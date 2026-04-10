@@ -1,21 +1,242 @@
-MIT License
+================================================================================
+LICENZA D'USO LIMITATO — SOLO USO NON COMMERCIALE E NON PROFIT
+LIMITED USE LICENSE — NON-COMMERCIAL AND NON-PROFIT USE ONLY
+Versione / Version 1.0 — 2026
+================================================================================
 
+Andy Code Cat
+<https://github.com/massimilianoC/andy-code-cat>
 Copyright (c) 2026 Massimiliano Camillucci
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Le versioni italiana e inglese hanno pari valore legale. In caso di conflitto
+tra le due versioni, prevale il testo italiano.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Both the Italian and English versions have equal legal value. In the event of
+conflict between the two versions, the Italian text shall prevail.
+
+================================================================================
+VERSIONE ITALIANA
+================================================================================
+
+1. DEFINIZIONI
+
+"Software" indica il codice sorgente, la documentazione, i file di
+configurazione e qualsiasi altro materiale distribuito con questa licenza.
+
+"Utilizzo Personale" indica l'uso del Software esclusivamente per scopi
+privati, didattici, di apprendimento o hobbistici, da parte di un individuo
+fisico che agisce in nome proprio e non per conto di alcuna organizzazione
+o entita' giuridica.
+
+"Organizzazione Non Profit" indica qualsiasi ente, associazione, fondazione
+o istituzione formalmente riconosciuta come non avente scopo di lucro ai
+sensi della normativa vigente nel paese di riferimento, e che utilizzi il
+Software esclusivamente per attivita' istituzionali proprie.
+
+"Uso Commerciale" indica qualsiasi utilizzo del Software finalizzato,
+direttamente o indirettamente, alla generazione di ricavi, alla riduzione
+di costi operativi, al supporto di attivita' imprenditoriali, o all'inserimento
+in prodotti, servizi o flussi di lavoro di un'organizzazione a scopo di lucro.
+Include, a titolo esemplificativo e non esaustivo:
+
+  a) l'utilizzo del Software all'interno di un'azienda, studio professionale
+     o ente con scopo di lucro, anche a uso interno e anche qualora il
+     Software non venga direttamente venduto o redistribuito;
+  b) la fornitura di servizi a clienti attraverso o mediante il Software;
+  c) l'integrazione del Software in un prodotto commerciale;
+  d) l'uso del Software da parte di liberi professionisti nell'ambito
+     della propria attivita' fatturata.
+
+--------------------------------------------------------------------------------
+
+1. DIRITTI CONCESSI
+
+Il titolare del copyright concede, a titolo gratuito, una licenza non
+esclusiva, non trasferibile e non sublicenziabile per utilizzare, copiare,
+modificare e distribuire il Software esclusivamente nei seguenti casi:
+
+  a) Utilizzo Personale, come definito all'articolo 1;
+  b) utilizzo da parte di Organizzazioni Non Profit, come definite
+     all'articolo 1, per le proprie attivita' istituzionali.
+
+Qualsiasi altra forma di utilizzo non espressamente autorizzata dal presente
+articolo e' riservata al titolare del copyright.
+
+--------------------------------------------------------------------------------
+
+1. DIVIETI
+
+E' espressamente vietato, senza preventiva autorizzazione scritta del titolare:
+
+  a) qualsiasi Uso Commerciale del Software, anche parziale;
+  b) l'utilizzo del Software all'interno di organizzazioni a scopo di lucro,
+     indipendentemente dalla natura interna o esterna dell'uso;
+  c) la vendita, il licensing, il sublicensing o la distribuzione del
+     Software a titolo oneroso;
+  d) la rimozione o la modifica delle informazioni di copyright e dei
+     riferimenti alla presente licenza dal Software o dalla sua documentazione.
+
+--------------------------------------------------------------------------------
+
+1. USO COMMERCIALE — LICENZA SU RICHIESTA
+
+Il titolare e' disponibile a concedere licenze commerciali mediante accordo
+scritto separato. Per richiedere una licenza commerciale o per qualsiasi
+chiarimento sull'ambito di applicazione della presente licenza, contattare:
+
+  <massimiliano@camillucci.com>
+
+--------------------------------------------------------------------------------
+
+1. ATTRIBUZIONE
+
+Ogni distribuzione o derivazione autorizzata del Software, in qualsiasi
+forma, deve includere:
+
+  a) una copia integrale della presente licenza;
+  b) una chiara indicazione del nome del progetto originale e del titolare
+     del copyright;
+  c) un riferimento al repository originale, se applicabile.
+
+--------------------------------------------------------------------------------
+
+1. ESCLUSIONE DI GARANZIE
+
+IL SOFTWARE E' FORNITO "COSI' COM'E'", SENZA GARANZIE DI ALCUN TIPO,
+ESPLICITE O IMPLICITE, IVI INCLUSE, A TITOLO ESEMPLIFICATIVO, LE GARANZIE
+DI COMMERCIABILITA', IDONEITA' A UNO SCOPO SPECIFICO E NON VIOLAZIONE DI
+DIRITTI DI TERZI. IL TITOLARE NON SARA' IN ALCUN CASO RESPONSABILE PER
+DANNI DIRETTI, INDIRETTI, INCIDENTALI, SPECIALI O CONSEQUENZIALI DERIVANTI
+DALL'USO O DALL'IMPOSSIBILITA' DI UTILIZZO DEL SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+1. LEGGE APPLICABILE E FORO COMPETENTE
+
+La presente licenza e' regolata dalla legge italiana. Per qualsiasi
+controversia derivante dall'interpretazione o dall'applicazione della
+presente licenza, le parti si sottopongono alla giurisdizione esclusiva
+del Tribunale di Pesaro, Italia.
+
+--------------------------------------------------------------------------------
+
+NOTA SULLA NATURA DELLA LICENZA
+
+La presente licenza non e' una licenza open source ai sensi delle definizioni
+della Open Source Initiative (OSI) ne' della Free Software Foundation (FSF).
+E' una licenza source-available a uso limitato. Il codice sorgente e' reso
+disponibile per favorire la trasparenza, la collaborazione non commerciale
+e l'apprendimento, nel rispetto dei diritti del titolare.
+
+================================================================================
+ENGLISH VERSION
+================================================================================
+
+1. DEFINITIONS
+
+"Software" means the source code, documentation, configuration files, and any
+other material distributed under this license.
+
+"Personal Use" means use of the Software exclusively for private, educational,
+learning, or hobby purposes, by a natural person acting on their own behalf
+and not on behalf of any organization or legal entity.
+
+"Non-Profit Organization" means any entity, association, foundation, or
+institution formally recognized as non-profit under the applicable law of the
+relevant jurisdiction, and which uses the Software exclusively for its own
+institutional activities.
+
+"Commercial Use" means any use of the Software intended, directly or
+indirectly, to generate revenue, reduce operational costs, support business
+activities, or integrate the Software into products, services, or workflows
+of a for-profit organization. This includes, without limitation:
+
+  a) use of the Software within a company, professional firm, or for-profit
+     entity, even for internal purposes only and even where the Software is
+     not directly sold or redistributed;
+  b) providing services to clients through or by means of the Software;
+  c) integrating the Software into a commercial product;
+  d) use of the Software by freelancers or independent contractors in the
+     course of their billed professional activities.
+
+--------------------------------------------------------------------------------
+
+1. RIGHTS GRANTED
+
+The copyright holder grants, free of charge, a non-exclusive, non-transferable,
+and non-sublicensable license to use, copy, modify, and distribute the
+Software, solely in the following cases:
+
+  a) Personal Use, as defined in Section 1;
+  b) use by Non-Profit Organizations, as defined in Section 1, for their
+     own institutional activities.
+
+Any use not expressly authorized under this Section is reserved to the
+copyright holder.
+
+--------------------------------------------------------------------------------
+
+1. RESTRICTIONS
+
+The following are expressly prohibited without prior written authorization
+from the copyright holder:
+
+  a) any Commercial Use of the Software, even partial;
+  b) use of the Software within for-profit organizations, regardless of
+     whether such use is internal or external;
+  c) selling, licensing, sublicensing, or distributing the Software
+     for commercial consideration;
+  d) removing or altering copyright notices or references to this license
+     from the Software or its documentation.
+
+--------------------------------------------------------------------------------
+
+1. COMMERCIAL USE — LICENSE AVAILABLE ON REQUEST
+
+The copyright holder is available to grant commercial licenses through a
+separate written agreement. To request a commercial license or to seek
+clarification on the scope of this license, please contact:
+
+  <massimiliano@camillucci.com>
+
+--------------------------------------------------------------------------------
+
+1. ATTRIBUTION
+
+Any authorized distribution or derivative work of the Software, in any form,
+must include:
+
+  a) a complete copy of this license;
+  b) a clear identification of the original project name and copyright holder;
+  c) a reference to the original repository, where applicable.
+
+--------------------------------------------------------------------------------
+
+1. DISCLAIMER OF WARRANTIES
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+INABILITY TO USE THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+1. GOVERNING LAW AND JURISDICTION
+
+This license is governed by Italian law. Any dispute arising from the
+interpretation or application of this license shall be subject to the exclusive
+jurisdiction of the Court of Pesaro, Italy.
+
+--------------------------------------------------------------------------------
+
+NOTE ON THE NATURE OF THIS LICENSE
+
+This license is not an open source license as defined by the Open Source
+Initiative (OSI) or the Free Software Foundation (FSF). It is a limited
+source-available license. The source code is made available to promote
+transparency, non-commercial collaboration, and learning, while preserving
+the rights of the copyright holder.
+
+================================================================================

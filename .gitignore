@@ -36,6 +36,11 @@ docs/cost-providers/bills_*
 docs/cost-providers/sf-probe-*.json
 docs/cost-providers/siliconflow_pricing.csv
 
+# ─── Test outputs (generated, never commit) ──────────────────────────────────
+test-results/
+tests/test-results/
+tests/e2e/report/
+
 # ─── Debug / scratch ─────────────────────────────────────────────────────────
 debug/sample/
 health_test.json

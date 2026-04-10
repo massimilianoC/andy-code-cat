@@ -6,7 +6,7 @@
 
 **AI-powered website builder platform.** An open-source, self-hostable platform that lets users create, edit, and publish websites using natural language and a visual editor — with a multi-provider LLM backend, cost tracking, and a full export/publish pipeline.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Limited Use](https://img.shields.io/badge/License-Limited%20Use-orange.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)](https://nodejs.org)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/Docker-required-blue)](https://docs.docker.com)
@@ -60,8 +60,11 @@ cd andy-code-cat
 
 `bash
 cp .env.example .env.docker
-# Edit .env.docker — at minimum set the LLM API keys:
-#   SILICONFLOW_API_KEY=  or  OPEN_ROUTER_API_KEY=
+
+# Edit .env.docker — at minimum set the LLM API keys
+
+# SILICONFLOW_API_KEY=  or  OPEN_ROUTER_API_KEY=
+
 `
 
 Get a free API key at [openrouter.ai/keys](https://openrouter.ai/keys) — free models work without credits.
@@ -173,4 +176,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE) © 2026 Massimiliano Camillucci
+Copyright (c) 2026 Massimiliano Camillucci
+
+This project is released under a **Limited Use License — Non-Commercial and Non-Profit Use Only**.
+Free for personal, educational, and non-profit use. Commercial use requires a separate written agreement.
+
+See [LICENSE](LICENSE) for full terms (Italian / English).
