@@ -1,0 +1,72 @@
+// Quick regression test for repairPrematureStringTermination colon fix.
+// Run: node src/application/llm/__repair_test.mjs
+
+function repairPrematureStringTermination(input) {
+    let out = "";
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (!inString) {
+            if (ch === '"') inString = true;
+            out += ch;
+            continue;
+        }
+        if (escaped) { escaped = false; out += ch; continue; }
+        if (ch === '\\') { escaped = true; out += ch; continue; }
+        if (ch === '"') {
+            let j = i + 1;
+            while (j < input.length && (input[j] === ' ' || input[j] === '\t' || input[j] === '\r' || input[j] === '\n')) j++;
+            const nextCh = j < input.length ? input[j] : "";
+            if (nextCh === "," || nextCh === "}" || nextCh === "]" || nextCh === ":" || nextCh === "") {
+                out += '"'; inString = false;
+            } else {
+                out += '\\"';
+            }
+            continue;
+        }
+        out += ch;
+    }
+    return out;
+}
+
+let passed = 0;
+let failed = 0;
+
+function test(name, rawBareJson) {
+    const repaired = repairPrematureStringTermination(rawBareJson);
+    try {
+        const parsed = JSON.parse(repaired);
+        if (!parsed.chat || !parsed.artifacts) throw new Error("missing chat/artifacts");
+        console.log(`PASS: ${name}`);
+        passed++;
+        return parsed;
+    } catch (e) {
+        console.error(`FAIL: ${name} — ${e.message}`);
+        console.error("  first 300 chars of repaired:", repaired.substring(0, 300));
+        failed++;
+    }
+}
+
+// Test 1: simple HTML attrs with bare quotes
+test("simple alpine attrs",
+    '{"chat":{"summary":"ok","bullets":[],"nextActions":[]},"artifacts":{"html":"","css":"","js":""},"focusPatch":{"targetType":"html","replacement":"<div x-show="open" class="foo">test</div>"}}'
+);
+
+// Test 2: iframe-style attributes (the real failing case)
+test("iframe with allow attr",
+    '{"chat":{"summary":"video popup","bullets":["item1"],"nextActions":[]},"artifacts":{"html":"","css":"","js":""},"focusPatch":{"targetType":"html","replacement":"<div x-show="showVideo" class="z-[100]"><iframe :src="url" title="Tutorial" allow="autoplay; picture-in-picture" allowfullscreen></iframe></div>"}}'
+);
+
+// Test 3: normal valid JSON (no repair needed) should still parse correctly
+test("valid json no repair needed",
+    '{"chat":{"summary":"clean","bullets":[],"nextActions":[]},"artifacts":{"html":"<div>hello</div>","css":"","js":""}}'
+);
+
+// Test 4: multiple HTML attributes with colons in values (Tailwind utilities)
+test("tailwind with brackets",
+    '{"chat":{"summary":"ok","bullets":[],"nextActions":[]},"artifacts":{"html":"","css":"","js":""},"focusPatch":{"targetType":"html","replacement":"<div class="fixed inset-0 z-[100] flex" x-show="open">content</div>"}}'
+);
+
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed > 0 ? 1 : 0);

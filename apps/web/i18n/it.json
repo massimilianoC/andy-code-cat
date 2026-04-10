@@ -1,0 +1,252 @@
+{
+    "brand": {
+        "name": "ANDY",
+        "tagline": "Il gatto che programma per te."
+    },
+    "nav": {
+        "login": "Accedi",
+        "register": "Crea account"
+    },
+    "home": {
+        "sub": "Crea siti straordinari con l'intelligenza artificiale.",
+        "cta": {
+            "login": "Accedi",
+            "register": "Inizia ora"
+        }
+    },
+    "login": {
+        "title": "Accedi",
+        "description": "Inserisci email e password per accedere al tuo account.",
+        "email": "Email *",
+        "password": "Password *",
+        "submit": "Accedi",
+        "submitting": "Accesso in corso...",
+        "failed": "Login fallito",
+        "noAccount": "Non hai un account?",
+        "createAccount": "Crea account →"
+    },
+    "register": {
+        "title": "Crea account",
+        "description": "Il sistema crea automaticamente un progetto default al termine della registrazione.",
+        "firstName": "Nome",
+        "lastName": "Cognome",
+        "email": "Email *",
+        "password": "Password *",
+        "passwordHint": "(min 8 caratteri)",
+        "submit": "Crea account",
+        "submitting": "Creazione...",
+        "haveAccount": "Hai già un account?",
+        "login": "Accedi →"
+    },
+    "dashboard": {
+        "newProject": "Nuovo progetto",
+        "logout": "Logout",
+        "hero": {
+            "title": "Dashboard Progetti",
+            "empty": "Nessun progetto ancora. Crea il primo da un preset qui sotto.",
+            "count_one": "{{count}} progetto nel workspace",
+            "count_other": "{{count}} progetti nel workspace"
+        },
+        "presets": {
+            "title": "Nuovo progetto da preset"
+        },
+        "projects": {
+            "title": "I tuoi progetti",
+            "empty": "Nessun progetto ancora",
+            "createFirst": "Crea il primo progetto"
+        },
+        "footer": {
+            "count_one": "{{count}} progetto",
+            "count_other": "{{count}} progetti"
+        },
+        "modal": {
+            "title": "Nuovo progetto",
+            "descPreset": "Preset: {{preset}}. Dai un nome al progetto.",
+            "descBlank": "Inserisci un nome (minimo 3 caratteri). Puoi partire anche da un preset.",
+            "placeholder": "Nome progetto (min 3 caratteri)",
+            "cancel": "Annulla",
+            "create": "Crea",
+            "creating": "Creazione..."
+        },
+        "confirm": {
+            "delete": "Eliminare il progetto \"{{name}}\"? Questa operazione è irreversibile."
+        },
+        "toast": {
+            "loadError": "Errore nel caricamento dei progetti",
+            "created": "Progetto \"{{name}}\" creato",
+            "deleted": "Progetto \"{{name}}\" eliminato",
+            "deleteError": "Errore nell'eliminazione",
+            "duplicateError": "Errore nella duplicazione",
+            "promptCopied": "Prompt copiato negli appunti",
+            "noPrompt": "Nessun prompt configurato per questo progetto"
+        }
+    },
+    "onboarding": {
+        "loading": "Caricamento...",
+        "skipAll": "Salta tutto →",
+        "styleProfile": "Profilazione stile",
+        "step": "Passo",
+        "of": "di",
+        "saveError": "Errore nel salvataggio. Riprova.",
+        "back": "← Indietro",
+        "skip": "Salta",
+        "next": "Avanti →",
+        "complete": "Completa →",
+        "saving": "Salvataggio...",
+        "steps": {
+            "0": {
+                "title": "Chi sei?",
+                "subtitle": "Seleziona i tag che descrivono meglio la tua identità e il tuo settore."
+            },
+            "1": {
+                "title": "Il tuo stile visivo",
+                "subtitle": "Come vuoi che appaia il tuo sito? Scegli i tag più vicini alla tua visione estetica."
+            },
+            "2": {
+                "title": "Per chi e come",
+                "subtitle": "Definisci il pubblico, il tono e le funzionalità più importanti per il tuo progetto."
+            }
+        },
+        "catLabels": {
+            "TC-IDENTITY": "Identità del brand",
+            "TC-SECTOR": "Settore / Industria",
+            "TC-AUDIENCE": "Pubblico di riferimento",
+            "TC-VISUAL": "Stile visivo",
+            "TC-PALETTE": "Palette colori",
+            "TC-TYPOGRAPHY": "Tipografia",
+            "TC-LAYOUT": "Layout",
+            "TC-TONE": "Tono di comunicazione",
+            "TC-REFERENCE": "Riferimenti stilistici",
+            "TC-FEATURE": "Funzionalità prioritarie"
+        }
+    },
+    "card": {
+        "openWorkspace": "Apri workspace →",
+        "openWorkspaceHover": "Apri workspace →",
+        "options": "Opzioni progetto",
+        "version_one": "{{count}} versione",
+        "version_other": "{{count}} versioni",
+        "menu": {
+            "open": "Apri",
+            "duplicate": "Duplica",
+            "copyPrompt": "Copia prompt",
+            "delete": "Elimina"
+        }
+    },
+    "guide": {
+        "title": "Come iniziare con ANDY",
+        "subtitle": "Guarda la guida rapida e crea il tuo primo sito in pochi minuti.",
+        "cta": "Guarda il tutorial"
+    },
+    "tips": {
+        "chip": "Consigli & Novità",
+        "title": "Consigli & Novità",
+        "closePanel": "Chiudi pannello",
+        "fabLabel": "Apri consigli e novità",
+        "markRead": "Segna come letto",
+        "items": {
+            "onboarding": {
+                "title": "Completa il profilo stile",
+                "body": "Seleziona i tuoi tag di stile nell'onboarding per personalizzare le generazioni AI."
+            },
+            "duplicate": {
+                "title": "Duplica e sperimenta",
+                "body": "Usa 'Duplica' dal menu di un progetto per conservare una copia prima di modificarlo."
+            },
+            "prompt": {
+                "title": "Copia il prompt iniziale",
+                "body": "Usa 'Copia prompt' per riutilizzare il sistema di istruzioni in nuovi progetti."
+            },
+            "streaming": {
+                "title": "Streaming AI in tempo reale",
+                "body": "Le risposte AI ora appaiono progressivamente mentre vengono generate."
+            },
+            "publish": {
+                "title": "Pubblica il tuo sito",
+                "body": "Ora puoi pubblicare il tuo progetto direttamente dall'editor con un click."
+            },
+            "save": {
+                "title": "Scorciatoia: Salva snapshot",
+                "body": "Premi Ctrl+S nell'editor per salvare uno snapshot della versione corrente."
+            }
+        },
+        "types": {
+            "tip": "Consiglio",
+            "news": "Novità",
+            "shortcut": "Scorciatoia"
+        }
+    },
+    "time": {
+        "justNow": "adesso",
+        "minutesAgo": "{{count}} min fa",
+        "hoursAgo": "{{count}} ore fa",
+        "daysAgo": "{{count}} giorni fa"
+    },
+    "presets": {
+        "neutral": {
+            "label": "Vuoto / Neutro",
+            "hint": "Parti da una tela bianca"
+        },
+        "landing": {
+            "label": "Landing Page",
+            "hint": "Singola pagina orientata conversione"
+        },
+        "website": {
+            "label": "Website",
+            "hint": "Sito multi-sezione classico"
+        },
+        "form": {
+            "label": "Form",
+            "hint": "Raccolta lead e contatti"
+        },
+        "manifesto": {
+            "label": "Manifesto",
+            "hint": "Pagina identità e valori"
+        },
+        "slideshow": {
+            "label": "Presentazione",
+            "hint": "Deck navigabile a slide"
+        },
+        "keynote": {
+            "label": "Keynote",
+            "hint": "Template keynote visuale"
+        },
+        "a4poster": {
+            "label": "A4 Poster",
+            "hint": "Layout singola pagina stampabile"
+        },
+        "infographic": {
+            "label": "Infographic",
+            "hint": "Visualizzazione dati e insight"
+        }
+    },
+    "lang": {
+        "it": "Italiano",
+        "en": "English"
+    },
+    "health": {
+        "title": "Stato API",
+        "checking": "Verifica in corso...",
+        "ok": "API raggiungibile",
+        "error": "API non raggiungibile",
+        "recheck": "Ricontrolla"
+    },
+    "session": {
+        "expired": "Sessione scaduta",
+        "requiresLogin": "La tua sessione \u00e8 scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
+        "tokenExpired": "La tua sessione \u00e8 scaduta. Effettua di nuovo il login per continuare.",
+        "logout": "Esci"
+    },
+    "notifications": {
+        "close": "Chiudi",
+        "title": "Processi",
+        "clear": "Pulisci",
+        "clearTitle": "Rimuovi completati/errori",
+        "hide": "Nascondi processi",
+        "show": "Mostra processi in corso",
+        "running_one": "{{count}} in corso",
+        "running_other": "{{count}} in corso",
+        "completed_one": "{{count}} completato",
+        "completed_other": "{{count}} completati"
+    }
+}

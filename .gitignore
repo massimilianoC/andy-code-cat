@@ -1,0 +1,46 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
+node_modules/
+.next/
+dist/
+coverage/
+
+# ─── Environment files (NEVER commit live secrets) ───────────────────────────
+.env
+.env.local
+.env.*.local
+.env.docker
+.env.droplet
+# deploy-specific env (keep .env.example and .env.deploy.example in repo)
+.env.droplet.example
+
+# ─── Local data volumes ───────────────────────────────────────────────────────
+data/
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Private infrastructure (server IPs, SSH keys, live deploy runbooks) ─────
+docker-compose.droplet.yml
+scripts/deploy-to-droplet.sh
+scripts/seed-droplet.sh
+nginx/sites-enabled/
+
+# ─── Private operational docs (not for public repo) ──────────────────────────
+docs/_archive/
+docs/deploy/
+docs/review/
+docs/cost-providers/bills_*
+docs/cost-providers/sf-probe-*.json
+docs/cost-providers/siliconflow_pricing.csv
+
+# ─── Debug / scratch ─────────────────────────────────────────────────────────
+debug/sample/
+health_test.json
+
+# ─── OS / IDE ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json

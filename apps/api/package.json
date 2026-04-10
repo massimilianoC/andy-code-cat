@@ -1,0 +1,50 @@
+{
+    "name": "@andy-code-cat/api",
+    "version": "0.1.0",
+    "private": true,
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc -p tsconfig.json",
+        "start": "node dist/index.js",
+        "seed": "tsx src/scripts/seed.ts",
+        "seed:llm": "tsx src/scripts/seed-llm.ts",
+        "migrate:db": "tsx src/scripts/migrate-db-rename.ts",
+        "sf:probe": "tsx src/scripts/sf-probe.ts",
+        "sf:billing": "tsx src/scripts/sf-billing-import.ts",
+        "lint": "echo 'lint not configured yet'",
+        "test": "echo 'test pipeline will be added in phase 2'"
+    },
+    "dependencies": {
+        "@andy-code-cat/contracts": "0.1.0",
+        "archiver": "^7.0.1",
+        "bcryptjs": "^2.4.3",
+        "cheerio": "^1.2.0",
+        "cookie-parser": "^1.4.6",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.19.2",
+        "helmet": "^7.1.0",
+        "jsonrepair": "^3.13.3",
+        "jsonwebtoken": "^9.0.2",
+        "mongodb": "^6.7.0",
+        "morgan": "^1.10.0",
+        "multer": "^2.1.1",
+        "puppeteer": "^24.40.0",
+        "zod": "^3.23.8"
+    },
+    "devDependencies": {
+        "@types/archiver": "^7.0.0",
+        "@types/bcryptjs": "^2.4.6",
+        "@types/cookie-parser": "^1.4.7",
+        "@types/cors": "^2.8.17",
+        "@types/express": "^4.17.21",
+        "@types/jsonwebtoken": "^9.0.6",
+        "@types/morgan": "^1.9.9",
+        "@types/multer": "^2.1.0",
+        "@types/node": "^20.14.10",
+        "tsx": "^4.16.2",
+        "typescript": "^5.5.3"
+    }
+}

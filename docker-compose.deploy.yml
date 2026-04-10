@@ -1,0 +1,102 @@
+# Explicit project name keeps volume names stable regardless of directory name.
+# Volumes: andy-code-cat_mongodb_data, andy-code-cat_redis_data
+name: andy-code-cat
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: andy-code-cat-mongodb
+    restart: unless-stopped
+    # Local test profile — host port exposed for direct access and seed scripts.
+    ports:
+      - "${MONGO_EXTERNAL_PORT:-27018}:27017"
+    command: ["--bind_ip_all"]
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - andy-code-cat-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: andy-code-cat-redis
+    restart: unless-stopped
+    # Local test profile — host port exposed for direct inspection.
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - andy-code-cat-net
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: prod
+    container_name: andy-code-cat-api
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongodb:27017/andy-code-cat
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    # Local test profile — API port exposed directly on host for curl/smoke tests.
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./data/www:/workspace/data/www
+    networks:
+      - andy-code-cat-net
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: prod
+    container_name: andy-code-cat-web
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - api
+    expose:
+      - "8081"
+    # Port mapped to host for local testing (nginx proxy requires SSL certs only in prod).
+    ports:
+      - "8081:8081"
+    networks:
+      - andy-code-cat-net
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: andy-code-cat-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Local HTTP-only config — no SSL certs needed.
+      # Production SSL config lives in nginx/sites-enabled/pageforge.conf (droplet only).
+      - ./nginx/sites-enabled/local.conf:/etc/nginx/sites-enabled/local.conf:ro
+      - ./data/www:/var/www/andy-code-cat:ro
+    depends_on:
+      - api
+      - web
+    networks:
+      - andy-code-cat-net
+
+networks:
+  andy-code-cat-net:
+    driver: bridge
+
+volumes:
+  # project name "andy-code-cat" (from `name:` above) auto-prefixes these to:
+  #   andy-code-cat_mongodb_data  and  andy-code-cat_redis_data
+  mongodb_data:
+  redis_data:

@@ -1,0 +1,252 @@
+{
+    "brand": {
+        "name": "ANDY",
+        "tagline": "The cat that codes for you."
+    },
+    "nav": {
+        "login": "Sign in",
+        "register": "Get started"
+    },
+    "home": {
+        "sub": "Build extraordinary websites with AI.",
+        "cta": {
+            "login": "Sign in",
+            "register": "Get started"
+        }
+    },
+    "login": {
+        "title": "Sign in",
+        "description": "Enter your email and password to access your account.",
+        "email": "Email *",
+        "password": "Password *",
+        "submit": "Sign in",
+        "submitting": "Signing in...",
+        "failed": "Login failed",
+        "noAccount": "Don't have an account?",
+        "createAccount": "Get started →"
+    },
+    "register": {
+        "title": "Create account",
+        "description": "A default project is created automatically at the end of registration.",
+        "firstName": "First name",
+        "lastName": "Last name",
+        "email": "Email *",
+        "password": "Password *",
+        "passwordHint": "(min 8 characters)",
+        "submit": "Create account",
+        "submitting": "Creating...",
+        "haveAccount": "Already have an account?",
+        "login": "Sign in →"
+    },
+    "dashboard": {
+        "newProject": "New project",
+        "logout": "Logout",
+        "hero": {
+            "title": "Projects",
+            "empty": "No projects yet. Create the first one from a preset below.",
+            "count_one": "{{count}} project in workspace",
+            "count_other": "{{count}} projects in workspace"
+        },
+        "presets": {
+            "title": "New project from preset"
+        },
+        "projects": {
+            "title": "Your projects",
+            "empty": "No projects yet",
+            "createFirst": "Create first project"
+        },
+        "footer": {
+            "count_one": "{{count}} project",
+            "count_other": "{{count}} projects"
+        },
+        "modal": {
+            "title": "New project",
+            "descPreset": "Preset: {{preset}}. Give the project a name.",
+            "descBlank": "Enter a name (min 3 characters). You can also start from a preset.",
+            "placeholder": "Project name (min 3 chars)",
+            "cancel": "Cancel",
+            "create": "Create",
+            "creating": "Creating..."
+        },
+        "confirm": {
+            "delete": "Delete project \"{{name}}\"? This operation is irreversible."
+        },
+        "toast": {
+            "loadError": "Error loading projects",
+            "created": "Project \"{{name}}\" created",
+            "deleted": "Project \"{{name}}\" deleted",
+            "deleteError": "Error deleting project",
+            "duplicateError": "Error duplicating",
+            "promptCopied": "Prompt copied to clipboard",
+            "noPrompt": "No prompt configured for this project"
+        }
+    },
+    "onboarding": {
+        "loading": "Loading...",
+        "skipAll": "Skip all →",
+        "styleProfile": "Style profiling",
+        "step": "Step",
+        "of": "of",
+        "saveError": "Save error. Please try again.",
+        "back": "← Back",
+        "skip": "Skip",
+        "next": "Next →",
+        "complete": "Complete →",
+        "saving": "Saving...",
+        "steps": {
+            "0": {
+                "title": "Who are you?",
+                "subtitle": "Select the tags that best describe your identity and sector."
+            },
+            "1": {
+                "title": "Your visual style",
+                "subtitle": "How do you want your site to look? Choose the tags closest to your aesthetic vision."
+            },
+            "2": {
+                "title": "For whom and how",
+                "subtitle": "Define the target audience, tone, and most important features for your project."
+            }
+        },
+        "catLabels": {
+            "TC-IDENTITY": "Brand identity",
+            "TC-SECTOR": "Sector / Industry",
+            "TC-AUDIENCE": "Target audience",
+            "TC-VISUAL": "Visual style",
+            "TC-PALETTE": "Color palette",
+            "TC-TYPOGRAPHY": "Typography",
+            "TC-LAYOUT": "Layout",
+            "TC-TONE": "Communication tone",
+            "TC-REFERENCE": "Style references",
+            "TC-FEATURE": "Priority features"
+        }
+    },
+    "card": {
+        "openWorkspace": "Open workspace →",
+        "openWorkspaceHover": "Open workspace →",
+        "options": "Project options",
+        "version_one": "{{count}} version",
+        "version_other": "{{count}} versions",
+        "menu": {
+            "open": "Open",
+            "duplicate": "Duplicate",
+            "copyPrompt": "Copy prompt",
+            "delete": "Delete"
+        }
+    },
+    "guide": {
+        "title": "How to get started with ANDY",
+        "subtitle": "Watch the quick guide and create your first site in minutes.",
+        "cta": "Watch tutorial"
+    },
+    "tips": {
+        "chip": "Tips",
+        "title": "Tips & News",
+        "closePanel": "Close panel",
+        "fabLabel": "Open tips and news",
+        "markRead": "Mark as read",
+        "items": {
+            "onboarding": {
+                "title": "Complete your style profile",
+                "body": "Select your style tags in onboarding to personalize AI generations."
+            },
+            "duplicate": {
+                "title": "Duplicate and experiment",
+                "body": "Use 'Duplicate' from the project menu to keep a copy before modifying it."
+            },
+            "prompt": {
+                "title": "Copy the initial prompt",
+                "body": "Use 'Copy prompt' to reuse the instruction system in new projects."
+            },
+            "streaming": {
+                "title": "Real-time AI streaming",
+                "body": "AI responses now appear progressively as they are generated."
+            },
+            "publish": {
+                "title": "Publish your site",
+                "body": "You can now publish your project directly from the editor with one click."
+            },
+            "save": {
+                "title": "Shortcut: Save snapshot",
+                "body": "Press Ctrl+S in the editor to save a snapshot of the current version."
+            }
+        },
+        "types": {
+            "tip": "Tip",
+            "news": "News",
+            "shortcut": "Shortcut"
+        }
+    },
+    "time": {
+        "justNow": "just now",
+        "minutesAgo": "{{count}} min ago",
+        "hoursAgo": "{{count}} h ago",
+        "daysAgo": "{{count}} days ago"
+    },
+    "presets": {
+        "neutral": {
+            "label": "Empty / Blank",
+            "hint": "Start from a blank canvas"
+        },
+        "landing": {
+            "label": "Landing Page",
+            "hint": "Single-page conversion-oriented site"
+        },
+        "website": {
+            "label": "Website",
+            "hint": "Classic multi-section site"
+        },
+        "form": {
+            "label": "Form",
+            "hint": "Lead and contact collection"
+        },
+        "manifesto": {
+            "label": "Manifesto",
+            "hint": "Identity and values page"
+        },
+        "slideshow": {
+            "label": "Slideshow",
+            "hint": "Navigable slide deck"
+        },
+        "keynote": {
+            "label": "Keynote",
+            "hint": "Visual keynote template"
+        },
+        "a4poster": {
+            "label": "A4 Poster",
+            "hint": "Single-page printable layout"
+        },
+        "infographic": {
+            "label": "Infographic",
+            "hint": "Data and insight visualization"
+        }
+    },
+    "lang": {
+        "it": "Italiano",
+        "en": "English"
+    },
+    "health": {
+        "title": "API Status",
+        "checking": "Checking...",
+        "ok": "API reachable",
+        "error": "API unreachable",
+        "recheck": "Recheck"
+    },
+    "session": {
+        "expired": "Session expired",
+        "requiresLogin": "Your session has expired. Enter your credentials to continue without losing the current context.",
+        "tokenExpired": "Your session has expired. Please sign in again to continue.",
+        "logout": "Sign out"
+    },
+    "notifications": {
+        "close": "Close",
+        "title": "Processes",
+        "clear": "Clear",
+        "clearTitle": "Remove completed / errors",
+        "hide": "Hide processes",
+        "show": "Show processes",
+        "running_one": "{{count}} running",
+        "running_other": "{{count}} running",
+        "completed_one": "{{count}} completed",
+        "completed_other": "{{count}} completed"
+    }
+}
