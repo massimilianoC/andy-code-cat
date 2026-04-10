@@ -200,6 +200,21 @@ Any new Radix/shadcn package requires:
 2. Create the primitive in `apps/web/components/ui/`
 3. Rebuild the deploy stack: `npm run docker:test:nocache` (or `docker:test` for cached)
 
+## Repository Hygiene — Keep the Root Clean for Contributors
+
+This project is open-source and regularly visited by external contributors ("ospiti") who clone, run, and explore the codebase. A clean root is a non-negotiable courtesy.
+
+### Rules
+
+1. **Never place temporary scripts, debug files, or one-off test files at the repository root.** Root-level files must be permanent fixtures: Docker configs, package manifests, documented specs, README, AGENTS.md.
+2. **All test code belongs under `tests/`.** This includes manual debug scripts, Playwright feature tests, and integration helpers.
+3. **All generated test artifacts are gitignored.** Playwright outputs go to `tests/test-results/` and `tests/e2e/report/` — both are in `.gitignore` and must never be committed.
+4. **Scratch files and debug samples belong under `debug/`.** That folder is gitignored; use it for exploratory work that should not reach the repo.
+5. **`health_test.json` and similarly named probe files are gitignored.** Do not let throwaway validation files accumulate at the root.
+6. **When you finish a task, delete any temporary helper files you created.** Leave the tree in the same (or better) shape you found it.
+
+> A contributor who clones this repo should see a self-explanatory, navigable structure — not a graveyard of experiments.
+
 ## Coding Rules
 
 - Keep functions small and focused.
