@@ -260,6 +260,45 @@ LLM providers, models, API keys, and token limits are fully resolved at runtime 
 - To change any LLM setting: edit `.env.docker`, then run `docker compose -f docker-compose.deploy.yml up -d --no-deps api`.
 - `seed.ts` seeds user + project only. `seed-llm.ts` seeds the catalog only when `LLM_CATALOG_SOURCE=mongo`.
 
+## Git & Branch Contract
+
+This project follows **Gitflow**. Agents must respect the following rules when proposing or executing any git-related operation.
+
+### Branch model
+
+| Branch | Purpose | Push allowed |
+|---|---|---|
+| `main` | Stable, released code — never commit directly | No — PRs only |
+| `develop` | Integration target — all features merge here | No — PRs only |
+| `feat/<name>` | New feature, branched off `develop` | Yes (via PR only) |
+| `fix/<name>` | Bug fix, branched off `develop` | Yes (via PR only) |
+| `hotfix/<name>` | Critical production fix, branched off `main`; merged into both `main` and `develop` | Yes (via PR only) |
+| `docs/<name>` | Documentation changes only | Yes (via PR only) |
+| `chore/<name>` | Tooling, config, dependency bumps | Yes (via PR only) |
+| `refactor/<name>` | Code restructuring, no behaviour change | Yes (via PR only) |
+
+### Non-Negotiable Rules
+
+1. **Never propose a direct push to `main` or `develop`** — all changes go through PRs.
+2. **All feature and fix branches must be created off `develop`**, not `main`.
+3. **Hotfix branches only**: base off `main`, merge back into both `main` and `develop`.
+4. **One logical change per commit** — no "WIP" or stacked unrelated changes in a single commit.
+5. **Commit messages must follow Conventional Commits**: `type(scope): description`.
+6. **Never rewrite published history** — no `git push --force` or `--force-with-lease` on `main` or `develop`.
+7. **PRs target `develop`** unless it is a hotfix (which targets `main`).
+
+### Commit message format
+
+```
+<type>(<scope>): <short imperative description>
+
+[optional body — explain why, not what]
+
+[optional footer — Closes #42 | Refs #17]
+```
+
+Valid types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `ci`.
+
 ## Guardrails For Agents
 
 Before coding:

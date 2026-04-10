@@ -29,13 +29,66 @@ Open an issue using the **Feature Request** template or start a **Discussion**. 
 
 ---
 
+## Branching Model (Gitflow)
+
+This project follows a simplified **Gitflow** model. Understanding it before you open a PR will save you a lot of back-and-forth.
+
+### Permanent branches
+
+| Branch | Purpose | Direct push |
+|---|---|---|
+| `main` | Stable, production-ready code | **Never** — PRs only |
+| `develop` | Integration branch — all features merge here first | **Never** — PRs only |
+
+### Temporary branches
+
+Always branch off `develop` (unless it is a hotfix — see below):
+
+| Prefix | When to use | Example |
+|---|---|---|
+| `feat/<short-name>` | New feature | `feat/llm-cost-tracker` |
+| `fix/<issue-or-name>` | Bug fix | `fix/jwt-expiry-check` |
+| `docs/<topic>` | Documentation only | `docs/openrouter-guide` |
+| `chore/<topic>` | Tooling, deps, config | `chore/bump-dependencies` |
+| `refactor/<scope>` | Code restructuring, no behaviour change | `refactor/session-use-case` |
+| `hotfix/<name>` | Critical production bug — branches off `main`, merges into both `main` AND `develop` | `hotfix/broken-publish` |
+
+### Flow at a glance
+
+```
+main  ←── hotfix/<name>  (base: main → merges back into main + develop)
+  ↑
+develop ←── feat/<name>
+             fix/<name>
+             docs/<name>
+             chore/<name>
+```
+
+> **Golden rule:** never commit directly to `main` or `develop`. Every change enters through a Pull Request.
+
+---
+
 ## Pull Request Process
 
-### 1. Fork & branch
+### 1. Fork & clone
+
+If you are an external contributor, always work on a **fork** — not on a clone of the main repository:
 
 ```bash
-git checkout -b feat/my-feature   # or fix/issue-123
+# 1. Fork on GitHub (click "Fork" on the repository page)
+# 2. Clone YOUR fork
+git clone https://github.com/<your-username>/andy-code-cat.git
+cd andy-code-cat
+
+# 3. Add the upstream remote so you can stay in sync
+git remote add upstream https://github.com/massimilianoC/andy-code-cat.git
+
+# 4. Create your branch off develop
+git fetch upstream
+git checkout -b feat/my-feature upstream/develop
 ```
+
+> Core team members with write access work on the same repository but still follow the branch model above — no direct pushes to `main` or `develop`.
 
 ### 2. Follow the architecture rules (non-negotiable)
 
@@ -61,9 +114,10 @@ git checkout -b feat/my-feature   # or fix/issue-123
 
 ### 5. Submit
 
-- Open a PR against `main`.
+- Open a PR against **`develop`** (not `main` — `main` is only updated via release merges).
 - Fill in the PR template.
 - PRs with failing checks will not be merged.
+- Request a review; at least one approval is required before merging.
 
 ---
 
@@ -84,15 +138,71 @@ npm run local:restart:api
 
 ---
 
+## Keeping Your Fork in Sync
+
+Before starting any new branch, sync your fork with upstream to avoid conflicts:
+
+```bash
+git fetch upstream
+git checkout develop
+git merge --ff-only upstream/develop   # fast-forward only — keeps history linear
+git push origin develop
+
+# now create your branch
+git checkout -b feat/my-next-feature
+```
+
+If your branch has fallen behind `develop` during development, rebase it (do not merge):
+
+```bash
+git fetch upstream
+git rebase upstream/develop
+```
+
+> Rebase keeps commit history clean and PRs easy to review. Only use `git merge` when instructed to in hotfix flows.
+
+---
+
 ## Commit Convention
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
-feat: add export pipeline for static HTML
-fix: correct JWT expiry check in refresh handler
-docs: update architecture diagram
-chore: bump dependencies
+<type>(<scope>): <short description>
+
+[optional body — explain WHY, not just WHAT]
+
+[optional footer — e.g. Closes #42]
+```
+
+| Type | When to use |
+|---|---|
+| `feat` | New feature visible to users |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `refactor` | Code change that is neither a feature nor a bug fix |
+| `test` | Adding or fixing tests |
+| `chore` | Tooling, deps, config changes |
+| `perf` | Performance improvement |
+| `ci` | CI/CD configuration |
+
+**Rules:**
+
+- **One logical change per commit** — avoid "WIP" mega-commits. If you have multiple concerns, split them.
+- Keep the subject line under **72 characters**.
+- Write in the **imperative mood**: "add export pipeline", not "added" or "adding".
+- Reference issues in the footer: `Closes #42` or `Refs #17`.
+- Do **not** rewrite history on shared branches (`develop`, `main`) — no `git push --force`.
+
+**Examples:**
+
+```
+feat(api): add cost tracking per LLM session
+fix(auth): correct JWT expiry check in refresh handler
+docs: add OpenRouter integration guide
+refactor(session): extract session creation into use-case
+chore: bump next from 14.1 to 14.2
+test(api): add integration test for project sandbox enforcement
 ```
 
 ---

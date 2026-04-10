@@ -170,7 +170,13 @@ See .env.example for the full reference.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions are welcome! Here is a quick orientation:
+
+- **Fork** the repository, then create your branch off `develop` (not `main`).
+- This project follows **Gitflow** — `main` is stable/released code; all work flows through `develop` via Pull Requests.
+- Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit: `feat(scope): description`, `fix(scope): description`, etc.
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, branching guide, and code rules before opening a PR.
+- Read [AGENTS.md](AGENTS.md) for architecture contracts and the branch/commit contract enforced for both humans and AI agents.
 
 ---
 
