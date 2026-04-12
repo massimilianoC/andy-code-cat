@@ -1,5 +1,10 @@
 import type { SiteDeployment, SiteDeploymentStatus } from "../entities/SiteDeployment";
 
+export interface ListDeploymentsResult {
+    deployments: SiteDeployment[];
+    total: number;
+}
+
 export interface CreateSiteDeploymentInput {
     publishId: string;
     customSlug?: string;
@@ -25,4 +30,8 @@ export interface SiteDeploymentRepository {
     deleteById(id: string): Promise<boolean>;
     isPublishIdTaken(publishId: string): Promise<boolean>;
     isCustomSlugTaken(slug: string, excludeDeploymentId?: string): Promise<boolean>;
+    // ── Admin ops ─────────────────────────────────────────────────────────────
+    setAdminBlocked(publishId: string, blocked: boolean, adminUserId: string): Promise<SiteDeployment | null>;
+    listAllPaginated(page: number, limit: number): Promise<ListDeploymentsResult>;
+    countLive(): Promise<number>;
 }

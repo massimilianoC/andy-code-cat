@@ -37,6 +37,7 @@ Coding agents should read in this order before making changes:
 |---|---|
 | [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Testable steps per milestone (M0 baseline → M5) |
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker setup (dev and deploy mode) |
+| [docs/guides/AUTH_HARDENING.md](guides/AUTH_HARDENING.md) | JWT/session hardening, legacy password migration, controlled email verification rollout |
 | [docs/guides/OPENROUTER_INTEGRATION_GUIDE.md](guides/OPENROUTER_INTEGRATION_GUIDE.md) | OpenRouter integration guide (multi-provider, cost policy, model selector) |
 | [docs/guides/I18N.md](guides/I18N.md) | i18n system — architecture, translation keys, adding new strings |
 | [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, data safety |
@@ -72,3 +73,4 @@ Coding agents should read in this order before making changes:
 | [BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | BaaS layer — forms, payments, webhooks, SDK |
 | [RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot for landing pages — BYOK, document ingestion, vanilla JS widget |
 | [MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-provider, multi-model platform playbook |
+| [SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin "god mode" — user mgmt, publication control, platform config, license model |

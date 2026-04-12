@@ -6,6 +6,7 @@
 const ACCESS_TOKEN_KEY = "pf_access_token";
 const REFRESH_TOKEN_KEY = "pf_refresh_token";
 const PROJECT_KEY = "pf_active_project";
+const PASSWORD_CHANGE_REQUIRED_KEY = "pf_password_change_required";
 
 // ── JWT expiry helpers ──────────────────────────────────────────────────────
 
@@ -79,14 +80,39 @@ export function getActiveProject(): string | null {
     return localStorage.getItem(PROJECT_KEY);
 }
 
+export function setPasswordChangeRequired(required: boolean) {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(PASSWORD_CHANGE_REQUIRED_KEY, required ? "true" : "false");
+}
+
+export function isPasswordChangeRequired(): boolean {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(PASSWORD_CHANGE_REQUIRED_KEY) === "true";
+}
+
 export function clearSession() {
     if (typeof window === "undefined") return;
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(PROJECT_KEY);
+    localStorage.removeItem(PASSWORD_CHANGE_REQUIRED_KEY);
 }
 
 // Deprecated: kept for backward compatibility
 export function getToken(): string | null {
     return getAccessToken();
+}
+
+/** Returns the roles array from the stored access token, or [] if absent/unreadable. */
+export function getRoles(): string[] {
+    const token = getAccessToken();
+    if (!token) return [];
+    const payload = decodeJwtPayload(token);
+    if (!payload || !Array.isArray(payload.roles)) return [];
+    return payload.roles as string[];
+}
+
+/** Returns true if the stored access token has the given role. */
+export function hasRole(role: string): boolean {
+    return getRoles().includes(role);
 }
