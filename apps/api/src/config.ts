@@ -54,12 +54,12 @@ const envSchema = z.object({
     /** Multiplier applied on top of provider-reported EUR cost (1.1 = +10% safety margin). */
     COST_POLICY_PROVIDER_MARKUP_FACTOR: z.coerce.number().positive().default(1.1),
     // --- Public domain (used to build subdomain URLs for published sites) ---
-    // Set to the base domain (e.g. sitowebinun.click) when nginx wildcard is active.
+    // Set to the base domain (e.g. yourdomain.com) when nginx wildcard is active.
     // If unset, only the path-based URL (/p/{publishId}) is returned.
     PUBLIC_DOMAIN: z.string().optional(),
     // --- CORS ---
     // Comma-separated list of allowed origins, or "*" for development.
-    // Production example: https://app.sitowebinun.click
+    // Production example: https://app.yourdomain.com
     CORS_ORIGIN: z.string().default("*"),
     // --- File storage & export ---
     DATA_DIR: z.string().default(DEFAULT_DATA_DIR),

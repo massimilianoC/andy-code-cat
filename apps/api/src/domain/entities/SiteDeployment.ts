@@ -7,7 +7,7 @@ export interface SiteDeployment {
     /**
      * Optional human-readable slug chosen by the user (e.g. "mia-pizzeria").
      * When set, files are also written to /data/www/{customSlug}/ so that
-     * {customSlug}.sitowebinun.click is served via the nginx wildcard block.
+        * {customSlug}.yourdomain.com is served via the nginx wildcard block.
      * The canonical path URL /p/{publishId} always remains valid.
      */
     customSlug?: string;
