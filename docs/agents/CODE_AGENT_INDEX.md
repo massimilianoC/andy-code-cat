@@ -7,9 +7,11 @@
 3. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — struttura del codebase attuale
 4. `docs/architecture/PIPELINE_LAYERS.md` — architettura a 2 layer e meccanismo di transizione
 5. `docs/security/SECURITY_BASELINE.md` — baseline auth e isolamento
-6. `docs/runbooks/TESTABLE_STEPS.md` — step testabili per ogni milestone
-7. `docs/specs/PRESET_TYPED_SPECS.md` — catalogo 9 preset tipizzati con outputSpec e systemPromptModule
-8. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — spec ZIP Export + Web Publishing
+6. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
+7. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
+8. `docs/runbooks/TESTABLE_STEPS.md` — step testabili per ogni milestone
+9. `docs/specs/PRESET_TYPED_SPECS.md` — catalogo 9 preset tipizzati con outputSpec e systemPromptModule
+10. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — spec ZIP Export + Web Publishing
 
 ---
 
@@ -171,6 +173,7 @@ apps/web/lib/
 - **Secrets:** nessun secret hardcoded — solo `process.env.*` via `apps/api/src/config.ts`
 - **Queue:** i worker non chiamano mai direttamente HTTP routes — usano use-cases del domain
 - **LLM providers:** aggiungere un nuovo provider = aggiungere un `default<Name>Catalog.ts`, aggiornare `GetLlmCatalog`, `SeedLlmCatalog`, `index.ts`, `seed-llm.ts`, e `.env.example`. Vedere `defaultOpenRouterCatalog.ts` come esempio.
+- **Gitflow:** ogni operazione git deve seguire `docs/guides/GITFLOW_RELEASE_POLICY.md`; il versioning di pubblicazione usa `RELEASE_VERSION`, non `package.json`.
 
 ## Do Not Do
 

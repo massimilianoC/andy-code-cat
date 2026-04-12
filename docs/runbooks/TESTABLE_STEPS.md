@@ -1,11 +1,11 @@
 # Testable Steps
 
-> Segui i milestone in ordine. Ogni step deve passare prima di procedere al successivo.
-> Per il piano completo vedere [`docs/DEVELOPMENT_PLAN.md`](../DEVELOPMENT_PLAN.md).
+> Follow milestones in order. Each step must pass before moving to the next one.
+> For the full plan, see [`docs/DEVELOPMENT_PLAN.md`](../DEVELOPMENT_PLAN.md).
 
 ---
 
-## BASELINE — Layer 1 già funzionante (✅)
+## BASELINE - Layer 1 already working (✅)
 
 ### Step 1 - Health
 
@@ -25,7 +25,7 @@
 ### Step 4 - List Projects
 
 - `GET /v1/projects` — headers: `Authorization: Bearer TOKEN`
-- Expected: lista progetti dell'utente autenticato
+- Expected: list of projects owned by the authenticated user
 
 ### Step 5 - Create Project
 
@@ -35,12 +35,12 @@
 ### Step 6 - Sandbox Check
 
 - `POST /v1/projects/:projectId/sessions` — headers: `x-project-id: PROJECT_ID`
-- Expected: `201` se utente è owner, `403` altrimenti
+- Expected: `201` if the user is the owner, `403` otherwise
 
 ### Step 7 - Seed
 
 - `npm run seed`
-- Expected: user `owner@Andy Code Cat.local` + default project creati (idempotente)
+- Expected: user `owner@andy-code-cat.local` and default project created (idempotent)
 
 ### Step 8 - LLM Catalog
 
@@ -63,7 +63,7 @@
 
 - `POST /v1/projects/:id/llm/chat-preview/stream`
 - Expected: SSE events `thinking` → `answer` → `done`
-- Verifica: `done.result.structured.artifacts` contiene `html/css/js`
+- Verify: `done.result.structured.artifacts` contains `html/css/js`
 
 ---
 
@@ -207,3 +207,46 @@
 ### Step 33 - SSE Credits Event
 
 - Durante il job, listener SSE riceve `{ type: "credits_charged", amount: N, balance: M }`
+
+---
+
+## Repository Governance — Gitflow Release
+
+### Step 34 - Release Version Format
+
+- `npm run release:version`
+- Expected: prints the contents of `RELEASE_VERSION` in `YYYY.MM.DD.N` format
+
+### Step 35 - Release Version Validation
+
+- `npm run release:version:validate`
+- Expected: output `Release version OK: ...`
+
+### Step 36 - Gitflow Branch Guard
+
+- `npm run gitflow:guard`
+- Expected: the current branch passes only if it matches one of these forms:
+  - `main`
+  - `develop`
+  - `feat/*`
+  - `fix/*`
+  - `docs/*`
+  - `chore/*`
+  - `refactor/*`
+  - `release/YYYY.MM.DD.N`
+  - `hotfix/*`
+
+### Step 37 - Release Branch Naming
+
+- Create branch `release/<RELEASE_VERSION>` from `develop`
+- Expected: branch name matches the canonical version stored in `RELEASE_VERSION`
+
+### Step 38 - Release Merge Intent
+
+- Open PR from `release/<RELEASE_VERSION>` to `main`
+- Expected: no new feature scope is present on the branch; only release hardening fixes, docs, and chore work
+
+### Step 39 - Agent Release Checklist Available
+
+- Open `docs/guides/AGENT_RELEASE_CHECKLIST.md`
+- Expected: the checklist covers branch selection, release identity, commit hygiene, PR targets, merge order, and back-merge rules
