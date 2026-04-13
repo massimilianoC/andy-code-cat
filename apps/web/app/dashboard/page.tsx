@@ -13,7 +13,8 @@ import {
     ApiError,
     type Project,
 } from "../../lib/api";
-import { getToken, clearSession } from "../../lib/token-store";
+import { getToken, clearSession, isPasswordChangeRequired } from "../../lib/token-store";
+import { PasswordChangeDialog } from "../../components/PasswordChangeDialog";
 import ProjectCard from "../../components/ProjectCard";
 import { TipsChip } from "../../components/TipsPanel";
 import GuideBanner from "../../components/GuideBanner";
@@ -70,6 +71,7 @@ export default function DashboardPage() {
     const [creating, setCreating] = useState(false);
     const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>(undefined);
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+    const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
     const createInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -81,6 +83,7 @@ export default function DashboardPage() {
         }
         setToken(tok);
         setRecentIds(getRecentIds());
+        setPasswordChangeRequiredState(isPasswordChangeRequired());
         setCheckingAuth(false);
         void load(tok);
     }, [router]);
@@ -192,6 +195,14 @@ export default function DashboardPage() {
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
+            {token ? (
+                <PasswordChangeDialog
+                    open={passwordChangeRequired}
+                    token={token}
+                    onCompleted={() => setPasswordChangeRequiredState(false)}
+                />
+            ) : null}
+
             {/* Navbar */}
             <header className="bg-card border-b border-border px-6 py-3 flex items-center justify-between sticky top-0 z-20">
                 <div className="flex items-center gap-2">

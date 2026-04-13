@@ -24,9 +24,9 @@ Required flow: `presentation → application → domain`, `infra → domain`
 
 ### Domain entities (✅)
 
-- `User` — con `llmPreferences.defaultProvider`
+- `User` — with `llmPreferences.defaultProvider` and `passwordPolicyVersion` for legacy password migration
 - `Project` — con `ownerUserId` per sandbox
-- `Session` — refresh token (solo hash in DB)
+- `Session` — session-bound refresh token rotation (only hashed refresh token stored in DB)
 - `Conversation` + `Message` + `MessageMetadata` + `BackgroundTask`
 - `LlmCatalog` — provider/model registry
 - `LlmPromptConfig` — prePromptTemplate per progetto
@@ -36,7 +36,7 @@ Required flow: `presentation → application → domain`, `infra → domain`
 
 ### Application use-cases (✅)
 
-- Auth: `RegisterUser`, `LoginUser`
+- Auth: `RegisterUser`, `LoginUser`, `RefreshSession`, `ChangePassword`
 - Projects: via routes dirette
 - Conversations: `CreateConversation`, `AddMessage`, `GetConversation`, `GetConversations`, `LogBackgroundTask`
 - LLM: `GetLlmCatalog`, `SeedLlmCatalog`, `GetLlmPromptConfig`, `SetLlmPromptConfig`
@@ -47,7 +47,7 @@ Required flow: `presentation → application → domain`, `infra → domain`
 ### API routes (✅)
 
 - `GET /health`
-- `POST /v1/auth/register` · `POST /v1/auth/login`
+- `POST /v1/auth/register` · `POST /v1/auth/login` · `POST /v1/auth/refresh` · `POST /v1/auth/change-password`
 - `GET/POST /v1/projects` · `GET /v1/projects/:id`
 - `DELETE /v1/projects/:id` · `POST /v1/projects/:id/duplicate`
 - `POST /v1/projects/:id/sessions`
@@ -137,3 +137,10 @@ Con chiave vengono registrati anche i modelli paid e la discovery live restituis
 Entrambi i check sono obbligatori su ogni route mutabile.
 In Layer 2, il workspace filesystem rispetta lo stesso modello:
 `/data/workspaces/{jobId}/` è isolato per job, `/var/www/Andy Code Cat/{slug}/` per progetto.
+
+## Auth Hardening Notes
+
+- Refresh tokens are now bound to a session token identifier (`sid`) and rotated after each successful refresh.
+- Legacy refresh tokens without `sid` are accepted once and upgraded during the next successful refresh.
+- Legacy accounts can still sign in, but the frontend must force the authenticated password change flow before normal workspace use.
+- Email verification remains bypassable through environment configuration until an operationally safe delivery flow is available.

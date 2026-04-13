@@ -1,37 +1,39 @@
 ---
 name: Bug Report
-about: Segnala un comportamento non corretto
+about: Report incorrect or unexpected behavior
 labels: bug
 ---
 
-## Descrizione
+# Bug Report
 
-Descrivi chiaramente il problema.
+## Description
 
-## Passi per Riprodurre
+Describe the problem clearly.
+
+## Steps to Reproduce
 
 1.
 2.
 3.
 
-## Comportamento Atteso
+## Expected Behavior
 
-Descrivi cosa ti aspettavi.
+Describe what you expected.
 
-## Comportamento Attuale
+## Actual Behavior
 
-Descrivi cosa succede realmente.
+Describe what actually happens.
 
-## Ambiente
+## Environment
 
 - OS:
-- Browser (se web):
-- Stack avviato: `docker-compose.yml` o `docker-compose.deploy.yml`
+- Browser (if web):
+- Running stack: `docker-compose.yml` or `docker-compose.deploy.yml`
 
 ## Log / Screenshot
 
-Incolla log o screenshot utili.
+Paste useful logs or screenshots.
 
-## Note Aggiuntive
+## Additional Notes
 
-Dettagli extra utili al triage.
+Extra details useful for triage.

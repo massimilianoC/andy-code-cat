@@ -1,31 +1,33 @@
 ---
 name: Feature Request
-about: Proponi un miglioramento o una nuova funzionalita
+about: Propose an improvement or a new feature
 labels: enhancement
 ---
 
-## Problema / Opportunita
+# Feature Request
 
-Quale problema risolve questa proposta?
+## Problem / Opportunity
 
-## Soluzione Proposta
+What problem does this proposal solve?
 
-Descrivi la soluzione desiderata.
+## Proposed Solution
 
-## Alternative Valutate
+Describe the desired solution.
 
-Descrivi eventuali alternative considerate.
+## Alternatives Considered
 
-## Impatto Architetturale
+Describe any alternatives that were considered.
 
-Indica se tocca API, web, contracts, o docs.
+## Architectural Impact
 
-## Criteri di Accettazione
+Indicate whether this affects API, web, contracts, or docs.
+
+## Acceptance Criteria
 
 - [ ]
 - [ ]
 - [ ]
 
-## Contesto Aggiuntivo
+## Additional Context
 
-Link, mockup o esempi utili.
+Useful links, mockups, or examples.

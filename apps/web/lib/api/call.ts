@@ -7,6 +7,8 @@ import {
     getAccessToken,
     getRefreshToken,
     setAccessToken,
+    setRefreshToken,
+    setPasswordChangeRequired,
     clearSession,
     isAccessTokenExpired,
     isRefreshTokenExpired,
@@ -31,6 +33,12 @@ export class ApiError extends Error {
 // the same deduplication mechanism without duplicating state.
 
 let _refreshPromise: Promise<string> | null = null;
+
+function isAnonymousAuthPath(path: string): boolean {
+    return path === "/v1/auth/login"
+        || path === "/v1/auth/register"
+        || path === "/v1/auth/refresh";
+}
 
 export function getSharedRefreshPromise(): Promise<string> | null {
     return _refreshPromise;
@@ -76,8 +84,13 @@ export async function refreshAccessToken(): Promise<string> {
         throw new ApiError(response.status, json);
     }
 
-    const newAccessToken = (json as { accessToken: string }).accessToken;
+    const payload = json as { accessToken: string; refreshToken?: string; requiresPasswordChange?: boolean };
+    const newAccessToken = payload.accessToken;
     setAccessToken(newAccessToken);
+    if (payload.refreshToken) {
+        setRefreshToken(payload.refreshToken);
+    }
+    setPasswordChangeRequired(payload.requiresPasswordChange === true);
     return newAccessToken;
 }
 
@@ -93,7 +106,7 @@ export async function call<T>(
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
     let resolvedHeaders: Record<string, string> = { ...headers };
-    if (!isRetry && !path.includes("/auth/") && resolvedHeaders.Authorization) {
+    if (!isRetry && !isAnonymousAuthPath(path) && resolvedHeaders.Authorization) {
         if (isAccessTokenExpired()) {
             try {
                 if (!_refreshPromise) {
@@ -142,7 +155,7 @@ export async function call<T>(
     const json = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-        if (res.status === 401 && !isRetry && !path.includes("/auth/")) {
+        if (res.status === 401 && !isRetry && !isAnonymousAuthPath(path)) {
             try {
                 if (!_refreshPromise) {
                     _refreshPromise = refreshAccessToken();

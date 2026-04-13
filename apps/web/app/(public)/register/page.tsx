@@ -99,7 +99,7 @@ export default function RegisterPage() {
                                 id="reg-password"
                                 type="password"
                                 required
-                                minLength={8}
+                                minLength={12}
                                 value={fields.password}
                                 onChange={(e) => set("password", e.target.value)}
                                 placeholder="••••••••"

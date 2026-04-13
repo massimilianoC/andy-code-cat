@@ -1,12 +1,13 @@
 import { ObjectId, type Collection } from "mongodb";
 import type { Session } from "../../domain/entities/Session";
-import type { CreateSessionInput, SessionRepository } from "../../domain/repositories/SessionRepository";
+import type { CreateSessionInput, SessionRepository, UpdateSessionRefreshInput } from "../../domain/repositories/SessionRepository";
 import { getDb } from "../db/mongo";
 
 interface SessionDocument {
     _id: ObjectId;
     userId: ObjectId;
     projectId: ObjectId;
+    tokenId?: string;
     refreshTokenHash: string;
     createdAt: Date;
     expiresAt: Date;
@@ -19,6 +20,7 @@ function mapDocument(doc: SessionDocument): Session {
         id: doc._id.toHexString(),
         userId: doc.userId.toHexString(),
         projectId: doc.projectId.toHexString(),
+        tokenId: doc.tokenId,
         refreshTokenHash: doc.refreshTokenHash,
         createdAt: doc.createdAt,
         expiresAt: doc.expiresAt,
@@ -41,6 +43,7 @@ export class MongoSessionRepository implements SessionRepository {
             _id: new ObjectId(),
             userId: new ObjectId(input.userId),
             projectId: new ObjectId(input.projectId),
+            tokenId: input.tokenId,
             refreshTokenHash: input.refreshTokenHash,
             createdAt: now,
             expiresAt: input.expiresAt,
@@ -56,6 +59,18 @@ export class MongoSessionRepository implements SessionRepository {
         return mapDocument(created);
     }
 
+    async findActiveByTokenId(tokenId: string): Promise<Session | null> {
+        const collection = await this.collection();
+        const now = new Date();
+
+        const doc = await collection.findOne({
+            tokenId,
+            expiresAt: { $gt: now }
+        });
+
+        return doc ? mapDocument(doc) : null;
+    }
+
     async findActiveByUserId(userId: string): Promise<Session | null> {
         const collection = await this.collection();
         const now = new Date();
@@ -63,9 +78,32 @@ export class MongoSessionRepository implements SessionRepository {
         const doc = await collection.findOne({
             userId: new ObjectId(userId),
             expiresAt: { $gt: now }
+        }, {
+            sort: { createdAt: -1 }
         });
 
         return doc ? mapDocument(doc) : null;
+    }
+
+    async updateRefreshToken(sessionId: string, input: UpdateSessionRefreshInput): Promise<Session | null> {
+        const collection = await this.collection();
+        const _id = new ObjectId(sessionId);
+
+        await collection.updateOne(
+            { _id },
+            {
+                $set: {
+                    tokenId: input.tokenId,
+                    refreshTokenHash: input.refreshTokenHash,
+                    expiresAt: input.expiresAt,
+                    ip: input.ip,
+                    userAgent: input.userAgent,
+                }
+            }
+        );
+
+        const updated = await collection.findOne({ _id });
+        return updated ? mapDocument(updated) : null;
     }
 
     async deleteAllByUserId(userId: string): Promise<number> {
