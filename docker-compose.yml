@@ -99,7 +99,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       # Local HTTP-only config — no SSL certs needed.
-      # Production SSL config lives in nginx/sites-enabled/pageforge.conf (droplet only).
+      # Production SSL config lives in nginx/sites-enabled/<project>.conf (droplet only).
       - ./nginx/sites-enabled/local.conf:/etc/nginx/sites-enabled/local.conf:ro
       - ./data/www:/var/www/andy-code-cat:ro
     depends_on:

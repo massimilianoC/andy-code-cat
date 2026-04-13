@@ -18,6 +18,7 @@ import { createPublishRoutes } from "./presentation/http/routes/publishRoutes";
 import { createUserProfileRoutes } from "./presentation/http/routes/userProfileRoutes";
 import { createPresetRoutes } from "./presentation/http/routes/presetRoutes";
 import { errorHandler } from "./presentation/http/middlewares/errorHandler";
+import { createAdminRoutes } from "./presentation/http/routes/adminRoutes";
 
 export function createApp() {
     const app = express();
@@ -56,6 +57,9 @@ export function createApp() {
     const { apiRouter: publishApi, staticRouter: publishStatic } = createPublishRoutes();
     app.use("/v1", publishApi);
     app.use("/p", publishStatic);
+
+    // Super admin routes — auth + requireSuperAdmin guard applied inside the router
+    app.use("/v1", createAdminRoutes());
 
     app.use(errorHandler);
 

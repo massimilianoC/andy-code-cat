@@ -60,7 +60,48 @@ async function run() {
     console.log("Style profile initialized for seed user.");
 }
 
-run().catch((error) => {
+run().then(() => {
+    return seedSuperAdmin();
+}).catch((error) => {
     console.error("Seed failed", error);
     process.exit(1);
 });
+
+async function seedSuperAdmin() {
+    const email = process.env.SUPERADMIN_EMAIL ?? "superadmin@andy-code-cat.local";
+    const password = process.env.SUPERADMIN_PASSWORD ?? "";
+
+    if (!password) {
+        console.warn(
+            "SUPERADMIN_PASSWORD is not set — skipping superadmin seed. " +
+            "Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD in your environment to create the superadmin account."
+        );
+        return;
+    }
+
+    const userRepository = new MongoUserRepository();
+    const existing = await userRepository.findByEmail(email);
+
+    if (existing) {
+        // Ensure the account has the superadmin role even if it was seeded without it
+        if (!existing.roles.includes("superadmin")) {
+            await userRepository.setRoles(existing.id, ["superadmin"]);
+            console.log(`Superadmin role assigned to existing account ${email}.`);
+        } else {
+            console.log(`Superadmin account ${email} already exists — seed skipped.`);
+        }
+        return;
+    }
+
+    const user = await userRepository.create({
+        email,
+        passwordHash: await hashPassword(password),
+        passwordPolicyVersion: 1,
+        firstName: "Super",
+        lastName: "Admin",
+        emailVerified: true,
+        llmPreferences: { defaultProvider: env.LLM_DEFAULT_PROVIDER },
+    });
+    await userRepository.setRoles(user.id, ["superadmin"]);
+    console.log(`Superadmin account created: ${email}`);
+}

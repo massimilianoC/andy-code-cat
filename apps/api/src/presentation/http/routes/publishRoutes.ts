@@ -299,6 +299,15 @@ export function createPublishRoutes() {
             return;
         }
 
+        // Admin suspension check — defer to deployment record before serving any content
+        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        if (deploymentRecord?.isAdminBlocked) {
+            res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
+                "This site has been suspended by the platform administrator."
+            );
+            return;
+        }
+
         const filePath = localFileStorage.resolvePublishFile(publishId, "index.html");
         if (!filePath) {
             res.status(404).send("Not found");

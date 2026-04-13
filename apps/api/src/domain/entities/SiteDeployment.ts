@@ -7,7 +7,7 @@ export interface SiteDeployment {
     /**
      * Optional human-readable slug chosen by the user (e.g. "mia-pizzeria").
      * When set, files are also written to /data/www/{customSlug}/ so that
-     * {customSlug}.sitowebinun.click is served via the nginx wildcard block.
+     * {customSlug}.yourdomain.com is served via the nginx wildcard block.
      * The canonical path URL /p/{publishId} always remains valid.
      */
     customSlug?: string;
@@ -19,6 +19,10 @@ export interface SiteDeployment {
     url: string;
     filesDeployed: string[];
     errorMessage?: string;
+    /** When true, the static-serving endpoint returns HTTP 403. Set by superadmin. */
+    isAdminBlocked?: boolean;
+    adminBlockedAt?: Date;
+    adminBlockedByUserId?: string;
     createdAt: Date;
     updatedAt: Date;
     deployedAt?: Date;

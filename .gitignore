@@ -10,6 +10,7 @@ coverage/
 .env.*.local
 .env.docker
 .env.droplet
+.env.deploy
 # deploy-specific env (keep .env.example and .env.deploy.example in repo)
 .env.droplet.example
 
@@ -27,6 +28,7 @@ docker-compose.droplet.yml
 scripts/deploy-to-droplet.sh
 scripts/seed-droplet.sh
 nginx/sites-enabled/
+.deploy/
 
 # ─── Private operational docs (not for public repo) ──────────────────────────
 docs/_archive/

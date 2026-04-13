@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import type { Collection } from "mongodb";
 import { getDb } from "../db/mongo";
 import type { SiteDeployment, SiteDeploymentStatus } from "../../domain/entities/SiteDeployment";
-import type { SiteDeploymentRepository, CreateSiteDeploymentInput } from "../../domain/repositories/SiteDeploymentRepository";
+import type { SiteDeploymentRepository, CreateSiteDeploymentInput, ListDeploymentsResult } from "../../domain/repositories/SiteDeploymentRepository";
 
 const COLLECTION = "site_deployments";
 
@@ -17,14 +17,33 @@ interface SiteDeploymentDocument {
     url: string;
     filesDeployed: string[];
     errorMessage?: string;
+    isAdminBlocked?: boolean;
+    adminBlockedAt?: Date;
+    adminBlockedByUserId?: string;
     createdAt: Date;
     updatedAt: Date;
     deployedAt?: Date;
 }
 
 function toEntity(doc: SiteDeploymentDocument): SiteDeployment {
-    const { _id, ...rest } = doc;
-    return { id: _id, ...rest };
+    return {
+        id: doc._id,
+        publishId: doc.publishId,
+        customSlug: doc.customSlug,
+        projectId: doc.projectId,
+        userId: doc.userId,
+        snapshotId: doc.snapshotId,
+        status: doc.status,
+        url: doc.url,
+        filesDeployed: doc.filesDeployed,
+        errorMessage: doc.errorMessage,
+        isAdminBlocked: doc.isAdminBlocked,
+        adminBlockedAt: doc.adminBlockedAt,
+        adminBlockedByUserId: doc.adminBlockedByUserId,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+        deployedAt: doc.deployedAt,
+    };
 }
 
 export class MongoSiteDeploymentRepository implements SiteDeploymentRepository {
@@ -145,5 +164,42 @@ export class MongoSiteDeploymentRepository implements SiteDeploymentRepository {
         await col.createIndex({ customSlug: 1 }, { sparse: true });  // sparse: allows multiple null/missing
         await col.createIndex({ projectId: 1, status: 1 });
         await col.createIndex({ userId: 1, createdAt: -1 });
+    }
+
+    async setAdminBlocked(publishId: string, blocked: boolean, adminUserId: string): Promise<SiteDeployment | null> {
+        const col = await this.col();
+        const now = new Date();
+        const $set: Record<string, unknown> = {
+            isAdminBlocked: blocked,
+            updatedAt: now,
+        };
+        if (blocked) {
+            $set.adminBlockedAt = now;
+            $set.adminBlockedByUserId = adminUserId;
+        } else {
+            $set.adminBlockedAt = undefined;
+            $set.adminBlockedByUserId = undefined;
+        }
+        const result = await col.findOneAndUpdate(
+            { publishId },
+            { $set },
+            { returnDocument: "after" }
+        );
+        return result ? toEntity(result) : null;
+    }
+
+    async listAllPaginated(page: number, limit: number): Promise<ListDeploymentsResult> {
+        const col = await this.col();
+        const skip = (page - 1) * limit;
+        const [deployments, total] = await Promise.all([
+            col.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
+            col.countDocuments({}),
+        ]);
+        return { deployments: deployments.map(toEntity), total };
+    }
+
+    async countLive(): Promise<number> {
+        const col = await this.col();
+        return col.countDocuments({ status: "live" });
     }
 }

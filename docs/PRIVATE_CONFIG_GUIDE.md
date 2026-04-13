@@ -24,7 +24,7 @@ This document is for the repository owner. It explains what stays local and how 
 | Live env files | `.env.docker`, `.env.droplet`, `.env.deploy` |
 | Private deploy scripts | `scripts/deploy-to-droplet.sh`, `scripts/seed-droplet.sh` |
 | Private compose file | `docker-compose.droplet.yml` |
-| Production nginx vhost | `nginx/sites-enabled/pageforge.conf` |
+| Production nginx vhost | `nginx/sites-enabled/<project>.conf` |
 | Billing data | `docs/cost-providers/bills_*.csv` |
 | Internal reviews | `docs/review/` |
 | Archived Italian docs | `docs/_archive/` |
