@@ -23,7 +23,9 @@ import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
+import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
 import { MongoUserStyleProfileRepository } from "../../../infra/repositories/MongoUserStyleProfileRepository";
+import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
@@ -55,6 +57,8 @@ type LlmRuntimeContext = {
     promptConfigId?: string;
     prePromptTemplate?: string;
     systemPrompt: string;
+    /** Governance focused-edit system prompt for this presetId (Layer E variant for focused mode). */
+    governanceFocusedSystemPrompt?: string;
 };
 
 function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]) {
@@ -90,6 +94,8 @@ export function createLlmRoutes(): Router {
     const setLlmPromptConfig = new SetLlmPromptConfig(promptConfigRepository);
     const moodboardRepository = new MongoProjectMoodboardRepository();
     const userStyleProfileRepository = new MongoUserStyleProfileRepository();
+    const userRepo = new MongoUserRepository();
+    const platformConfigRepo = new MongoPlatformConfigRepository();
 
     router.use(authMiddleware);
 
@@ -292,11 +298,17 @@ export function createLlmRoutes(): Router {
     }): Promise<LlmRuntimeContext> {
         const catalog = await getLlmCatalog.execute();
         const promptConfig = await getLlmPromptConfig.execute(input.projectId);
-        const [moodboard, userProfile, project] = await Promise.all([
+        const [moodboard, userProfile, project, platformConfig] = await Promise.all([
             moodboardRepository.findByProjectId(input.projectId),
             userStyleProfileRepository.findByUserId(input.userId),
             projectRepository.findByIdForUser(input.projectId, input.userId),
+            platformConfigRepo.get().catch(() => null),
         ]);
+
+        const governanceTemplates = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates;
+        const governanceSystemPrompt = governanceTemplates?.generationSystem || undefined;
+        const governanceFocusedSystemPrompt = governanceTemplates?.focusedEditSystem || undefined;
+
         const styleBlock = buildStyleContextBlock(userProfile, moodboard);
         const mkPrompt = () => composeSystemPrompt({
             presetId: project?.presetId,
@@ -304,6 +316,7 @@ export function createLlmRoutes(): Router {
             prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
             outputBudgetPolicy: buildOutputBudgetPolicy(),
             requestSystemPrompt: input.systemPrompt,
+            governanceSystemPrompt,
         });
 
         const providerCatalog =
@@ -329,6 +342,7 @@ export function createLlmRoutes(): Router {
                 promptConfigId: promptConfig.id,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 systemPrompt: mkPrompt(),
+                governanceFocusedSystemPrompt,
             };
         }
 
@@ -354,6 +368,7 @@ export function createLlmRoutes(): Router {
                 promptConfigId: promptConfig.id,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 systemPrompt: mkPrompt(),
+                governanceFocusedSystemPrompt,
             };
         }
 
@@ -370,6 +385,7 @@ export function createLlmRoutes(): Router {
             promptConfigId: promptConfig.id,
             prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
             systemPrompt: mkPrompt(),
+            governanceFocusedSystemPrompt,
         };
     }
 
@@ -431,21 +447,24 @@ export function createLlmRoutes(): Router {
         }
     });
 
-    // R1.4 — Prompt preview debug endpoint: returns the resolved system prompt with all 4 layers visible
+    // R1.4 — Prompt preview debug endpoint: returns the resolved system prompt with all layers visible
     router.get("/projects/:projectId/llm/prompt-preview", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const promptConfig = await getLlmPromptConfig.execute(req.sandbox!.projectId);
-            const [moodboard, userProfile, project] = await Promise.all([
+            const [moodboard, userProfile, project, platformConfig] = await Promise.all([
                 moodboardRepository.findByProjectId(req.sandbox!.projectId),
                 userStyleProfileRepository.findByUserId(req.auth!.userId),
                 projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId),
+                platformConfigRepo.get().catch(() => null),
             ]);
             const styleBlock = buildStyleContextBlock(userProfile, moodboard);
+            const governanceSystemPrompt = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates?.generationSystem || undefined;
             const layers = composeSystemPromptWithLayers({
                 presetId: project?.presetId,
                 styleBlock,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 outputBudgetPolicy: buildOutputBudgetPolicy(),
+                governanceSystemPrompt,
             });
             res.json({
                 presetId: project?.presetId ?? null,
@@ -454,6 +473,7 @@ export function createLlmRoutes(): Router {
                     b_presetModule: layers.layerB,
                     c_styleContext: layers.layerC,
                     d_prePromptTemplate: layers.layerD,
+                    e_governance: layers.layerE,
                     budgetPolicy: layers.budgetPolicy,
                 },
                 composed: layers.composed,
@@ -510,6 +530,7 @@ export function createLlmRoutes(): Router {
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
             const effectiveSystemPrompt = isFocusedMode
                 ? context.systemPrompt + "\n\n" + buildFocusedModeSystemAddendum(body.focusContext!, sectionOpts?.pageMap)
+                    + (context.governanceFocusedSystemPrompt ? "\n\n" + context.governanceFocusedSystemPrompt : "")
                 : context.systemPrompt;
 
             const { messages } = buildMessagesWithHistory(
@@ -674,6 +695,7 @@ export function createLlmRoutes(): Router {
                 messages,
                 outputText: rawReply,
             });
+            userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => {});
 
             // OpenRouter (and compatible providers) may return usage.cost in USD.
             const rawProviderCost = sfJson?.usage?.cost;
@@ -794,6 +816,7 @@ export function createLlmRoutes(): Router {
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
             const effectiveSystemPrompt = isFocusedMode
                 ? context.systemPrompt + "\n\n" + buildFocusedModeSystemAddendum(body.focusContext!, sectionOpts?.pageMap)
+                    + (context.governanceFocusedSystemPrompt ? "\n\n" + context.governanceFocusedSystemPrompt : "")
                 : context.systemPrompt;
 
             const { messages, historyIncluded } = buildMessagesWithHistory(
@@ -1052,6 +1075,7 @@ export function createLlmRoutes(): Router {
                 // Send an "interrupted" event with partial metadata so the client
                 // can persist the cost/token info even for aborted generations.
                 const partialUsage = resolveUsageWithFallback({ usage, messages, outputText: rawReply });
+                userRepo.incrementTokensConsumed(req.auth!.userId, partialUsage.totalTokens).catch(() => {});
                 const partialCost = estimateCost(
                     { capability: body.capability, tokenUsage: partialUsage, providerCostUsd: providerCostUsdStream },
                     {
@@ -1117,6 +1141,7 @@ export function createLlmRoutes(): Router {
                 messages,
                 outputText: trimmedRaw,
             });
+            userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => {});
 
             const result: LlmChatPreviewResult = {
                 reply,

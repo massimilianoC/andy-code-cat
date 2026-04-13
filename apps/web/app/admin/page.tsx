@@ -67,6 +67,17 @@ export default function AdminDashboardPage() {
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
+                            Total Tokens Used
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <span className="text-3xl font-bold">{((stats.totalTokensConsumedLifetime ?? 0) / 1000).toFixed(1)}K</span>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
                             Roles Distribution
                         </CardTitle>
                     </CardHeader>

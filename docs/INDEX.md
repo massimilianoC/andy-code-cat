@@ -85,3 +85,4 @@ Coding agents should read in this order before making changes:
 | Document | Description |
 |---|---|
 | [SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Admin governance flow: per-product prompt templates, global HTML/JS injections, and nginx runtime knobs |
+| [governance/PLATFORM_GOVERNANCE_POLICY.md](governance/PLATFORM_GOVERNANCE_POLICY.md) | Shared English policy for governance ownership, approval model, rollout boundaries, and audit expectations |

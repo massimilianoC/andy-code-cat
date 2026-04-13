@@ -147,6 +147,25 @@ In Layer 2, il workspace filesystem rispetta lo stesso modello:
   - Global injection snippets (`headHtml`, `headerHtml`, `footerHtml`, script blocks, analytics IDs)
   - Nginx runtime knobs (`publicDomain`, `publishSubdomainPattern`, cache/body-size tuning, extra directives)
 - Backward compatibility is preserved: existing deployments using only base platform config fields remain valid.
+- Current runtime status:
+  - `/admin/governance` is active and persists data through `GET|PATCH /v1/admin/config`.
+  - Registration and email-verification switches are active runtime controls.
+  - Governance prompt/injection/nginx fields are currently persisted and editable, but not yet fully consumed by the generation/publish runtime.
+
+## Admin User Operations
+
+- `/admin/users` now supports inline superadmin-side configuration with a right sidebar workflow.
+- Available admin user actions:
+  - block/unblock user
+  - edit email, first name, last name, email verification flag
+  - edit roles
+  - edit plan/limits overrides
+  - reset password with optional forced change on next login
+  - force or clear password reset requirement on next login
+  - delete user
+- When a user is blocked:
+  - active sessions are invalidated
+  - public published sites owned by that user return HTTP 403 until the account is restored
 
 ## Auth Hardening Notes
 

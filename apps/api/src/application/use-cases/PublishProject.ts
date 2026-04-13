@@ -4,6 +4,7 @@ import type { SiteDeploymentRepository } from "../../domain/repositories/SiteDep
 import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
 import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 import type { PublishHistoryRepository } from "../../domain/repositories/PublishHistoryRepository";
+import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 
 // ---------------------------------------------------------------------------
 // Artifact post-processing (same logic as ExportLayer1Zip, minimal version)
@@ -77,6 +78,83 @@ function postProcess(artifacts: { html: string; css: string; js: string }) {
     return { html: html.trim(), css: css.trim(), js: js.trim() };
 }
 
+/**
+ * Inject operator-configured governance HTML fragments and analytics snippets into the
+ * published site's HTML. Called after postProcess so injection targets are stable.
+ */
+function injectGovernanceHtml(
+    html: string,
+    injections: {
+        headHtml?: string;
+        headerHtml?: string;
+        footerHtml?: string;
+        scriptInHead?: string;
+        scriptBeforeBodyClose?: string;
+        googleTagManagerId?: string;
+        googleAnalyticsId?: string;
+        matomoSiteId?: string;
+        matomoUrl?: string;
+    },
+): string {
+    let out = html;
+
+    // GTM snippet in <head>
+    if (injections.googleTagManagerId?.trim()) {
+        const gtmId = injections.googleTagManagerId.trim();
+        const gtmHead = `<!-- Google Tag Manager -->\n<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}');</script>\n<!-- End Google Tag Manager -->`;
+        out = out.replace(/<\/head>/i, `${gtmHead}\n</head>`);
+    }
+
+    // GA4 snippet in <head>
+    if (injections.googleAnalyticsId?.trim()) {
+        const gaId = injections.googleAnalyticsId.trim();
+        const ga4Head = `<!-- Google Analytics -->\n<script async src="https://www.googletagmanager.com/gtag/js?id=${gaId}"></script>\n<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gaId}');</script>\n<!-- End Google Analytics -->`;
+        out = out.replace(/<\/head>/i, `${ga4Head}\n</head>`);
+    }
+
+    // scriptInHead inline in <head>
+    if (injections.scriptInHead?.trim()) {
+        out = out.replace(/<\/head>/i, `<script>${injections.scriptInHead.trim()}</script>\n</head>`);
+    }
+
+    // headHtml before </head>
+    if (injections.headHtml?.trim()) {
+        out = out.replace(/<\/head>/i, `${injections.headHtml.trim()}\n</head>`);
+    }
+
+    // GTM noscript after <body>
+    if (injections.googleTagManagerId?.trim()) {
+        const gtmId = injections.googleTagManagerId.trim();
+        const gtmBody = `<!-- Google Tag Manager (noscript) -->\n<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=${gtmId}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>\n<!-- End Google Tag Manager (noscript) -->`;
+        out = out.replace(/<body([^>]*)>/i, `<body$1>\n${gtmBody}`);
+    }
+
+    // headerHtml after <body>
+    if (injections.headerHtml?.trim()) {
+        out = out.replace(/<body([^>]*)>/i, `<body$1>\n${injections.headerHtml.trim()}`);
+    }
+
+    // Matomo before </body>
+    if (injections.matomoSiteId?.trim() && injections.matomoUrl?.trim()) {
+        const siteId = injections.matomoSiteId.trim();
+        const trackerUrl = injections.matomoUrl.trim().replace(/\/$/, "");
+        const matomo = `<!-- Matomo -->\n<script>var _paq=window._paq=window._paq||[];_paq.push(['trackPageView']);_paq.push(['enableLinkTracking']);(function(){var u='${trackerUrl}/';_paq.push(['setTrackerUrl',u+'matomo.php']);_paq.push(['setSiteId','${siteId}']);var d=document,g=d.createElement('script'),s=d.getElementsByTagName('script')[0];g.async=true;g.src=u+'matomo.js';s.parentNode.insertBefore(g,s);})();</script>\n<!-- End Matomo -->`;
+        out = out.replace(/<\/body>/i, `${matomo}\n</body>`);
+    }
+
+    // scriptBeforeBodyClose inline before </body>
+    if (injections.scriptBeforeBodyClose?.trim()) {
+        out = out.replace(/<\/body>/i, `<script>${injections.scriptBeforeBodyClose.trim()}</script>\n</body>`);
+    }
+
+    // footerHtml before </body>
+    if (injections.footerHtml?.trim()) {
+        out = out.replace(/<\/body>/i, `${injections.footerHtml.trim()}\n</body>`);
+    }
+
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Short publish-id generator (8 lowercase hex chars from UUID)
 // ---------------------------------------------------------------------------
@@ -99,6 +177,8 @@ export interface PublishProjectInput {
     userId: string;
     snapshotId?: string;
     customSlug?: string;
+    /** Preset ID of the project — used to resolve governance injections at publish time. */
+    presetId?: string | null;
 }
 
 export class PublishProject {
@@ -107,6 +187,7 @@ export class PublishProject {
         private snapshotRepo: PreviewSnapshotRepository,
         private storage: LocalFileStorage,
         private historyRepo?: PublishHistoryRepository,
+        private platformConfigRepo?: PlatformConfigRepository,
     ) { }
 
     async execute(input: PublishProjectInput): Promise<SiteDeployment> {
@@ -132,6 +213,7 @@ export class PublishProject {
 
         if (existing) {
             return this.republish(existing, snapshot.id, snapshot.artifacts, input.userId, input.projectId, input.customSlug);
+                    return this.republish(existing, snapshot.id, snapshot.artifacts, input.userId, input.projectId, input.customSlug, input.presetId);
         }
 
         // 4. Generate publish ID
@@ -141,7 +223,17 @@ export class PublishProject {
         // 5. Post-process artifacts and inject cache-busting version hash
         const processed = postProcess(snapshot.artifacts);
         const version = computeContentVersion(processed.css, processed.js);
-        const html = injectVersionHash(processed.html, version);
+        let html = injectVersionHash(processed.html, version);
+
+        // 5b. Apply governance HTML injections (operator-configured per presetId)
+        if (this.platformConfigRepo) {
+            const platformConfig = await this.platformConfigRepo.get().catch(() => null);
+            const govKey = input.presetId ?? "default";
+            const injections = platformConfig?.governanceByProduct?.[govKey]?.injections;
+            if (injections) {
+                html = injectGovernanceHtml(html, injections);
+            }
+        }
 
         // 6. Write files to /data/www/{publishId}/
         const files: Record<string, string> = { "index.html": html };
@@ -192,10 +284,21 @@ export class PublishProject {
         userId: string,
         projectId: string,
         newCustomSlug?: string,
+        presetId?: string | null,
     ): Promise<SiteDeployment> {
         const processed = postProcess(artifacts);
         const version = computeContentVersion(processed.css, processed.js);
-        const html = injectVersionHash(processed.html, version);
+        let html = injectVersionHash(processed.html, version);
+
+        // Apply governance HTML injections
+        if (this.platformConfigRepo) {
+            const platformConfig = await this.platformConfigRepo.get().catch(() => null);
+            const govKey = presetId ?? "default";
+            const injections = platformConfig?.governanceByProduct?.[govKey]?.injections;
+            if (injections) {
+                html = injectGovernanceHtml(html, injections);
+            }
+        }
 
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;

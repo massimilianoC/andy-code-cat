@@ -9,10 +9,11 @@ export class GetPlatformStats {
     ) {}
 
     async execute() {
-        const [totalUsers, blockedUsers, totalLiveDeployments] = await Promise.all([
+        const [totalUsers, blockedUsers, totalLiveDeployments, totalTokensConsumedLifetime] = await Promise.all([
             this.userRepository.countAll(),
             this.userRepository.countBlocked(),
             this.siteDeploymentRepository.countLive(),
+            this.userRepository.sumTokensConsumedLifetime(),
         ]);
 
         // Role breakdown from a paginated sweep (up to 1000 users for stats)
@@ -28,6 +29,7 @@ export class GetPlatformStats {
             totalUsers,
             blockedUsers,
             totalLiveDeployments,
+            totalTokensConsumedLifetime,
             usersByRole,
         };
     }

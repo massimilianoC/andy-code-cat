@@ -92,11 +92,26 @@
 ### Step 11b - Backward Compatibility of Platform Config
 
 - Call `PATCH /v1/admin/config` with payload containing only legacy fields:
- 	- `registrationOpen`
- 	- `emailVerificationRequired`
- 	- `defaultUserLimits`
+  - `registrationOpen`
+  - `emailVerificationRequired`
+  - `defaultUserLimits`
 - Expected: 200 OK and no regression in existing config reads/writes
 - Verify: `governanceByProduct` remains optional and does not break old clients
+
+### Step 11c - Superadmin User Sidebar Operations
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/users`
+- Click a row in the users table
+- Expected: a right sidebar opens with status, profile, roles, limits, password controls, and project summary
+- Change first name / last name / email and confirm save
+- Expected: updated values are persisted and reloaded in the sidebar and list
+- Trigger `Force reset next login`
+- Expected: user detail reports `requiresPasswordChange = true`
+- Reset password with a temporary password and keep `Force change on next login` enabled
+- Expected: reset succeeds and existing sessions for that user are invalidated
+- Block the user
+- Expected: user becomes blocked and public published sites owned by the user return HTTP 403
 
 ---
 

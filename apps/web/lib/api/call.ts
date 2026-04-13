@@ -47,6 +47,11 @@ export function setSharedRefreshPromise(p: Promise<string> | null): void {
     _refreshPromise = p;
 }
 
+function getApiBaseUrl(): string {
+    const configured = (process.env.NEXT_PUBLIC_API_URL ?? "").trim();
+    return configured.length > 0 ? configured : "http://localhost:4000";
+}
+
 // ── Refresh ───────────────────────────────────────────────────────────────────
 
 /**
@@ -63,7 +68,7 @@ export async function refreshAccessToken(): Promise<string> {
     }
 
     const refreshToken = getRefreshToken()!;
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    const baseUrl = getApiBaseUrl();
 
     let response: Response;
     try {
@@ -103,7 +108,7 @@ export async function call<T>(
     headers?: Record<string, string>,
     isRetry = false
 ): Promise<T> {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    const baseUrl = getApiBaseUrl();
 
     let resolvedHeaders: Record<string, string> = { ...headers };
     if (!isRetry && !isAnonymousAuthPath(path) && resolvedHeaders.Authorization) {

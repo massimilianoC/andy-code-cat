@@ -60,6 +60,37 @@ export default function AdminConfigPage() {
 
     if (loading) return <p className="text-muted-foreground text-sm">Loading…</p>;
 
+    function ToggleField({
+        label,
+        description,
+        checked,
+        onToggle,
+    }: {
+        label: string;
+        description: string;
+        checked: boolean;
+        onToggle: () => void;
+    }) {
+        return (
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card/60 px-4 py-3">
+                <div className="space-y-1">
+                    <Label className="text-sm font-medium">{label}</Label>
+                    <p className="text-xs text-muted-foreground">{description}</p>
+                </div>
+                <Button
+                    type="button"
+                    variant={checked ? "default" : "outline"}
+                    size="sm"
+                    className="min-w-24"
+                    onClick={onToggle}
+                    aria-pressed={checked}
+                >
+                    {checked ? "Enabled" : "Disabled"}
+                </Button>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6 max-w-2xl">
             <h1 className="text-2xl font-bold">Platform Configuration</h1>
@@ -75,52 +106,19 @@ export default function AdminConfigPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <Label className="text-sm font-medium">Registration open</Label>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                When off, the /register endpoint returns 403 for regular signups.
-                                The superadmin can still create users via the admin panel.
-                            </p>
-                        </div>
-                        <button
-                            role="switch"
-                            aria-checked={registrationOpen}
-                            onClick={() => setRegistrationOpen((v) => !v)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                registrationOpen ? "bg-primary" : "bg-muted"
-                            }`}
-                        >
-                            <span
-                                className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                                    registrationOpen ? "translate-x-6" : "translate-x-1"
-                                }`}
-                            />
-                        </button>
-                    </div>
+                    <ToggleField
+                        label="Registration open"
+                        description="When off, the /register endpoint returns 403 for regular signups. The superadmin can still create users via the admin panel."
+                        checked={registrationOpen}
+                        onToggle={() => setRegistrationOpen((v) => !v)}
+                    />
 
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <Label className="text-sm font-medium">Email verification required</Label>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                When on, unverified users are blocked from accessing the platform.
-                            </p>
-                        </div>
-                        <button
-                            role="switch"
-                            aria-checked={emailVerificationRequired}
-                            onClick={() => setEmailVerificationRequired((v) => !v)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                emailVerificationRequired ? "bg-primary" : "bg-muted"
-                            }`}
-                        >
-                            <span
-                                className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                                    emailVerificationRequired ? "translate-x-6" : "translate-x-1"
-                                }`}
-                            />
-                        </button>
-                    </div>
+                    <ToggleField
+                        label="Email verification required"
+                        description="When on, unverified users are blocked from accessing the platform."
+                        checked={emailVerificationRequired}
+                        onToggle={() => setEmailVerificationRequired((v) => !v)}
+                    />
                 </CardContent>
             </Card>
 

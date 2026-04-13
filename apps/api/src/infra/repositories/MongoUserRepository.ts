@@ -1,7 +1,7 @@
 import { ObjectId, type Collection, type Filter } from "mongodb";
 import type { User } from "../../domain/entities/User";
 import type { UserLimits, UserRole } from "../../domain/entities/User";
-import type { CreateUserInput, UserRepository } from "../../domain/repositories/UserRepository";
+import type { CreateUserInput, UpdateUserProfileInput, UserRepository } from "../../domain/repositories/UserRepository";
 import type { ListUsersFilter, ListUsersResult } from "../../domain/repositories/UserRepository";
 import { getDb } from "../db/mongo";
 
@@ -17,6 +17,7 @@ interface UserDocument {
     roles: UserRole[];
     llmPreferences?: User["llmPreferences"];
     limits?: UserLimits;
+    tokensConsumedLifetime?: number;
     createdAt: Date;
 }
 
@@ -33,6 +34,7 @@ function mapDocument(doc: UserDocument): User {
         roles: doc.roles,
         limits: doc.limits,
         llmPreferences: doc.llmPreferences,
+        tokensConsumedLifetime: doc.tokensConsumedLifetime,
         createdAt: doc.createdAt
     };
 }
@@ -90,6 +92,46 @@ export class MongoUserRepository implements UserRepository {
             {
                 $set: {
                     passwordHash,
+                    passwordPolicyVersion,
+                }
+            }
+        );
+
+        const updated = await collection.findOne({ _id });
+        return updated ? mapDocument(updated) : null;
+    }
+
+    async updateProfile(userId: string, input: UpdateUserProfileInput): Promise<User | null> {
+        const collection = await this.collection();
+        const _id = new ObjectId(userId);
+        const $set: Record<string, unknown> = {};
+
+        if (input.email !== undefined) {
+            $set.email = input.email.toLowerCase();
+        }
+        if (input.firstName !== undefined) {
+            $set.firstName = input.firstName;
+        }
+        if (input.lastName !== undefined) {
+            $set.lastName = input.lastName;
+        }
+        if (input.emailVerified !== undefined) {
+            $set.emailVerified = input.emailVerified;
+        }
+
+        await collection.updateOne({ _id }, { $set });
+        const updated = await collection.findOne({ _id });
+        return updated ? mapDocument(updated) : null;
+    }
+
+    async setPasswordPolicyVersion(userId: string, passwordPolicyVersion: number): Promise<User | null> {
+        const collection = await this.collection();
+        const _id = new ObjectId(userId);
+
+        await collection.updateOne(
+            { _id },
+            {
+                $set: {
                     passwordPolicyVersion,
                 }
             }
@@ -164,5 +206,22 @@ export class MongoUserRepository implements UserRepository {
     async deleteById(userId: string): Promise<void> {
         const collection = await this.collection();
         await collection.deleteOne({ _id: new ObjectId(userId) });
+    }
+
+    async sumTokensConsumedLifetime(): Promise<number> {
+        const collection = await this.collection();
+        const agg = await collection
+            .aggregate<{ total: number }>([{ $group: { _id: null, total: { $sum: "$tokensConsumedLifetime" } } }])
+            .next();
+        return agg?.total ?? 0;
+    }
+
+    async incrementTokensConsumed(userId: string, tokens: number): Promise<void> {
+        if (tokens <= 0) return;
+        const collection = await this.collection();
+        await collection.updateOne(
+            { _id: new ObjectId(userId) },
+            { $inc: { tokensConsumedLifetime: tokens } },
+        );
     }
 }

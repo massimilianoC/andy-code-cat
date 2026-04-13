@@ -48,7 +48,7 @@ export const setPlatformConfigSchema = z.object({
             clientMaxBodySizeMb: z.number().int().min(1).max(1024).default(20),
             extraServerDirectives: z.string().max(40000).default(""),
         }).partial().optional(),
-    }).default({}).optional()).optional(),
+    }).default({})).optional(),
 });
 export type SetPlatformConfigInput = z.infer<typeof setPlatformConfigSchema>;
 
@@ -76,6 +76,25 @@ export const blockUserSchema = z.object({
     blocked: z.boolean(),
 });
 export type BlockUserInput = z.infer<typeof blockUserSchema>;
+
+export const adminUpdateUserProfileSchema = z.object({
+    email: z.string().email().optional(),
+    firstName: z.string().max(100).nullable().optional(),
+    lastName: z.string().max(100).nullable().optional(),
+    emailVerified: z.boolean().optional(),
+});
+export type AdminUpdateUserProfileInput = z.infer<typeof adminUpdateUserProfileSchema>;
+
+export const adminResetUserPasswordSchema = z.object({
+    newPassword: z.string().min(8).max(128),
+    requireChangeOnNextLogin: z.boolean().default(true),
+});
+export type AdminResetUserPasswordInput = z.infer<typeof adminResetUserPasswordSchema>;
+
+export const adminSetPasswordResetRequiredSchema = z.object({
+    required: z.boolean(),
+});
+export type AdminSetPasswordResetRequiredInput = z.infer<typeof adminSetPasswordResetRequiredSchema>;
 
 export const listUsersQuerySchema = z.object({
     page: z.coerce.number().int().positive().default(1),

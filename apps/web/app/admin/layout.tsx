@@ -29,6 +29,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <a href="/admin/users" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                     Users
                 </a>
+                <a href="/admin/projects" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    Projects
+                </a>
                 <a href="/admin/config" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                     Config
                 </a>
