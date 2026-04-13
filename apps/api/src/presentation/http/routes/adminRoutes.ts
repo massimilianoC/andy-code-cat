@@ -18,6 +18,14 @@ import { SetPlatformConfig } from "../../../application/use-cases/admin/SetPlatf
 import { AdminTogglePublication } from "../../../application/use-cases/admin/AdminTogglePublication";
 import type { RequestWithContext } from "../types";
 
+function getRequiredRouteParam(value: string | undefined, name: string): string {
+    if (!value) {
+        throw new Error(`Missing route parameter: ${name}`);
+    }
+
+    return value;
+}
+
 export function createAdminRoutes(): Router {
     const router = Router();
 
@@ -93,7 +101,8 @@ export function createAdminRoutes(): Router {
 
     router.get("/admin/users/:userId", async (req, res, next) => {
         try {
-            const detail = await getUserDetail.execute(req.params.userId);
+            const userId = getRequiredRouteParam(req.params.userId, "userId");
+            const detail = await getUserDetail.execute(userId);
             res.json(detail);
         } catch (err) {
             next(err);
@@ -102,7 +111,8 @@ export function createAdminRoutes(): Router {
 
     router.patch("/admin/users/:userId/block", async (req: RequestWithContext, res, next) => {
         try {
-            const result = await blockUser.execute(req.params.userId, req.auth!.userId, req.body);
+            const userId = getRequiredRouteParam(req.params.userId, "userId");
+            const result = await blockUser.execute(userId, req.auth!.userId, req.body);
             res.json(result);
         } catch (err) {
             next(err);
@@ -111,7 +121,8 @@ export function createAdminRoutes(): Router {
 
     router.patch("/admin/users/:userId/roles", async (req: RequestWithContext, res, next) => {
         try {
-            const result = await setUserRole.execute(req.params.userId, req.auth!.userId, req.body);
+            const userId = getRequiredRouteParam(req.params.userId, "userId");
+            const result = await setUserRole.execute(userId, req.auth!.userId, req.body);
             res.json(result);
         } catch (err) {
             next(err);
@@ -120,7 +131,8 @@ export function createAdminRoutes(): Router {
 
     router.patch("/admin/users/:userId/limits", async (req, res, next) => {
         try {
-            const result = await setUserLimits.execute(req.params.userId, req.body);
+            const userId = getRequiredRouteParam(req.params.userId, "userId");
+            const result = await setUserLimits.execute(userId, req.body);
             res.json(result);
         } catch (err) {
             next(err);
@@ -129,7 +141,8 @@ export function createAdminRoutes(): Router {
 
     router.delete("/admin/users/:userId", async (req: RequestWithContext, res, next) => {
         try {
-            const result = await deleteUser.execute(req.params.userId, req.auth!.userId);
+            const userId = getRequiredRouteParam(req.params.userId, "userId");
+            const result = await deleteUser.execute(userId, req.auth!.userId);
             res.json(result);
         } catch (err) {
             next(err);
@@ -167,8 +180,9 @@ export function createAdminRoutes(): Router {
 
     router.patch("/admin/deployments/:publishId/block", async (req: RequestWithContext, res, next) => {
         try {
+            const publishId = getRequiredRouteParam(req.params.publishId, "publishId");
             const result = await adminTogglePublication.execute(
-                req.params.publishId,
+                publishId,
                 req.auth!.userId,
                 req.body,
             );
