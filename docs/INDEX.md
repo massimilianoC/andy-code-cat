@@ -37,6 +37,7 @@ Coding agents should read in this order before making changes:
 |---|---|
 | [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Testable steps per milestone (M0 baseline → M5) |
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker setup (dev and deploy mode) |
+| [docs/PRIVATE_CONFIG_GUIDE.md](PRIVATE_CONFIG_GUIDE.md) | Owner-only policy for private config/deploy data, secret hygiene, and safe user migration rollout |
 | [docs/guides/OPENROUTER_INTEGRATION_GUIDE.md](guides/OPENROUTER_INTEGRATION_GUIDE.md) | OpenRouter integration guide (multi-provider, cost policy, model selector) |
 | [docs/guides/I18N.md](guides/I18N.md) | i18n system — architecture, translation keys, adding new strings |
 | [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, data safety |
