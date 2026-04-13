@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { MonacoCodeEditor } from "@/components/admin/MonacoCodeEditor";
 
 const DEFAULT_PRODUCT_KEY = "default";
+const NGINX_RUNTIME_ENABLED = false;
 
 const EMPTY_GOVERNANCE: ProductGovernanceDto = {
     promptTemplates: {
@@ -256,27 +257,59 @@ export default function AdminGovernancePage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {!NGINX_RUNTIME_ENABLED ? (
+                        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                            Future feature: these nginx fields are currently configuration-only and are not applied automatically
+                            to runtime nginx files, domain switches, or SSL certificate generation.
+                        </p>
+                    ) : null}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1">
                             <Label>Public domain</Label>
-                            <Input value={governance.nginx.publicDomain} onChange={(e) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, publicDomain: e.target.value } }))} placeholder="example.com" />
+                            <Input
+                                disabled={!NGINX_RUNTIME_ENABLED}
+                                value={governance.nginx.publicDomain}
+                                onChange={(e) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, publicDomain: e.target.value } }))}
+                                placeholder="example.com"
+                            />
                         </div>
                         <div className="space-y-1">
                             <Label>Subdomain pattern</Label>
-                            <Input value={governance.nginx.publishSubdomainPattern} onChange={(e) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, publishSubdomainPattern: e.target.value } }))} placeholder="{publishId}" />
+                            <Input
+                                disabled={!NGINX_RUNTIME_ENABLED}
+                                value={governance.nginx.publishSubdomainPattern}
+                                onChange={(e) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, publishSubdomainPattern: e.target.value } }))}
+                                placeholder="{publishId}"
+                            />
                         </div>
                         <div className="space-y-1">
                             <Label>Cache TTL (seconds)</Label>
-                            <Input type="number" value={String(governance.nginx.cacheTtlSeconds)} onChange={(e) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, cacheTtlSeconds: Number(e.target.value) || 0 } }))} />
+                            <Input
+                                disabled={!NGINX_RUNTIME_ENABLED}
+                                type="number"
+                                value={String(governance.nginx.cacheTtlSeconds)}
+                                onChange={(e) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, cacheTtlSeconds: Number(e.target.value) || 0 } }))}
+                            />
                         </div>
                         <div className="space-y-1">
                             <Label>Client max body size (MB)</Label>
-                            <Input type="number" value={String(governance.nginx.clientMaxBodySizeMb)} onChange={(e) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, clientMaxBodySizeMb: Number(e.target.value) || 1 } }))} />
+                            <Input
+                                disabled={!NGINX_RUNTIME_ENABLED}
+                                type="number"
+                                value={String(governance.nginx.clientMaxBodySizeMb)}
+                                onChange={(e) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, clientMaxBodySizeMb: Number(e.target.value) || 1 } }))}
+                            />
                         </div>
                     </div>
                     <div className="space-y-1">
                         <Label>Extra server directives</Label>
-                        <MonacoCodeEditor language="nginx" value={governance.nginx.extraServerDirectives} onChange={(next) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, extraServerDirectives: next } }))} />
+                        <div className={!NGINX_RUNTIME_ENABLED ? "pointer-events-none opacity-60" : ""}>
+                            <MonacoCodeEditor
+                                language="nginx"
+                                value={governance.nginx.extraServerDirectives}
+                                onChange={(next) => setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, extraServerDirectives: next } }))}
+                            />
+                        </div>
                     </div>
                 </CardContent>
             </Card>
