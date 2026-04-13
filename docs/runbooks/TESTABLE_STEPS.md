@@ -1,11 +1,11 @@
 # Testable Steps
 
-> Segui i milestone in ordine. Ogni step deve passare prima di procedere al successivo.
-> Per il piano completo vedere [`docs/DEVELOPMENT_PLAN.md`](../DEVELOPMENT_PLAN.md).
+> Follow the milestones in order. Each step must pass before moving to the next one.
+> For the full plan, see [`docs/DEVELOPMENT_PLAN.md`](../DEVELOPMENT_PLAN.md).
 
 ---
 
-## BASELINE — Layer 1 già funzionante (✅)
+## BASELINE - Layer 1 already working (✅)
 
 ### Step 1 - Health
 
@@ -20,12 +20,28 @@
 ### Step 3 - Login
 
 - `POST /v1/auth/login` — body: email, password
-- Expected: `200 { accessToken, refreshToken, projects }`
+- Expected: `200 { accessToken, refreshToken, projects, activeProjectId, requiresPasswordChange, emailVerificationRequired }`
+
+### Step 3a - Refresh Rotation
+
+- `POST /v1/auth/refresh` — body: `{ "refreshToken": "..." }`
+- Expected: `200 { accessToken, refreshToken, activeProjectId }`
+- Verify: the returned `refreshToken` differs from the submitted one.
+- Verify: replaying the old refresh token now returns `401`.
+
+### Step 3b - Legacy Password Upgrade
+
+- Precondition: use a legacy account without `passwordPolicyVersion` or with an older version.
+- `POST /v1/auth/login`
+- Expected: `requiresPasswordChange === true` while login still succeeds.
+- `POST /v1/auth/change-password` with bearer token and body `{ currentPassword, newPassword }`
+- Expected: `200 { reauthRequired: true, requiresPasswordChange: false }`
+- Verify: a new login with the updated password returns `requiresPasswordChange === false`.
 
 ### Step 4 - List Projects
 
 - `GET /v1/projects` — headers: `Authorization: Bearer TOKEN`
-- Expected: lista progetti dell'utente autenticato
+- Expected: list of projects owned by the authenticated user
 
 ### Step 5 - Create Project
 
@@ -35,67 +51,67 @@
 ### Step 6 - Sandbox Check
 
 - `POST /v1/projects/:projectId/sessions` — headers: `x-project-id: PROJECT_ID`
-- Expected: `201` se utente è owner, `403` altrimenti
+- Expected: `201` if the user is the owner, `403` otherwise
 
 ### Step 7 - Seed
 
 - `npm run seed`
-- Expected: user `owner@Andy Code Cat.local` + default project creati (idempotente)
+- Expected: user `owner@andy-code-cat.local` and default project created (idempotent)
 
 ### Step 8 - LLM Catalog
 
 - `GET /v1/llm/providers`
 - Expected: `200 { source: "env", providers: [...] }`
 
-### Step 9 - LLM Catalog Mongo Seed (opzionale)
+### Step 9 - LLM Catalog Mongo Seed (optional)
 
 - Precondition: `LLM_CATALOG_SOURCE=mongo`
 - `npm run seed:llm`
-- Expected: upsert idempotente in collection `llm_providers`
+- Expected: idempotent upsert in the `llm_providers` collection
 
 ### Step 10 - Chat Preview
 
 - `POST /v1/projects/:id/llm/chat-preview`
-- body: `{ message: "Crea una landing page per un'agenzia SEO" }`
+- body: `{ message: "Create a landing page for an SEO agency" }`
 - Expected: `200 { reply, structured: { chat, artifacts } }`
 
 ### Step 11 - Chat Preview Streaming
 
 - `POST /v1/projects/:id/llm/chat-preview/stream`
 - Expected: SSE events `thinking` → `answer` → `done`
-- Verifica: `done.result.structured.artifacts` contiene `html/css/js`
+- Verify: `done.result.structured.artifacts` contains `html/css/js`
 
 ---
 
-## M0.5 — Focused Asset Control
+## M0.5 - Focused Asset Control
 
 ### Step 12 - Preview Inspect Toggle
 
-- Aprire Workspace con artifacts presenti
-- Attivare toggle `Inspect`
-- Expected: hover su iframe evidenzia il nodo sotto il mouse; click seleziona il nodo
+- Open the Workspace with generated artifacts present
+- Enable the `Inspect` toggle
+- Expected: hovering the iframe highlights the node under the mouse; clicking selects the node
 
 ### Step 13 - Selected Element Metadata
 
-- Con elemento selezionato cliccare `Copia JSON metadati`
-- Expected: payload contiene almeno `stableNodeId`, `selector`, `tag`, `classes`
+- With an element selected, click `Copy metadata JSON`
+- Expected: payload contains at least `stableNodeId`, `selector`, `tag`, `classes`
 
 ### Step 14 - Focus Context In Prompt
 
-- Cliccare `Usa in prompt` e inviare messaggio tipo "ottimizza questo blocco"
+- Click `Use in prompt` and send a message such as "optimize this block"
 - Expected: request backend include `focusContext.mode = "preview-element"`
-- Expected: tracing `messagesSentToLlm` contiene il blocco focus
+- Expected: tracing `messagesSentToLlm` contains the focus block
 
 ### Step 15 - Code Selection Focus
 
-- Nelle tab `HTML/CSS/JS`, selezionare un range e inviare prompt
+- In the `HTML/CSS/JS` tabs, select a range and send a prompt
 - Expected: request include `focusContext.mode = "code-selection"` + `startLine/endLine`
 
 ### Step 16 - Snapshot History
 
-- Inviare 3 prompt consecutivi con modifiche
-- Expected: 3 snapshot ordinati per timestamp navigabili da combo box history
-- Expected: restore snapshot precedente disponibile
+- Send 3 consecutive prompts with changes
+- Expected: 3 snapshots ordered by timestamp, browsable from the history combo box
+- Expected: restoring a previous snapshot is available
 
 ---
 
@@ -103,8 +119,8 @@
 
 ### Step 17 - contextStats.atCapacity
 
-- Eseguire 6+ scambi in una conversazione con messaggi lunghi
-- Expected: `contextStats.atCapacity === true` nella response
+- Execute 6+ turns in a conversation with long messages
+- Expected: `contextStats.atCapacity === true` in the response
 
 ### Step 18 - Job Creation
 
@@ -124,20 +140,20 @@
 ### Step 20 - Profiles List
 
 - `GET /v1/preprompt-profiles`
-- Expected: almeno 2 profili default (`landing-page-standard`, `mini-site-portfolio`)
+- Expected: at least 2 default profiles (`landing-page-standard`, `mini-site-portfolio`)
 
 ### Step 21 - Preprompt Test Preview
 
 - `POST /v1/preprompt-profiles/landing-page-standard/test`
-- body: `{ prompt: "Landing page per agenzia SEO SpeedRank", projectId: "..." }`
+- body: `{ prompt: "Landing page for SEO agency SpeedRank", projectId: "..." }`
 - Expected: `200 { resolvedPrompt, resolvedClaudeMd, resolvedOpenCodeJson, tokenEstimate }`
-- Verifica: `resolvedPrompt` non è vuoto e contiene il testo del prompt
+- Verify: `resolvedPrompt` is not empty and contains the prompt text
 
 ### Step 22 - Layer Condizionale
 
-- Creare profilo con layer condizionale `condition: "input.hasPdf == true"`
-- Test con `hasPdf: false` → layer NON incluso
-- Test con `hasPdf: true` → layer incluso
+- Create a profile with a conditional layer `condition: "input.hasPdf == true"`
+- Test with `hasPdf: false` → layer is NOT included
+- Test with `hasPdf: true` → layer is included
 
 ---
 
@@ -145,24 +161,24 @@
 
 ### Step 23 - BullMQ Queue
 
-- `POST /generate` con Redis disponibile
-- Verifica Redis: `EXISTS bull:generation:*`
+- `POST /generate` with Redis available
+- Verify in Redis: `EXISTS bull:generation:*`
 
 ### Step 24 - Workspace Setup
 
-- Expected: `/data/workspaces/{jobId}/` creata con `opencode.json`, `CLAUDE.md`, `skills/`
+- Expected: `/data/workspaces/{jobId}/` is created with `opencode.json`, `CLAUDE.md`, `skills/`
 
 ### Step 25 - SSE Log Stream
 
 - `GET /v1/jobs/:jobId/logs` (SSE)
-- Expected: stream di log da OpenCode stdout
-- Verifica: timeout SIGTERM funzionante se OpenCode si blocca
+- Expected: log stream from OpenCode stdout
+- Verify: SIGTERM timeout works if OpenCode hangs
 
 ### Step 26 - Generation Completed
 
-- Attendere `job.status === "completed"`
-- Expected: `/data/workspaces/{jobId}/dist/index.html` esiste
-- Expected: git log mostra commit `iteration-1`
+- Wait until `job.status === "completed"`
+- Expected: `/data/workspaces/{jobId}/dist/index.html` exists
+- Expected: git log shows commit `iteration-1`
 
 ---
 
@@ -175,19 +191,19 @@
 
 ### Step 28 - Nginx Config
 
-- Expected: `/etc/nginx/sites-available/{slug}.conf` creato
-- Verifica: `nginx -t` → OK
+- Expected: `/etc/nginx/sites-available/{slug}.conf` is created
+- Verify: `nginx -t` → OK
 
 ### Step 29 - Site Live
 
 - `GET /v1/projects/:id/deployment`
 - Expected: `{ status: "live", url: "http://slug.Andy Code Cat.local" }`
-- Verifica: `curl http://slug.Andy Code Cat.local` → HTML del sito
+- Verify: `curl http://slug.Andy Code Cat.local` → site HTML
 
 ### Step 30 - Export ZIP
 
 - `GET /v1/projects/:id/export/zip`
-- Expected: ZIP scaricabile con `index.html` dentro
+- Expected: downloadable ZIP containing `index.html`
 
 ---
 
@@ -195,15 +211,15 @@
 
 ### Step 31 - Insufficient Credits
 
-- Seed user con 0 crediti
+- Seed a user with 0 credits
 - `POST /generate` → `402 { error: "insufficient_credits", required: 6.5, balance: 0 }`
 
 ### Step 32 - Credits Deducted
 
-- Seed user con 20 crediti
-- Completare una generazione + deploy
-- `GET /v1/profile/credits` → balance ridotto (6.5 crediti: 0.5 preprompt + 5 gen + 1 deploy)
+- Seed a user with 20 credits
+- Complete one generation + deploy flow
+- `GET /v1/profile/credits` → reduced balance (6.5 credits: 0.5 preprompt + 5 generation + 1 deploy)
 
 ### Step 33 - SSE Credits Event
 
-- Durante il job, listener SSE riceve `{ type: "credits_charged", amount: N, balance: M }`
+- During the job, the SSE listener receives `{ type: "credits_charged", amount: N, balance: M }`

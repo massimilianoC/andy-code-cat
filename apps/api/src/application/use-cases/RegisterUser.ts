@@ -1,4 +1,8 @@
-import { registerSchema, type RegisterInput } from "@andy-code-cat/contracts";
+import {
+    CURRENT_PASSWORD_POLICY_VERSION,
+    registerSchema,
+    type RegisterInput
+} from "@andy-code-cat/contracts";
 import type { UserRepository } from "../../domain/repositories/UserRepository";
 import type { ProjectRepository } from "../../domain/repositories/ProjectRepository";
 import { hashPassword } from "../../infra/security/password";
@@ -22,6 +26,7 @@ export class RegisterUser {
         const user = await this.userRepository.create({
             email: normalizedEmail,
             passwordHash: await hashPassword(input.password),
+            passwordPolicyVersion: CURRENT_PASSWORD_POLICY_VERSION,
             firstName: input.firstName,
             lastName: input.lastName,
             emailVerified: env.authBypassEmailVerification,

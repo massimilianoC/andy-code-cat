@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
@@ -11,7 +12,7 @@ import { DuplicateProject } from "../../../application/use-cases/DuplicateProjec
 import { GetProjectMoodboard } from "../../../application/use-cases/GetProjectMoodboard";
 import { UpdateProjectMoodboard } from "../../../application/use-cases/UpdateProjectMoodboard";
 import { hashPassword } from "../../../infra/security/password";
-import { signRefreshToken } from "../../../infra/security/jwt";
+import { signRefreshToken, verifyRefreshToken } from "../../../infra/security/jwt";
 import { PRESET_MAP, VALID_PRESET_IDS } from "../../../domain/entities/ProjectPreset";
 import type { RequestWithContext } from "../types";
 
@@ -172,12 +173,15 @@ export function createProjectRoutes(): Router {
 
     router.post("/projects/:projectId/sessions", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
-            const refreshToken = signRefreshToken({ sub: req.auth!.userId });
+            const tokenId = randomUUID();
+            const refreshToken = signRefreshToken({ sub: req.auth!.userId, sid: tokenId });
+            const refreshPayload = verifyRefreshToken(refreshToken);
             await sessionRepository.create({
                 userId: req.auth!.userId,
                 projectId: req.sandbox!.projectId,
+                tokenId,
                 refreshTokenHash: await hashPassword(refreshToken),
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                expiresAt: new Date((refreshPayload.exp ?? 0) * 1000),
                 ip: req.ip,
                 userAgent: req.headers["user-agent"]
             });

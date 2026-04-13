@@ -32,7 +32,7 @@
         "lastName": "Last name",
         "email": "Email *",
         "password": "Password *",
-        "passwordHint": "(min 8 characters)",
+        "passwordHint": "(min 12 chars, upper/lowercase, number, symbol)",
         "submit": "Create account",
         "submitting": "Creating...",
         "haveAccount": "Already have an account?",
@@ -236,6 +236,24 @@
         "requiresLogin": "Your session has expired. Enter your credentials to continue without losing the current context.",
         "tokenExpired": "Your session has expired. Please sign in again to continue.",
         "logout": "Sign out"
+    },
+    "security": {
+        "passwordChange": {
+            "title": "Password update required",
+            "badge": "Legacy account",
+            "description": "This account was created before the current password policy. Set a stronger password to keep using the workspace.",
+            "currentPassword": "Current password",
+            "newPassword": "New password",
+            "confirmPassword": "Confirm new password",
+            "policyHint": "Use at least 12 characters with uppercase, lowercase, a number, and a symbol.",
+            "logout": "Sign out",
+            "submit": "Update password",
+            "submitting": "Updating...",
+            "errors": {
+                "confirmationMismatch": "Password confirmation does not match.",
+                "generic": "Unable to update the password."
+            }
+        }
     },
     "notifications": {
         "close": "Close",

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useSession } from "./SessionContext";
 import { LoginForm } from "../components/LoginForm";
 import type { LoginResult } from "./api";
+import { setPasswordChangeRequired } from "./token-store";
 
 export function SessionRefreshModal() {
     const { t } = useTranslation();
@@ -15,6 +16,7 @@ export function SessionRefreshModal() {
     }
 
     function handleLoginSuccess(data: LoginResult) {
+        setPasswordChangeRequired(data.requiresPasswordChange);
         onLoginSuccess(data.accessToken, data.refreshToken, data.activeProjectId);
     }
 
