@@ -4,29 +4,29 @@
 
 - **web**: Next.js 15 App Router — UI client
 - **api**: Express + TypeScript — backend API (Clean Architecture)
-- **mongodb**: database primario (porta host 27018)
-- **redis**: cache + BullMQ queue (porta host 6380)
-- **workspace**: container per OpenCode worker (da aggiungere in M3)
+- **mongodb**: primary database (host port 27018)
+- **redis**: cache + BullMQ queue (host port 6380)
+- **workspace**: container for OpenCode worker (planned for M3)
 
 ## Clean Architecture Map (API)
 
 ```
 apps/api/src/
-  domain/          ← entità pure TypeScript + interfacce repository (zero dipendenze esterne)
-  application/     ← use-cases + orchestrazione (dipende solo da domain)
-  infra/           ← Mongoose adapters + bcrypt + JWT (implementa interfacce domain)
-  presentation/    ← Express routes + middleware (chiama application)
+  domain/          ← pure TypeScript entities + repository interfaces (zero external dependencies)
+  application/     ← use-cases + orchestration (depends only on domain)
+  infra/           ← Mongoose adapters + bcrypt + JWT (implements domain interfaces)
+  presentation/    ← Express routes + middleware (calls application)
 ```
 
-Flusso obbligatorio: `presentation → application → domain`, `infra → domain`
+Required flow: `presentation → application → domain`, `infra → domain`
 
 ## What Is Built
 
 ### Domain entities (✅)
 
-- `User` — con `llmPreferences.defaultProvider`
+- `User` — with `llmPreferences.defaultProvider` and `passwordPolicyVersion` for legacy password migration
 - `Project` — con `ownerUserId` per sandbox
-- `Session` — refresh token (solo hash in DB)
+- `Session` — session-bound refresh token rotation (only hashed refresh token stored in DB)
 - `Conversation` + `Message` + `MessageMetadata` + `BackgroundTask`
 - `LlmCatalog` — provider/model registry
 - `LlmPromptConfig` — prePromptTemplate per progetto
@@ -36,7 +36,7 @@ Flusso obbligatorio: `presentation → application → domain`, `infra → domai
 
 ### Application use-cases (✅)
 
-- Auth: `RegisterUser`, `LoginUser`
+- Auth: `RegisterUser`, `LoginUser`, `RefreshSession`, `ChangePassword`
 - Projects: via routes dirette
 - Conversations: `CreateConversation`, `AddMessage`, `GetConversation`, `GetConversations`, `LogBackgroundTask`
 - LLM: `GetLlmCatalog`, `SeedLlmCatalog`, `GetLlmPromptConfig`, `SetLlmPromptConfig`
@@ -47,7 +47,7 @@ Flusso obbligatorio: `presentation → application → domain`, `infra → domai
 ### API routes (✅)
 
 - `GET /health`
-- `POST /v1/auth/register` · `POST /v1/auth/login`
+- `POST /v1/auth/register` · `POST /v1/auth/login` · `POST /v1/auth/refresh` · `POST /v1/auth/change-password`
 - `GET/POST /v1/projects` · `GET /v1/projects/:id`
 - `DELETE /v1/projects/:id` · `POST /v1/projects/:id/duplicate`
 - `POST /v1/projects/:id/sessions`
@@ -63,7 +63,7 @@ Flusso obbligatorio: `presentation → application → domain`, `infra → domai
 - `GET|PUT /v1/users/me/profile`
 - `GET|PUT /v1/projects/:id/moodboard`
 
-⚠️ **Route ordering**: `createUserProfileRoutes()` deve essere registrata PRIMA di `createProjectRoutes()` in `app.ts`. Il router di projectRoutes ha `router.use(authMiddleware)` che si applica a TUTTI i path che entrano nel router, incluso `/v1/style-tags` se fosse il primo a ricevere la richiesta.
+⚠️ **Route ordering**: `createUserProfileRoutes()` must be registered BEFORE `createProjectRoutes()` in `app.ts`. The `projectRoutes` router uses `router.use(authMiddleware)`, which applies to all incoming paths, including `/v1/style-tags` if project routes are registered first.
 
 ### Frontend screens (✅)
 
@@ -114,9 +114,9 @@ Flusso obbligatorio: `presentation → application → domain`, `infra → domai
 
 ## LLM Catalog Bootstrap
 
-- `LLM_CATALOG_SOURCE=env` (default) — catalog da codice, nessun seed richiesto
-- `LLM_CATALOG_SOURCE=mongo` — catalog da collection `llm_providers`
-- Seed: `npm run seed:llm` (idempotente)
+- `LLM_CATALOG_SOURCE=env` (default) — catalog from code, no seed required
+- `LLM_CATALOG_SOURCE=mongo` — catalog from the `llm_providers` collection
+- Seed: `npm run seed:llm` (idempotent)
 
 ### Provider registrati
 
@@ -137,3 +137,10 @@ Con chiave vengono registrati anche i modelli paid e la discovery live restituis
 Entrambi i check sono obbligatori su ogni route mutabile.
 In Layer 2, il workspace filesystem rispetta lo stesso modello:
 `/data/workspaces/{jobId}/` è isolato per job, `/var/www/Andy Code Cat/{slug}/` per progetto.
+
+## Auth Hardening Notes
+
+- Refresh tokens are now bound to a session token identifier (`sid`) and rotated after each successful refresh.
+- Legacy refresh tokens without `sid` are accepted once and upgraded during the next successful refresh.
+- Legacy accounts can still sign in, but the frontend must force the authenticated password change flow before normal workspace use.
+- Email verification remains bypassable through environment configuration until an operationally safe delivery flow is available.

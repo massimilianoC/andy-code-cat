@@ -24,7 +24,7 @@ This document is for the repository owner. It explains what stays local and how 
 | Live env files | `.env.docker`, `.env.droplet`, `.env.deploy` |
 | Private deploy scripts | `scripts/deploy-to-droplet.sh`, `scripts/seed-droplet.sh` |
 | Private compose file | `docker-compose.droplet.yml` |
-| Production nginx vhost | `nginx/sites-enabled/pageforge.conf` |
+| Production nginx vhost | `nginx/sites-enabled/<project>.conf` |
 | Billing data | `docs/cost-providers/bills_*.csv` |
 | Internal reviews | `docs/review/` |
 | Archived Italian docs | `docs/_archive/` |
@@ -74,6 +74,76 @@ Before every `git push public main`, mentally check:
 6. No `docker-compose.droplet.yml`
 
 The `.gitignore` already covers all of these — as long as you never `git add -f` a gitignored file.
+
+---
+
+## Minimal Collaboration Rules (English-First)
+
+Use English for collaboration artifacts that are public-facing:
+
+- GitHub issues and PR descriptions
+- commit messages and release notes
+- public docs under `docs/` and `README.md`
+
+For private operational notes (`docs/deploy/`, local runbooks), keep sensitive details local and sanitized before sharing snippets publicly.
+
+---
+
+## Secret-Safe Documentation Rules
+
+Never include production secrets in any tracked file. In docs and examples, always use placeholders:
+
+- `JWT_ACCESS_SECRET=<redacted>`
+- `OPEN_ROUTER_API_KEY=<redacted>`
+- `SILICONFLOW_API_KEY=<redacted>`
+- `MONGODB_URI=mongodb://<user>:<password>@<host>:27017/<db>`
+
+If you need to explain a real incident, describe the symptom and resolution, not the actual key/token/IP.
+
+---
+
+## Existing Users Migration (No Breakage Strategy)
+
+Goal: keep current users operational during auth/security upgrades.
+
+### Preferred rollout
+
+1. Keep backward-compatible login/session behavior for existing users.
+2. Mark legacy accounts with `requiresPasswordChange` when needed.
+3. Force password update after login (API/platform flow), then require re-authentication.
+4. Avoid hard locks unless there is an active security incident.
+
+### Current UI constraint
+
+There is no dedicated profile page yet for password management.
+
+Until profile UI exists, use platform/API-managed forced password change:
+
+- keep login compatible for legacy users;
+- trigger forced password update flow from app startup/dashboard;
+- revoke old sessions after successful change.
+
+This preserves service continuity while progressively raising security posture.
+
+### What to avoid
+
+- Bulk password resets without communication
+- Forced account edits during deploy without compatibility path
+- Disabling all legacy sessions preemptively in non-emergency scenarios
+
+---
+
+## Private Deploy Runbook Template (Local Only)
+
+Keep detailed deploy steps in `docs/deploy/` (gitignored). At minimum, include:
+
+1. Pre-deploy checks (backup, branch/tag, health state)
+2. Migration plan (schema/data/session impact)
+3. Existing-user behavior expectations (no change vs forced password change)
+4. Rollback steps
+5. Post-deploy verification checklist
+
+Do not include live secrets in these files; reference local secret managers instead.
 
 ---
 

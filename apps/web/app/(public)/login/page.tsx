@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { LoginForm } from "@/components/LoginForm";
-import { saveSession } from "@/lib/token-store";
+import { saveSession, setPasswordChangeRequired } from "@/lib/token-store";
 import type { LoginResult } from "@/lib/api";
 import {
     Card,
@@ -24,6 +24,7 @@ function LoginContent() {
 
     function handleSuccess(data: LoginResult) {
         saveSession(data.accessToken, data.refreshToken, data.activeProjectId);
+        setPasswordChangeRequired(data.requiresPasswordChange);
         router.push(afterOnboarding ? "/onboarding" : "/dashboard");
     }
 

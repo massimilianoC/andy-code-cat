@@ -32,7 +32,7 @@
         "lastName": "Cognome",
         "email": "Email *",
         "password": "Password *",
-        "passwordHint": "(min 8 caratteri)",
+        "passwordHint": "(min 12 caratteri, maiuscole/minuscole, numero, simbolo)",
         "submit": "Crea account",
         "submitting": "Creazione...",
         "haveAccount": "Hai già un account?",
@@ -236,6 +236,24 @@
         "requiresLogin": "La tua sessione \u00e8 scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
         "tokenExpired": "La tua sessione \u00e8 scaduta. Effettua di nuovo il login per continuare.",
         "logout": "Esci"
+    },
+    "security": {
+        "passwordChange": {
+            "title": "Aggiornamento password richiesto",
+            "badge": "Account legacy",
+            "description": "Questo account è stato creato prima della policy password corrente. Imposta una password più robusta per continuare a usare il workspace.",
+            "currentPassword": "Password attuale",
+            "newPassword": "Nuova password",
+            "confirmPassword": "Conferma nuova password",
+            "policyHint": "Usa almeno 12 caratteri con maiuscole, minuscole, numero e simbolo.",
+            "logout": "Esci",
+            "submit": "Aggiorna password",
+            "submitting": "Aggiornamento...",
+            "errors": {
+                "confirmationMismatch": "La conferma password non corrisponde.",
+                "generic": "Impossibile aggiornare la password."
+            }
+        }
     },
     "notifications": {
         "close": "Chiudi",

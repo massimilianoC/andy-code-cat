@@ -7,10 +7,16 @@ const refreshTokenTtl = env.JWT_REFRESH_TTL as jwt.SignOptions["expiresIn"];
 export interface AccessTokenPayload {
     sub: string;
     roles: string[];
+    sid?: string;
+    exp?: number;
+    iat?: number;
 }
 
 export interface RefreshTokenPayload {
     sub: string;
+    sid?: string;
+    exp?: number;
+    iat?: number;
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {

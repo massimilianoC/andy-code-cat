@@ -1,9 +1,14 @@
-import { loginSchema, type LoginInput } from "@andy-code-cat/contracts";
+import {
+    CURRENT_PASSWORD_POLICY_VERSION,
+    loginSchema,
+    type LoginInput
+} from "@andy-code-cat/contracts";
+import { randomUUID } from "crypto";
 import type { UserRepository } from "../../domain/repositories/UserRepository";
 import type { ProjectRepository } from "../../domain/repositories/ProjectRepository";
 import type { SessionRepository } from "../../domain/repositories/SessionRepository";
 import { verifyPassword, hashPassword } from "../../infra/security/password";
-import { signAccessToken, signRefreshToken } from "../../infra/security/jwt";
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../infra/security/jwt";
 import { env } from "../../config";
 
 export class LoginUser {
@@ -19,16 +24,16 @@ export class LoginUser {
 
         const user = await this.userRepository.findByEmail(normalizedEmail);
         if (!user) {
-            throw new Error("Invalid credentials");
+            throw Object.assign(new Error("Invalid credentials"), { statusCode: 401 });
         }
 
         const isValidPassword = await verifyPassword(input.password, user.passwordHash);
         if (!isValidPassword) {
-            throw new Error("Invalid credentials");
+            throw Object.assign(new Error("Invalid credentials"), { statusCode: 401 });
         }
 
         if (!user.emailVerified && !env.authBypassEmailVerification) {
-            throw new Error("Email not verified");
+            throw Object.assign(new Error("Email not verified"), { statusCode: 403 });
         }
 
         const projects = await this.projectRepository.listForUser(user.id);
@@ -40,18 +45,23 @@ export class LoginUser {
             selectedProject = await this.projectRepository.create(user.id, "Default Project");
         }
 
-        const accessToken = signAccessToken({ sub: user.id, roles: user.roles });
-        const refreshToken = signRefreshToken({ sub: user.id });
+        const tokenId = randomUUID();
+        const accessToken = signAccessToken({ sub: user.id, roles: user.roles, sid: tokenId });
+        const refreshToken = signRefreshToken({ sub: user.id, sid: tokenId });
+        const refreshPayload = verifyRefreshToken(refreshToken);
 
         const refreshTokenHash = await hashPassword(refreshToken);
         await this.sessionRepository.create({
             userId: user.id,
             projectId: selectedProject.id,
+            tokenId,
             refreshTokenHash,
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            expiresAt: new Date((refreshPayload.exp ?? 0) * 1000),
             ip: metadata?.ip,
             userAgent: metadata?.userAgent
         });
+
+        const requiresPasswordChange = (user.passwordPolicyVersion ?? 1) < CURRENT_PASSWORD_POLICY_VERSION;
 
         return {
             user: {
@@ -64,6 +74,8 @@ export class LoginUser {
             },
             projects,
             activeProjectId: selectedProject.id,
+            emailVerificationRequired: !user.emailVerified,
+            requiresPasswordChange,
             accessToken,
             refreshToken
         };
