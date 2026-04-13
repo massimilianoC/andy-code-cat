@@ -63,7 +63,7 @@ All admin endpoints are mounted at `/v1/admin` and require:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/v1/admin/config` | Get current platform configuration |
-| `PATCH` | `/v1/admin/config` | Update platform configuration |
+| `PATCH` | `/v1/admin/config` | Update platform configuration, including optional per-product governance |
 
 ### Platform Statistics
 
@@ -111,10 +111,40 @@ interface PlatformConfig {
     registrationOpen: boolean;          // allow public self-registration
     emailVerificationRequired: boolean; // enforce email verification on register
     defaultUserLimits: UserLimits;      // applied to new users at creation time
+   governanceByProduct?: Record<string, ProductGovernanceConfig>; // optional map by product key
     updatedAt: Date;
     updatedByUserId?: string;           // userId of the admin that last changed config
 }
+
+interface ProductGovernanceConfig {
+   promptTemplates: {
+      generationSystem: string;
+      focusedEditSystem: string;
+      reviewSystem: string;
+   };
+   injections: {
+      headHtml: string;
+      headerHtml: string;
+      footerHtml: string;
+      scriptInHead: string;
+      scriptBeforeBodyClose: string;
+      googleTagManagerId: string;
+      googleAnalyticsId: string;
+      matomoSiteId: string;
+      matomoUrl: string;
+   };
+   nginx: {
+      publicDomain: string;
+      publishSubdomainPattern: string;
+      cacheTtlSeconds: number;
+      clientMaxBodySizeMb: number;
+      extraServerDirectives: string;
+   };
+}
 ```
+
+`governanceByProduct` is additive and optional. Existing clients can continue reading/updating
+legacy fields without sending governance payloads.
 
 ### `SiteDeployment` additions
 
@@ -165,6 +195,7 @@ to `/login` if either:
 | `/admin/users` | Paginated user list with search + filter |
 | `/admin/users/[userId]` | Master-detail user view: info, block, role, limits, plan |
 | `/admin/config` | Platform configuration editor |
+| `/admin/governance` | Per-product governance editor with Monaco-backed prompt/injection/nginx sections |
 
 The admin UI uses the same shadcn/ui primitives and Tailwind semantic tokens as the rest of the
 application.  It is not linked from the user-facing navigation and is invisible to regular users.

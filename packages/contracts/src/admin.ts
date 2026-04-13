@@ -24,6 +24,31 @@ export const setPlatformConfigSchema = z.object({
     registrationOpen: z.boolean().optional(),
     emailVerificationRequired: z.boolean().optional(),
     defaultUserLimits: setUserLimitsSchema.optional(),
+    governanceByProduct: z.record(z.string().min(1), z.object({
+        promptTemplates: z.object({
+            generationSystem: z.string().max(20000).default(""),
+            focusedEditSystem: z.string().max(20000).default(""),
+            reviewSystem: z.string().max(20000).default(""),
+        }).partial().optional(),
+        injections: z.object({
+            headHtml: z.string().max(40000).default(""),
+            headerHtml: z.string().max(40000).default(""),
+            footerHtml: z.string().max(40000).default(""),
+            scriptInHead: z.string().max(40000).default(""),
+            scriptBeforeBodyClose: z.string().max(40000).default(""),
+            googleTagManagerId: z.string().max(128).default(""),
+            googleAnalyticsId: z.string().max(128).default(""),
+            matomoSiteId: z.string().max(128).default(""),
+            matomoUrl: z.string().max(2048).default(""),
+        }).partial().optional(),
+        nginx: z.object({
+            publicDomain: z.string().max(255).default(""),
+            publishSubdomainPattern: z.string().max(255).default("{publishId}"),
+            cacheTtlSeconds: z.number().int().min(0).max(86400).default(300),
+            clientMaxBodySizeMb: z.number().int().min(1).max(1024).default(20),
+            extraServerDirectives: z.string().max(40000).default(""),
+        }).partial().optional(),
+    }).default({}).optional()).optional(),
 });
 export type SetPlatformConfigInput = z.infer<typeof setPlatformConfigSchema>;
 
@@ -117,6 +142,31 @@ export interface PlatformConfigDto {
         plan: string;
         planExpiresAt?: string;
     };
+    governanceByProduct?: Record<string, {
+        promptTemplates: {
+            generationSystem: string;
+            focusedEditSystem: string;
+            reviewSystem: string;
+        };
+        injections: {
+            headHtml: string;
+            headerHtml: string;
+            footerHtml: string;
+            scriptInHead: string;
+            scriptBeforeBodyClose: string;
+            googleTagManagerId: string;
+            googleAnalyticsId: string;
+            matomoSiteId: string;
+            matomoUrl: string;
+        };
+        nginx: {
+            publicDomain: string;
+            publishSubdomainPattern: string;
+            cacheTtlSeconds: number;
+            clientMaxBodySizeMb: number;
+            extraServerDirectives: string;
+        };
+    }>;
     updatedAt: string;
     updatedByUserId?: string;
 }

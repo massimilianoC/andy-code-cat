@@ -2,7 +2,7 @@ import type { PlatformConfigRepository } from "../../../domain/repositories/Plat
 import { DEFAULT_USER_LIMITS } from "../../../domain/entities/User";
 
 export class GetPlatformConfig {
-    constructor(private readonly configRepository: PlatformConfigRepository) {}
+    constructor(private readonly configRepository: PlatformConfigRepository) { }
 
     async execute() {
         const config = await this.configRepository.get();
@@ -12,8 +12,41 @@ export class GetPlatformConfig {
             registrationOpen: true,
             emailVerificationRequired: false,
             defaultUserLimits: { ...DEFAULT_USER_LIMITS },
+            governanceByProduct: {},
             updatedAt: new Date(),
         };
+
+        const governanceByProduct = Object.fromEntries(
+            Object.entries(effective.governanceByProduct ?? {}).map(([productKey, governance]) => [
+                productKey,
+                {
+                    promptTemplates: {
+                        generationSystem: governance.promptTemplates.generationSystem ?? "",
+                        focusedEditSystem: governance.promptTemplates.focusedEditSystem ?? "",
+                        reviewSystem: governance.promptTemplates.reviewSystem ?? "",
+                    },
+                    injections: {
+                        headHtml: governance.injections.headHtml ?? "",
+                        headerHtml: governance.injections.headerHtml ?? "",
+                        footerHtml: governance.injections.footerHtml ?? "",
+                        scriptInHead: governance.injections.scriptInHead ?? "",
+                        scriptBeforeBodyClose: governance.injections.scriptBeforeBodyClose ?? "",
+                        googleTagManagerId: governance.injections.googleTagManagerId ?? "",
+                        googleAnalyticsId: governance.injections.googleAnalyticsId ?? "",
+                        matomoSiteId: governance.injections.matomoSiteId ?? "",
+                        matomoUrl: governance.injections.matomoUrl ?? "",
+                    },
+                    nginx: {
+                        publicDomain: governance.nginx.publicDomain ?? "",
+                        publishSubdomainPattern: governance.nginx.publishSubdomainPattern ?? "{publishId}",
+                        cacheTtlSeconds: governance.nginx.cacheTtlSeconds ?? 300,
+                        clientMaxBodySizeMb: governance.nginx.clientMaxBodySizeMb ?? 20,
+                        extraServerDirectives: governance.nginx.extraServerDirectives ?? "",
+                    },
+                },
+            ])
+        );
+
         return {
             registrationOpen: effective.registrationOpen,
             emailVerificationRequired: effective.emailVerificationRequired,
@@ -21,6 +54,7 @@ export class GetPlatformConfig {
                 ...effective.defaultUserLimits,
                 planExpiresAt: effective.defaultUserLimits.planExpiresAt?.toISOString(),
             },
+            governanceByProduct,
             updatedAt: effective.updatedAt.toISOString(),
             updatedByUserId: effective.updatedByUserId,
         };

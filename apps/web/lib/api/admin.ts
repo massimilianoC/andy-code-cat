@@ -43,8 +43,41 @@ export interface PlatformConfigDto {
     registrationOpen: boolean;
     emailVerificationRequired: boolean;
     defaultUserLimits: UserLimitsDto;
+    governanceByProduct?: Record<string, ProductGovernanceDto>;
     updatedAt: string;
     updatedByUserId?: string;
+}
+
+export interface ProductPromptTemplatesDto {
+    generationSystem: string;
+    focusedEditSystem: string;
+    reviewSystem: string;
+}
+
+export interface ProductInjectionsDto {
+    headHtml: string;
+    headerHtml: string;
+    footerHtml: string;
+    scriptInHead: string;
+    scriptBeforeBodyClose: string;
+    googleTagManagerId: string;
+    googleAnalyticsId: string;
+    matomoSiteId: string;
+    matomoUrl: string;
+}
+
+export interface ProductNginxDto {
+    publicDomain: string;
+    publishSubdomainPattern: string;
+    cacheTtlSeconds: number;
+    clientMaxBodySizeMb: number;
+    extraServerDirectives: string;
+}
+
+export interface ProductGovernanceDto {
+    promptTemplates: ProductPromptTemplatesDto;
+    injections: ProductInjectionsDto;
+    nginx: ProductNginxDto;
 }
 
 export interface AdminDeploymentDto {
@@ -79,9 +112,26 @@ export function getAdminConfig(token: string): Promise<PlatformConfigDto> {
 
 export function updateAdminConfig(
     token: string,
-    body: Partial<{ registrationOpen: boolean; emailVerificationRequired: boolean; defaultUserLimits: Partial<UserLimitsDto> }>
+    body: Partial<{
+        registrationOpen: boolean;
+        emailVerificationRequired: boolean;
+        defaultUserLimits: Partial<UserLimitsDto>;
+        governanceByProduct: Record<string, Partial<ProductGovernanceDto>>;
+    }>
 ): Promise<PlatformConfigDto> {
     return call<PlatformConfigDto>("PATCH", "/v1/admin/config", body, auth(token));
+}
+
+export function updateProductGovernance(
+    token: string,
+    productKey: string,
+    governancePatch: Partial<ProductGovernanceDto>
+): Promise<PlatformConfigDto> {
+    return updateAdminConfig(token, {
+        governanceByProduct: {
+            [productKey]: governancePatch,
+        },
+    });
 }
 
 // ── User management ───────────────────────────────────────────────────────────

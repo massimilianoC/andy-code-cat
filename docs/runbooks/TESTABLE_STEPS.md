@@ -81,6 +81,23 @@
 - Expected: SSE events `thinking` → `answer` → `done`
 - Verify: `done.result.structured.artifacts` contains `html/css/js`
 
+### Step 11a - Superadmin Governance Config
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/governance`
+- Expected: product scope selector, prompt template editors, injection editors, nginx parameters are visible
+- Save for `productKey = default`
+- Expected: success state in UI and persisted values returned by `GET /v1/admin/config`
+
+### Step 11b - Backward Compatibility of Platform Config
+
+- Call `PATCH /v1/admin/config` with payload containing only legacy fields:
+ 	- `registrationOpen`
+ 	- `emailVerificationRequired`
+ 	- `defaultUserLimits`
+- Expected: 200 OK and no regression in existing config reads/writes
+- Verify: `governanceByProduct` remains optional and does not break old clients
+
 ---
 
 ## M0.5 - Focused Asset Control

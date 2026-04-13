@@ -74,3 +74,11 @@ Coding agents should read in this order before making changes:
 | [RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot for landing pages — BYOK, document ingestion, vanilla JS widget |
 | [MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-provider, multi-model platform playbook |
 | [SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin "god mode" — user mgmt, publication control, platform config, license model |
+
+---
+
+## Governance Controls
+
+| Document | Description |
+|---|---|
+| [SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Admin governance flow: per-product prompt templates, global HTML/JS injections, and nginx runtime knobs |

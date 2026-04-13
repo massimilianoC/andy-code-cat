@@ -140,6 +140,14 @@ export default function AdminUserDetailPage() {
 
     return (
         <div className="space-y-6 max-w-4xl">
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+                <a href="/admin" className="hover:text-foreground transition-colors">Admin</a>
+                <span>/</span>
+                <a href="/admin/users" className="hover:text-foreground transition-colors">Users</a>
+                <span>/</span>
+                <span className="text-foreground truncate">{user.email}</span>
+            </div>
+
             {/* Header */}
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="sm" onClick={() => router.push("/admin/users")}>

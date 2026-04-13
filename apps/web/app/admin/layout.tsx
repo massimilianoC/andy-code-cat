@@ -32,6 +32,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <a href="/admin/config" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                     Config
                 </a>
+                <a href="/admin/governance" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    Governance
+                </a>
                 <div className="ml-auto">
                     <a href="/dashboard" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
                         ← Back to Dashboard

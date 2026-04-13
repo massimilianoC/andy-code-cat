@@ -71,6 +71,7 @@ Required flow: `presentation → application → domain`, `infra → domain`
 - `/dashboard` — ProjectCard grid + GuideBanner + TipsPanel + toast
 - `/onboarding` — wizard 3-step con TagPicker (stili utente)
 - `/workspace/[projectId]` — split-panel: chat + preview iframe
+- `/admin` · `/admin/users` · `/admin/users/[userId]` · `/admin/config` · `/admin/governance` — superadmin-only control plane
 
 ### Frontend components (✅)
 
@@ -137,6 +138,15 @@ Con chiave vengono registrati anche i modelli paid e la discovery live restituis
 Entrambi i check sono obbligatori su ogni route mutabile.
 In Layer 2, il workspace filesystem rispetta lo stesso modello:
 `/data/workspaces/{jobId}/` è isolato per job, `/var/www/Andy Code Cat/{slug}/` per progetto.
+
+## Admin Governance Configuration
+
+- `PlatformConfig` supports optional `governanceByProduct` keys for product-level governance.
+- Governance scope contains:
+  - Prompt templates (`generationSystem`, `focusedEditSystem`, `reviewSystem`)
+  - Global injection snippets (`headHtml`, `headerHtml`, `footerHtml`, script blocks, analytics IDs)
+  - Nginx runtime knobs (`publicDomain`, `publishSubdomainPattern`, cache/body-size tuning, extra directives)
+- Backward compatibility is preserved: existing deployments using only base platform config fields remain valid.
 
 ## Auth Hardening Notes
 
