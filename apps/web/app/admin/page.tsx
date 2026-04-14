@@ -30,7 +30,7 @@ export default function AdminDashboardPage() {
         <div className="space-y-6">
             <h1 className="text-2xl font-bold">Platform Overview</h1>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -50,6 +50,17 @@ export default function AdminDashboardPage() {
                     </CardHeader>
                     <CardContent>
                         <span className="text-3xl font-bold text-destructive">{stats.blockedUsers}</span>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">
+                            Total Projects
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <span className="text-3xl font-bold">{stats.totalProjects ?? 0}</span>
                     </CardContent>
                 </Card>
 
