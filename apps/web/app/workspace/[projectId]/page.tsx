@@ -47,6 +47,7 @@ import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
 import { saveThumbnail, savePromptExcerpt, incrementSnapCount } from "../../../lib/thumbnail";
 import ProjectConfigPopup from "../../../components/ProjectConfigPopup";
+import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
 import { Settings } from "lucide-react";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
@@ -118,6 +119,13 @@ function groupedModelOptions(models: ModelItem[]): React.ReactNode {
     const free = models.filter((m) => m.priceTier === "free");
 
     function intoFamilyGroups(list: ModelItem[]): [string, ModelItem[]][] {
+
+function getStringDetail(details: unknown, key: string): string | undefined {
+    if (!details || typeof details !== "object") return undefined;
+    const value = (details as Record<string, unknown>)[key];
+    return typeof value === "string" ? value : undefined;
+}
+
         const map = new Map<string, ModelItem[]>();
         for (const m of list) {
             const fam = modelFamily(m.id);
@@ -188,6 +196,7 @@ export default function WorkspacePage() {
     const [prompt, setPrompt] = useState("");
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [llmErrorDialog, setLlmErrorDialog] = useState<LlmProviderErrorDialogState | null>(null);
     const [promptConfigVersion, setPromptConfigVersion] = useState<string>("v1");
     // Chat defaults are driven by the backend (GET /llm/prompt-config).
     // Clients must never hardcode these values — always use what the backend returns.
@@ -914,6 +923,7 @@ export default function WorkspacePage() {
     const liveGeneratedTokens = Math.max(0, Math.round((thinkingText.length + draftAnswer.length) / 4));
     const liveTotalTokens = streamPromptTokens + liveGeneratedTokens;
     const currentProvider = providersCatalog.find((p) => p.provider === selectedProvider) ?? null;
+    const currentProviderMissingKey = Boolean(currentProvider?.requiresKey && !currentProvider.hasApiKeyConfigured);
     const currentProviderModels = (() => {
         const models = (currentProvider?.models ?? []).filter((m) => m.isActive);
         const byId = new Map<string, typeof models[number]>();
@@ -924,6 +934,47 @@ export default function WorkspacePage() {
         }
         return [...byId.values()];
     })();
+
+    const presentLlmError = useCallback((err: unknown): string => {
+        const fallbackMessage = err instanceof Error ? err.message : String(err);
+
+        if (!(err instanceof ApiError)) {
+            addNotification({
+                label: "Errore LLM",
+                status: "error",
+                message: fallbackMessage,
+            });
+            return fallbackMessage;
+        }
+
+        const provider = getStringDetail(err.details, "provider") ?? currentProvider?.provider ?? undefined;
+        const model = getStringDetail(err.details, "model") ?? selectedModel || undefined;
+        const keyEnvironmentVariable = getStringDetail(err.details, "keyEnvironmentVariable");
+        const message = err.userMessage ?? err.message;
+        const title = err.code === "LLM_PROVIDER_API_KEY_MISSING"
+            ? "Configura la API key del provider"
+            : "Errore durante la chiamata al provider";
+        const shouldOpenDialog = Boolean(err.code?.startsWith("LLM_"));
+
+        addNotification({
+            label: err.code === "LLM_PROVIDER_API_KEY_MISSING" ? "Provider non configurato" : "Errore LLM",
+            status: "error",
+            message,
+        });
+
+        if (shouldOpenDialog) {
+            setLlmErrorDialog({
+                title,
+                message,
+                code: err.code,
+                provider,
+                model,
+                keyEnvironmentVariable,
+            });
+        }
+
+        return `Errore [${err.status}]: ${message}`;
+    }, [addNotification, currentProvider?.provider, selectedModel]);
 
         const previewResult = editorHtml || editorCss || editorJs
         ? buildPreviewDoc(
@@ -969,6 +1020,12 @@ export default function WorkspacePage() {
             window.removeEventListener("mouseup", onUp);
         };
     }, [isDragging, leftWidth]);
+
+    useEffect(() => {
+        if (llmErrorDialog?.code === "LLM_PROVIDER_API_KEY_MISSING" && !currentProviderMissingKey) {
+            setLlmErrorDialog(null);
+        }
+    }, [currentProviderMissingKey, llmErrorDialog?.code]);
 
     async function handleSend(e: React.FormEvent) {
         e.preventDefault();
@@ -1057,6 +1114,20 @@ export default function WorkspacePage() {
                 return undefined;
             })();
 
+            if (currentProvider?.requiresKey && !currentProvider.hasApiKeyConfigured) {
+                throw new ApiError(503, {
+                    error: `Il provider ${currentProvider.provider} richiede una API key che non e configurata.`,
+                    code: "LLM_PROVIDER_API_KEY_MISSING",
+                    status: 503,
+                    userMessage: `Il provider ${currentProvider.provider} richiede una API key che non e configurata.`,
+                    details: {
+                        provider: currentProvider.provider,
+                        model: selectedModel || undefined,
+                        keyEnvironmentVariable: currentProvider.keyEnvironmentVariable,
+                    },
+                });
+            }
+
             let llm: Awaited<ReturnType<typeof llmChatPreview>>;
             let interruptedMeta: Extract<LlmChatStreamEvent, { type: "interrupted" }> | null = null;
             try {
@@ -1099,7 +1170,7 @@ export default function WorkspacePage() {
 
                         if (event.type === "error") {
                             streamErrorDurationMs = event.durationMs;
-                            throw new Error(event.message);
+                            throw new ApiError(event.error?.status ?? 502, event.error ?? { error: event.message });
                         }
 
                         if (event.type === "interrupted") {
@@ -1296,7 +1367,7 @@ export default function WorkspacePage() {
             setThinkingText("");
             setDraftAnswer("");
         } catch (err) {
-            const msg = err instanceof ApiError ? `Errore [${err.status}]: ${err.message}` : String(err);
+            const msg = presentLlmError(err);
             setError(msg);
 
             if (token && trackedConversationId) {
@@ -1413,6 +1484,23 @@ export default function WorkspacePage() {
                             )}
                         </select>
                     </div>
+                    {currentProviderMissingKey && currentProvider && (
+                        <div
+                            style={{
+                                marginTop: "0.6rem",
+                                border: "1px solid rgba(239, 68, 68, 0.35)",
+                                background: "rgba(239, 68, 68, 0.08)",
+                                color: "#fca5a5",
+                                borderRadius: "0.5rem",
+                                padding: "0.65rem 0.75rem",
+                                fontSize: "0.78rem",
+                                lineHeight: 1.45,
+                            }}
+                        >
+                            Il provider <strong>{currentProvider.provider}</strong> richiede una API key non configurata.
+                            {currentProvider.keyEnvironmentVariable ? ` Configura ${currentProvider.keyEnvironmentVariable} e riprova.` : " Configura la chiave del provider e riprova."}
+                        </div>
+                    )}
                 </div>
 
                 <div className="workspace-chat-messages" ref={chatContainerRef}>
@@ -2305,6 +2393,13 @@ export default function WorkspacePage() {
             onRename={(name: string) => setProjectName(name)}
             presetLabel={presetCatalog.find(p => p.id === projectPresetId)?.labelIt}
             briefGuideQuestions={presetCatalog.find(p => p.id === projectPresetId)?.briefGuideQuestions}
+        />
+        <LlmProviderErrorDialog
+            open={Boolean(llmErrorDialog)}
+            error={llmErrorDialog}
+            onOpenChange={(open) => {
+                if (!open) setLlmErrorDialog(null);
+            }}
         />
         </>
     );

@@ -1,6 +1,14 @@
 import { call, ApiError, getSharedRefreshPromise, setSharedRefreshPromise, refreshAccessToken } from "./call";
 import { getAccessToken, isAccessTokenExpired } from "../token-store";
 
+export interface ApiErrorPayload {
+    error?: string;
+    code?: string;
+    status?: number;
+    userMessage?: string;
+    details?: unknown;
+}
+
 export interface LlmHistoryMessage {
     role: "user" | "assistant";
     content: string;
@@ -126,7 +134,7 @@ export type LlmChatStreamEvent =
     | { type: "thinking"; content: string }
     | { type: "answer"; content: string }
     | { type: "done"; result: LlmChatPreviewResult }
-    | { type: "error"; message: string; durationMs?: number }
+    | { type: "error"; message: string; durationMs?: number; error?: ApiErrorPayload }
     | {
         type: "interrupted";
         provider: string;
@@ -143,6 +151,9 @@ export interface LlmProviderCatalogDto {
     apiType?: "openai-compatible" | "anthropic-compatible" | "custom";
     authType?: "api-key" | "bearer" | "none";
     isActive: boolean;
+    requiresKey: boolean;
+    hasApiKeyConfigured: boolean;
+    keyEnvironmentVariable?: string;
     models: Array<{
         id: string;
         provider: string;
