@@ -10,14 +10,16 @@
     "dev": "npm run dev -w apps/api",
     "dev:api": "npm run dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",
-
+    "release:version": "node scripts/release-version.mjs print",
+    "release:version:validate": "node scripts/release-version.mjs validate",
+    "release:version:set": "node scripts/release-version.mjs set",
+    "gitflow:guard": "node scripts/gitflow-guard.mjs",
     "_comment_local_dev": "--- LOCAL DEV (docker-compose.yml) — hot-reload, bind mounts ---",
     "local:dev": "docker compose up --build",
     "local:dev:up": "docker compose up --build -d",
     "local:dev:down": "docker compose down",
     "local:dev:logs": "docker compose logs -f --tail=100",
     "local:dev:restart:api": "docker compose up -d --no-deps api",
-
     "_comment_local_deploy": "--- LOCAL DEPLOY TEST (docker-compose.deploy.yml) — prod builds, named volumes ---",
     "local:up": "docker compose -f docker-compose.deploy.yml up -d",
     "local:down": "docker compose -f docker-compose.deploy.yml down",
@@ -26,7 +28,6 @@
     "local:logs": "docker compose -f docker-compose.deploy.yml logs -f --tail=100",
     "local:logs:api": "docker compose -f docker-compose.deploy.yml logs -f --tail=200 api",
     "local:restart:api": "docker compose -f docker-compose.deploy.yml up -d --no-deps api",
-
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces",

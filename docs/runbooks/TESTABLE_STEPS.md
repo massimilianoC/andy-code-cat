@@ -240,3 +240,46 @@
 ### Step 33 - SSE Credits Event
 
 - During the job, the SSE listener receives `{ type: "credits_charged", amount: N, balance: M }`
+
+---
+
+## Repository Governance — Gitflow Release
+
+### Step 34 - Release Version Format
+
+- `npm run release:version`
+- Expected: prints the contents of `RELEASE_VERSION` in `YYYY.MM.DD.N` format
+
+### Step 35 - Release Version Validation
+
+- `npm run release:version:validate`
+- Expected: output `Release version OK: ...`
+
+### Step 36 - Gitflow Branch Guard
+
+- `npm run gitflow:guard`
+- Expected: the current branch passes only if it matches one of these forms:
+  - `main`
+  - `develop`
+  - `feat/*`
+  - `fix/*`
+  - `docs/*`
+  - `chore/*`
+  - `refactor/*`
+  - `release/YYYY.MM.DD.N`
+  - `hotfix/*`
+
+### Step 37 - Release Branch Naming
+
+- Create branch `release/<RELEASE_VERSION>` from `develop`
+- Expected: branch name matches the canonical version stored in `RELEASE_VERSION`
+
+### Step 38 - Release Merge Intent
+
+- Open PR from `release/<RELEASE_VERSION>` to `main`
+- Expected: no new feature scope is present on the branch; only release hardening fixes, docs, and chore work
+
+### Step 39 - Agent Release Checklist Available
+
+- Open `docs/guides/AGENT_RELEASE_CHECKLIST.md`
+- Expected: the checklist covers branch selection, release identity, commit hygiene, PR targets, merge order, and back-merge rules
