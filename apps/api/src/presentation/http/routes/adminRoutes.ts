@@ -53,7 +53,7 @@ export function createAdminRoutes(): Router {
     const updateUserProfile = new UpdateUserProfile(userRepo);
     const adminResetUserPassword = new AdminResetUserPassword(userRepo, sessionRepo);
     const setUserPasswordResetRequired = new SetUserPasswordResetRequired(userRepo);
-    const getPlatformStats = new GetPlatformStats(userRepo, deploymentRepo);
+    const getPlatformStats = new GetPlatformStats(userRepo, deploymentRepo, projectRepo);
     const getPlatformConfig = new GetPlatformConfig(configRepo);
     const setPlatformConfig = new SetPlatformConfig(configRepo);
     const adminTogglePublication = new AdminTogglePublication(deploymentRepo);

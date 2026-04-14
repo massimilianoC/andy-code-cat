@@ -86,6 +86,12 @@ main:has(.dashboard-shell) {
     max-width: 1200px;
 }
 
+/* Admin panel: full-width, no centre-boxing */
+main.admin-main {
+    max-width: 1920px;
+    padding: 0;
+}
+
 h1 {
     font-size: 1.6rem;
     font-weight: 700;

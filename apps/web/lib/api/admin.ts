@@ -49,6 +49,7 @@ export interface AdminResetUserPasswordBody {
 export interface PlatformStatsDto {
     totalUsers: number;
     blockedUsers: number;
+    totalProjects: number;
     totalLiveDeployments: number;
     usersByRole: Record<string, number>;
     totalTokensConsumedLifetime: number;
@@ -75,10 +76,31 @@ export interface ProductInjectionsDto {
     footerHtml: string;
     scriptInHead: string;
     scriptBeforeBodyClose: string;
+    /** Global CSS injected into generated pages. */
+    globalCss: string;
     googleTagManagerId: string;
     googleAnalyticsId: string;
     matomoSiteId: string;
     matomoUrl: string;
+}
+
+export interface CookieBannerLocaleText {
+    message: string;
+    acceptLabel: string;
+    rejectLabel: string;
+}
+
+export interface ProductCookieBannerDto {
+    enabled: boolean;
+    position: "bottom" | "top" | "bottom-left" | "bottom-right";
+    texts: Record<string, CookieBannerLocaleText>;
+}
+
+export interface ProductLegalDto {
+    privacyPolicyUrls: Record<string, string>;
+    cookiePolicyUrls: Record<string, string>;
+    privacyPolicyHtml: Record<string, string>;
+    cookiePolicyHtml: Record<string, string>;
 }
 
 export interface ProductNginxDto {
@@ -92,6 +114,8 @@ export interface ProductNginxDto {
 export interface ProductGovernanceDto {
     promptTemplates: ProductPromptTemplatesDto;
     injections: ProductInjectionsDto;
+    cookieBanner?: ProductCookieBannerDto;
+    legal?: ProductLegalDto;
     nginx: ProductNginxDto;
 }
 

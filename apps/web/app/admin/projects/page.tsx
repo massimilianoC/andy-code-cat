@@ -33,6 +33,37 @@ interface ConfirmState {
     publishId?: string;
 }
 
+type SidebarTab = "overview" | "deployment" | "danger";
+
+/** Simple tab bar for the project sidebar. */
+function SidebarTabs({ active, onChange }: { active: SidebarTab; onChange: (t: SidebarTab) => void }) {
+    const tabs: { id: SidebarTab; label: string }[] = [
+        { id: "overview", label: "Overview" },
+        { id: "deployment", label: "Deployment" },
+        { id: "danger", label: "Danger" },
+    ];
+    return (
+        <div className="flex border-b border-border shrink-0">
+            {tabs.map((t) => (
+                <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => onChange(t.id)}
+                    className={cn(
+                        "flex-1 py-2.5 text-sm font-medium transition-colors",
+                        active === t.id
+                            ? "border-b-2 border-primary text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        t.id === "danger" && active !== "danger" && "hover:text-destructive",
+                    )}
+                >
+                    {t.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
 export default function AdminProjectsPage() {
     const router = useRouter();
     const [projects, setProjects] = useState<AdminProjectDto[]>([]);
@@ -41,7 +72,9 @@ export default function AdminProjectsPage() {
     const [search, setSearch] = useState("");
     const [draftSearch, setDraftSearch] = useState("");
     const [loading, setLoading] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [selectedProject, setSelectedProject] = useState<AdminProjectDto | null>(null);
+    const [sidebarTab, setSidebarTab] = useState<SidebarTab>("overview");
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
     const [actionInFlight, setActionInFlight] = useState(false);
@@ -51,17 +84,15 @@ export default function AdminProjectsPage() {
     const fetchProjects = useCallback(
         async (p: number, s: string) => {
             const token = getToken();
-            if (!token) {
-                router.replace("/login");
-                return;
-            }
+            if (!token) { router.replace("/login"); return; }
             setLoading(true);
+            setFetchError(null);
             try {
                 const result = await adminListProjects(token, { page: p, limit, search: s || undefined });
                 setProjects(result.projects);
                 setTotal(result.total);
-            } catch {
-                setActionMessage("Failed to load projects.");
+            } catch (err: unknown) {
+                setFetchError(err instanceof Error ? err.message : "Failed to load projects.");
             } finally {
                 setLoading(false);
             }
@@ -83,6 +114,12 @@ export default function AdminProjectsPage() {
         setActionMessage(null);
     }
 
+    function selectProject(p: AdminProjectDto) {
+        setSelectedProject(p);
+        setActionMessage(null);
+        setSidebarTab("overview");
+    }
+
     async function executeConfirmedAction() {
         if (!confirmState) return;
         const token = getToken();
@@ -101,18 +138,8 @@ export default function AdminProjectsPage() {
                 setActionMessage("Deployment unblocked.");
             }
             await fetchProjects(page, search);
-            // Refresh selected project data from the updated list
-            if (confirmState.action !== "delete-project") {
-                // find updated project
-                setSelectedProject((prev) => {
-                    if (!prev) return null;
-                    // project list may have been updated; find by id
-                    return prev;
-                });
-            }
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : "Action failed.";
-            setActionMessage(msg);
+            setActionMessage(err instanceof Error ? err.message : "Action failed.");
         } finally {
             setActionInFlight(false);
             setConfirmState(null);
@@ -130,33 +157,31 @@ export default function AdminProjectsPage() {
         if (state.action === "delete-project")
             return {
                 title: "Delete project?",
-                description:
-                    "This will block all published deployments for this project and permanently delete the project record. This cannot be undone.",
+                description: "This will block all published deployments for this project and permanently delete the project record. This cannot be undone.",
             };
         if (state.action === "block-deployment")
-            return {
-                title: "Block deployment?",
-                description: "The published site will return HTTP 403 until unblocked.",
-            };
-        return {
-            title: "Unblock deployment?",
-            description: "The published site will be accessible again.",
-        };
+            return { title: "Block deployment?", description: "The published site will return HTTP 403 until unblocked." };
+        return { title: "Unblock deployment?", description: "The published site will be accessible again." };
     }
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     return (
-        <div className={cn("", selectedProject && "xl:pr-[30rem]")}>
+        <div className={cn("", selectedProject && "xl:pr-[42rem]")}>
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-bold">Projects</h1>
-                    <p className="text-sm text-muted-foreground mt-1">{total} total projects</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        {loading ? "Loading…" : `${total} total project${total !== 1 ? "s" : ""} across all users`}
+                    </p>
                 </div>
+                <Button variant="outline" size="sm" onClick={() => fetchProjects(page, search)}>
+                    Refresh
+                </Button>
             </div>
 
-            {/* Search bar */}
+            {/* Search */}
             <div className="flex gap-2 mb-4">
                 <Input
                     placeholder="Search by project name…"
@@ -165,22 +190,20 @@ export default function AdminProjectsPage() {
                     onKeyDown={(e) => e.key === "Enter" && applySearch()}
                     className="max-w-sm"
                 />
-                <Button variant="outline" onClick={applySearch}>
-                    Search
-                </Button>
+                <Button variant="outline" onClick={applySearch}>Search</Button>
                 {search && (
-                    <Button
-                        variant="ghost"
-                        onClick={() => {
-                            setDraftSearch("");
-                            setSearch("");
-                            setPage(1);
-                        }}
-                    >
+                    <Button variant="ghost" onClick={() => { setDraftSearch(""); setSearch(""); setPage(1); }}>
                         Clear
                     </Button>
                 )}
             </div>
+
+            {/* Error state */}
+            {fetchError && (
+                <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {fetchError}
+                </div>
+            )}
 
             {/* Project table */}
             {loading ? (
@@ -202,10 +225,7 @@ export default function AdminProjectsPage() {
                                 {projects.map((p) => (
                                     <tr
                                         key={p.id}
-                                        onClick={() => {
-                                            setSelectedProject(p);
-                                            setActionMessage(null);
-                                        }}
+                                        onClick={() => selectProject(p)}
                                         className={cn(
                                             "border-b border-border cursor-pointer hover:bg-muted/30 transition-colors",
                                             selectedProject?.id === p.id && "bg-muted/50",
@@ -213,43 +233,36 @@ export default function AdminProjectsPage() {
                                     >
                                         <td className="py-3 px-4 font-medium">{p.name}</td>
                                         <td className="py-3 px-4 text-muted-foreground">
-                                            <span className="block">{p.ownerEmail}</span>
+                                            <span className="block font-mono text-xs">{p.ownerEmail}</span>
                                             {p.ownerIsBlocked && (
-                                                <Badge variant="destructive" className="text-xs mt-1">
-                                                    Blocked
-                                                </Badge>
+                                                <Badge variant="destructive" className="text-xs mt-1">Blocked</Badge>
                                             )}
                                         </td>
                                         <td className="py-3 px-4 text-muted-foreground">
-                                            {p.presetId ? (
-                                                <Badge variant="outline" className="text-xs">
-                                                    {p.presetId}
-                                                </Badge>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground">—</span>
-                                            )}
+                                            {p.presetId
+                                                ? <Badge variant="outline" className="text-xs">{p.presetId}</Badge>
+                                                : <span className="text-xs text-muted-foreground">—</span>
+                                            }
                                         </td>
                                         <td className="py-3 px-4">
-                                            {p.activeDeployment ? (
-                                                <Badge
-                                                    variant={p.activeDeployment.isAdminBlocked ? "destructive" : "success"}
-                                                    className="text-xs"
-                                                >
+                                            {p.activeDeployment
+                                                ? <Badge variant={p.activeDeployment.isAdminBlocked ? "destructive" : "success"} className="text-xs">
                                                     {p.activeDeployment.isAdminBlocked ? "Blocked" : "Live"}
                                                 </Badge>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground">—</span>
-                                            )}
+                                                : <span className="text-xs text-muted-foreground">—</span>
+                                            }
                                         </td>
                                         <td className="py-3 px-4 text-muted-foreground text-xs">
                                             {new Date(p.createdAt).toLocaleDateString()}
                                         </td>
                                     </tr>
                                 ))}
-                                {projects.length === 0 && (
+                                {projects.length === 0 && !loading && (
                                     <tr>
-                                        <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                                            No projects found.
+                                        <td colSpan={5} className="py-10 text-center text-muted-foreground">
+                                            {search
+                                                ? "No projects match your search."
+                                                : "No projects found in the database. Projects appear here once users start creating them."}
                                         </td>
                                     </tr>
                                 )}
@@ -262,275 +275,219 @@ export default function AdminProjectsPage() {
             {/* Pagination */}
             {totalPages > 1 && (
                 <div className="flex items-center gap-2 mt-4 justify-end">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => p - 1)}
-                    >
-                        Previous
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                        {page} / {totalPages}
-                    </span>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={page >= totalPages}
-                        onClick={() => setPage((p) => p + 1)}
-                    >
-                        Next
-                    </Button>
+                    <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+                    <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
                 </div>
             )}
 
-            {/* Right sidebar */}
+            {/* ── Wide project sidebar ─────────────────────────────────────────── */}
             {selectedProject && (
                 <>
-                    {/* Mobile overlay */}
-                    <div
-                        className="fixed inset-0 bg-black/40 z-30 xl:hidden"
-                        onClick={() => setSelectedProject(null)}
-                    />
-                    <div className="fixed top-0 right-0 h-full w-full max-w-[28rem] bg-background border-l border-border z-40 shadow-xl flex flex-col">
+                    <div className="fixed inset-0 bg-black/40 z-30 xl:hidden" onClick={() => setSelectedProject(null)} />
+                    <aside className="fixed top-0 right-0 h-full w-full max-w-xl bg-background border-l border-border z-40 shadow-xl xl:w-[40rem] flex flex-col">
+
                         {/* Sidebar header */}
-                        <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
-                            <h2 className="font-semibold text-base truncate max-w-[20rem]">
-                                {selectedProject.name}
-                            </h2>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setSelectedProject(null)}
-                            >
-                                ✕
-                            </Button>
+                        <div className="shrink-0 px-5 py-4 border-b border-border">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Project</p>
+                                    <h2 className="font-semibold text-base truncate">{selectedProject.name}</h2>
+                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                        {selectedProject.presetId && (
+                                            <Badge variant="outline" className="text-xs">{selectedProject.presetId}</Badge>
+                                        )}
+                                        {selectedProject.activeDeployment && (
+                                            <Badge
+                                                variant={selectedProject.activeDeployment.isAdminBlocked ? "destructive" : "success"}
+                                                className="text-xs"
+                                            >
+                                                {selectedProject.activeDeployment.isAdminBlocked ? "Deployment blocked" : "Live"}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => setSelectedProject(null)} className="shrink-0">Close</Button>
+                            </div>
                         </div>
 
+                        {/* Tab bar */}
+                        <SidebarTabs active={sidebarTab} onChange={setSidebarTab} />
+
                         <ScrollArea className="flex-1">
-                            <div className="p-4 space-y-4">
+                            <div className="p-5 space-y-4">
                                 {actionMessage && (
                                     <div className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded">
                                         {actionMessage}
                                     </div>
                                 )}
 
-                                {/* Owner info */}
-                                <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm">Owner</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-1 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-muted-foreground">Email:</span>
-                                            <span>{selectedProject.ownerEmail}</span>
-                                            {selectedProject.ownerIsBlocked && (
-                                                <Badge variant="destructive" className="text-xs">
-                                                    Blocked
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        {(selectedProject.ownerFirstName || selectedProject.ownerLastName) && (
-                                            <div className="flex gap-2">
-                                                <span className="text-muted-foreground">Name:</span>
-                                                <span>
-                                                    {[selectedProject.ownerFirstName, selectedProject.ownerLastName]
-                                                        .filter(Boolean)
-                                                        .join(" ")}
-                                                </span>
-                                            </div>
-                                        )}
-                                        <div className="flex gap-2">
-                                            <span className="text-muted-foreground">Owner ID:</span>
-                                            <span className="font-mono text-xs text-muted-foreground">
-                                                {selectedProject.ownerUserId}
-                                            </span>
-                                        </div>
-                                        <div className="pt-1">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() =>
-                                                    router.push(
-                                                        `/admin/users?highlight=${selectedProject.ownerUserId}`,
-                                                    )
-                                                }
-                                            >
-                                                View owner in Users →
-                                            </Button>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Project metadata */}
-                                <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm">Project details</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-1 text-sm">
-                                        <div className="flex gap-2">
-                                            <span className="text-muted-foreground">ID:</span>
-                                            <span className="font-mono text-xs">
-                                                {selectedProject.id}
-                                            </span>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <span className="text-muted-foreground">Preset:</span>
-                                            <span>
-                                                {selectedProject.presetId ?? (
-                                                    <span className="text-muted-foreground">none</span>
-                                                )}
-                                            </span>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <span className="text-muted-foreground">Created:</span>
-                                            <span>
-                                                {new Date(selectedProject.createdAt).toLocaleString()}
-                                            </span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Deployment */}
-                                <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm">Active deployment</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="text-sm">
-                                        {selectedProject.activeDeployment ? (
-                                            <div className="space-y-2">
+                                {/* ── Tab: Overview ── */}
+                                {sidebarTab === "overview" && (
+                                    <div className="space-y-4">
+                                        {/* Owner */}
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm">Owner</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-2 text-sm">
                                                 <div className="flex items-center gap-2">
-                                                    <Badge
-                                                        variant={
-                                                            selectedProject.activeDeployment.isAdminBlocked
-                                                                ? "destructive"
-                                                                : "success"
-                                                        }
-                                                    >
-                                                        {selectedProject.activeDeployment.isAdminBlocked
-                                                            ? "Blocked"
-                                                            : "Live"}
-                                                    </Badge>
-                                                    <span className="font-mono text-xs text-muted-foreground">
-                                                        {selectedProject.activeDeployment.publishId}
-                                                    </span>
+                                                    <span className="text-muted-foreground">Email:</span>
+                                                    <span className="font-mono text-xs">{selectedProject.ownerEmail}</span>
+                                                    {selectedProject.ownerIsBlocked && (
+                                                        <Badge variant="destructive" className="text-xs">Blocked</Badge>
+                                                    )}
                                                 </div>
-                                                {selectedProject.activeDeployment.customSlug && (
+                                                {(selectedProject.ownerFirstName || selectedProject.ownerLastName) && (
                                                     <div className="flex gap-2">
-                                                        <span className="text-muted-foreground">Slug:</span>
-                                                        <span>{selectedProject.activeDeployment.customSlug}</span>
+                                                        <span className="text-muted-foreground">Name:</span>
+                                                        <span>{[selectedProject.ownerFirstName, selectedProject.ownerLastName].filter(Boolean).join(" ")}</span>
                                                     </div>
                                                 )}
                                                 <div className="flex gap-2">
-                                                    <span className="text-muted-foreground">URL:</span>
-                                                    <a
-                                                        href={selectedProject.activeDeployment.url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-primary hover:underline text-xs"
-                                                    >
-                                                        {selectedProject.activeDeployment.url}
-                                                    </a>
+                                                    <span className="text-muted-foreground">User ID:</span>
+                                                    <span className="font-mono text-xs text-muted-foreground">{selectedProject.ownerUserId}</span>
                                                 </div>
-                                                <div className="flex gap-2 pt-1">
-                                                    {selectedProject.activeDeployment.isAdminBlocked ? (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                openConfirm({
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => router.push(`/admin/users?highlight=${selectedProject.ownerUserId}`)}
+                                                >
+                                                    View owner in Users →
+                                                </Button>
+                                            </CardContent>
+                                        </Card>
+
+                                        {/* Project metadata */}
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm">Project metadata</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-2 text-sm">
+                                                <div className="grid grid-cols-[6rem_1fr] gap-y-1.5">
+                                                    <span className="text-muted-foreground">Project ID</span>
+                                                    <span className="font-mono text-xs break-all">{selectedProject.id}</span>
+                                                    <span className="text-muted-foreground">Preset</span>
+                                                    <span>{selectedProject.presetId ?? <span className="text-muted-foreground">none</span>}</span>
+                                                    <span className="text-muted-foreground">Created</span>
+                                                    <span>{new Date(selectedProject.createdAt).toLocaleString()}</span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                )}
+
+                                {/* ── Tab: Deployment ── */}
+                                {sidebarTab === "deployment" && (
+                                    <div className="space-y-4">
+                                        {selectedProject.activeDeployment ? (
+                                            <Card>
+                                                <CardHeader className="pb-2">
+                                                    <CardTitle className="text-sm">Active deployment</CardTitle>
+                                                </CardHeader>
+                                                <CardContent className="space-y-3 text-sm">
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant={selectedProject.activeDeployment.isAdminBlocked ? "destructive" : "success"}>
+                                                            {selectedProject.activeDeployment.isAdminBlocked ? "Blocked" : "Live"}
+                                                        </Badge>
+                                                        <span className="font-mono text-xs text-muted-foreground">
+                                                            {selectedProject.activeDeployment.publishId}
+                                                        </span>
+                                                    </div>
+                                                    {selectedProject.activeDeployment.customSlug && (
+                                                        <div className="flex gap-2">
+                                                            <span className="text-muted-foreground">Slug:</span>
+                                                            <span>{selectedProject.activeDeployment.customSlug}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex gap-2">
+                                                        <span className="text-muted-foreground">URL:</span>
+                                                        <a
+                                                            href={selectedProject.activeDeployment.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-primary hover:underline text-xs break-all"
+                                                        >
+                                                            {selectedProject.activeDeployment.url}
+                                                        </a>
+                                                    </div>
+                                                    <div className="pt-1">
+                                                        {selectedProject.activeDeployment.isAdminBlocked ? (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => openConfirm({
                                                                     action: "unblock-deployment",
                                                                     projectId: selectedProject.id,
-                                                                    publishId:
-                                                                        selectedProject.activeDeployment!.publishId,
-                                                                })
-                                                            }
-                                                        >
-                                                            Unblock site
-                                                        </Button>
-                                                    ) : (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                openConfirm({
+                                                                    publishId: selectedProject.activeDeployment!.publishId,
+                                                                })}
+                                                            >
+                                                                Unblock site
+                                                            </Button>
+                                                        ) : (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => openConfirm({
                                                                     action: "block-deployment",
                                                                     projectId: selectedProject.id,
-                                                                    publishId:
-                                                                        selectedProject.activeDeployment!.publishId,
-                                                                })
-                                                            }
-                                                        >
-                                                            Block site
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </div>
+                                                                    publishId: selectedProject.activeDeployment!.publishId,
+                                                                })}
+                                                            >
+                                                                Block site
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
                                         ) : (
-                                            <p className="text-muted-foreground">No active deployment.</p>
+                                            <div className="rounded-md border border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                                                No active deployment for this project.
+                                            </div>
                                         )}
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                )}
 
-                                {/* Danger zone */}
-                                <Card className="border-destructive/40">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm text-destructive">Danger zone</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <p className="text-xs text-muted-foreground mb-3">
-                                            Deletes the project and blocks all its published deployments. This
-                                            cannot be undone.
-                                        </p>
-                                        <Button
-                                            variant="destructive"
-                                            size="sm"
-                                            onClick={() =>
-                                                openConfirm({
-                                                    action: "delete-project",
-                                                    projectId: selectedProject.id,
-                                                })
-                                            }
-                                        >
-                                            Delete project
-                                        </Button>
-                                    </CardContent>
-                                </Card>
+                                {/* ── Tab: Danger ── */}
+                                {sidebarTab === "danger" && (
+                                    <Card className="border-destructive/40">
+                                        <CardHeader className="pb-2">
+                                            <CardTitle className="text-sm text-destructive">Danger zone</CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-xs text-muted-foreground mb-4">
+                                                Deletes the project and blocks all its published deployments. This action is permanent and cannot be undone.
+                                            </p>
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => openConfirm({ action: "delete-project", projectId: selectedProject.id })}
+                                            >
+                                                Delete project
+                                            </Button>
+                                        </CardContent>
+                                    </Card>
+                                )}
                             </div>
                         </ScrollArea>
-                    </div>
+                    </aside>
                 </>
             )}
 
             {/* Confirmation dialog */}
-            <Dialog
-                open={!!confirmState}
-                onOpenChange={(open) => {
-                    if (!open) setConfirmState(null);
-                }}
-            >
+            <Dialog open={!!confirmState} onOpenChange={(open) => { if (!open) setConfirmState(null); }}>
                 <DialogContent>
                     {confirmState && (
                         <>
                             <DialogHeader>
                                 <DialogTitle>{getConfirmCopy(confirmState).title}</DialogTitle>
-                                <DialogDescription>
-                                    {getConfirmCopy(confirmState).description}
-                                </DialogDescription>
+                                <DialogDescription>{getConfirmCopy(confirmState).description}</DialogDescription>
                             </DialogHeader>
                             <Separator />
                             <DialogFooter>
+                                <Button variant="outline" onClick={() => setConfirmState(null)} disabled={actionInFlight}>Cancel</Button>
                                 <Button
-                                    variant="outline"
-                                    onClick={() => setConfirmState(null)}
-                                    disabled={actionInFlight}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    variant={
-                                        confirmState.action === "delete-project" ? "destructive" : "default"
-                                    }
+                                    variant={confirmState.action === "delete-project" ? "destructive" : "default"}
                                     onClick={executeConfirmedAction}
                                     disabled={actionInFlight}
                                 >

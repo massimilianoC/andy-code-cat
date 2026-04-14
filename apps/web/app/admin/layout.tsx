@@ -44,7 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </a>
                 </div>
             </nav>
-            <main className="px-4 sm:px-6 lg:px-8 xl:px-10 py-6">
+            <main className="admin-main px-4 sm:px-6 lg:px-8 xl:px-12 py-6">
                 {children}
             </main>
         </div>

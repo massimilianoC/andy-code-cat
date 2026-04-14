@@ -46,6 +46,42 @@ type ConfirmAction =
     | "toggle-password-reset"
     | "delete-user";
 
+type SidebarTab = "identity" | "permissions" | "resources";
+
+/** Simple tab bar component used inside the user sidebar. */
+function SidebarTabs({
+    active,
+    onChange,
+}: {
+    active: SidebarTab;
+    onChange: (t: SidebarTab) => void;
+}) {
+    const tabs: { id: SidebarTab; label: string }[] = [
+        { id: "identity", label: "Identity" },
+        { id: "permissions", label: "Permissions" },
+        { id: "resources", label: "Resources" },
+    ];
+    return (
+        <div className="flex border-b border-border shrink-0">
+            {tabs.map((t) => (
+                <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => onChange(t.id)}
+                    className={cn(
+                        "flex-1 py-2.5 text-sm font-medium transition-colors",
+                        active === t.id
+                            ? "border-b-2 border-primary text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                    )}
+                >
+                    {t.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
 export default function AdminUsersPage() {
     const router = useRouter();
     const [result, setResult] = useState<ListUsersResult | null>(null);
@@ -61,12 +97,17 @@ export default function AdminUsersPage() {
     const [createForm, setCreateForm] = useState({ email: "", password: "", firstName: "", lastName: "" });
     const [createError, setCreateError] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
+
+    // Sidebar state
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [selectedUser, setSelectedUser] = useState<AdminUserDetailDto | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [detailError, setDetailError] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
+    const [sidebarTab, setSidebarTab] = useState<SidebarTab>("identity");
+
+    // Form state per tab
     const [profileForm, setProfileForm] = useState({ email: "", firstName: "", lastName: "", emailVerified: false });
     const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
     const [limitsForm, setLimitsForm] = useState<Partial<UserLimitsDto>>({});
@@ -100,15 +141,13 @@ export default function AdminUsersPage() {
 
     async function loadUserDetail(userId: string) {
         const token = getToken();
-        if (!token) {
-            router.replace("/login");
-            return;
-        }
+        if (!token) { router.replace("/login"); return; }
 
         setSelectedUserId(userId);
         setDetailLoading(true);
         setDetailError(null);
         setActionMessage(null);
+        setSidebarTab("identity");
 
         try {
             const detail = await getAdminUser(token, userId);
@@ -161,9 +200,7 @@ export default function AdminUsersPage() {
     }
 
     function getConfirmCopy(action: ConfirmAction): { title: string; description: string } {
-        if (!selectedUser) {
-            return { title: "Confirm action", description: "Proceed with this operation?" };
-        }
+        if (!selectedUser) return { title: "Confirm action", description: "Proceed with this operation?" };
 
         switch (action) {
             case "block-toggle":
@@ -179,45 +216,27 @@ export default function AdminUsersPage() {
                     description: `Apply email/name changes for ${selectedUser.email}. If the email changes, verification is reset unless you keep it explicitly enabled.`,
                 };
             case "save-roles":
-                return {
-                    title: "Save roles",
-                    description: `Update platform roles for ${selectedUser.email}.`,
-                };
+                return { title: "Save roles", description: `Update platform roles for ${selectedUser.email}.` };
             case "save-limits":
-                return {
-                    title: "Save limits",
-                    description: `Apply plan and quota overrides for ${selectedUser.email}. Use -1 for unlimited values.`,
-                };
+                return { title: "Save limits", description: `Apply plan and quota overrides for ${selectedUser.email}. Use -1 for unlimited.` };
             case "reset-password":
-                return {
-                    title: "Reset password",
-                    description: `Set a new password for ${selectedUser.email}. Existing sessions will be invalidated immediately.`,
-                };
+                return { title: "Reset password", description: `Set a new password for ${selectedUser.email}. Existing sessions will be invalidated immediately.` };
             case "toggle-password-reset":
                 return {
                     title: selectedUser.requiresPasswordChange ? "Clear password reset requirement" : "Force password reset",
                     description: selectedUser.requiresPasswordChange
                         ? `Remove the forced password change requirement for ${selectedUser.email}.`
-                        : `Require ${selectedUser.email} to change password at the next login.`,
+                        : `Require ${selectedUser.email} to change password at next login.`,
                 };
             case "delete-user":
-                return {
-                    title: "Delete user",
-                    description: `Permanently delete ${selectedUser.email}. Projects and related data remain in the database as orphaned records.`,
-                };
+                return { title: "Delete user", description: `Permanently delete ${selectedUser.email}. Projects remain as orphaned records.` };
         }
     }
 
     async function executeConfirmedAction() {
-        if (!confirmAction || !selectedUser) {
-            return;
-        }
-
+        if (!confirmAction || !selectedUser) return;
         const token = getToken();
-        if (!token) {
-            router.replace("/login");
-            return;
-        }
+        if (!token) { router.replace("/login"); return; }
 
         setActionLoading(true);
         setDetailError(null);
@@ -252,7 +271,7 @@ export default function AdminUsersPage() {
                         requireChangeOnNextLogin: passwordResetForm.requireChangeOnNextLogin,
                     });
                     setPasswordResetForm({ newPassword: "", requireChangeOnNextLogin: true });
-                    setActionMessage("Password reset completed. Existing sessions were invalidated.");
+                    setActionMessage("Password reset. Existing sessions invalidated.");
                     break;
                 case "toggle-password-reset":
                     await adminSetUserPasswordResetRequired(token, selectedUser.id, !selectedUser.requiresPasswordChange);
@@ -279,7 +298,7 @@ export default function AdminUsersPage() {
     const confirmCopy = confirmAction ? getConfirmCopy(confirmAction) : null;
 
     return (
-        <div className={cn("relative space-y-6", selectedUserId && "xl:pr-[30rem]")}>
+        <div className={cn("relative space-y-6", selectedUserId && "xl:pr-[42rem]")}>
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">Users</h1>
                 <Button onClick={() => setShowCreate(true)}>Create User</Button>
@@ -405,248 +424,352 @@ export default function AdminUsersPage() {
                         </table>
                     </div>
 
-                    {/* Pagination */}
                     {totalPages > 1 && (
                         <div className="flex items-center gap-3 text-sm">
-                            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>
-                                Previous
-                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>Previous</Button>
                             <span className="text-muted-foreground">Page {page} / {totalPages}</span>
-                            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>
-                                Next
-                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>Next</Button>
                         </div>
                     )}
                     <p className="text-xs text-muted-foreground">{result.total} total users</p>
                 </>
             )}
 
+            {/* ── Wide user sidebar ─────────────────────────────────────────────── */}
             {selectedUserId && (
                 <>
                     <div className="fixed inset-0 z-30 bg-background/60 backdrop-blur-sm xl:hidden" onClick={closeSidebar} />
-                    <aside className="fixed right-0 top-0 z-40 h-full w-full max-w-2xl border-l border-border bg-background shadow-2xl xl:w-[28rem]">
+                    <aside className="fixed right-0 top-0 z-40 h-full w-full max-w-xl border-l border-border bg-background shadow-2xl xl:w-[40rem]">
                         <div className="flex h-full flex-col">
-                            <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                                <div>
-                                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">User configuration</p>
-                                    <h2 className="text-lg font-semibold">{selectedUser?.email ?? "Loading…"}</h2>
+
+                            {/* Sidebar header */}
+                            <div className="shrink-0 border-b border-border px-5 py-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">User configuration</p>
+                                        <h2 className="text-base font-semibold truncate">{selectedUser?.email ?? "Loading…"}</h2>
+                                        {selectedUser && (
+                                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                <Badge variant={selectedUser.isBlocked ? "destructive" : "outline"} className="text-xs">
+                                                    {selectedUser.isBlocked ? "Blocked" : "Active"}
+                                                </Badge>
+                                                <Badge variant={selectedUser.emailVerified ? "outline" : "secondary"} className="text-xs">
+                                                    {selectedUser.emailVerified ? "Verified" : "Unverified"}
+                                                </Badge>
+                                                {selectedUser.requiresPasswordChange && (
+                                                    <Badge variant="secondary" className="text-xs">Password reset required</Badge>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <Button variant="ghost" size="sm" onClick={closeSidebar} className="shrink-0">Close</Button>
                                 </div>
-                                <Button variant="ghost" size="sm" onClick={closeSidebar}>Close</Button>
                             </div>
 
+                            {/* Tab bar */}
+                            {selectedUser && !detailLoading && (
+                                <SidebarTabs active={sidebarTab} onChange={setSidebarTab} />
+                            )}
+
                             <ScrollArea className="flex-1">
-                                <div className="space-y-4 p-5">
+                                <div className="p-5 space-y-4">
                                     {detailLoading && <p className="text-sm text-muted-foreground">Loading user detail…</p>}
                                     {detailError && <p className="text-sm text-destructive">{detailError}</p>}
-                                    {actionMessage && <p className="rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">{actionMessage}</p>}
+                                    {actionMessage && (
+                                        <div className="rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">
+                                            {actionMessage}
+                                        </div>
+                                    )}
 
                                     {selectedUser && !detailLoading && (
                                         <>
-                                            <Card>
-                                                <CardHeader className="pb-3">
-                                                    <CardTitle className="text-base">Status</CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="space-y-3 text-sm">
-                                                    <div className="flex flex-wrap gap-2">
-                                                        <Badge variant={selectedUser.isBlocked ? "destructive" : "outline"}>
-                                                            {selectedUser.isBlocked ? "Blocked" : "Active"}
-                                                        </Badge>
-                                                        <Badge variant={selectedUser.emailVerified ? "outline" : "secondary"}>
-                                                            {selectedUser.emailVerified ? "Verified" : "Unverified"}
-                                                        </Badge>
-                                                        <Badge variant={selectedUser.requiresPasswordChange ? "accent" : "secondary"}>
-                                                            {selectedUser.requiresPasswordChange ? "Password reset required" : "Password policy aligned"}
-                                                        </Badge>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground">Created {new Date(selectedUser.createdAt).toLocaleString()}</p>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <Button
-                                                            variant={selectedUser.isBlocked ? "outline" : "destructive"}
-                                                            size="sm"
-                                                            onClick={() => setConfirmAction("block-toggle")}
-                                                            disabled={actionLoading}
-                                                        >
-                                                            {selectedUser.isBlocked ? "Unblock user" : "Block user"}
-                                                        </Button>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() => setConfirmAction("toggle-password-reset")}
-                                                            disabled={actionLoading}
-                                                        >
-                                                            {selectedUser.requiresPasswordChange ? "Clear reset flag" : "Force reset next login"}
-                                                        </Button>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-
-                                            <Card>
-                                                <CardHeader className="pb-3">
-                                                    <CardTitle className="text-base">Usage</CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="space-y-1 text-sm">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-muted-foreground">Lifetime tokens consumed</span>
-                                                        <span className="font-mono font-medium">{(selectedUser.tokensConsumedLifetime ?? 0).toLocaleString()}</span>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-
-                                            <Card>
-                                                <CardHeader className="pb-3">
-                                                    <CardTitle className="text-base">Profile</CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="space-y-3">
-                                                    <div className="space-y-1">
-                                                        <Label htmlFor="au-email">Email</Label>
-                                                        <Input id="au-email" type="email" value={profileForm.email} onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))} />
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div className="space-y-1">
-                                                            <Label htmlFor="au-first">First name</Label>
-                                                            <Input id="au-first" value={profileForm.firstName} onChange={(e) => setProfileForm((f) => ({ ...f, firstName: e.target.value }))} />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label htmlFor="au-last">Last name</Label>
-                                                            <Input id="au-last" value={profileForm.lastName} onChange={(e) => setProfileForm((f) => ({ ...f, lastName: e.target.value }))} />
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
-                                                        <div>
-                                                            <p className="font-medium">Email verified</p>
-                                                            <p className="text-xs text-muted-foreground">If the email changes, leaving this on keeps the account verified.</p>
-                                                        </div>
-                                                        <Button
-                                                            type="button"
-                                                            variant={profileForm.emailVerified ? "default" : "outline"}
-                                                            size="sm"
-                                                            onClick={() => setProfileForm((f) => ({ ...f, emailVerified: !f.emailVerified }))}
-                                                        >
-                                                            {profileForm.emailVerified ? "Verified" : "Not verified"}
-                                                        </Button>
-                                                    </div>
-                                                    <Button size="sm" onClick={() => setConfirmAction("save-profile")} disabled={actionLoading || !profileForm.email.trim()}>
-                                                        Save profile
-                                                    </Button>
-                                                </CardContent>
-                                            </Card>
-
-                                            <Card>
-                                                <CardHeader className="pb-3">
-                                                    <CardTitle className="text-base">Roles</CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="space-y-3">
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {["user", "admin", "superadmin"].map((role) => (
-                                                            <Button
-                                                                key={role}
-                                                                type="button"
-                                                                variant={selectedRoles.includes(role) ? "default" : "outline"}
-                                                                size="sm"
-                                                                onClick={() => toggleRole(role)}
-                                                            >
-                                                                {role}
-                                                            </Button>
-                                                        ))}
-                                                    </div>
-                                                    <Button size="sm" onClick={() => setConfirmAction("save-roles")} disabled={actionLoading || selectedRoles.length === 0}>
-                                                        Save roles
-                                                    </Button>
-                                                </CardContent>
-                                            </Card>
-
-                                            <Card>
-                                                <CardHeader className="pb-3">
-                                                    <CardTitle className="text-base">Limits</CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="space-y-3">
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div className="space-y-1">
-                                                            <Label htmlFor="lu-plan">Plan</Label>
-                                                            <Input id="lu-plan" value={limitsForm.plan ?? ""} onChange={(e) => setLimitsForm((f) => ({ ...f, plan: e.target.value }))} />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label htmlFor="lu-projects">Max projects</Label>
-                                                            <Input id="lu-projects" type="number" value={limitsForm.maxProjects ?? ""} onChange={(e) => setLimitsForm((f) => ({ ...f, maxProjects: Number(e.target.value) }))} />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label htmlFor="lu-tokens">Max tokens/month (K)</Label>
-                                                            <Input id="lu-tokens" type="number" value={limitsForm.maxMonthlyTokensK ?? ""} onChange={(e) => setLimitsForm((f) => ({ ...f, maxMonthlyTokensK: Number(e.target.value) }))} />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label htmlFor="lu-storage">Max storage (MB)</Label>
-                                                            <Input id="lu-storage" type="number" value={limitsForm.maxStorageMb ?? ""} onChange={(e) => setLimitsForm((f) => ({ ...f, maxStorageMb: Number(e.target.value) }))} />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label htmlFor="lu-sites">Max published sites</Label>
-                                                            <Input id="lu-sites" type="number" value={limitsForm.maxPublishedSites ?? ""} onChange={(e) => setLimitsForm((f) => ({ ...f, maxPublishedSites: Number(e.target.value) }))} />
-                                                        </div>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground">Use -1 for unlimited values.</p>
-                                                    <Button size="sm" onClick={() => setConfirmAction("save-limits")} disabled={actionLoading}>
-                                                        Save limits
-                                                    </Button>
-                                                </CardContent>
-                                            </Card>
-
-                                            <Card>
-                                                <CardHeader className="pb-3">
-                                                    <CardTitle className="text-base">Password controls</CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="space-y-3">
-                                                    <div className="space-y-1">
-                                                        <Label htmlFor="pw-reset">Temporary password</Label>
-                                                        <Input id="pw-reset" type="password" value={passwordResetForm.newPassword} onChange={(e) => setPasswordResetForm((f) => ({ ...f, newPassword: e.target.value }))} />
-                                                    </div>
-                                                    <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
-                                                        <div>
-                                                            <p className="font-medium">Force change on next login</p>
-                                                            <p className="text-xs text-muted-foreground">The user will log in with the temporary password and be required to replace it.</p>
-                                                        </div>
-                                                        <Button
-                                                            type="button"
-                                                            variant={passwordResetForm.requireChangeOnNextLogin ? "default" : "outline"}
-                                                            size="sm"
-                                                            onClick={() => setPasswordResetForm((f) => ({ ...f, requireChangeOnNextLogin: !f.requireChangeOnNextLogin }))}
-                                                        >
-                                                            {passwordResetForm.requireChangeOnNextLogin ? "Required" : "Optional"}
-                                                        </Button>
-                                                    </div>
-                                                    <Button
-                                                        size="sm"
-                                                        onClick={() => setConfirmAction("reset-password")}
-                                                        disabled={actionLoading || passwordResetForm.newPassword.length < 8}
-                                                    >
-                                                        Reset password
-                                                    </Button>
-                                                </CardContent>
-                                            </Card>
-
-                                            <Card>
-                                                <CardHeader className="pb-3">
-                                                    <CardTitle className="text-base">Projects</CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="space-y-2 text-sm">
-                                                    {selectedUser.projects.length === 0 && <p className="text-muted-foreground">No projects.</p>}
-                                                    {selectedUser.projects.map((project) => (
-                                                        <div key={project.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                                                            <div>
-                                                                <p className="font-medium">{project.name}</p>
-                                                                <p className="text-xs text-muted-foreground">Created {new Date(project.createdAt).toLocaleDateString()}</p>
+                                            {/* ── Tab: Identity ── */}
+                                            {sidebarTab === "identity" && (
+                                                <div className="space-y-4">
+                                                    {/* Status controls */}
+                                                    <Card>
+                                                        <CardHeader className="pb-2">
+                                                            <CardTitle className="text-sm">Account status</CardTitle>
+                                                        </CardHeader>
+                                                        <CardContent className="space-y-3">
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Created {new Date(selectedUser.createdAt).toLocaleString()}
+                                                            </p>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <Button
+                                                                    variant={selectedUser.isBlocked ? "outline" : "destructive"}
+                                                                    size="sm"
+                                                                    onClick={() => setConfirmAction("block-toggle")}
+                                                                    disabled={actionLoading}
+                                                                >
+                                                                    {selectedUser.isBlocked ? "Unblock user" : "Block user"}
+                                                                </Button>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={() => setConfirmAction("toggle-password-reset")}
+                                                                    disabled={actionLoading}
+                                                                >
+                                                                    {selectedUser.requiresPasswordChange ? "Clear reset flag" : "Force reset next login"}
+                                                                </Button>
                                                             </div>
-                                                            <Badge variant="secondary">{project.presetId ?? "custom"}</Badge>
-                                                        </div>
-                                                    ))}
-                                                    <p className="text-xs text-muted-foreground">Admin project CRUD and per-project suspension are not wired yet in the backend.</p>
-                                                </CardContent>
-                                            </Card>
+                                                        </CardContent>
+                                                    </Card>
 
+                                                    {/* Profile form */}
+                                                    <Card>
+                                                        <CardHeader className="pb-2">
+                                                            <CardTitle className="text-sm">Profile</CardTitle>
+                                                        </CardHeader>
+                                                        <CardContent className="space-y-3">
+                                                            <div className="space-y-1">
+                                                                <Label htmlFor="au-email">Email</Label>
+                                                                <Input
+                                                                    id="au-email"
+                                                                    type="email"
+                                                                    value={profileForm.email}
+                                                                    onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))}
+                                                                />
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <div className="space-y-1">
+                                                                    <Label htmlFor="au-first">First name</Label>
+                                                                    <Input
+                                                                        id="au-first"
+                                                                        value={profileForm.firstName}
+                                                                        onChange={(e) => setProfileForm((f) => ({ ...f, firstName: e.target.value }))}
+                                                                    />
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <Label htmlFor="au-last">Last name</Label>
+                                                                    <Input
+                                                                        id="au-last"
+                                                                        value={profileForm.lastName}
+                                                                        onChange={(e) => setProfileForm((f) => ({ ...f, lastName: e.target.value }))}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                                                                <div>
+                                                                    <p className="font-medium">Email verified</p>
+                                                                    <p className="text-xs text-muted-foreground">Changing the email resets verification unless this stays enabled.</p>
+                                                                </div>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant={profileForm.emailVerified ? "default" : "outline"}
+                                                                    size="sm"
+                                                                    onClick={() => setProfileForm((f) => ({ ...f, emailVerified: !f.emailVerified }))}
+                                                                >
+                                                                    {profileForm.emailVerified ? "Verified" : "Not verified"}
+                                                                </Button>
+                                                            </div>
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => setConfirmAction("save-profile")}
+                                                                disabled={actionLoading || !profileForm.email.trim()}
+                                                            >
+                                                                Save profile
+                                                            </Button>
+                                                        </CardContent>
+                                                    </Card>
+                                                </div>
+                                            )}
+
+                                            {/* ── Tab: Permissions ── */}
+                                            {sidebarTab === "permissions" && (
+                                                <div className="space-y-4">
+                                                    <Card>
+                                                        <CardHeader className="pb-2">
+                                                            <CardTitle className="text-sm">Roles</CardTitle>
+                                                        </CardHeader>
+                                                        <CardContent className="space-y-3">
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {["user", "admin", "superadmin"].map((role) => (
+                                                                    <Button
+                                                                        key={role}
+                                                                        type="button"
+                                                                        variant={selectedRoles.includes(role) ? "default" : "outline"}
+                                                                        size="sm"
+                                                                        onClick={() => toggleRole(role)}
+                                                                    >
+                                                                        {role}
+                                                                    </Button>
+                                                                ))}
+                                                            </div>
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => setConfirmAction("save-roles")}
+                                                                disabled={actionLoading || selectedRoles.length === 0}
+                                                            >
+                                                                Save roles
+                                                            </Button>
+                                                        </CardContent>
+                                                    </Card>
+
+                                                    <Card>
+                                                        <CardHeader className="pb-2">
+                                                            <CardTitle className="text-sm">Password controls</CardTitle>
+                                                        </CardHeader>
+                                                        <CardContent className="space-y-3">
+                                                            <div className="space-y-1">
+                                                                <Label htmlFor="pw-reset">Temporary password</Label>
+                                                                <Input
+                                                                    id="pw-reset"
+                                                                    type="password"
+                                                                    value={passwordResetForm.newPassword}
+                                                                    onChange={(e) => setPasswordResetForm((f) => ({ ...f, newPassword: e.target.value }))}
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                                                                <div>
+                                                                    <p className="font-medium">Force change on next login</p>
+                                                                    <p className="text-xs text-muted-foreground">User logs in with temp password and must replace it.</p>
+                                                                </div>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant={passwordResetForm.requireChangeOnNextLogin ? "default" : "outline"}
+                                                                    size="sm"
+                                                                    onClick={() => setPasswordResetForm((f) => ({ ...f, requireChangeOnNextLogin: !f.requireChangeOnNextLogin }))}
+                                                                >
+                                                                    {passwordResetForm.requireChangeOnNextLogin ? "Required" : "Optional"}
+                                                                </Button>
+                                                            </div>
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => setConfirmAction("reset-password")}
+                                                                disabled={actionLoading || passwordResetForm.newPassword.length < 8}
+                                                            >
+                                                                Reset password
+                                                            </Button>
+                                                        </CardContent>
+                                                    </Card>
+                                                </div>
+                                            )}
+
+                                            {/* ── Tab: Resources ── */}
+                                            {sidebarTab === "resources" && (
+                                                <div className="space-y-4">
+                                                    {/* Usage */}
+                                                    <Card>
+                                                        <CardHeader className="pb-2">
+                                                            <CardTitle className="text-sm">Usage</CardTitle>
+                                                        </CardHeader>
+                                                        <CardContent className="text-sm">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-muted-foreground">Lifetime tokens consumed</span>
+                                                                <span className="font-mono font-medium">
+                                                                    {(selectedUser.tokensConsumedLifetime ?? 0).toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+
+                                                    {/* Limits */}
+                                                    <Card>
+                                                        <CardHeader className="pb-2">
+                                                            <CardTitle className="text-sm">Plan &amp; Limits</CardTitle>
+                                                        </CardHeader>
+                                                        <CardContent className="space-y-3">
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <div className="space-y-1">
+                                                                    <Label htmlFor="lu-plan">Plan</Label>
+                                                                    <Input
+                                                                        id="lu-plan"
+                                                                        value={limitsForm.plan ?? ""}
+                                                                        onChange={(e) => setLimitsForm((f) => ({ ...f, plan: e.target.value }))}
+                                                                    />
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <Label htmlFor="lu-projects">Max projects</Label>
+                                                                    <Input
+                                                                        id="lu-projects"
+                                                                        type="number"
+                                                                        value={limitsForm.maxProjects ?? ""}
+                                                                        onChange={(e) => setLimitsForm((f) => ({ ...f, maxProjects: Number(e.target.value) }))}
+                                                                    />
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <Label htmlFor="lu-tokens">Max tokens/month (K)</Label>
+                                                                    <Input
+                                                                        id="lu-tokens"
+                                                                        type="number"
+                                                                        value={limitsForm.maxMonthlyTokensK ?? ""}
+                                                                        onChange={(e) => setLimitsForm((f) => ({ ...f, maxMonthlyTokensK: Number(e.target.value) }))}
+                                                                    />
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <Label htmlFor="lu-storage">Max storage (MB)</Label>
+                                                                    <Input
+                                                                        id="lu-storage"
+                                                                        type="number"
+                                                                        value={limitsForm.maxStorageMb ?? ""}
+                                                                        onChange={(e) => setLimitsForm((f) => ({ ...f, maxStorageMb: Number(e.target.value) }))}
+                                                                    />
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <Label htmlFor="lu-sites">Max published sites</Label>
+                                                                    <Input
+                                                                        id="lu-sites"
+                                                                        type="number"
+                                                                        value={limitsForm.maxPublishedSites ?? ""}
+                                                                        onChange={(e) => setLimitsForm((f) => ({ ...f, maxPublishedSites: Number(e.target.value) }))}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <p className="text-xs text-muted-foreground">Use -1 for unlimited values.</p>
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => setConfirmAction("save-limits")}
+                                                                disabled={actionLoading}
+                                                            >
+                                                                Save limits
+                                                            </Button>
+                                                        </CardContent>
+                                                    </Card>
+
+                                                    {/* Projects */}
+                                                    <Card>
+                                                        <CardHeader className="pb-2">
+                                                            <CardTitle className="text-sm">Projects ({selectedUser.projects.length})</CardTitle>
+                                                        </CardHeader>
+                                                        <CardContent className="space-y-2 text-sm">
+                                                            {selectedUser.projects.length === 0 && (
+                                                                <p className="text-muted-foreground">No projects.</p>
+                                                            )}
+                                                            {selectedUser.projects.map((project) => (
+                                                                <div
+                                                                    key={project.id}
+                                                                    className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
+                                                                >
+                                                                    <div>
+                                                                        <p className="font-medium">{project.name}</p>
+                                                                        <p className="text-xs text-muted-foreground">
+                                                                            Created {new Date(project.createdAt).toLocaleDateString()}
+                                                                        </p>
+                                                                    </div>
+                                                                    <Badge variant="secondary">{project.presetId ?? "custom"}</Badge>
+                                                                </div>
+                                                            ))}
+                                                        </CardContent>
+                                                    </Card>
+                                                </div>
+                                            )}
+
+                                            {/* ── Danger zone (always shown at bottom of scroll) ── */}
                                             <Card className="border-destructive/40">
-                                                <CardHeader className="pb-3">
-                                                    <CardTitle className="text-base text-destructive">Danger zone</CardTitle>
+                                                <CardHeader className="pb-2">
+                                                    <CardTitle className="text-sm text-destructive">Danger zone</CardTitle>
                                                 </CardHeader>
                                                 <CardContent>
-                                                    <Button variant="destructive" size="sm" onClick={() => setConfirmAction("delete-user")} disabled={actionLoading}>
+                                                    <p className="text-xs text-muted-foreground mb-3">
+                                                        Permanently deletes this user account. Projects remain as orphaned records.
+                                                    </p>
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        onClick={() => setConfirmAction("delete-user")}
+                                                        disabled={actionLoading}
+                                                    >
                                                         Delete user
                                                     </Button>
                                                 </CardContent>
@@ -672,38 +795,20 @@ export default function AdminUsersPage() {
                     <div className="space-y-3">
                         <div className="flex flex-col gap-1">
                             <Label htmlFor="cu-email">Email *</Label>
-                            <Input
-                                id="cu-email"
-                                type="email"
-                                value={createForm.email}
-                                onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
-                            />
+                            <Input id="cu-email" type="email" value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} />
                         </div>
                         <div className="flex flex-col gap-1">
                             <Label htmlFor="cu-password">Password *</Label>
-                            <Input
-                                id="cu-password"
-                                type="password"
-                                value={createForm.password}
-                                onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                            />
+                            <Input id="cu-password" type="password" value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} />
                         </div>
                         <div className="flex gap-3">
                             <div className="flex flex-col gap-1 flex-1">
                                 <Label htmlFor="cu-first">First name</Label>
-                                <Input
-                                    id="cu-first"
-                                    value={createForm.firstName}
-                                    onChange={(e) => setCreateForm((f) => ({ ...f, firstName: e.target.value }))}
-                                />
+                                <Input id="cu-first" value={createForm.firstName} onChange={(e) => setCreateForm((f) => ({ ...f, firstName: e.target.value }))} />
                             </div>
                             <div className="flex flex-col gap-1 flex-1">
                                 <Label htmlFor="cu-last">Last name</Label>
-                                <Input
-                                    id="cu-last"
-                                    value={createForm.lastName}
-                                    onChange={(e) => setCreateForm((f) => ({ ...f, lastName: e.target.value }))}
-                                />
+                                <Input id="cu-last" value={createForm.lastName} onChange={(e) => setCreateForm((f) => ({ ...f, lastName: e.target.value }))} />
                             </div>
                         </div>
                         {createError && <p className="text-destructive text-sm">{createError}</p>}
@@ -725,7 +830,11 @@ export default function AdminUsersPage() {
                     </DialogHeader>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setConfirmAction(null)} disabled={actionLoading}>Cancel</Button>
-                        <Button onClick={executeConfirmedAction} disabled={actionLoading} variant={confirmAction === "delete-user" || confirmAction === "block-toggle" ? "destructive" : "default"}>
+                        <Button
+                            onClick={executeConfirmedAction}
+                            disabled={actionLoading}
+                            variant={confirmAction === "delete-user" || confirmAction === "block-toggle" ? "destructive" : "default"}
+                        >
                             {actionLoading ? "Applying…" : "Confirm"}
                         </Button>
                     </DialogFooter>
