@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import {
     Dialog,
     DialogContent,
@@ -278,7 +279,7 @@ export default function AdminUsersPage() {
     const confirmCopy = confirmAction ? getConfirmCopy(confirmAction) : null;
 
     return (
-        <div className="relative space-y-6 max-w-6xl pr-0 xl:pr-[30rem]">
+        <div className={cn("relative space-y-6", selectedUserId && "xl:pr-[30rem]")}>
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">Users</h1>
                 <Button onClick={() => setShowCreate(true)}>Create User</Button>

@@ -139,7 +139,7 @@ export default function AdminUserDetailPage() {
     if (!user) return null;
 
     return (
-        <div className="space-y-6 max-w-4xl">
+        <div className="space-y-6">
             <div className="text-xs text-muted-foreground flex items-center gap-2">
                 <a href="/admin" className="hover:text-foreground transition-colors">Admin</a>
                 <span>/</span>
@@ -160,7 +160,7 @@ export default function AdminUserDetailPage() {
 
             {actionError && <p className="text-destructive text-sm">{actionError}</p>}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 {/* User Info */}
                 <Card>
                     <CardHeader>

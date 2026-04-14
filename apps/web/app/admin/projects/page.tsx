@@ -147,7 +147,7 @@ export default function AdminProjectsPage() {
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     return (
-        <div className="max-w-6xl pr-0 xl:pr-[30rem]">
+        <div className={cn("", selectedProject && "xl:pr-[30rem]")}>
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>

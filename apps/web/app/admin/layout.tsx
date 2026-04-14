@@ -21,30 +21,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     return (
         <div className="min-h-screen bg-background text-foreground">
-            <nav className="border-b border-border bg-card px-6 py-3 flex items-center gap-6">
-                <span className="font-semibold text-sm text-primary">Platform Admin</span>
-                <a href="/admin" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    Dashboard
-                </a>
-                <a href="/admin/users" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    Users
-                </a>
-                <a href="/admin/projects" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    Projects
-                </a>
-                <a href="/admin/config" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    Config
-                </a>
-                <a href="/admin/governance" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    Governance
-                </a>
+            <nav className="sticky top-0 z-10 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-1 sm:gap-3 flex-wrap">
+                <span className="font-semibold text-sm text-primary mr-2 shrink-0">Platform Admin</span>
+                {[
+                    { href: "/admin", label: "Dashboard" },
+                    { href: "/admin/users", label: "Users" },
+                    { href: "/admin/projects", label: "Projects" },
+                    { href: "/admin/config", label: "Config" },
+                    { href: "/admin/governance", label: "Governance" },
+                ].map(({ href, label }) => (
+                    <a
+                        key={href}
+                        href={href}
+                        className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors px-3 py-1.5 rounded-md"
+                    >
+                        {label}
+                    </a>
+                ))}
                 <div className="ml-auto">
-                    <a href="/dashboard" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                    <a href="/dashboard" className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md hover:bg-muted/50">
                         ← Back to Dashboard
                     </a>
                 </div>
             </nav>
-            <main className="p-6">
+            <main className="px-4 sm:px-6 lg:px-8 xl:px-10 py-6">
                 {children}
             </main>
         </div>

@@ -92,94 +92,96 @@ export default function AdminConfigPage() {
     }
 
     return (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6">
             <h1 className="text-2xl font-bold">Platform Configuration</h1>
 
             {error && <p className="text-destructive text-sm">{error}</p>}
 
-            {/* Access Control */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Access Control</CardTitle>
-                    <CardDescription className="text-xs">
-                        Control who can sign up and how accounts are verified.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <ToggleField
-                        label="Registration open"
-                        description="When off, the /register endpoint returns 403 for regular signups. The superadmin can still create users via the admin panel."
-                        checked={registrationOpen}
-                        onToggle={() => setRegistrationOpen((v) => !v)}
-                    />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                {/* Access Control */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base">Access Control</CardTitle>
+                        <CardDescription className="text-xs">
+                            Control who can sign up and how accounts are verified.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <ToggleField
+                            label="Registration open"
+                            description="When off, the /register endpoint returns 403 for regular signups. The superadmin can still create users via the admin panel."
+                            checked={registrationOpen}
+                            onToggle={() => setRegistrationOpen((v) => !v)}
+                        />
 
-                    <ToggleField
-                        label="Email verification required"
-                        description="When on, unverified users are blocked from accessing the platform."
-                        checked={emailVerificationRequired}
-                        onToggle={() => setEmailVerificationRequired((v) => !v)}
-                    />
-                </CardContent>
-            </Card>
+                        <ToggleField
+                            label="Email verification required"
+                            description="When on, unverified users are blocked from accessing the platform."
+                            checked={emailVerificationRequired}
+                            onToggle={() => setEmailVerificationRequired((v) => !v)}
+                        />
+                    </CardContent>
+                </Card>
 
-            {/* Default User Limits */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Default User Limits</CardTitle>
-                    <CardDescription className="text-xs">
-                        Applied to newly created users. Use -1 for unlimited. Individual overrides take precedence.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="flex flex-col gap-1">
-                            <Label htmlFor="dl-plan" className="text-xs">Plan name</Label>
-                            <Input
-                                id="dl-plan"
-                                value={defaultLimits.plan ?? ""}
-                                onChange={(e) => setDefaultLimits((f) => ({ ...f, plan: e.target.value }))}
-                                placeholder="unlimited"
-                            />
+                {/* Default User Limits */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base">Default User Limits</CardTitle>
+                        <CardDescription className="text-xs">
+                            Applied to newly created users. Use -1 for unlimited. Individual overrides take precedence.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1">
+                                <Label htmlFor="dl-plan" className="text-xs">Plan name</Label>
+                                <Input
+                                    id="dl-plan"
+                                    value={defaultLimits.plan ?? ""}
+                                    onChange={(e) => setDefaultLimits((f) => ({ ...f, plan: e.target.value }))}
+                                    placeholder="unlimited"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <Label htmlFor="dl-projects" className="text-xs">Max projects (-1 = ∞)</Label>
+                                <Input
+                                    id="dl-projects"
+                                    type="number"
+                                    value={defaultLimits.maxProjects ?? ""}
+                                    onChange={(e) => setDefaultLimits((f) => ({ ...f, maxProjects: Number(e.target.value) }))}
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <Label htmlFor="dl-tokens" className="text-xs">Max tokens/month (K)</Label>
+                                <Input
+                                    id="dl-tokens"
+                                    type="number"
+                                    value={defaultLimits.maxMonthlyTokensK ?? ""}
+                                    onChange={(e) => setDefaultLimits((f) => ({ ...f, maxMonthlyTokensK: Number(e.target.value) }))}
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <Label htmlFor="dl-storage" className="text-xs">Max storage (MB)</Label>
+                                <Input
+                                    id="dl-storage"
+                                    type="number"
+                                    value={defaultLimits.maxStorageMb ?? ""}
+                                    onChange={(e) => setDefaultLimits((f) => ({ ...f, maxStorageMb: Number(e.target.value) }))}
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <Label htmlFor="dl-sites" className="text-xs">Max published sites</Label>
+                                <Input
+                                    id="dl-sites"
+                                    type="number"
+                                    value={defaultLimits.maxPublishedSites ?? ""}
+                                    onChange={(e) => setDefaultLimits((f) => ({ ...f, maxPublishedSites: Number(e.target.value) }))}
+                                />
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-1">
-                            <Label htmlFor="dl-projects" className="text-xs">Max projects (-1 = ∞)</Label>
-                            <Input
-                                id="dl-projects"
-                                type="number"
-                                value={defaultLimits.maxProjects ?? ""}
-                                onChange={(e) => setDefaultLimits((f) => ({ ...f, maxProjects: Number(e.target.value) }))}
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <Label htmlFor="dl-tokens" className="text-xs">Max tokens/month (K)</Label>
-                            <Input
-                                id="dl-tokens"
-                                type="number"
-                                value={defaultLimits.maxMonthlyTokensK ?? ""}
-                                onChange={(e) => setDefaultLimits((f) => ({ ...f, maxMonthlyTokensK: Number(e.target.value) }))}
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <Label htmlFor="dl-storage" className="text-xs">Max storage (MB)</Label>
-                            <Input
-                                id="dl-storage"
-                                type="number"
-                                value={defaultLimits.maxStorageMb ?? ""}
-                                onChange={(e) => setDefaultLimits((f) => ({ ...f, maxStorageMb: Number(e.target.value) }))}
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <Label htmlFor="dl-sites" className="text-xs">Max published sites</Label>
-                            <Input
-                                id="dl-sites"
-                                type="number"
-                                value={defaultLimits.maxPublishedSites ?? ""}
-                                onChange={(e) => setDefaultLimits((f) => ({ ...f, maxPublishedSites: Number(e.target.value) }))}
-                            />
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Last updated */}
             {config && (
