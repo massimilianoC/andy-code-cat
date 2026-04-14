@@ -15,7 +15,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MonacoCodeEditor } from "@/components/admin/MonacoCodeEditor";
-import { cn } from "@/lib/utils";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -87,18 +86,14 @@ const TABS: { id: GovernanceTab; label: string }[] = [
 
 function TabBar({ active, onChange }: { active: GovernanceTab; onChange: (t: GovernanceTab) => void }) {
     return (
-        <div className="flex gap-0 border-b border-border overflow-x-auto shrink-0">
+        <div className="admin-tab-list">
             {TABS.map((t) => (
                 <button
                     key={t.id}
                     type="button"
                     onClick={() => onChange(t.id)}
-                    className={cn(
-                        "whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px",
-                        active === t.id
-                            ? "border-primary text-foreground"
-                            : "border-transparent text-muted-foreground hover:text-foreground",
-                    )}
+                    className="admin-tab"
+                    data-active={active === t.id ? "true" : undefined}
                 >
                     {t.label}
                 </button>
@@ -257,68 +252,102 @@ export default function AdminGovernancePage() {
     const legal = governance.legal ?? EMPTY_GOVERNANCE.legal!;
 
     return (
-        <div className="space-y-0">
-            {/* Page header */}
-            <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold">Global Product Governance</h1>
-                    <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-                        Per-product prompt templates, HTML/JS/CSS injections, cookie banner, legal pages, and
-                        nginx runtime knobs. Changes take effect on the next page render.
-                    </p>
-                </div>
-                <div className="text-xs text-muted-foreground flex items-center gap-2">
-                    <a href="/admin" className="hover:text-foreground transition-colors">Admin</a>
-                    <span>/</span>
-                    <span className="text-foreground">Governance</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {/* ── Page header ─────────────────────────────────────────────── */}
+            <div style={{ marginBottom: "1.5rem" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+                    <div>
+                        <h1 style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--text)", marginBottom: "0.3rem" }}>
+                            Product Governance
+                        </h1>
+                        <p style={{ fontSize: "0.8125rem", color: "var(--text-muted)", maxWidth: "56rem", lineHeight: 1.55 }}>
+                            Per-product prompt templates, HTML/JS/CSS injections, cookie banner, legal pages, and
+                            nginx runtime knobs. Changes apply on the next page render.
+                        </p>
+                    </div>
+                    <nav style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", color: "var(--text-muted)", flexShrink: 0 }}>
+                        <a href="/admin" style={{ color: "var(--text-muted)", textDecoration: "none" }}>Admin</a>
+                        <span>/</span>
+                        <span style={{ color: "var(--text)" }}>Governance</span>
+                    </nav>
                 </div>
             </div>
 
-            {error && <p className="text-sm text-destructive mb-4">{error}</p>}
+            {error && (
+                <div style={{ marginBottom: "1rem", padding: "0.75rem 1rem", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", fontSize: "0.8125rem", color: "var(--danger)" }}>
+                    {error}
+                </div>
+            )}
 
-            {/* Product scope selector */}
-            <div className="flex flex-wrap items-end gap-3 mb-6 p-4 rounded-lg border border-border bg-card">
-                <div>
-                    <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Product scope</p>
-                    <div className="flex flex-wrap gap-2">
+            {/* ── Product scope toolbar ───────────────────────────────────── */}
+            <div
+                style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "flex-end",
+                    gap: "12px",
+                    marginBottom: "1.25rem",
+                    padding: "1rem 1.25rem",
+                    borderRadius: "10px",
+                    border: "1px solid var(--border)",
+                    background: "var(--surface)",
+                }}
+            >
+                <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+                    <p style={{ fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
+                        Product scope
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        {productOptions.length === 0 && (
+                            <span style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>No products yet — type a key below to create one.</span>
+                        )}
                         {productOptions.map((key) => (
-                            <Button
+                            <button
                                 key={key}
-                                variant={key === activeProductKey ? "default" : "outline"}
-                                size="sm"
+                                type="button"
                                 onClick={() => loadProductConfig(key)}
+                                style={{
+                                    padding: "3px 10px",
+                                    borderRadius: "6px",
+                                    fontSize: "0.8125rem",
+                                    fontWeight: 500,
+                                    cursor: "pointer",
+                                    transition: "all 0.12s",
+                                    background: key === activeProductKey ? "rgba(99,102,241,0.18)" : "var(--surface-2)",
+                                    color: key === activeProductKey ? "var(--accent-hover)" : "var(--text-muted)",
+                                    border: key === activeProductKey ? "1px solid rgba(99,102,241,0.35)" : "1px solid var(--border)",
+                                }}
                             >
                                 {key}
-                            </Button>
+                            </button>
                         ))}
                     </div>
                 </div>
-                <div className="flex gap-2 items-end ml-auto">
-                    <div className="space-y-1">
-                        <Label htmlFor="product-key" className="text-xs">Product key</Label>
+                <div style={{ display: "flex", gap: "8px", alignItems: "flex-end", flexShrink: 0 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <Label htmlFor="product-key" style={{ fontSize: "0.72rem" }}>Product key</Label>
                         <Input
                             id="product-key"
                             value={productKeyInput}
                             onChange={(e) => setProductKeyInput(e.target.value)}
                             placeholder="default"
-                            className="w-40"
+                            className="w-36"
                         />
                     </div>
-                    <Button variant="outline" onClick={() => loadProductConfig(productKeyInput.trim() || DEFAULT_PRODUCT_KEY)}>
+                    <Button variant="outline" size="sm" onClick={() => loadProductConfig(productKeyInput.trim() || DEFAULT_PRODUCT_KEY)}>
                         Load
                     </Button>
-                    <Button onClick={saveGovernance} disabled={saving}>
-                        {saving ? "Saving…" : "Save Governance"}
+                    <Button size="sm" onClick={saveGovernance} disabled={saving}>
+                        {saving ? "Saving…" : saved ? "✓ Saved" : "Save Governance"}
                     </Button>
-                    {saved && <span className="text-sm text-green-500 self-center">Saved!</span>}
                 </div>
             </div>
 
-            {/* Tab bar */}
+            {/* ── Tab bar ─────────────────────────────────────────────────── */}
             <TabBar active={activeTab} onChange={setActiveTab} />
 
-            {/* Tab content */}
-            <div className="pt-6 space-y-6">
+            {/* ── Tab content ─────────────────────────────────────────────── */}
+            <div style={{ paddingTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
 
                 {/* ── Analytics ─────────────────────────────────────────────── */}
                 {activeTab === "analytics" && (
@@ -733,13 +762,30 @@ export default function AdminGovernancePage() {
                 )}
 
                 {/* Save bar — always visible at page bottom */}
-                <div className="sticky bottom-0 z-10 flex items-center gap-3 border-t border-border bg-background/95 backdrop-blur py-4">
+                <div
+                    style={{
+                        position: "sticky",
+                        bottom: 0,
+                        zIndex: 10,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        borderTop: "1px solid var(--border)",
+                        background: "rgba(15,17,23,0.96)",
+                        backdropFilter: "blur(10px)",
+                        padding: "12px 0",
+                        marginTop: "8px",
+                    }}
+                >
                     <Button onClick={saveGovernance} disabled={saving}>
                         {saving ? "Saving…" : "Save Governance"}
                     </Button>
-                    {saved && <span className="text-sm text-green-500">Saved!</span>}
-                    <span className="text-xs text-muted-foreground ml-2">
-                        Scope: <span className="font-mono">{activeProductKey}</span> — tab: {activeTab}
+                    {saved && (
+                        <span style={{ fontSize: "0.8125rem", color: "var(--success)" }}>✓ Saved</span>
+                    )}
+                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginLeft: "4px" }}>
+                        Scope: <code style={{ fontFamily: "monospace" }}>{activeProductKey}</code> — tab:{" "}
+                        <code style={{ fontFamily: "monospace" }}>{activeTab}</code>
                     </span>
                 </div>
             </div>

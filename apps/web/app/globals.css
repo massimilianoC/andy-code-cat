@@ -86,10 +86,108 @@ main:has(.dashboard-shell) {
     max-width: 1200px;
 }
 
-/* Admin panel: full-width, no centre-boxing */
+/* Admin panel: full-width, proper padding, no centre-boxing.
+   NOTE: specificity (0,1,1) beats Tailwind utility classes (0,0,1) —
+   padding is set here so responsive Tailwind padding classes don't silently lose. */
 main.admin-main {
     max-width: 1920px;
-    padding: 0;
+    margin: 0;
+    width: 100%;
+    padding: 2rem 1.75rem;
+}
+
+@media (min-width: 768px) {
+    main.admin-main {
+        padding: 2.25rem 2.5rem;
+    }
+}
+
+@media (min-width: 1280px) {
+    main.admin-main {
+        padding: 2.5rem 3.5rem;
+    }
+}
+
+/* Admin panel design tokens — muted, low-contrast variant of the base palette */
+.admin-tab-list {
+    display: flex;
+    gap: 3px;
+    padding: 4px;
+    border-radius: 12px;
+    background: rgba(15, 17, 23, 0.7);
+    border: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-shrink: 0;
+}
+
+.admin-tab-list::-webkit-scrollbar {
+    display: none;
+}
+
+.admin-tab {
+    white-space: nowrap;
+    padding: 0.375rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+    border: 1px solid transparent;
+    cursor: pointer;
+    color: var(--text-muted);
+    background: transparent;
+    line-height: 1.5;
+}
+
+.admin-tab:hover {
+    color: var(--text);
+    background: rgba(46, 50, 72, 0.5);
+}
+
+.admin-tab[data-active="true"] {
+    color: var(--text);
+    background: var(--surface);
+    border-color: var(--border);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* Sidebar segment-control tabs (users / projects) */
+.admin-seg-list {
+    display: grid;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background: rgba(15, 17, 23, 0.6);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.admin-seg-tab {
+    padding: 0.35rem 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 7px;
+    text-align: center;
+    transition: background 0.12s, color 0.12s;
+    border: 1px solid transparent;
+    cursor: pointer;
+    color: var(--text-muted);
+    background: transparent;
+}
+
+.admin-seg-tab:hover {
+    color: var(--text);
+}
+
+.admin-seg-tab[data-active="true"] {
+    color: var(--text);
+    background: var(--surface);
+    border-color: var(--border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.admin-seg-tab[data-danger="true"]:not([data-active="true"]):hover {
+    color: var(--danger);
 }
 
 h1 {

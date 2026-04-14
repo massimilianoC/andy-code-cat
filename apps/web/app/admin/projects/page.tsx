@@ -35,27 +35,26 @@ interface ConfirmState {
 
 type SidebarTab = "overview" | "deployment" | "danger";
 
-/** Simple tab bar for the project sidebar. */
+/** Segment-control tab bar for the project sidebar. */
 function SidebarTabs({ active, onChange }: { active: SidebarTab; onChange: (t: SidebarTab) => void }) {
-    const tabs: { id: SidebarTab; label: string }[] = [
+    const tabs: { id: SidebarTab; label: string; danger?: boolean }[] = [
         { id: "overview", label: "Overview" },
         { id: "deployment", label: "Deployment" },
-        { id: "danger", label: "Danger" },
+        { id: "danger", label: "Danger", danger: true },
     ];
     return (
-        <div className="flex border-b border-border shrink-0">
+        <div
+            className="admin-seg-list shrink-0 mx-4 mt-3"
+            style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}
+        >
             {tabs.map((t) => (
                 <button
                     key={t.id}
                     type="button"
                     onClick={() => onChange(t.id)}
-                    className={cn(
-                        "flex-1 py-2.5 text-sm font-medium transition-colors",
-                        active === t.id
-                            ? "border-b-2 border-primary text-foreground"
-                            : "text-muted-foreground hover:text-foreground",
-                        t.id === "danger" && active !== "danger" && "hover:text-destructive",
-                    )}
+                    className="admin-seg-tab"
+                    data-active={active === t.id ? "true" : undefined}
+                    data-danger={t.danger ? "true" : undefined}
                 >
                     {t.label}
                 </button>

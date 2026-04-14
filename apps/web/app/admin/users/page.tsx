@@ -48,7 +48,7 @@ type ConfirmAction =
 
 type SidebarTab = "identity" | "permissions" | "resources";
 
-/** Simple tab bar component used inside the user sidebar. */
+/** Segment-control tab bar for the user sidebar. */
 function SidebarTabs({
     active,
     onChange,
@@ -62,18 +62,17 @@ function SidebarTabs({
         { id: "resources", label: "Resources" },
     ];
     return (
-        <div className="flex border-b border-border shrink-0">
+        <div
+            className="admin-seg-list shrink-0 mx-4 mt-3"
+            style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}
+        >
             {tabs.map((t) => (
                 <button
                     key={t.id}
                     type="button"
                     onClick={() => onChange(t.id)}
-                    className={cn(
-                        "flex-1 py-2.5 text-sm font-medium transition-colors",
-                        active === t.id
-                            ? "border-b-2 border-primary text-foreground"
-                            : "text-muted-foreground hover:text-foreground",
-                    )}
+                    className="admin-seg-tab"
+                    data-active={active === t.id ? "true" : undefined}
                 >
                     {t.label}
                 </button>
