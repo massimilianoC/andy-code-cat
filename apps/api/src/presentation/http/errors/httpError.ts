@@ -32,7 +32,7 @@ export interface NormalizedHttpError {
 }
 
 function isZodError(error: unknown): error is ZodError {
-    return Boolean(error) && typeof error === "object" && "issues" in error && Array.isArray((error as { issues?: unknown }).issues);
+    return error !== null && typeof error === "object" && "issues" in error && Array.isArray((error as { issues?: unknown }).issues);
 }
 
 export function normalizeHttpError(error: unknown): NormalizedHttpError {

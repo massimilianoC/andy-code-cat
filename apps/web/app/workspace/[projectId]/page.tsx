@@ -109,6 +109,12 @@ function tierBadge(tier: ModelItem["priceTier"]): string {
     return "";
 }
 
+function getStringDetail(details: unknown, key: string): string | undefined {
+    if (!details || typeof details !== "object") return undefined;
+    const value = (details as Record<string, unknown>)[key];
+    return typeof value === "string" ? value : undefined;
+}
+
 /**
  * Renders <optgroup> sections for a model list:
  * - paid models grouped by family (alphabetical)
@@ -119,13 +125,6 @@ function groupedModelOptions(models: ModelItem[]): React.ReactNode {
     const free = models.filter((m) => m.priceTier === "free");
 
     function intoFamilyGroups(list: ModelItem[]): [string, ModelItem[]][] {
-
-function getStringDetail(details: unknown, key: string): string | undefined {
-    if (!details || typeof details !== "object") return undefined;
-    const value = (details as Record<string, unknown>)[key];
-    return typeof value === "string" ? value : undefined;
-}
-
         const map = new Map<string, ModelItem[]>();
         for (const m of list) {
             const fam = modelFamily(m.id);
@@ -948,7 +947,7 @@ export default function WorkspacePage() {
         }
 
         const provider = getStringDetail(err.details, "provider") ?? currentProvider?.provider ?? undefined;
-        const model = getStringDetail(err.details, "model") ?? selectedModel || undefined;
+        const model = getStringDetail(err.details, "model") ?? (selectedModel || undefined);
         const keyEnvironmentVariable = getStringDetail(err.details, "keyEnvironmentVariable");
         const message = err.userMessage ?? err.message;
         const title = err.code === "LLM_PROVIDER_API_KEY_MISSING"

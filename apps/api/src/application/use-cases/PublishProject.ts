@@ -212,8 +212,7 @@ export class PublishProject {
         const existing = await this.deploymentRepo.findActiveByProjectId(input.projectId);
 
         if (existing) {
-            return this.republish(existing, snapshot.id, snapshot.artifacts, input.userId, input.projectId, input.customSlug);
-                    return this.republish(existing, snapshot.id, snapshot.artifacts, input.userId, input.projectId, input.customSlug, input.presetId);
+            return this.republish(existing, snapshot.id, snapshot.artifacts, input.userId, input.projectId, input.customSlug, input.presetId);
         }
 
         // 4. Generate publish ID
