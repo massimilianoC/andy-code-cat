@@ -58,12 +58,13 @@ export function normalizeHttpError(error: unknown): NormalizedHttpError {
 
     if (error instanceof Error) {
         const candidate = error as Error & { statusCode?: number; code?: string; userMessage?: string; details?: unknown };
-        const statusCode = typeof candidate.statusCode === "number" ? candidate.statusCode : 500;
+        const isJwtError = ["JsonWebTokenError", "TokenExpiredError", "NotBeforeError"].includes(candidate.name);
+        const statusCode = typeof candidate.statusCode === "number" ? candidate.statusCode : isJwtError ? 401 : 500;
         return {
             statusCode,
-            code: candidate.code,
+            code: candidate.code ?? (isJwtError ? "INVALID_TOKEN" : undefined),
             message: candidate.message,
-            userMessage: candidate.userMessage ?? candidate.message,
+            userMessage: candidate.userMessage ?? (isJwtError ? "Invalid or expired token" : candidate.message),
             details: candidate.details,
         };
     }
