@@ -220,6 +220,74 @@ function groupedModelOptions(models: ModelItem[]): React.ReactNode {
 }
 // ── End model dropdown helpers ───────────────────────────────────────────────
 
+type SelectedFocusElement = NonNullable<LlmFocusContext["selectedElement"]>;
+
+const MAX_FOCUS_SELECTOR_LEN = 240;
+const MAX_FOCUS_NODE_ID_LEN = 120;
+const MAX_FOCUS_TEXT_LEN = 160;
+const MAX_FOCUS_OUTER_HTML_LEN = 8000;
+const MAX_FOCUS_CLASSES = 8;
+const INVALID_FOCUS_TAGS = new Set(["html", "body", "head", "script", "style", "link", "meta"]);
+
+function clipFocusValue(value: string | undefined, max: number): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+}
+
+function sanitizeSelectedElementForFocus(
+    element: LlmFocusContext["selectedElement"] | null | undefined,
+): SelectedFocusElement | null {
+    if (!element) return null;
+
+    const tag = clipFocusValue(element.tag?.toLowerCase(), 64);
+    if (!tag || INVALID_FOCUS_TAGS.has(tag)) {
+        return null;
+    }
+
+    const stableNodeId = clipFocusValue(element.stableNodeId, MAX_FOCUS_NODE_ID_LEN);
+    const selector = clipFocusValue(element.selector, MAX_FOCUS_SELECTOR_LEN);
+    if (!stableNodeId || !selector) {
+        return null;
+    }
+
+    const classes = Array.isArray(element.classes)
+        ? element.classes
+            .map((item) => clipFocusValue(item, 60))
+            .filter((item): item is string => Boolean(item))
+            .slice(0, MAX_FOCUS_CLASSES)
+        : [];
+
+    const textSnippet = clipFocusValue(element.textSnippet, MAX_FOCUS_TEXT_LEN);
+    const outerHtml = clipFocusValue(element.outerHtml, MAX_FOCUS_OUTER_HTML_LEN);
+
+    if (outerHtml && /^<(html|body)\b/i.test(outerHtml)) {
+        return null;
+    }
+
+    return {
+        stableNodeId,
+        selector,
+        tag,
+        classes,
+        ...(textSnippet ? { textSnippet } : {}),
+        ...(outerHtml ? { outerHtml } : {}),
+    };
+}
+
+function isFocusContextValidationError(error: unknown): boolean {
+    if (!(error instanceof ApiError) || error.status !== 400) {
+        return false;
+    }
+
+    const details = error.details as
+        | { fieldErrors?: { focusContext?: unknown } }
+        | undefined;
+
+    return Array.isArray(details?.fieldErrors?.focusContext) && details.fieldErrors.focusContext.length > 0;
+}
+
 export default function WorkspacePage() {
     const router = useRouter();
     const params = useParams();
@@ -803,7 +871,8 @@ export default function WorkspacePage() {
         function onMessage(event: MessageEvent) {
             if (!event.data || typeof event.data !== "object") return;
             if (event.data.type === "pf-select") {
-                setSelectedElement(event.data.element as LlmFocusContext["selectedElement"]);
+                const safeElement = sanitizeSelectedElementForFocus(event.data.element as LlmFocusContext["selectedElement"]);
+                setSelectedElement(safeElement);
                 return;
             }
             if (event.data.type === "pf-edit-save") {
@@ -1178,13 +1247,16 @@ export default function WorkspacePage() {
 
             // Build focusContext from active inspect selection or code editor selection
             const focusContext: LlmFocusContext | undefined = (() => {
-                if (inspectMode && selectedElement) {
-                    return {
-                        mode: "preview-element" as const,
-                        targetType: getElementTargetType(selectedElement.tag),
-                        userIntent: content,
-                        selectedElement,
-                    };
+                if (inspectMode) {
+                    const safeSelectedElement = sanitizeSelectedElementForFocus(selectedElement);
+                    if (safeSelectedElement) {
+                        return {
+                            mode: "preview-element" as const,
+                            targetType: getElementTargetType(safeSelectedElement.tag),
+                            userIntent: content,
+                            selectedElement: safeSelectedElement,
+                        };
+                    }
                 }
                 if (codeEditorSelection && previewTab !== "preview") {
                     return {
@@ -1296,6 +1368,17 @@ export default function WorkspacePage() {
                     setDraftAnswer("");
                     return;
                 }
+                const retryWithoutFocusContext = Boolean(focusContext && isFocusContextValidationError(streamErr));
+
+                if (retryWithoutFocusContext) {
+                    setSelectedElement(null);
+                    addNotification({
+                        label: "Inspect limitato",
+                        status: "error",
+                        message: "La selezione non era valida per la focus patch. Continuo con il contesto completo del progetto.",
+                    });
+                }
+
                 llm = await llmChatPreview(token, projectId, {
                     message: content,
                     provider: selectedProvider || undefined,
@@ -1305,7 +1388,7 @@ export default function WorkspacePage() {
                     temperature: chatDefaults.temperature,
                     history,
                     currentArtifacts,
-                    focusContext,
+                    focusContext: retryWithoutFocusContext ? undefined : focusContext,
                 });
             }
 
@@ -3181,30 +3264,25 @@ function SnapshotHistoryPanel({
 
 // Minified script injected into every preview iframe.
 // Stays idle until it receives a { type: 'pf-inspect', on: true } postMessage.
-const PF_INSPECT_SCRIPT =
-    "<script data-pf-injected>(function(){var hl=null,sl=null,sty=document.createElement('style');sty.id='__pf_i';" +
-    "(document.head||document.body).appendChild(sty);" +
-    "var pfTb=function(){return document.getElementById('__pf_tb');};" +
-    "function inTb(el){var t=pfTb();return t&&t.contains(el);}" +
-    "function nodeId(el){var p=[],c=el;while(c&&c.parentElement&&c!==document.body){" +
-    "var par=c.parentElement,idx=Array.prototype.indexOf.call(par.children,c);" +
-    "p.unshift(c.tagName.toLowerCase()+':'+idx);c=par;}return 'body>'+p.join('>');" +
-    "}function mkdata(el){var cls=Array.prototype.slice.call(el.classList);" +
-    "var txt=(el.textContent||'').trim().slice(0,100);" +
-    "var oh=el.outerHTML||'';oh=oh.replace(/ data-pf-[hse](=\"\")?/g,'');oh=oh.replace(/ style=\"\"/g,'');oh=oh.replace(/ (aos-init|aos-animate)/g,'');if(oh.length>12000)oh=oh.slice(0,12000);" +
-    "return{stableNodeId:nodeId(el),selector:el.id?'#'+el.id:el.tagName.toLowerCase()+(cls.length?'.'+cls.join('.'):'')," +
-    "tag:el.tagName.toLowerCase(),classes:cls,textSnippet:txt||undefined,outerHtml:oh||undefined};}" +
-    "function over(e){if(inTb(e.target))return;if(hl&&hl!==e.target)hl.removeAttribute('data-pf-h');hl=e.target;if(hl)hl.setAttribute('data-pf-h','');}" +
-    "function clk(e){if(inTb(e.target))return;e.preventDefault();e.stopPropagation();if(sl)sl.removeAttribute('data-pf-s');sl=e.target;" +
-    "if(sl)sl.setAttribute('data-pf-s','');try{window.parent.postMessage({type:'pf-select',element:mkdata(e.target)},'*');}catch(x){}}" +
-    "function on(){sty.textContent='[data-pf-h]{outline:2px solid rgba(99,102,241,.6)!important;cursor:crosshair!important}" +
-    "[data-pf-s]{outline:2px solid #6366f1!important;outline-offset:2px!important}';" +
-    "document.addEventListener('mouseover',over);document.addEventListener('click',clk,true);}" +
-    "function off(){sty.textContent='';document.removeEventListener('mouseover',over);" +
-    "document.removeEventListener('click',clk,true);" +
-    "if(hl){hl.removeAttribute('data-pf-h');hl=null;}if(sl){sl.removeAttribute('data-pf-s');sl=null;}}" +
-    "window.addEventListener('message',function(e){if(e.data&&e.data.type==='pf-inspect'){if(e.data.on)on();else off();}});" +
-    "})();<" + "/script>";
+const PF_INSPECT_SCRIPT = `<script data-pf-injected>(function(){
+var hl=null,sl=null,sty=document.createElement('style');sty.id='__pf_i';
+(document.head||document.body).appendChild(sty);
+var BLOCK_TAGS={section:1,article:1,main:1,header:1,footer:1,nav:1,aside:1,form:1,div:1,li:1,ul:1,ol:1,figure:1,blockquote:1};
+function pfTb(){return document.getElementById('__pf_tb');}
+function inTb(el){var t=pfTb();return !!(t&&el&&t.contains(el));}
+function clip(v,max){v=String(v||'').trim();return v.length>max?v.slice(0,max):v;}
+function cleanClasses(el){return Array.prototype.slice.call((el&&el.classList)||[]).filter(function(c){return c&&c.length<=60&&c!=='aos-init'&&c!=='aos-animate'&&!/^data-pf-/.test(c);}).slice(0,8);}
+function nodeId(el){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-pf-id');if(pf)return clip('pf:'+pf,120);if(el.id)return clip('id:'+el.id,120);var p=[],c=el,d=0;while(c&&c.parentElement&&c!==document.body&&d<6){var par=c.parentElement,idx=Array.prototype.indexOf.call(par.children,c);p.unshift(c.tagName.toLowerCase()+':'+idx);c=par;d++;}return clip('body>'+p.join('>'),120);}
+function selectorFor(el,cls){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-pf-id');if(pf)return '[data-pf-id="'+clip(pf,80)+'"]';if(el.id)return '#'+clip(el.id,80);return clip(el.tagName.toLowerCase()+(cls.length?'.'+cls.slice(0,3).join('.'):''),240);}
+function score(el){if(!el||!el.tagName)return -999;var tag=el.tagName.toLowerCase();if(tag==='html'||tag==='body'||tag==='head'||tag==='script'||tag==='style'||tag==='meta'||tag==='link')return -999;var s=0;if(el.hasAttribute('data-pf-id'))s+=6;if(el.id)s+=5;if(BLOCK_TAGS[tag])s+=3;var html=el.outerHTML||'';if(html.length>8000)s-=8;return s;}
+function pickTarget(start){if(!start||!start.tagName)return null;var best=start,bestScore=score(start),cur=start,depth=0;while(cur&&cur.parentElement&&cur!==document.body&&depth<4){cur=cur.parentElement;var sc=score(cur);if(sc>bestScore&&(cur.hasAttribute('data-pf-id')||cur.id)){best=cur;bestScore=sc;}depth++;}return bestScore<-100?null:best;}
+function mkdata(el){el=pickTarget(el);if(!el)return null;var cls=cleanClasses(el);var txt=clip(el.textContent||'',160);var oh=el.outerHTML||'';oh=oh.replace(/ data-pf-[hse](="")?/g,'');oh=oh.replace(/ style=""/g,'');oh=oh.replace(/ (aos-init|aos-animate)/g,'');oh=clip(oh,8000);var selector=selectorFor(el,cls);var stable=nodeId(el);if(!selector||!stable||/^<(html|body)\b/i.test(oh))return null;return{stableNodeId:stable,selector:selector,tag:el.tagName.toLowerCase(),classes:cls,textSnippet:txt||undefined,outerHtml:oh||undefined};}
+function over(e){if(inTb(e.target))return;var target=pickTarget(e.target)||e.target;if(hl&&hl!==target)hl.removeAttribute('data-pf-h');hl=target;if(hl)hl.setAttribute('data-pf-h','');}
+function clk(e){if(inTb(e.target))return;var target=pickTarget(e.target);var data=mkdata(target);if(!data||!target)return;e.preventDefault();e.stopPropagation();if(sl)sl.removeAttribute('data-pf-s');sl=target;if(sl)sl.setAttribute('data-pf-s','');try{window.parent.postMessage({type:'pf-select',element:data},'*');}catch(x){}}
+function on(){sty.textContent='[data-pf-h]{outline:2px solid rgba(99,102,241,.6)!important;cursor:crosshair!important}[data-pf-s]{outline:2px solid #6366f1!important;outline-offset:2px!important}';document.addEventListener('mouseover',over);document.addEventListener('click',clk,true);}
+function off(){sty.textContent='';document.removeEventListener('mouseover',over);document.removeEventListener('click',clk,true);if(hl){hl.removeAttribute('data-pf-h');hl=null;}if(sl){sl.removeAttribute('data-pf-s');sl=null;}}
+window.addEventListener('message',function(e){if(e.data&&e.data.type==='pf-inspect'){if(e.data.on)on();else off();}});
+})();<\/script>`;
 
 /**
  * EDIT Light script — injected alongside PF_INSPECT_SCRIPT when editMode is active.
@@ -3369,7 +3447,7 @@ document.addEventListener('click',onClick,true);
 
 function getElementTargetType(tag: string): "html" | "css" | "js" | "component" | "section" {
     if (["section", "main", "article", "header", "footer", "nav", "aside"].includes(tag)) return "section";
-    if (["button", "input", "select", "textarea", "form"].includes(tag)) return "component";
+    if (["button", "input", "select", "textarea", "form", "canvas", "svg", "img", "video"].includes(tag)) return "component";
     return "html";
 }
 

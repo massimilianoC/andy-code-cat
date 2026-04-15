@@ -30,6 +30,7 @@ export interface LlmFocusContext {
         tag: string;
         classes: string[];
         textSnippet?: string;
+        outerHtml?: string;
     };
     codeSelection?: {
         language: "html" | "css" | "js";
