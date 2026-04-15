@@ -33,13 +33,29 @@ Architecture goals:
 - API validation contracts: packages/contracts
 - Runtime topology: docker-compose.yml
 - Environment contract: .env.example and apps/api/src/config.ts
-- Agent navigation docs: docs/INDEX.md
+- Documentation index: docs/INDEX.md
+- Agent navigation docs: docs/agents/CODE_AGENT_INDEX.md
 
 When conflicts exist, apply this priority:
 
 1. AGENTS.md
 2. docs/INDEX.md and docs/agents/CODE_AGENT_INDEX.md
-3. technical specs (SPEC.md, DB_PLATFORM_SPEC.md, WORKFLOWS.md)
+3. technical specs under docs/specs/ (especially SPEC.md, DB_PLATFORM_SPEC.md, and WORKFLOWS.md)
+
+## Documentation Layout Rules
+
+The repository root should remain contributor-friendly and minimal.
+Keep long-form documentation, architecture notes, specifications, and runbooks under `docs/`.
+Only repository entry points should stay at the root, such as:
+
+- AGENTS.md
+- CLAUDE.md
+- README.md
+- CONTRIBUTING.md
+- LICENSE
+- Docker and package manifests
+
+If you add or move documentation, update `docs/INDEX.md` in the same change.
 
 ## Required Architecture
 

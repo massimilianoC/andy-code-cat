@@ -1,17 +1,17 @@
-# Andy Code Cat — Schema MongoDB Multi-tenant e Architettura Piattaforma
+# Andy Code Cat — Multi-tenant MongoDB Schema and Platform Architecture
 
 ---
 
-## 1. Principi del Schema Multi-tenant
+## 1. Multi-tenant Schema Principles
 
-- **Tenant = User**: ogni utente è il proprio tenant. I dati sono isolati per `ownerId`.
-- **Shared namespace per slug**: i sottodomini sono globali → `slug` univoco nel collection `sites` (non per utente)
-- **Collaborazione**: un progetto ha un `ownerId` e un array `collaborators[]`
-- **Audit trail**: ogni operazione significativa (deploy, publish, modifica visibilità) è loggata
+- **Tenant = User**: each user is their own tenant. Data is isolated by `ownerId`.
+- **Shared slug namespace**: subdomains are global, so `slug` must be unique in the `sites` collection rather than unique per user.
+- **Collaboration**: a project keeps an `ownerId` plus a `collaborators[]` array.
+- **Audit trail**: every relevant action (deploy, publish, visibility changes) is logged.
 
 ---
 
-## 2. Collections MongoDB
+## 2. MongoDB Collections
 
 ### 2.1 `users`
 

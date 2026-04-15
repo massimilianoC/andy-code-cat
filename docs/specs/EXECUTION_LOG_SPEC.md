@@ -1,4 +1,4 @@
-# EXECUTION_LOG_SPEC.md
+# Execution Log Specification
 
 Structured execution log system for operational observability.  
 Collection: `execution_logs` (MongoDB, TTL 90 days).

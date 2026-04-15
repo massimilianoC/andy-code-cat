@@ -2,25 +2,25 @@
 
 ## Summary
 
-Descrivi cosa cambia e perché.
+Describe what changed and why.
 
 ## Checklist
 
-- [ ] Branch conforme a Gitflow (base: `develop`, salvo hotfix)
-- [ ] Se branch `release/*`, nome in formato `release/YYYY.MM.DD.N` coerente con `RELEASE_VERSION`
-- [ ] Commit in Conventional Commits
-- [ ] Nessun secret o dato sensibile committato
-- [ ] Contratti/API aggiornati se necessario (`packages/contracts`)
-- [ ] Documentazione aggiornata se serve (`docs/INDEX.md`, runbook, architettura)
-- [ ] Test rilevanti eseguiti con esito positivo
+- [ ] Branch follows Gitflow policy (base: `develop`, unless this is a hotfix)
+- [ ] If this is a `release/*` branch, the name matches `release/YYYY.MM.DD.N` and `RELEASE_VERSION`
+- [ ] Commits follow Conventional Commits
+- [ ] No secrets or sensitive data were committed
+- [ ] Contracts or APIs were updated when required (`packages/contracts`)
+- [ ] Documentation was updated when needed (`docs/INDEX.md`, runbooks, architecture)
+- [ ] Relevant tests or validation checks were executed successfully
 
 ## Testing
 
-Elenca i comandi/test eseguiti e risultato.
+List the commands or checks you ran and their outcome.
 
 ## Scope & Risk
 
-Indica impatti, regressioni possibili e mitigazioni.
+Describe impact, possible regressions, and mitigations.
 
 ## Linked Issues
 
