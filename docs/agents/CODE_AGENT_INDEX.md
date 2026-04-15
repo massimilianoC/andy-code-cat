@@ -43,7 +43,7 @@ apps/api/src/
     Session.ts               ← refresh token session
     Conversation.ts          ← messages, MessageMetadata, backgroundTasks
     LlmCatalog.ts            ← provider/model catalog
-    LlmPromptConfig.ts       ← prePromptTemplate per project
+    LlmPromptConfig.ts       ← project-level prePromptTemplate
     StyleTag.ts              ← static catalog of 82 tags + VALID_TAG_IDS + MAX_TAGS_PER_CATEGORY
     UserStyleProfile.ts      ← user style profile (10 tag categories + brandBio)
     ProjectMoodboard.ts      ← per-project moodboard (style override + project brief)

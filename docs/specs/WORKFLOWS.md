@@ -1,33 +1,33 @@
-# Andy Code Cat — Workflow Automatici: Specifiche
+# Andy Code Cat — Automated Workflows: Specification
 
-> **Scope:** Definizione completa di tutti i workflow automatici del sistema  
-> **Riferimento:** si integra con SPEC.md §6, ROADMAP.md, PREPROMPT_ENGINE_SPEC.md  
-> **Notazione:** usa pseudocodice + diagrammi ASCII per descrivere i flussi
+> **Scope:** Full definition of the platform’s automated workflows  
+> **Reference:** aligned with `SPEC.md`, `docs/project/ROADMAP.md`, and `PREPROMPT_ENGINE_SPEC.md`  
+> **Notation:** pseudocode and ASCII diagrams are used to describe the flows
 
 ---
 
-## Indice Workflow
+## Workflow Index
 
-| ID | Nome | Trigger | Fase |
+| ID | Name | Trigger | Phase |
 |---|---|---|---|
 | WF-01 | First Generation | `POST /generate` | MVP |
 | WF-02 | Refinement | `POST /refine` | MVP |
-| WF-03 | Auto-Deploy Post-Gen | Completamento WF-01/02 | MVP |
-| WF-04 | Image Placeholder MVP | Post generazione | MVP |
-| WF-05 | Export ZIP | `GET /export/zip` | MVP |
+| WF-03 | Auto-Deploy Post-Gen | WF-01/02 completion | MVP |
+| WF-04 | Image Placeholder MVP | Post-generation | MVP |
+| WF-05 | ZIP Export | `GET /export/zip` | MVP |
 | WF-06 | Export Nginx Config | `GET /export/nginx` | MVP |
-| WF-07 | Image Generation Reale | Post WF-04 | Phase 2 |
-| WF-08 | Audit Post-Gen | Post ogni generazione | Phase 2 |
-| WF-09 | Rollback Iterazione | `POST /iterations/:n/restore` | Phase 2 |
-| WF-10 | Webhook Delivery | Ogni cambio status job | MVP |
+| WF-07 | Real Image Generation | Post WF-04 | Phase 2 |
+| WF-08 | Post-generation Audit | After each generation | Phase 2 |
+| WF-09 | Iteration Rollback | `POST /iterations/:n/restore` | Phase 2 |
+| WF-10 | Webhook Delivery | On every job status change | MVP |
 
 ---
 
 ## WF-01 — First Generation
 
 **Trigger:** `POST /api/v1/projects/:slug/generate`  
-**Precondizioni:** progetto esistente, nessun job `active` in corso per il progetto  
-**Output:** sito web in dist/, git commit, deploy (se configurato)
+**Preconditions:** the project exists and there is no active job already running for it  
+**Output:** generated website in `dist/`, git commit, and optional deploy
 
 ```
 CLIENT

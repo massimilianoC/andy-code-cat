@@ -1,15 +1,29 @@
 # Documentation Index
 
-## Agent-first Reading Order
+This repository keeps the root intentionally small. Long-form documentation, specifications, and runbooks live under `docs/` and are linked here for both humans and coding agents.
 
-Coding agents should read in this order before making changes:
+## Agent-First Reading Order
 
-1. [AGENTS.md](../AGENTS.md) — architecture contract, layer rules, sandbox model
-2. [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) — codebase navigation
-3. [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) — current build state
-4. [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) — 2-layer pipeline architecture
-5. [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) — auth and isolation baseline
-6. [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) — testable milestones
+Read in this order before making changes:
+
+1. [AGENTS.md](../AGENTS.md) — repository contract, architecture rules, sandbox requirements
+2. [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) — codebase map and implementation boundaries
+3. [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) — current platform shape
+4. [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) — generation pipeline and layer model
+5. [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) — security, auth, and isolation baseline
+6. [docs/guides/GITFLOW_RELEASE_POLICY.md](guides/GITFLOW_RELEASE_POLICY.md) — branch and release governance
+7. [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) — verification path for current milestones
+
+---
+
+## Product & Project
+
+| Document | Description |
+|---|---|
+| [README.md](../README.md) | Public project overview, quick start, and positioning |
+| [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Stable planning entry point for agents and contributors |
+| [docs/project/ROADMAP.md](project/ROADMAP.md) | Project roadmap and release direction |
+| [docs/PRIVATE_CONFIG_GUIDE.md](PRIVATE_CONFIG_GUIDE.md) | Owner-only guidance for public/private repo hygiene |
 
 ---
 
@@ -17,8 +31,9 @@ Coding agents should read in this order before making changes:
 
 | Document | Description |
 |---|---|
-| [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) | Current codebase structure, clean architecture map |
-| [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) | 2-layer pipeline (Chat Preview + focused edit), SSE events, double sandboxing |
+| [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) | Current services, route map, storage adapters, and governance status |
+| [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) | Layer 1 preview flow, Layer 2 generation pipeline, and transition mechanics |
+| [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, and operational security rules |
 
 ---
 
@@ -26,8 +41,8 @@ Coding agents should read in this order before making changes:
 
 | Document | Description |
 |---|---|
-| [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) | Entry point for coding agents — current state, what to build, patterns to follow |
-| [docs/agents/LLM_PROVIDER_HANDOFF_RECAP.md](agents/LLM_PROVIDER_HANDOFF_RECAP.md) | LLM catalog and chat-preview implementation recap |
+| [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) | Primary entry point for coding agents |
+| [docs/agents/LLM_PROVIDER_HANDOFF_RECAP.md](agents/LLM_PROVIDER_HANDOFF_RECAP.md) | LLM provider and chat-preview implementation notes |
 
 ---
 
@@ -35,51 +50,50 @@ Coding agents should read in this order before making changes:
 
 | Document | Description |
 |---|---|
-| [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Testable steps per milestone (M0 baseline → M5) |
-| [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Non-invasive production hardening plan and deploy best practices |
-| [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker setup (dev and deploy mode) |
-| [docs/guides/AGENT_RELEASE_CHECKLIST.md](guides/AGENT_RELEASE_CHECKLIST.md) | Checklist for agents handling branch, commit, merge, release, and hotfix flows |
-| [docs/guides/GITFLOW_RELEASE_POLICY.md](guides/GITFLOW_RELEASE_POLICY.md) | Gitflow branch semantics, release flow, and `RELEASE_VERSION` policy |
-| [docs/guides/PUBLIC_REPO_CHECKLIST.md](guides/PUBLIC_REPO_CHECKLIST.md) | Public repository safety checklist (what must stay private) |
-| [docs/guides/OPENROUTER_INTEGRATION_GUIDE.md](guides/OPENROUTER_INTEGRATION_GUIDE.md) | OpenRouter integration guide (multi-provider, cost policy, model selector) |
-| [docs/guides/I18N.md](guides/I18N.md) | i18n system — architecture, translation keys, adding new strings |
-| [docs/PRIVATE_CONFIG_GUIDE.md](PRIVATE_CONFIG_GUIDE.md) | Owner-only guide for private configs and dual-remote strategy |
-| [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, data safety |
+| [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Testable steps per milestone |
+| [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Production hardening and deployment safety guidance |
+| [docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md](runbooks/BETA_LAUNCH_HARDENING_PLAN.md) | Beta-readiness checklist |
+| [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker workflow for dev and deploy-like stacks |
+| [docs/guides/AGENT_RELEASE_CHECKLIST.md](guides/AGENT_RELEASE_CHECKLIST.md) | Release and branch checklist for agents |
+| [docs/guides/GITFLOW_RELEASE_POLICY.md](guides/GITFLOW_RELEASE_POLICY.md) | Gitflow branch semantics and release policy |
+| [docs/guides/PUBLIC_REPO_CHECKLIST.md](guides/PUBLIC_REPO_CHECKLIST.md) | Public repository safety and sanitization checklist |
+| [docs/guides/OPENROUTER_INTEGRATION_GUIDE.md](guides/OPENROUTER_INTEGRATION_GUIDE.md) | OpenRouter setup and multi-provider notes |
+| [docs/guides/I18N.md](guides/I18N.md) | Internationalization guide and translation workflow |
 
 ---
 
-## Technical Specifications
+## Core Technical Specifications
 
 | Document | Description |
 |---|---|
-| [SPEC.md](../SPEC.md) | Backend API platform — REST endpoints, data model, base workflow |
-| [DB_PLATFORM_SPEC.md](../DB_PLATFORM_SPEC.md) | MongoDB schemas, nginx config, credit system |
-| [PROVIDER_SPEC.md](../PROVIDER_SPEC.md) | Multi-provider LLM, SiliconFlow adapter, TypeScript interface |
-| [PREPROMPT_ENGINE_SPEC.md](../PREPROMPT_ENGINE_SPEC.md) | PrepromptEngine spec (Layer 2, Stage A) |
-| [WORKFLOWS.md](../WORKFLOWS.md) | Automated workflows WF-01 to WF-10 |
-| [UX_SPEC.md](../UX_SPEC.md) | Full UX flow, 6-step wizard, screens |
-| [EXECUTION_LOG_SPEC.md](../EXECUTION_LOG_SPEC.md) | execution_logs collection schema (MongoDB TTL 90d) |
-| [FOCUSED_EDIT_SPEC.md](../FOCUSED_EDIT_SPEC.md) | Focused edit feature spec |
+| [docs/specs/SPEC.md](specs/SPEC.md) | Backend API platform and MVP architecture |
+| [docs/specs/DB_PLATFORM_SPEC.md](specs/DB_PLATFORM_SPEC.md) | MongoDB schema design, publication model, and credit system |
+| [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
+| [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | Preprompt engine service and composition flow |
+| [docs/specs/WORKFLOWS.md](specs/WORKFLOWS.md) | Automated workflow definitions WF-01 to WF-10 |
+| [docs/specs/UX_SPEC.md](specs/UX_SPEC.md) | End-to-end UX and product screen map |
+| [docs/specs/EXECUTION_LOG_SPEC.md](specs/EXECUTION_LOG_SPEC.md) | Structured operational audit logging |
+| [docs/specs/FOCUSED_EDIT_SPEC.md](specs/FOCUSED_EDIT_SPEC.md) | Focused editing behavior and constraints |
 
 ---
 
-## Feature Specs (docs/specs/)
+## Feature Specifications
 
 | Document | Description |
 |---|---|
-| [EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export + web publishing (subdomain model) |
-| [UX_REVIEW_AND_PUBLISH_SPEC.md](specs/UX_REVIEW_AND_PUBLISH_SPEC.md) | UX review workspace + path-based publish |
-| [WYSIWYG_EDIT_MODE_SPEC.md](specs/WYSIWYG_EDIT_MODE_SPEC.md) | WYSIWYG editor (GrapesJS), architecture, milestones |
-| [ONBOARDING_AND_STYLE_PROFILING_SPEC.md](specs/ONBOARDING_AND_STYLE_PROFILING_SPEC.md) | Onboarding wizard, style profiling, Layer 0 preprompting |
-| [PRESET_TYPED_SPECS.md](specs/PRESET_TYPED_SPECS.md) | Typed preset catalog, output spec, modular prompt architecture |
-| [SECTION_CONTEXT_OPT_SPEC.md](specs/SECTION_CONTEXT_OPT_SPEC.md) | Section-aware context optimization (40-60% token reduction) |
-| [PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX — inline enrichment, undo buffer, rate limiting |
-| [PROMPTING_SERVICE_PLATFORM_SPEC.md](specs/PROMPTING_SERVICE_PLATFORM_SPEC.md) | Reusable internal prompting platform — task registry, admin-configurable models/templates, dedicated audit logs |
-| [ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md](specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md) | Low-impact plan for using project assets, links, documents, screenshots, and vision summaries in prompt optimization |
-| [BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | BaaS layer — forms, payments, webhooks, SDK |
-| [RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot for landing pages — BYOK, document ingestion, vanilla JS widget |
-| [MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-provider, multi-model platform playbook |
-| [SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin "god mode" — user mgmt, publication control, platform config, license model |
+| [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
+| [docs/specs/UX_REVIEW_AND_PUBLISH_SPEC.md](specs/UX_REVIEW_AND_PUBLISH_SPEC.md) | Review workspace and publish flow |
+| [docs/specs/WYSIWYG_EDIT_MODE_SPEC.md](specs/WYSIWYG_EDIT_MODE_SPEC.md) | WYSIWYG editor architecture and milestones |
+| [docs/specs/ONBOARDING_AND_STYLE_PROFILING_SPEC.md](specs/ONBOARDING_AND_STYLE_PROFILING_SPEC.md) | Onboarding, style profiling, and Layer 0 context |
+| [docs/specs/PRESET_TYPED_SPECS.md](specs/PRESET_TYPED_SPECS.md) | Preset catalog, output contracts, and prompt modules |
+| [docs/specs/SECTION_CONTEXT_OPT_SPEC.md](specs/SECTION_CONTEXT_OPT_SPEC.md) | Section-aware context optimization |
+| [docs/specs/PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX and guardrails |
+| [docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md](specs/PROMPTING_SERVICE_PLATFORM_SPEC.md) | Internal prompting platform and audit model |
+| [docs/specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md](specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md) | Asset-aware prompt enrichment plan |
+| [docs/specs/BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | Backend-as-a-service extension layer |
+| [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
+| [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-model platform playbook |
+| [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin controls and platform governance |
 
 ---
 
@@ -87,7 +101,7 @@ Coding agents should read in this order before making changes:
 
 | Document | Description |
 |---|---|
-| [SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Admin governance flow: per-product prompt templates, global HTML/JS injections, nginx runtime knobs, and live registries for presets/models |
-| [governance/PLATFORM_GOVERNANCE_POLICY.md](governance/PLATFORM_GOVERNANCE_POLICY.md) | Shared English policy for governance ownership, approval model, rollout boundaries, and audit expectations |
+| [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Product-level prompt, injection, and runtime governance model |
+| [docs/governance/PLATFORM_GOVERNANCE_POLICY.md](governance/PLATFORM_GOVERNANCE_POLICY.md) | Governance ownership, approval flow, and audit expectations |
 
-> Runtime control surfaces now include both [apps/web/app/admin/models/page.tsx](../apps/web/app/admin/models/page.tsx) and [apps/web/app/admin/presets/page.tsx](../apps/web/app/admin/presets/page.tsx), backed by Mongo registries with static TypeScript fallbacks.
+> If you add, move, or retire documentation, update this index in the same change.

@@ -1,26 +1,26 @@
-# Andy Code Cat — PrepromptEngine: Specifiche Dettagliate
+# Andy Code Cat — PrepromptEngine: Detailed Specification
 
-> **Scope:** Specifiche tecniche complete del servizio PrepromptEngine  
-> **Dipendenze:** MongoDB (PrepromptProfile), Nunjucks (template), pdf-parse, Sharp  
-> **Posizione nel progetto:** `apps/api/src/services/preprompt/`
+> **Scope:** Full technical specification for the PrepromptEngine service  
+> **Dependencies:** MongoDB (`PrepromptProfile`), Nunjucks templates, `pdf-parse`, `sharp`  
+> **Project location:** `apps/api/src/services/preprompt/`
 
 ---
 
-## 1. Responsabilità
+## 1. Responsibilities
 
-Il PrepromptEngine è il servizio che trasforma un **input grezzo** (prompt testuale, PDF, immagine) in un **prompt strutturato e arricchito** pronto per essere passato a OpenCode.
+The PrepromptEngine is the service that transforms **raw input** (text prompt, PDF, image) into a **structured, enriched prompt** ready to be passed to OpenCode.
 
-Produce tre output distinti per ogni job:
+It produces three distinct outputs for each job:
 
-| Output | Descrizione | Usato da |
+| Output | Description | Used by |
 |---|---|---|
-| `resolvedPrompt` | Prompt finale arricchito e wrappato | OpenCode CLI (argomento) |
-| `resolvedClaudeMd` | Contenuto del CLAUDE.md di progetto | Scritto in working dir |
-| `resolvedOpenCodeJson` | Config opencode.json per il job | Scritto in working dir |
+| `resolvedPrompt` | Final wrapped and enriched prompt | OpenCode CLI argument |
+| `resolvedClaudeMd` | Project-specific `CLAUDE.md` content | Written to the working directory |
+| `resolvedOpenCodeJson` | Dynamic `opencode.json` config for the job | Written to the working directory |
 
 ---
 
-## 2. Architettura Interna
+## 2. Internal Architecture
 
 ```
 PrepromptEngine
@@ -95,9 +95,9 @@ class InputProcessor {
       switch (attachment.mimeType) {
 
         case 'application/pdf':
-          // Estrae testo con pdf-parse
-          // Max 50.000 char estratti (troncato con nota se oltre)
-          // Preserva struttura: headers, bullet, tabelle come testo
+          // Extract text with pdf-parse
+          // Max 50,000 extracted chars (truncate and note if exceeded)
+          // Preserve structure: headers, bullets, and tables as text
           const text = await this.textExtractor.extract(attachment.filePath);
           results.extractedTexts.push({
             filename: attachment.originalName,
@@ -109,13 +109,14 @@ class InputProcessor {
         case 'image/jpeg':
         case 'image/png':
         case 'image/webp':
-          // Se il modello del progetto supporta vision:
-          //   → chiama LLM con l'immagine e prompt: "Descrivi questo contenuto
-          //     in modo dettagliato per usarlo come contesto per generare
-          //     un sito web. Includi: testo visibile, struttura layout,
-          //     colori principali, elementi grafici, tone of voice percepito."
-          // Se il modello NON supporta vision:
-          //   → usa filename e EXIF data come contesto minimale
+          // If the project model supports vision:
+          //   → call the LLM with the image and a prompt such as:
+          //     "Describe this content in detail so it can be used as
+          //      context for generating a website. Include visible text,
+          //      layout structure, primary colors, graphic elements,
+          //      and perceived tone of voice."
+          // If the model does NOT support vision:
+          //   → use the filename and EXIF data as minimal context
           const description = await this.imageDescriber.describe(
             attachment.filePath,
             project.aiConfig

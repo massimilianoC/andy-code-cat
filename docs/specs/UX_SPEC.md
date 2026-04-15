@@ -1,11 +1,11 @@
-# Andy Code Cat — UX Flow Completo
+# Andy Code Cat — Complete UX Flow
 
-> **Principio guida:** ogni schermata ha un solo obiettivo. L'utente non deve mai chiedersi "cosa faccio adesso?".  
-> **Tono:** silenzioso, automatico, rassicurante. La piattaforma lavora in background.
+> **Guiding principle:** each screen should have a single clear objective. The user should never wonder, “what do I do next?”  
+> **Tone:** quiet, automatic, reassuring. The platform does the heavy lifting in the background.
 
 ---
 
-## Mappa Schermate
+## Screen Map
 
 ```
 /                          Landing pubblica

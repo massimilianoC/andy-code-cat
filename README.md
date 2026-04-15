@@ -1,44 +1,53 @@
-<p align="center">
-  <img src="docs/brand/andy.jpg" alt="Andy Code Cat" width="120" />
-</p>
-
 # Andy Code Cat
 
-**AI-powered website builder platform.** An open-source, self-hostable platform that lets users create, edit, and publish websites using natural language and a visual editor, with a multi-provider LLM backend, cost tracking, and a full export/publish pipeline.
+![Andy Code Cat](docs/brand/andy.jpg)
 
-[![License: Limited Use](https://img.shields.io/badge/License-Limited%20Use-orange.svg)](LICENSE)
+> **Open-source AI website builder for teams, freelancers, founders, and agencies.**  
+> Turn a plain-language idea into a production-ready website with chat refinement, visual editing, export, and publish flows built in.
+
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)](https://nodejs.org)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/Docker-required-blue)](https://docs.docker.com)
 
 ---
 
-## Features
+## What Andy Code Cat Helps You Do
 
-- **AI page generation** - Generate full HTML pages from a prompt using OpenRouter, SiliconFlow, or LM Studio (local).
-- **Visual editor** - GrapesJS-based WYSIWYG editor with focused-edit AI assistance.
-- **Multi-provider LLM** - Swap between providers and models at runtime via environment variables.
-- **Cost tracking** - Per-session token cost metering with configurable cost policies.
-- **Export and publish** - Export to static HTML and publish under a custom domain.
-- **Onboarding and style profiling** - Guided onboarding extracts user style preferences to prime the AI.
-- **Authentication** - JWT access + refresh tokens, with user sandbox isolation per project.
-- **Monorepo** - Express API + Next.js 14 web app + shared contracts package.
+| Capability | Outcome |
+| --- | --- |
+| Prompt-to-site generation | Build landing pages and mini-sites from a natural-language brief |
+| Live iteration | Refine copy, structure, and layout through chat with preview feedback |
+| Visual editing | Combine AI generation with a WYSIWYG editing workflow |
+| Portable delivery | Export static assets or publish directly under managed infrastructure |
+| Open architecture | Run on a self-hosted stack with multi-provider LLM support |
 
 ---
 
-## Architecture
+## Core Strengths
+
+- **AI-powered generation** using OpenRouter, SiliconFlow, or LM Studio
+- **Focused editing** for targeted HTML, CSS, and JS updates
+- **Runtime model routing** configurable through environment settings
+- **Export and publish flows** for ZIP delivery and hosted output
+- **JWT auth and tenant isolation** with double-sandbox enforcement
+- **Docker-first self-hosting** for both local and deploy-like stacks
+
+---
+
+## Architecture at a Glance
 
 ```text
 apps/
-  api/        Express API - Clean Architecture (domain / application / infra / presentation)
-  web/        Next.js 14 - App Router, Tailwind CSS, shadcn/ui
+  api/        Express API with Clean Architecture layers
+  web/        Next.js App Router UI with Tailwind and shadcn/ui
 packages/
-  contracts/  Shared types and Zod validation schemas (single source of truth)
+  contracts/  Shared Zod schemas and API contracts
 ```
 
-Services: **MongoDB**, **Redis**, **nginx** (reverse proxy). All wired via Docker Compose.
+Supporting services: **MongoDB**, **Redis**, **nginx**, and a dedicated workspace container for generation workflows.
 
-See [AGENTS.md](AGENTS.md) for the full architecture contract and layer rules.
+Start from [AGENTS.md](AGENTS.md) and [docs/INDEX.md](docs/INDEX.md) for the full repository contract and documentation map.
 
 ---
 
@@ -46,49 +55,39 @@ See [AGENTS.md](AGENTS.md) for the full architecture contract and layer rules.
 
 ### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose v2)
-- Node.js 20+ (only needed to run npm scripts locally)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine with Compose v2
+- Node.js 20+ for local package scripts
 
-### 1. Clone
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/massimilianoC/andy-code-cat.git
 cd andy-code-cat
 ```
 
-### 2. Configure environment
+### 2. Configure the environment
 
 ```bash
 cp .env.example .env.docker
 
-# Edit .env.docker - at minimum set one LLM API key:
+# Then set at least one provider key, for example:
 # SILICONFLOW_API_KEY=...
 # OPEN_ROUTER_API_KEY=...
 ```
 
-Get a free API key at [openrouter.ai/keys](https://openrouter.ai/keys). Free models work without credits.
-
-### 3. Start the stack
-
-First run (or after code changes):
+### 3. Build and start the stack
 
 ```bash
 npm run local:build:nocache
 npm run local:up
 ```
 
-Subsequent runs (cached):
-
-```bash
-npm run local:up
-```
-
-### 4. Open the app
+### 4. Open the application
 
 | Service | URL |
-|---|---|
-| Web UI | <http://localhost> |
-| API health | <http://localhost:4000/health> |
+| --- | --- |
+| Web UI | [http://localhost](http://localhost) |
+| API health | [http://localhost:4000/health](http://localhost:4000/health) |
 
 ### 5. Seed initial data
 
@@ -98,83 +97,45 @@ npm run seed
 
 ---
 
-## Development
+## Common Development Commands
 
-### Hot-reload mode
-
-```bash
-npm run local:dev:up    # start with hot-reload (bind-mount sources)
-npm run local:dev:down  # stop
-```
-
-### Useful commands
-
-```bash
-npm run local:logs          # tail all service logs
-npm run local:logs:api      # tail API logs only
-npm run local:restart:api   # restart API only (after env change, no rebuild)
-```
-
-### Stop
-
-```bash
-npm run local:down
-```
+| Command | Purpose |
+| --- | --- |
+| `npm run local:dev:up` | Start the hot-reload development stack |
+| `npm run local:dev:down` | Stop the hot-reload stack |
+| `npm run local:logs` | Tail all service logs |
+| `npm run local:logs:api` | Tail API logs only |
+| `npm run local:restart:api` | Restart the API without a full rebuild |
+| `npm run local:down` | Stop the stack |
 
 ---
 
-## Environment Variables
+## Environment Reference
 
 Copy `.env.example` to `.env.docker` for local development.
-Copy `.env.deploy.example` to `.env.deploy` for production-like environments.
+Use `.env.deploy.example` as the sanitized reference for deploy-like environments.
 
 | Variable | Description |
-|---|---|
+| --- | --- |
 | SILICONFLOW_API_KEY | SiliconFlow API key |
 | OPEN_ROUTER_API_KEY | OpenRouter API key |
-| JWT_ACCESS_SECRET | JWT signing secret (min 32 chars) |
+| JWT_ACCESS_SECRET | JWT signing secret |
 | MONGODB_URI | MongoDB connection string |
-| LLM_DEFAULT_PROVIDER | Active LLM provider (`siliconflow`, `openrouter`, `lmstudio`) |
-| PUBLIC_DOMAIN | Publish subdomain base (production only) |
-
-See `.env.example` for the full reference.
+| LLM_DEFAULT_PROVIDER | Default LLM provider |
+| PUBLIC_DOMAIN | Base domain for publication |
 
 ---
 
-## Docker Compose Stacks
+## Documentation Map
 
-| File | Purpose |
-|---|---|
-| docker-compose.yml | Local development (bind mounts + hot-reload) |
-| docker-compose.deploy.yml | Production-style local testing (named volumes) |
-
-**Important:** In deploy-mode, MongoDB data is stored in the named Docker volume `andy-code-cat_mongodb_data`. Do not mix stack commands across compose files unless you explicitly intend to work with different data stores.
-
----
-
-## Public/Private Boundaries
-
-This is a public repository. Keep production-only material local and private.
-
-- Keep live secrets and deploy-only files local (`.env.docker`, `.env.droplet`, `.deploy/`, `docker-compose.droplet.yml`).
-- Do not commit production infrastructure details (live IPs, DNS tokens, private runbooks).
-- Commit sanitized templates only (`.env.example`, `.env.deploy.example`).
-
-See [docs/PRIVATE_CONFIG_GUIDE.md](docs/PRIVATE_CONFIG_GUIDE.md) and [docs/guides/PUBLIC_REPO_CHECKLIST.md](docs/guides/PUBLIC_REPO_CHECKLIST.md).
-
----
-
-## Documentation
-
-| Doc | Description |
-|---|---|
-| [AGENTS.md](AGENTS.md) | Architecture contract, layer rules, agent guidelines |
-| [docs/INDEX.md](docs/INDEX.md) | Documentation entry point |
-| [docs/agents/CODE_AGENT_INDEX.md](docs/agents/CODE_AGENT_INDEX.md) | Navigation guide for AI coding agents |
-| [docs/architecture/](docs/architecture/) | Service topology, pipeline layers |
-| [docs/specs/](docs/specs/) | Feature specifications |
-| [docs/guides/](docs/guides/) | Guides and runbooks |
-| [docs/security/SECURITY_BASELINE.md](docs/security/SECURITY_BASELINE.md) | Security baseline |
+| Entry point | Purpose |
+| --- | --- |
+| [docs/INDEX.md](docs/INDEX.md) | Full documentation index |
+| [docs/agents/CODE_AGENT_INDEX.md](docs/agents/CODE_AGENT_INDEX.md) | Agent-oriented codebase map |
+| [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](docs/architecture/BOOTSTRAP_ARCHITECTURE.md) | Platform structure and runtime overview |
+| [docs/specs/](docs/specs/) | Technical and feature specifications |
+| [docs/guides/](docs/guides/) | Operational guides and policies |
+| [docs/runbooks/](docs/runbooks/) | Validation and hardening runbooks |
 
 ---
 
@@ -182,13 +143,10 @@ See [docs/PRIVATE_CONFIG_GUIDE.md](docs/PRIVATE_CONFIG_GUIDE.md) and [docs/guide
 
 Contributions are welcome.
 
-- Fork the repository, then create your branch from `develop` (not `main`).
-- This project follows full Gitflow: feature branches target `develop`, release branches are `release/YYYY.MM.DD.N`, and hotfix branches start from `main`.
-- The canonical repository release version lives in `RELEASE_VERSION` using `YYYY.MM.DD.N`, for example `2026.04.12.6`.
-- Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(scope): description`, `fix(scope): description`, etc.
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
-- Read [AGENTS.md](AGENTS.md) for architecture and branching contracts used by both humans and coding agents.
-- Read [docs/guides/GITFLOW_RELEASE_POLICY.md](docs/guides/GITFLOW_RELEASE_POLICY.md) for release flow, tags, and branch semantics.
+- Branch from `develop`, not `main`
+- Follow Gitflow and Conventional Commits
+- Update [docs/INDEX.md](docs/INDEX.md) whenever documentation moves or new docs are added
+- Read [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md), and [docs/guides/GITFLOW_RELEASE_POLICY.md](docs/guides/GITFLOW_RELEASE_POLICY.md) before opening a PR
 
 ---
 
@@ -196,7 +154,5 @@ Contributions are welcome.
 
 Copyright (c) 2026 Massimiliano Camillucci
 
-This project is released under a **Limited Use License - Non-Commercial and Non-Profit Use Only**.
-Free for personal, educational, and non-profit use. Commercial use requires a separate written agreement.
-
-See [LICENSE](LICENSE) for full terms (Italian/English).
+This project is licensed under the **GNU Affero General Public License v3.0**.
+See [LICENSE](LICENSE) for the full text.

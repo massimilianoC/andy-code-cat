@@ -7,10 +7,15 @@ This file defines repository-specific operating rules for Claude-based coding ag
 Before making changes, read in this order:
 
 1. `AGENTS.md`
-2. `docs/agents/CODE_AGENT_INDEX.md`
-3. `docs/guides/GITFLOW_RELEASE_POLICY.md`
-4. `docs/guides/AGENT_RELEASE_CHECKLIST.md`
-5. `docs/INDEX.md`
+2. `docs/INDEX.md`
+3. `docs/agents/CODE_AGENT_INDEX.md`
+4. `docs/guides/GITFLOW_RELEASE_POLICY.md`
+5. `docs/guides/AGENT_RELEASE_CHECKLIST.md`
+
+## Documentation Placement
+
+Keep the repository root limited to entry-point files.
+Detailed architecture notes, specs, roadmaps, and operational guides belong under `docs/` and must remain linked from `docs/INDEX.md`.
 
 ## Repository Governance
 

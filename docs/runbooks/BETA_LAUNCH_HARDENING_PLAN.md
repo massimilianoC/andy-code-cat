@@ -7,48 +7,48 @@
 
 ---
 
-## 1. Situazione
+## 1. Situation
 
-La codebase è funzionalmente completa per un beta chiuso ma presenta **5 blockers** che impediscono l'apertura sicura a utenti esterni e la piena fruibilità in lingua inglese.
+The codebase is functionally complete for a closed beta, but it still has **5 blockers** that prevent a safe external launch and a fully polished English-language experience.
 
-Il progetto è una piattaforma AI multi-servizio (Next.js 14 + Express API + MongoDB + Redis, dockerizzata) che genera siti web tramite un editor GrapesJS con raffinamento AI. Stack frontend: App Router, Tailwind CSS 3, shadcn/ui, react-i18next.
+The project is a multi-service AI platform (Next.js 14 + Express API + MongoDB + Redis, fully dockerized) that generates websites through a GrapesJS editor with AI refinement. Frontend stack: App Router, Tailwind CSS 3, shadcn/ui, and react-i18next.
 
-L'audit completo è in `docs/runbooks/PRODUCTION_HARDENING_PLAN.md`.
+The full audit is documented in `docs/runbooks/PRODUCTION_HARDENING_PLAN.md`.
 
 ---
 
-## 2. Riferimenti architetturali obbligatori
+## 2. Mandatory architectural references
 
-Prima di scrivere codice, leggere in ordine:
+Before writing code, read these in order:
 
-1. `AGENTS.md` — regole non negoziabili (layer boundaries, sandbox, UI primitives)
-2. `docs/agents/CODE_AGENT_INDEX.md` — stato codebase attuale
-3. `docs/guides/I18N.md` — architettura i18n (pattern `useTranslation`, file JSON, chiavi)
+1. `AGENTS.md` — non-negotiable rules (layer boundaries, sandboxing, UI primitives)
+2. `docs/agents/CODE_AGENT_INDEX.md` — current codebase state
+3. `docs/guides/I18N.md` — i18n architecture (`useTranslation` pattern, JSON files, translation keys)
 4. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance
 
-### Pattern UI obbligatori (da AGENTS.md)
+### Mandatory UI patterns (from `AGENTS.md`)
 
-- Mai `<button>` raw → usare `Button` da `@/components/ui/button`
-- Mai `style={{...}}` → solo classi Tailwind
-- Mai colori hardcoded → token semantici (`bg-card`, `text-foreground`, ecc.)
-- `cn()` da `@/lib/utils` per classi condizionali
-- Non toccare `GrapesJsEditorPanel.tsx`
+- Never use raw `<button>` elements → use `Button` from `@/components/ui/button`
+- Never use `style={{...}}` → Tailwind classes only
+- Never hardcode colors → use semantic tokens such as `bg-card` and `text-foreground`
+- Use `cn()` from `@/lib/utils` for conditional classes
+- Do not touch `GrapesJsEditorPanel.tsx`
 
-### Pattern i18n obbligatori (da docs/guides/I18N.md)
+### Mandatory i18n patterns (from `docs/guides/I18N.md`)
 
 ```tsx
-// In ogni componente React "use client":
+// In every React component using "use client":
 import { useTranslation } from "react-i18next";
 const { t } = useTranslation();
-// Uso: {t("workspace.errors.export")}
+// Usage: {t("workspace.errors.export")}
 ```
 
-Chiavi identiche in `apps/web/i18n/en.json` e `apps/web/i18n/it.json`.
-Namespace sempre `translation` (default). Non creare nuovi namespace.
+Keys must stay aligned between `apps/web/i18n/en.json` and `apps/web/i18n/it.json`.
+Always use the default `translation` namespace and do not create new namespaces without a clear need.
 
 ---
 
-## 3. Branch e commit
+## 3. Branch and commit guidance
 
 ```bash
 git checkout develop

@@ -1,34 +1,34 @@
-# Andy Code Cat — Backend API Platform: Specifiche MVP
+# Andy Code Cat — Backend API Platform: MVP Specification
 
-> **Versione:** 0.1-draft  
-> **Scope:** Linee guida architetturali per agente di sviluppo  
-> **Stack target:** Node.js (TypeScript) · MongoDB · BullMQ · OpenCode CLI · Gitea locale
-
----
-
-## 1. Visione e Obiettivo
-
-Andy Code Cat è un **backend API headless** che, dato un input testuale (prompt, PDF, immagine), genera automaticamente landing page e mini-siti web, li pubblica su sottodomini dedicati e gestisce il ciclo di vita dei progetti in modo completamente autonomo.
-
-Il sistema è progettato come **piattaforma aperta**: la UI di Andy Code Cat è solo uno dei possibili client. Servizi di terze parti possono integrare il backend via API REST e gestire la propria UI, ricevendo come output:
-- Una **configurazione nginx** pronta all'uso per puntare il proprio reverse proxy al sito generato
-- Un **archivio ZIP scaricabile** con il pacchetto completo del sito (modalità sandboxed export)
-- Un **endpoint di stato** per polling/webhook sul progresso della generazione
+> **Version:** 0.1-draft  
+> **Scope:** Architectural guidance for development agents and maintainers  
+> **Target stack:** Node.js (TypeScript) · MongoDB · BullMQ · OpenCode CLI · local Gitea
 
 ---
 
-## 2. Principi Architetturali
+## 1. Vision and Goal
 
-- **API-first**: ogni funzionalità è esposta via REST; nessuna logica è accoppiata alla UI
-- **Async by design**: la generazione è sempre asincrona via job queue; le API restituiscono immediatamente un `jobId`
-- **Sandbox per progetto**: ogni progetto ha la propria working directory isolata, repo git locale e namespace MongoDB
-- **Pre-prompt configurabile**: i layer di pre-prompting sono entità di prima classe, versionate e componibili
-- **Zero lock-in sul modello AI**: OpenCode è configurato per usare il provider scelto dall'utente/progetto
-- **Idempotenza**: ogni job può essere rieseguito senza effetti collaterali indesiderati
+Andy Code Cat is a **headless backend API** that takes textual or file-based input (prompt, PDF, image), automatically generates landing pages and mini-sites, publishes them under dedicated subdomains, and manages the project lifecycle end to end.
+
+The system is designed as an **open platform**: the Andy Code Cat UI is only one possible client. Third-party services can integrate with the backend through REST APIs and use their own UI while receiving:
+- a ready-to-use **nginx configuration** for reverse-proxy routing
+- a downloadable **ZIP archive** containing the full site package
+- a **status endpoint** for polling or webhook-based progress tracking
 
 ---
 
-## 3. Componenti del Sistema
+## 2. Architectural Principles
+
+- **API-first**: every capability is exposed over REST; no business logic is tightly coupled to the UI
+- **Async by design**: generation runs through job queues and APIs return a `jobId` immediately
+- **Per-project sandboxing**: each project gets its own isolated workspace, local git repository, and MongoDB namespace boundary
+- **Configurable pre-prompting**: prompt layers are first-class, versioned, and composable
+- **No AI model lock-in**: OpenCode can use the provider selected by the user or project
+- **Idempotence**: each job can be retried without unwanted side effects
+
+---
+
+## 3. System Components
 
 ```
 ┌─────────────────────────────────────────────────────────────┐

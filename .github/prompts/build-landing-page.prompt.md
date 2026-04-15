@@ -60,84 +60,84 @@ The page must be implemented inside the existing Next.js app at `apps/web/` and 
 Build the landing page with the following sections **in order**:
 
 ### 1. `<Header>` — Sticky navigation
-- Logo: text `Andy Code Cat` with a small lightning bolt icon (inline SVG)
-- Nav links: Features · How it works · Pricing · Docs (anchor links, smooth scroll)
-- CTA button: `Inizia gratis →` (links to `/login`)
-- Mobile: hamburger toggling a slide-down menu (`"use client"`)
+- Logo: text `Andy Code Cat` with a small lightning-bolt icon (inline SVG)
+- Nav links: Features · How it works · Pricing · Docs (anchor links with smooth scroll)
+- CTA button: `Start free →` (links to `/login`)
+- Mobile: hamburger menu that toggles a slide-down panel (`"use client"`)
 
 ### 2. `<Hero>` — Above the fold
-- Headline (H1): **"Dal prompt al sito in minuti."** (bold, large, gradient text)
-- Sub-headline: "Andy Code Cat trasforma la tua idea in una landing page professionale usando l'intelligenza artificiale. Nessun codice. Nessun progettista. Solo risultati."
-- Two CTAs: primary `Crea il tuo sito →` → `/login`; secondary `Guarda la demo ↓` → `#how-it-works` anchor
-- Visual: a mock browser window (pure CSS/divs) showing a simulated generated site with a blinking cursor — conveys "AI is building it now"
-- Background: dark gradient (`from-slate-950 via-slate-900 to-slate-800`) with subtle grid or noise texture via CSS
+- Headline (H1): **"From prompt to live site in minutes."** (bold, large, gradient text)
+- Sub-headline: "Andy Code Cat turns your idea into a professional landing page with AI. No coding. No bottlenecks. Just momentum."
+- Two CTAs: primary `Create your site →` → `/login`; secondary `Watch the demo ↓` → `#how-it-works`
+- Visual: a mock browser window (pure CSS/divs) showing a generated site with a blinking cursor to suggest the AI is building in real time
+- Background: dark gradient (`from-slate-950 via-slate-900 to-slate-800`) with a subtle grid or noise texture in CSS
 
 ### 3. `<LogoBar>` — Social proof strip
-- Label: "Usato da team in tutto il mondo — built on open standards"
-- Show 5–6 tech logos as inline SVG icons (React, Next.js, Node.js, MongoDB, Redis, nginx) with a muted style
-- Purpose: reinforce technical credibility, not specific brand endorsements
+- Label: "Built for teams worldwide — powered by open standards"
+- Show 5–6 muted inline SVG tech logos (React, Next.js, Node.js, MongoDB, Redis, nginx)
+- Purpose: reinforce technical credibility without implying endorsement
 
 ### 4. `<Features>` — id="features"
-Three-column card grid (stacked on mobile). Each card has an icon, a title, and 2–3 lines of copy.
+Three-column card grid (stacked on mobile). Each card needs an icon, a title, and 2–3 lines of copy.
 
 | Icon | Title | Copy |
 |---|---|---|
-| ✦ AI | Genera con un prompt | Descrivi la tua idea. Andy Code Cat la trasforma in HTML, CSS e JavaScript professionale in pochi secondi. |
-| 💬 Chat | Itera in conversazione | Affina il risultato attraverso una chat live con anteprima in tempo reale. Nessun reload, nessuna perdita di contesto. |
-| 🚀 Pubblica | Online in un click | Il tuo sito va live su un sottodominio dedicato con HTTPS automatico. Zero configurazioni server. |
-| 📦 Export | Portalo ovunque | Scarica il pacchetto ZIP completo e distribuiscilo su qualsiasi hosting. Nessun vendor lock-in. |
-| 🔌 API-first | Integra con la tua piattaforma | REST API documentata. Le agenzie possono usare Andy Code Cat come motore backend con la propria UI. |
-| 🔒 Sicurezza | Sandbox sicuri | Ogni progetto è isolato per utente con doppio controllo sandbox. I tuoi dati restano tuoi. |
+| ✦ AI | Generate from a prompt | Describe your idea in plain language. Andy Code Cat turns it into production-ready HTML, CSS, and JavaScript in seconds. |
+| 💬 Chat | Refine through conversation | Improve the result through a live chat workflow with real-time preview. No reloads, no lost context. |
+| 🚀 Publish | Go live in one click | Launch under a dedicated subdomain with automatic HTTPS. No server setup required. |
+| 📦 Export | Take it anywhere | Download the complete ZIP package and deploy it to any hosting provider. No vendor lock-in. |
+| 🔌 API-first | Integrate your platform | A documented REST API makes it easy for agencies or SaaS products to plug in their own UI. |
+| 🔒 Security | Safe sandboxes | Each project is isolated per user with double-sandbox enforcement. Your data stays yours. |
 
 ### 5. `<HowItWorks>` — id="how-it-works"
-Numbered step-by-step section (3 big steps):
+Numbered step-by-step section (3 large steps):
 
-1. **Descrivi la tua idea** — Scrivi un testo libero (es. "landing page per la mia pizzeria con prenota-tavolo") o incolla il tuo documento.
-2. **L'AI genera il sito** — Andy Code Cat analizza il tuo input, sceglie stile e struttura, e genera il codice completo. Vedi l'anteprima in diretta mentre il testo fluisce.
-3. **Pubblica o scarica** — Con un click il sito va online sul tuo sottodominio. Oppure scarica il file ZIP e deployalo dove vuoi.
+1. **Describe your idea** — write a short prompt such as "landing page for my pizza shop with online booking" or paste an existing brief.
+2. **The AI builds the site** — Andy Code Cat analyzes the input, chooses structure and tone, and generates the code while the preview updates live.
+3. **Publish or export** — launch instantly on your subdomain or download a ZIP bundle and deploy it wherever you want.
 
-Each step: large number, title, description, a simple illustration (pure CSS diagram or inline SVG).
+Each step should have a large number, title, description, and a simple illustration (pure CSS diagram or inline SVG).
 
 ### 6. `<SocialProof>` — Testimonials
-Three testimonial cards with avatar (initials circle), name, role, and quote:
+Three testimonial cards with initials avatars, name, role, and quote:
 
-- **"Marco R." — Freelance Developer** — "In 10 minuti avevo una landing page per il mio cliente. Il cliente l'ha approvata al volo. Risparmio ore ogni settimana."
-- **"Sara M." — Marketing Manager** — "Non devo più aspettare il developer per la prima bozza. Scrivo l'idea, Andy Code Cat la costruisce, io la rifinisco. Game changer."
-- **"Luca B." — Founder, Startup** — "Ho testato 5 idee di prodotto in un pomeriggio. Tutte con landing page reali, non mockup. Conversione reale dagli ad."
+- **"Marco R." — Freelance Developer** — "I had a client landing page ready in 10 minutes. It was approved almost instantly. I save hours every week."
+- **"Sara M." — Marketing Manager** — "I no longer wait on engineering for the first draft. I write the idea, Andy Code Cat builds it, and I refine it. Total game changer."
+- **"Luca B." — Founder, Startup** — "I tested five product ideas in a single afternoon using real landing pages instead of mockups. Much faster learning loop."
 
 ### 7. `<Pricing>` — id="pricing"
-Three pricing tiers presented as cards (highlighted middle card for the popular plan):
+Three pricing tiers displayed as cards, with the middle tier highlighted as the most popular.
 
 | Plan | Price | Features |
 |---|---|---|
-| **Starter** gratis | €0/mese | 50 crediti iniziali · 3 progetti · Export ZIP · Community support |
-| **Pro** ⭐ più popolare | €19/mese | 500 crediti/mese · Progetti illimitati · Pubblicazione sottodomini · Supporto prioritario · API access |
-| **Agency** | €79/mese | Crediti illimitati · White-label · REST API full · Gestione clienti multi-account · SLA |
+| **Starter** free | €0/month | 50 starter credits · 3 projects · ZIP export · Community support |
+| **Pro** ⭐ most popular | €19/month | 500 credits/month · Unlimited projects · Managed subdomain publishing · Priority support · API access |
+| **Agency** | €79/month | Unlimited credits · White-label options · Full REST API · Multi-client management · SLA |
 
-Each card: plan name, price, feature list with checkmarks, CTA button (`Inizia` / `Scegli Pro` / `Contatta`).
+Each card: plan name, price, feature list with checkmarks, and CTA button (`Start` / `Choose Pro` / `Contact us`).
 
-Note: add a small disclaimer "I prezzi sono indicativi. La piattaforma è in fase beta." in muted text below.
+Note: include a small muted disclaimer saying "Pricing is indicative. The platform is currently in beta." below the cards.
 
 ### 8. `<FAQ>` — Accordion (optional island)
 Five questions, collapsed by default (`"use client"` accordion island):
 
-1. Devo avere competenze tecniche per usare Andy Code Cat?
-2. Il sito generato è davvero mio?
-3. Che modelli AI vengono usati?
-4. Posso usare un dominio personalizzato?
-5. Come funzionano i crediti?
+1. Do I need technical skills to use Andy Code Cat?
+2. Do I fully own the generated website?
+3. Which AI models can be used?
+4. Can I connect a custom domain?
+5. How do credits work?
 
 ### 9. `<CtaBanner>` — Final CTA
-- Headline: "Pronto a costruire qualcosa?"
-- Copy: "Inizia gratis oggi. Nessuna carta di credito richiesta."
-- CTA button: `Crea il tuo sito gratis →` → `/login`
-- Background: dark with a subtle gradient or animated glow effect (CSS only)
+- Headline: "Ready to build something real?"
+- Copy: "Start for free today. No credit card required."
+- CTA button: `Create your free site →` → `/login`
+- Background: dark with a subtle gradient or animated CSS glow
 
 ### 10. `<Footer>`
 - Logo + tagline: `Andy Code Cat — AI-powered web generation`
-- Nav columns: Prodotto (Features, How it works, Pricing), Sviluppatori (API Docs, Export, Integrations), Legale (Privacy Policy, Termini di servizio)
+- Nav columns: Product (Features, How it works, Pricing), Developers (API Docs, Export, Integrations), Legal (Privacy Policy, Terms of Service)
 - Social: GitHub icon (link to `#`)
-- Copyright: `© 2026 Andy Code Cat. Tutti i diritti riservati.`
+- Copyright: `© 2026 Andy Code Cat. All rights reserved.`
 
 ---
 
