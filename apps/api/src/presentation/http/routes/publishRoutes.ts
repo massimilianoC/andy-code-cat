@@ -7,6 +7,8 @@ import { MongoProjectRepository } from "../../../infra/repositories/MongoProject
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
 import { MongoPublishHistoryRepository } from "../../../infra/repositories/MongoPublishHistoryRepository";
+import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
+import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { PublishProject } from "../../../application/use-cases/PublishProject";
 import { UnpublishProject } from "../../../application/use-cases/UnpublishProject";
@@ -87,9 +89,11 @@ export function createPublishRoutes() {
     const snapshotRepository = new MongoPreviewSnapshotRepository();
     const deploymentRepository = new MongoSiteDeploymentRepository();
     const historyRepository = new MongoPublishHistoryRepository();
+    const userRepository = new MongoUserRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
-    const publishProject = new PublishProject(deploymentRepository, snapshotRepository, localFileStorage, historyRepository);
+    const platformConfigRepository = new MongoPlatformConfigRepository();
+    const publishProject = new PublishProject(deploymentRepository, snapshotRepository, localFileStorage, historyRepository, platformConfigRepository);
     const unpublishProject = new UnpublishProject(deploymentRepository, localFileStorage);
     const getSiteDeployment = new GetSiteDeployment(deploymentRepository);
 
@@ -104,11 +108,13 @@ export function createPublishRoutes() {
             try {
                 const body = publishProjectSchema.parse(req.body);
 
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
                 const deployment = await publishProject.execute({
                     projectId: req.sandbox!.projectId,
                     userId: req.auth!.userId,
                     snapshotId: body.snapshotId,
                     customSlug: body.customSlug,
+                    presetId: project?.presetId,
                 });
 
                 res.status(201).json(toDto(deployment));
@@ -307,6 +313,15 @@ export function createPublishRoutes() {
             );
             return;
         }
+        if (deploymentRecord) {
+            const owner = await userRepository.findById(deploymentRecord.userId).catch(() => null);
+            if (owner?.isBlocked) {
+                res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
+                    "This site is unavailable because the owner account has been suspended."
+                );
+                return;
+            }
+        }
 
         const filePath = localFileStorage.resolvePublishFile(publishId, "index.html");
         if (!filePath) {
@@ -347,6 +362,23 @@ export function createPublishRoutes() {
         if (!PUBLISH_ID_RE.test(publishId) || !file) {
             res.status(404).send("Not found");
             return;
+        }
+
+        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        if (deploymentRecord?.isAdminBlocked) {
+            res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
+                "This site has been suspended by the platform administrator."
+            );
+            return;
+        }
+        if (deploymentRecord) {
+            const owner = await userRepository.findById(deploymentRecord.userId).catch(() => null);
+            if (owner?.isBlocked) {
+                res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
+                    "This site is unavailable because the owner account has been suspended."
+                );
+                return;
+            }
         }
 
         // Only allow simple filenames — no path traversal

@@ -1,8 +1,12 @@
 import { blockUserSchema } from "@andy-code-cat/contracts";
+import type { SessionRepository } from "../../../domain/repositories/SessionRepository";
 import type { UserRepository } from "../../../domain/repositories/UserRepository";
 
 export class BlockUser {
-    constructor(private readonly userRepository: UserRepository) {}
+    constructor(
+        private readonly userRepository: UserRepository,
+        private readonly sessionRepository: SessionRepository,
+    ) { }
 
     async execute(targetUserId: string, callerUserId: string, rawInput: unknown) {
         if (targetUserId === callerUserId) {
@@ -22,6 +26,11 @@ export class BlockUser {
         }
 
         await this.userRepository.setBlocked(targetUserId, blocked);
+
+        if (blocked) {
+            await this.sessionRepository.deleteAllByUserId(targetUserId);
+        }
+
         return { userId: targetUserId, isBlocked: blocked };
     }
 }

@@ -41,6 +41,7 @@ const DEFAULT_PRODUCT_GOVERNANCE: NonNullable<PlatformConfig["governanceByProduc
         footerHtml: "",
         scriptInHead: "",
         scriptBeforeBodyClose: "",
+        globalCss: "",
         googleTagManagerId: "",
         googleAnalyticsId: "",
         matomoSiteId: "",

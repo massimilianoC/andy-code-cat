@@ -23,7 +23,9 @@ import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
+import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
 import { MongoUserStyleProfileRepository } from "../../../infra/repositories/MongoUserStyleProfileRepository";
+import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
@@ -31,6 +33,7 @@ import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptC
 import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptConfig";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
+import { HttpError, normalizeHttpError } from "../errors/httpError";
 
 type LlmRuntimeContext = {
     providerCatalog: {
@@ -55,6 +58,19 @@ type LlmRuntimeContext = {
     promptConfigId?: string;
     prePromptTemplate?: string;
     systemPrompt: string;
+    /** Governance focused-edit system prompt for this presetId (Layer E variant for focused mode). */
+    governanceFocusedSystemPrompt?: string;
+};
+
+type LlmProviderStatus = {
+    requiresKey: boolean;
+    hasApiKeyConfigured: boolean;
+    keyEnvironmentVariable?: string;
+};
+
+const PROVIDER_KEY_ENV_HINTS: Record<string, string> = {
+    siliconflow: "SILICONFLOW_API_KEY",
+    openrouter: "OPENROUTER_API_KEY",
 };
 
 function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]) {
@@ -81,6 +97,81 @@ function sendSse(res: RequestWithContext["res"], payload: unknown) {
     (res as any).write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+function getProviderStatus(providerKey: string, authType?: "api-key" | "bearer" | "none"): LlmProviderStatus {
+    const requiresKey = authType !== "none";
+    return {
+        requiresKey,
+        hasApiKeyConfigured: requiresKey ? Boolean(env.providerApiKeys[providerKey]) : true,
+        keyEnvironmentVariable: requiresKey ? (PROVIDER_KEY_ENV_HINTS[providerKey] ?? "LLM_PROVIDER_API_KEYS_JSON") : undefined,
+    };
+}
+
+function buildProviderApiKeyMissingError(context: LlmRuntimeContext): HttpError {
+    const providerStatus = getProviderStatus(context.providerCatalog.provider, context.providerCatalog.authType);
+    return new HttpError(`Missing API key for provider ${context.providerCatalog.provider}`, {
+        statusCode: 503,
+        code: "LLM_PROVIDER_API_KEY_MISSING",
+        userMessage: `Il provider ${context.providerCatalog.provider} richiede una API key che non e configurata.`,
+        details: {
+            provider: context.providerCatalog.provider,
+            model: context.modelId,
+            authType: context.providerCatalog.authType,
+            keyEnvironmentVariable: providerStatus.keyEnvironmentVariable,
+        },
+    });
+}
+
+function buildProviderResponseError(input: {
+    statusCode: number;
+    code: string;
+    message: string;
+    userMessage: string;
+    provider: string;
+    model: string;
+    providerStatus?: number;
+    providerBody?: unknown;
+}): HttpError {
+    return new HttpError(input.message, {
+        statusCode: input.statusCode,
+        code: input.code,
+        userMessage: input.userMessage,
+        details: {
+            provider: input.provider,
+            model: input.model,
+            providerStatus: input.providerStatus,
+            providerBody: input.providerBody,
+        },
+    });
+}
+
+function emitLlmFailureLog(input: {
+    projectId: string;
+    durationMs: number;
+    provider?: string;
+    model?: string;
+    code?: string;
+    message: string;
+    details?: unknown;
+    isFocusedMode?: boolean;
+}) {
+    ExecutionLogger.instance.emit({
+        projectId: input.projectId,
+        domain: "llm",
+        eventType: "llm_generation_failed",
+        level: "error",
+        status: "failure",
+        durationMs: input.durationMs,
+        metadata: {
+            provider: input.provider,
+            model: input.model,
+            code: input.code,
+            message: input.message,
+            details: input.details,
+            isFocusedMode: input.isFocusedMode,
+        },
+    });
+}
+
 export function createLlmRoutes(): Router {
     const router = Router();
     const projectRepository = new MongoProjectRepository();
@@ -90,6 +181,8 @@ export function createLlmRoutes(): Router {
     const setLlmPromptConfig = new SetLlmPromptConfig(promptConfigRepository);
     const moodboardRepository = new MongoProjectMoodboardRepository();
     const userStyleProfileRepository = new MongoUserStyleProfileRepository();
+    const userRepo = new MongoUserRepository();
+    const platformConfigRepo = new MongoPlatformConfigRepository();
 
     router.use(authMiddleware);
 
@@ -292,11 +385,17 @@ export function createLlmRoutes(): Router {
     }): Promise<LlmRuntimeContext> {
         const catalog = await getLlmCatalog.execute();
         const promptConfig = await getLlmPromptConfig.execute(input.projectId);
-        const [moodboard, userProfile, project] = await Promise.all([
+        const [moodboard, userProfile, project, platformConfig] = await Promise.all([
             moodboardRepository.findByProjectId(input.projectId),
             userStyleProfileRepository.findByUserId(input.userId),
             projectRepository.findByIdForUser(input.projectId, input.userId),
+            platformConfigRepo.get().catch(() => null),
         ]);
+
+        const governanceTemplates = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates;
+        const governanceSystemPrompt = governanceTemplates?.generationSystem || undefined;
+        const governanceFocusedSystemPrompt = governanceTemplates?.focusedEditSystem || undefined;
+
         const styleBlock = buildStyleContextBlock(userProfile, moodboard);
         const mkPrompt = () => composeSystemPrompt({
             presetId: project?.presetId,
@@ -304,6 +403,7 @@ export function createLlmRoutes(): Router {
             prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
             outputBudgetPolicy: buildOutputBudgetPolicy(),
             requestSystemPrompt: input.systemPrompt,
+            governanceSystemPrompt,
         });
 
         const providerCatalog =
@@ -329,6 +429,7 @@ export function createLlmRoutes(): Router {
                 promptConfigId: promptConfig.id,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 systemPrompt: mkPrompt(),
+                governanceFocusedSystemPrompt,
             };
         }
 
@@ -354,6 +455,7 @@ export function createLlmRoutes(): Router {
                 promptConfigId: promptConfig.id,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 systemPrompt: mkPrompt(),
+                governanceFocusedSystemPrompt,
             };
         }
 
@@ -370,6 +472,7 @@ export function createLlmRoutes(): Router {
             promptConfigId: promptConfig.id,
             prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
             systemPrompt: mkPrompt(),
+            governanceFocusedSystemPrompt,
         };
     }
 
@@ -389,6 +492,7 @@ export function createLlmRoutes(): Router {
 
                     return {
                         ...provider,
+                        ...getProviderStatus(provider.provider, provider.authType),
                         models,
                     };
                 })
@@ -431,21 +535,24 @@ export function createLlmRoutes(): Router {
         }
     });
 
-    // R1.4 — Prompt preview debug endpoint: returns the resolved system prompt with all 4 layers visible
+    // R1.4 — Prompt preview debug endpoint: returns the resolved system prompt with all layers visible
     router.get("/projects/:projectId/llm/prompt-preview", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const promptConfig = await getLlmPromptConfig.execute(req.sandbox!.projectId);
-            const [moodboard, userProfile, project] = await Promise.all([
+            const [moodboard, userProfile, project, platformConfig] = await Promise.all([
                 moodboardRepository.findByProjectId(req.sandbox!.projectId),
                 userStyleProfileRepository.findByUserId(req.auth!.userId),
                 projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId),
+                platformConfigRepo.get().catch(() => null),
             ]);
             const styleBlock = buildStyleContextBlock(userProfile, moodboard);
+            const governanceSystemPrompt = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates?.generationSystem || undefined;
             const layers = composeSystemPromptWithLayers({
                 presetId: project?.presetId,
                 styleBlock,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 outputBudgetPolicy: buildOutputBudgetPolicy(),
+                governanceSystemPrompt,
             });
             res.json({
                 presetId: project?.presetId ?? null,
@@ -454,6 +561,7 @@ export function createLlmRoutes(): Router {
                     b_presetModule: layers.layerB,
                     c_styleContext: layers.layerC,
                     d_prePromptTemplate: layers.layerD,
+                    e_governance: layers.layerE,
                     budgetPolicy: layers.budgetPolicy,
                 },
                 composed: layers.composed,
@@ -510,6 +618,7 @@ export function createLlmRoutes(): Router {
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
             const effectiveSystemPrompt = isFocusedMode
                 ? context.systemPrompt + "\n\n" + buildFocusedModeSystemAddendum(body.focusContext!, sectionOpts?.pageMap)
+                + (context.governanceFocusedSystemPrompt ? "\n\n" + context.governanceFocusedSystemPrompt : "")
                 : context.systemPrompt;
 
             const { messages } = buildMessagesWithHistory(
@@ -524,49 +633,7 @@ export function createLlmRoutes(): Router {
             const authHeader = resolveAuthHeader(context.providerCatalog.provider, context.providerCatalog.authType);
 
             if (!authHeader && context.providerCatalog.authType !== "none") {
-                const structured = buildFallbackStructured(body.message);
-                const simulated: LlmChatPreviewResult = {
-                    reply: structured.chat.summary,
-                    rawResponse: structured.chat.summary,
-                    structuredParseValid: true,
-                    promptingTrace: {
-                        originalUserMessage: body.message,
-                        promptConfigId: context.promptConfigId,
-                        prePromptTemplate: context.prePromptTemplate,
-                        effectiveSystemPrompt: context.systemPrompt,
-                        messagesSentToLlm: messages,
-                        focusContext: body.focusContext,
-                    },
-                    structured,
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                    finishReason: "simulated",
-                    usage: {
-                        promptTokens: Math.ceil(body.message.length / 4),
-                        completionTokens: 24,
-                        totalTokens: Math.ceil(body.message.length / 4) + 24,
-                    },
-                    costEstimate: estimateCost(
-                        {
-                            capability: body.capability,
-                            tokenUsage: {
-                                promptTokens: Math.ceil(body.message.length / 4),
-                                completionTokens: 24,
-                                totalTokens: Math.ceil(body.message.length / 4) + 24,
-                            },
-                        },
-                        {
-                            textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                            imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                            videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                        }
-                    ),
-                    durationMs: Date.now() - startedAt,
-                    simulated: true,
-                };
-
-                res.json(simulated);
-                return;
+                throw buildProviderApiKeyMissingError(context);
             }
 
             const sfRes = await fetch(`${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
@@ -599,22 +666,37 @@ export function createLlmRoutes(): Router {
                 // Pass through 429 (rate limit) and 404 (model not found) directly
                 // so the client knows the actual reason instead of seeing a generic 502.
                 const outStatus = sfRes.status === 429 ? 429 : sfRes.status === 404 ? 404 : 502;
-                const outMessage =
-                    outStatus === 429 ? "LLM provider rate limit reached — try again shortly or select a different model" :
-                        outStatus === 404 ? "Model not found at provider — please select a different model" :
-                            "LLM provider call failed";
-                res.status(outStatus).json({
-                    error: outMessage,
+                throw buildProviderResponseError({
+                    statusCode: outStatus,
+                    code: outStatus === 429 ? "LLM_PROVIDER_RATE_LIMIT" : outStatus === 404 ? "LLM_MODEL_NOT_FOUND" : "LLM_PROVIDER_REQUEST_FAILED",
+                    message: outStatus === 429
+                        ? "LLM provider rate limit reached"
+                        : outStatus === 404
+                            ? "Model not found at provider"
+                            : "LLM provider call failed",
+                    userMessage: outStatus === 429
+                        ? "Il provider ha raggiunto il rate limit. Riprova tra poco o seleziona un altro modello."
+                        : outStatus === 404
+                            ? "Il modello selezionato non e disponibile presso il provider. Scegli un modello diverso."
+                            : "La chiamata al provider LLM non e andata a buon fine.",
+                    provider: context.providerCatalog.provider,
+                    model: context.modelId,
                     providerStatus: sfRes.status,
                     providerBody: sfJson,
                 });
-                return;
             }
 
             const rawReply = String(sfJson?.choices?.[0]?.message?.content ?? "").trim();
             if (!rawReply) {
-                res.status(502).json({ error: "LLM provider returned empty content", providerBody: sfJson });
-                return;
+                throw buildProviderResponseError({
+                    statusCode: 502,
+                    code: "LLM_PROVIDER_EMPTY_RESPONSE",
+                    message: "LLM provider returned empty content",
+                    userMessage: "Il provider ha restituito una risposta vuota.",
+                    provider: context.providerCatalog.provider,
+                    model: context.modelId,
+                    providerBody: sfJson,
+                });
             }
 
             const parsed = tryParseStructuredJson(rawReply);
@@ -674,6 +756,7 @@ export function createLlmRoutes(): Router {
                 messages,
                 outputText: rawReply,
             });
+            userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => { });
 
             // OpenRouter (and compatible providers) may return usage.cost in USD.
             const rawProviderCost = sfJson?.usage?.cost;
@@ -766,6 +849,16 @@ export function createLlmRoutes(): Router {
 
             res.json(result);
         } catch (error) {
+            const normalized = normalizeHttpError(error);
+            emitLlmFailureLog({
+                projectId: req.sandbox!.projectId,
+                durationMs: Date.now() - startedAt,
+                provider: req.body?.provider,
+                model: req.body?.model,
+                code: normalized.code,
+                message: normalized.userMessage,
+                details: normalized.details,
+            });
             next(error);
         }
     });
@@ -794,6 +887,7 @@ export function createLlmRoutes(): Router {
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
             const effectiveSystemPrompt = isFocusedMode
                 ? context.systemPrompt + "\n\n" + buildFocusedModeSystemAddendum(body.focusContext!, sectionOpts?.pageMap)
+                + (context.governanceFocusedSystemPrompt ? "\n\n" + context.governanceFocusedSystemPrompt : "")
                 : context.systemPrompt;
 
             const { messages, historyIncluded } = buildMessagesWithHistory(
@@ -805,72 +899,11 @@ export function createLlmRoutes(): Router {
                 sectionOpts,
             );
 
-            res.setHeader("Content-Type", "text/event-stream");
-            res.setHeader("Cache-Control", "no-cache, no-transform");
-            res.setHeader("Connection", "keep-alive");
-            res.setHeader("X-Accel-Buffering", "no");
-            res.flushHeaders?.();
-
             const authHeader = resolveAuthHeader(context.providerCatalog.provider, context.providerCatalog.authType);
             console.log(`[stream-debug] provider=${context.providerCatalog.provider} model=${context.modelId} authType=${context.providerCatalog.authType} hasAuth=${Boolean(authHeader)} historyIncluded=${historyIncluded} msgCount=${messages.length}`);
 
             if (!authHeader && context.providerCatalog.authType !== "none") {
-                const simulatedThinking = [
-                    "Analyzing request context...",
-                    "Preparing structured JSON output...",
-                    "Generating HTML/CSS/JS artifacts...",
-                ];
-
-                for (const line of simulatedThinking) {
-                    sendSse(res, { type: "thinking", content: line });
-                    await new Promise((resolve) => setTimeout(resolve, 120));
-                }
-
-                const structured = buildFallbackStructured(body.message);
-                const simulated: LlmChatPreviewResult = {
-                    reply: structured.chat.summary,
-                    rawResponse: structured.chat.summary,
-                    structuredParseValid: true,
-                    promptingTrace: {
-                        originalUserMessage: body.message,
-                        promptConfigId: context.promptConfigId,
-                        prePromptTemplate: context.prePromptTemplate,
-                        effectiveSystemPrompt: context.systemPrompt,
-                        messagesSentToLlm: messages,
-                        focusContext: body.focusContext,
-                    },
-                    structured,
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                    finishReason: "simulated",
-                    usage: {
-                        promptTokens: Math.ceil(body.message.length / 4),
-                        completionTokens: 24,
-                        totalTokens: Math.ceil(body.message.length / 4) + 24,
-                    },
-                    costEstimate: estimateCost(
-                        {
-                            capability: body.capability,
-                            tokenUsage: {
-                                promptTokens: Math.ceil(body.message.length / 4),
-                                completionTokens: 24,
-                                totalTokens: Math.ceil(body.message.length / 4) + 24,
-                            },
-                        },
-                        {
-                            textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                            imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                            videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                        }
-                    ),
-                    durationMs: Date.now() - startedAt,
-                    simulated: true,
-                };
-
-                sendSse(res, { type: "answer", content: simulated.reply });
-                sendSse(res, { type: "done", result: simulated });
-                res.end();
-                return;
+                throw buildProviderApiKeyMissingError(context);
             }
 
             // Abort provider fetch on client disconnect or after 5-minute hard timeout.
@@ -920,22 +953,42 @@ export function createLlmRoutes(): Router {
                     return;
                 }
                 console.log(`[stream-debug] fetch threw non-abort error at ${Date.now() - startedAt}ms:`, fetchErr);
-                // Headers already flushed — can't use next(error). Send SSE error and close.
-                sendSse(res, { type: "error", message: fetchErr instanceof Error ? fetchErr.message : "Provider connection error", durationMs: Date.now() - startedAt });
-                res.end();
-                return;
+                throw buildProviderResponseError({
+                    statusCode: 502,
+                    code: "LLM_PROVIDER_CONNECTION_FAILED",
+                    message: fetchErr instanceof Error ? fetchErr.message : "Provider connection error",
+                    userMessage: "Non e stato possibile contattare il provider LLM.",
+                    provider: context.providerCatalog.provider,
+                    model: context.modelId,
+                });
             }
             clearTimeout(fetchTimeout);
-            // Keep res "close" listener active during stream reading — do NOT remove it.
 
             if (!sfRes.ok || !sfRes.body) {
                 res.off("close", onClientClose);
                 const providerBody = await sfRes.text().catch(() => "");
                 console.log(`[stream-debug] provider error status=${sfRes.status} at ${Date.now() - startedAt}ms body=${providerBody.slice(0, 200)}`);
-                sendSse(res, { type: "error", message: `Provider error ${sfRes.status}: ${providerBody}`, durationMs: Date.now() - startedAt });
-                res.end();
-                return;
+                throw buildProviderResponseError({
+                    statusCode: sfRes.status === 429 ? 429 : sfRes.status === 404 ? 404 : 502,
+                    code: sfRes.status === 429 ? "LLM_PROVIDER_RATE_LIMIT" : sfRes.status === 404 ? "LLM_MODEL_NOT_FOUND" : "LLM_PROVIDER_REQUEST_FAILED",
+                    message: `Provider error ${sfRes.status}`,
+                    userMessage: sfRes.status === 429
+                        ? "Il provider ha raggiunto il rate limit. Riprova tra poco o seleziona un altro modello."
+                        : sfRes.status === 404
+                            ? "Il modello selezionato non e disponibile presso il provider. Scegli un modello diverso."
+                            : "La chiamata al provider LLM non e andata a buon fine.",
+                    provider: context.providerCatalog.provider,
+                    model: context.modelId,
+                    providerStatus: sfRes.status,
+                    providerBody,
+                });
             }
+
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache, no-transform");
+            res.setHeader("Connection", "keep-alive");
+            res.setHeader("X-Accel-Buffering", "no");
+            res.flushHeaders?.();
             console.log(`[stream-debug] provider response ok, starting stream read at ${Date.now() - startedAt}ms`);
 
             const reader = sfRes.body.getReader();
@@ -1052,6 +1105,7 @@ export function createLlmRoutes(): Router {
                 // Send an "interrupted" event with partial metadata so the client
                 // can persist the cost/token info even for aborted generations.
                 const partialUsage = resolveUsageWithFallback({ usage, messages, outputText: rawReply });
+                userRepo.incrementTokensConsumed(req.auth!.userId, partialUsage.totalTokens).catch(() => { });
                 const partialCost = estimateCost(
                     { capability: body.capability, tokenUsage: partialUsage, providerCostUsd: providerCostUsdStream },
                     {
@@ -1117,6 +1171,7 @@ export function createLlmRoutes(): Router {
                 messages,
                 outputText: trimmedRaw,
             });
+            userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => { });
 
             const result: LlmChatPreviewResult = {
                 reply,
@@ -1196,13 +1251,34 @@ export function createLlmRoutes(): Router {
             sendSse(res, { type: "done", result });
             res.end();
         } catch (error) {
+            const normalized = normalizeHttpError(error);
+            emitLlmFailureLog({
+                projectId: req.sandbox!.projectId,
+                durationMs: Date.now() - startedAt,
+                provider: req.body?.provider,
+                model: req.body?.model,
+                code: normalized.code,
+                message: normalized.userMessage,
+                details: normalized.details,
+            });
             // If headers have already been flushed (SSE started), we cannot use
             // next(error) which would try res.status().json() and crash. Instead
             // send an SSE error event so the client can handle it gracefully.
             if (res.headersSent) {
                 console.error(`[stream-debug] post-flush error at ${Date.now() - startedAt}ms:`, error);
                 if (!res.writableEnded && !res.destroyed) {
-                    sendSse(res, { type: "error", message: error instanceof Error ? error.message : "Unexpected error", durationMs: Date.now() - startedAt });
+                    sendSse(res, {
+                        type: "error",
+                        message: normalized.userMessage,
+                        durationMs: Date.now() - startedAt,
+                        error: {
+                            error: normalized.userMessage,
+                            code: normalized.code,
+                            status: normalized.statusCode,
+                            userMessage: normalized.userMessage,
+                            details: normalized.details,
+                        },
+                    });
                     res.end();
                 }
                 return;

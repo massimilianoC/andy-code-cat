@@ -29,14 +29,30 @@ export interface AdminUserDto {
 }
 
 export interface AdminUserDetailDto extends AdminUserDto {
+    requiresPasswordChange: boolean;
     projects: { id: string; name: string; presetId?: string; createdAt: string }[];
+    tokensConsumedLifetime: number;
+}
+
+export interface AdminUpdateUserProfileBody {
+    email?: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    emailVerified?: boolean;
+}
+
+export interface AdminResetUserPasswordBody {
+    newPassword: string;
+    requireChangeOnNextLogin?: boolean;
 }
 
 export interface PlatformStatsDto {
     totalUsers: number;
     blockedUsers: number;
+    totalProjects: number;
     totalLiveDeployments: number;
     usersByRole: Record<string, number>;
+    totalTokensConsumedLifetime: number;
 }
 
 export interface PlatformConfigDto {
@@ -60,10 +76,31 @@ export interface ProductInjectionsDto {
     footerHtml: string;
     scriptInHead: string;
     scriptBeforeBodyClose: string;
+    /** Global CSS injected into generated pages. */
+    globalCss: string;
     googleTagManagerId: string;
     googleAnalyticsId: string;
     matomoSiteId: string;
     matomoUrl: string;
+}
+
+export interface CookieBannerLocaleText {
+    message: string;
+    acceptLabel: string;
+    rejectLabel: string;
+}
+
+export interface ProductCookieBannerDto {
+    enabled: boolean;
+    position: "bottom" | "top" | "bottom-left" | "bottom-right";
+    texts: Record<string, CookieBannerLocaleText>;
+}
+
+export interface ProductLegalDto {
+    privacyPolicyUrls: Record<string, string>;
+    cookiePolicyUrls: Record<string, string>;
+    privacyPolicyHtml: Record<string, string>;
+    cookiePolicyHtml: Record<string, string>;
 }
 
 export interface ProductNginxDto {
@@ -77,6 +114,8 @@ export interface ProductNginxDto {
 export interface ProductGovernanceDto {
     promptTemplates: ProductPromptTemplatesDto;
     injections: ProductInjectionsDto;
+    cookieBanner?: ProductCookieBannerDto;
+    legal?: ProductLegalDto;
     nginx: ProductNginxDto;
 }
 
@@ -191,6 +230,30 @@ export function adminSetUserLimits(token: string, userId: string, limits: Partia
     return call("PATCH", `/v1/admin/users/${userId}/limits`, limits, auth(token));
 }
 
+export function adminUpdateUserProfile(
+    token: string,
+    userId: string,
+    body: AdminUpdateUserProfileBody
+): Promise<{ userId: string; email: string; firstName?: string; lastName?: string; emailVerified: boolean }> {
+    return call("PATCH", `/v1/admin/users/${userId}/profile`, body, auth(token));
+}
+
+export function adminResetUserPassword(
+    token: string,
+    userId: string,
+    body: AdminResetUserPasswordBody
+): Promise<{ userId: string; reauthRequired: boolean; requiresPasswordChange: boolean }> {
+    return call("PATCH", `/v1/admin/users/${userId}/password-reset`, body, auth(token));
+}
+
+export function adminSetUserPasswordResetRequired(
+    token: string,
+    userId: string,
+    required: boolean
+): Promise<{ userId: string; requiresPasswordChange: boolean }> {
+    return call("PATCH", `/v1/admin/users/${userId}/password-reset-required`, { required }, auth(token));
+}
+
 export function adminDeleteUser(token: string, userId: string): Promise<{ deleted: boolean; userId: string }> {
     return call("DELETE", `/v1/admin/users/${userId}`, undefined, auth(token));
 }
@@ -213,4 +276,56 @@ export function listAdminDeployments(token: string, params?: { page?: number; li
 
 export function adminBlockDeployment(token: string, publishId: string, blocked: boolean): Promise<{ publishId: string; isAdminBlocked: boolean }> {
     return call("PATCH", `/v1/admin/deployments/${publishId}/block`, { blocked }, auth(token));
+}
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+
+export interface AdminProjectActiveDeploymentDto {
+    publishId: string;
+    customSlug?: string;
+    url: string;
+    isAdminBlocked: boolean;
+}
+
+export interface AdminProjectDto {
+    id: string;
+    name: string;
+    presetId?: string;
+    ownerUserId: string;
+    ownerEmail: string;
+    ownerFirstName?: string;
+    ownerLastName?: string;
+    ownerIsBlocked: boolean;
+    activeDeployment?: AdminProjectActiveDeploymentDto;
+    createdAt: string;
+}
+
+export interface AdminListProjectsParams {
+    page?: number;
+    limit?: number;
+    search?: string;
+    ownerId?: string;
+    presetId?: string;
+}
+
+export interface AdminListProjectsResult {
+    projects: AdminProjectDto[];
+    total: number;
+    page: number;
+    limit: number;
+}
+
+export function adminListProjects(token: string, params?: AdminListProjectsParams): Promise<AdminListProjectsResult> {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.search) qs.set("search", params.search);
+    if (params?.ownerId) qs.set("ownerId", params.ownerId);
+    if (params?.presetId) qs.set("presetId", params.presetId);
+    const query = qs.toString();
+    return call<AdminListProjectsResult>("GET", `/v1/admin/projects${query ? `?${query}` : ""}`, undefined, auth(token));
+}
+
+export function adminDeleteProject(token: string, projectId: string): Promise<{ deleted: boolean }> {
+    return call("DELETE", `/v1/admin/projects/${projectId}`, undefined, auth(token));
 }

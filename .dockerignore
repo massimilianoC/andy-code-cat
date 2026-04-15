@@ -1,0 +1,22 @@
+# Exclude host node_modules — symlinks are Windows-absolute paths and break in Linux containers.
+# The Dockerfile's RUN npm install creates fresh Linux-native workspace symlinks instead.
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+
+# Git and dev tooling
+.git
+.gitignore
+
+# Sensitive env files (injected at runtime via --env-file or docker-compose env_file)
+.env
+.env.local
+.env.*.local
+
+# Build output regenerated inside Docker (not needed in build context)
+apps/*/.next
+apps/*/dist
+
+# Local data and debug directories
+data/
+debug/

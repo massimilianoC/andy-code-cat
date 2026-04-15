@@ -6,7 +6,7 @@ import { useMemo } from "react";
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 interface MonacoCodeEditorProps {
-    language: "html" | "javascript" | "typescript" | "json" | "css";
+    language: "html" | "javascript" | "typescript" | "json" | "css" | "markdown" | "nginx";
     value: string;
     onChange: (next: string) => void;
     height?: string;

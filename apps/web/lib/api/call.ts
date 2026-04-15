@@ -14,17 +14,57 @@ import {
     isRefreshTokenExpired,
 } from "../token-store";
 
+export interface ApiErrorResponse {
+    error?: string;
+    code?: string;
+    status?: number;
+    userMessage?: string;
+    details?: unknown;
+}
+
+function tryParseApiErrorBody(body: unknown): ApiErrorResponse {
+    if (typeof body === "string") {
+        const trimmed = body.trim();
+        if (trimmed.startsWith("{")) {
+            try {
+                const parsed = JSON.parse(trimmed) as unknown;
+                return tryParseApiErrorBody(parsed);
+            } catch {
+                return { error: trimmed };
+            }
+        }
+        return { error: trimmed };
+    }
+
+    if (typeof body === "object" && body !== null) {
+        const candidate = body as Record<string, unknown>;
+        return {
+            error: typeof candidate.error === "string" ? candidate.error : undefined,
+            code: typeof candidate.code === "string" ? candidate.code : undefined,
+            status: typeof candidate.status === "number" ? candidate.status : undefined,
+            userMessage: typeof candidate.userMessage === "string" ? candidate.userMessage : undefined,
+            details: candidate.details,
+        };
+    }
+
+    return {};
+}
+
 export class ApiError extends Error {
+    public readonly code?: string;
+    public readonly details?: unknown;
+    public readonly userMessage?: string;
+
     constructor(
         public readonly status: number,
         public readonly body: unknown
     ) {
-        super(
-            typeof body === "object" && body !== null && "error" in body
-                ? String((body as { error: unknown }).error)
-                : `HTTP ${status}`
-        );
+        const parsed = tryParseApiErrorBody(body);
+        super(parsed.userMessage ?? parsed.error ?? `HTTP ${status}`);
         this.name = "ApiError";
+        this.code = parsed.code;
+        this.details = parsed.details;
+        this.userMessage = parsed.userMessage ?? parsed.error;
     }
 }
 
@@ -47,6 +87,11 @@ export function setSharedRefreshPromise(p: Promise<string> | null): void {
     _refreshPromise = p;
 }
 
+function getApiBaseUrl(): string {
+    const configured = (process.env.NEXT_PUBLIC_API_URL ?? "").trim();
+    return configured.length > 0 ? configured : "http://localhost:4000";
+}
+
 // ── Refresh ───────────────────────────────────────────────────────────────────
 
 /**
@@ -63,7 +108,7 @@ export async function refreshAccessToken(): Promise<string> {
     }
 
     const refreshToken = getRefreshToken()!;
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    const baseUrl = getApiBaseUrl();
 
     let response: Response;
     try {
@@ -103,7 +148,7 @@ export async function call<T>(
     headers?: Record<string, string>,
     isRetry = false
 ): Promise<T> {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    const baseUrl = getApiBaseUrl();
 
     let resolvedHeaders: Record<string, string> = { ...headers };
     if (!isRetry && !isAnonymousAuthPath(path) && resolvedHeaders.Authorization) {

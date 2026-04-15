@@ -13,7 +13,7 @@ import {
     ApiError,
     type Project,
 } from "../../lib/api";
-import { getToken, clearSession, isPasswordChangeRequired } from "../../lib/token-store";
+import { getToken, clearSession, isPasswordChangeRequired, getRoles } from "../../lib/token-store";
 import { PasswordChangeDialog } from "../../components/PasswordChangeDialog";
 import ProjectCard from "../../components/ProjectCard";
 import { TipsChip } from "../../components/TipsPanel";
@@ -72,6 +72,7 @@ export default function DashboardPage() {
     const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>(undefined);
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
     const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
+    const [canAccessSuperadmin, setCanAccessSuperadmin] = useState(false);
     const createInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -83,6 +84,8 @@ export default function DashboardPage() {
         }
         setToken(tok);
         setRecentIds(getRecentIds());
+        const roles = getRoles();
+        setCanAccessSuperadmin(roles.includes("admin") || roles.includes("superadmin"));
         setPasswordChangeRequiredState(isPasswordChangeRequired());
         setCheckingAuth(false);
         void load(tok);
@@ -211,6 +214,9 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher className="mr-1" />
+                    {canAccessSuperadmin ? (
+                        <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>Superadmin</Button>
+                    ) : null}
                     <Button size="sm" className="gap-1" onClick={() => setCreateOpen(true)}>
                         <Plus className="h-3.5 w-3.5" />
                         {t("dashboard.newProject")}

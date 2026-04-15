@@ -36,10 +36,34 @@ export const setPlatformConfigSchema = z.object({
             footerHtml: z.string().max(40000).default(""),
             scriptInHead: z.string().max(40000).default(""),
             scriptBeforeBodyClose: z.string().max(40000).default(""),
+            globalCss: z.string().max(40000).default(""),
             googleTagManagerId: z.string().max(128).default(""),
             googleAnalyticsId: z.string().max(128).default(""),
             matomoSiteId: z.string().max(128).default(""),
             matomoUrl: z.string().max(2048).default(""),
+        }).partial().optional(),
+        /** Cookie banner config. Keys in `texts` are IETF locale codes (e.g. "en", "it"). */
+        cookieBanner: z.object({
+            enabled: z.boolean().default(false),
+            position: z.enum(["bottom", "top", "bottom-left", "bottom-right"]).default("bottom"),
+            texts: z.record(
+                z.string().min(2).max(10),
+                z.object({
+                    message: z.string().max(2000).default(""),
+                    acceptLabel: z.string().max(100).default(""),
+                    rejectLabel: z.string().max(100).default(""),
+                }),
+            ).default({}),
+        }).partial().optional(),
+        /**
+         * Multilingual legal pages. Keys are IETF locale codes; values are URL or inline HTML.
+         * URL takes precedence when both are supplied; HTML acts as a fallback in-platform page.
+         */
+        legal: z.object({
+            privacyPolicyUrls: z.record(z.string().min(2).max(10), z.string().max(2048)).default({}),
+            cookiePolicyUrls: z.record(z.string().min(2).max(10), z.string().max(2048)).default({}),
+            privacyPolicyHtml: z.record(z.string().min(2).max(10), z.string().max(100000)).default({}),
+            cookiePolicyHtml: z.record(z.string().min(2).max(10), z.string().max(100000)).default({}),
         }).partial().optional(),
         nginx: z.object({
             publicDomain: z.string().max(255).default(""),
@@ -48,7 +72,7 @@ export const setPlatformConfigSchema = z.object({
             clientMaxBodySizeMb: z.number().int().min(1).max(1024).default(20),
             extraServerDirectives: z.string().max(40000).default(""),
         }).partial().optional(),
-    }).default({}).optional()).optional(),
+    }).default({})).optional(),
 });
 export type SetPlatformConfigInput = z.infer<typeof setPlatformConfigSchema>;
 
@@ -76,6 +100,25 @@ export const blockUserSchema = z.object({
     blocked: z.boolean(),
 });
 export type BlockUserInput = z.infer<typeof blockUserSchema>;
+
+export const adminUpdateUserProfileSchema = z.object({
+    email: z.string().email().optional(),
+    firstName: z.string().max(100).nullable().optional(),
+    lastName: z.string().max(100).nullable().optional(),
+    emailVerified: z.boolean().optional(),
+});
+export type AdminUpdateUserProfileInput = z.infer<typeof adminUpdateUserProfileSchema>;
+
+export const adminResetUserPasswordSchema = z.object({
+    newPassword: z.string().min(8).max(128),
+    requireChangeOnNextLogin: z.boolean().default(true),
+});
+export type AdminResetUserPasswordInput = z.infer<typeof adminResetUserPasswordSchema>;
+
+export const adminSetPasswordResetRequiredSchema = z.object({
+    required: z.boolean(),
+});
+export type AdminSetPasswordResetRequiredInput = z.infer<typeof adminSetPasswordResetRequiredSchema>;
 
 export const listUsersQuerySchema = z.object({
     page: z.coerce.number().int().positive().default(1),
