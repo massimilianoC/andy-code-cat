@@ -172,6 +172,33 @@ function emitLlmFailureLog(input: {
     });
 }
 
+function parseLlmChatPreviewBody(raw: unknown) {
+    const parsed = llmChatPreviewSchema.safeParse(raw);
+    if (parsed.success) {
+        return parsed.data;
+    }
+
+    const focusOnlyError =
+        parsed.error.issues.length > 0 &&
+        parsed.error.issues.every((issue) => issue.path[0] === "focusContext");
+
+    if (focusOnlyError && raw && typeof raw === "object") {
+        const fallbackParsed = llmChatPreviewSchema.safeParse({
+            ...(raw as Record<string, unknown>),
+            focusContext: undefined,
+        });
+
+        if (fallbackParsed.success) {
+            console.warn("[llm] invalid focusContext ignored — falling back to full-project context.", {
+                focusContextErrors: parsed.error.flatten().fieldErrors.focusContext,
+            });
+            return fallbackParsed.data;
+        }
+    }
+
+    throw parsed.error;
+}
+
 export function createLlmRoutes(): Router {
     const router = Router();
     const projectRepository = new MongoProjectRepository();
@@ -598,7 +625,7 @@ export function createLlmRoutes(): Router {
         const startedAt = Date.now();
 
         try {
-            const body = llmChatPreviewSchema.parse(req.body);
+            const body = parseLlmChatPreviewBody(req.body);
             const context = await resolveContext({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
@@ -867,7 +894,7 @@ export function createLlmRoutes(): Router {
         const startedAt = Date.now();
 
         try {
-            const body = llmChatPreviewSchema.parse(req.body);
+            const body = parseLlmChatPreviewBody(req.body);
             const context = await resolveContext({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
