@@ -26,14 +26,17 @@
 ## UX-01 — Registrazione e Onboarding
 
 ### Login `/login`
+
 - SSO Google / GitHub (OAuth2)
 - Email + password nativa con verifica magic link (valido 24h)
 - Primo accesso → `/onboarding`; accesso successivo → `/dashboard`
 
 ### Onboarding `/onboarding`
+
 Una singola schermata, 3 blocchi:
 
 **Blocco A — Profilo (opzionale, saltabile)**
+
 ```
 Come ti chiami? [Nome] [Cognome]
 Per cosa userai Andy Code Cat?
@@ -43,6 +46,7 @@ Per cosa userai Andy Code Cat?
 ```
 
 **Blocco B — Consensi GDPR (obbligatorio)**
+
 ```
 ☑ Accetto i Termini di Servizio e la Privacy Policy
 ☐ Acconsento a comunicazioni marketing (opzionale)
@@ -50,6 +54,7 @@ Per cosa userai Andy Code Cat?
 ```
 
 **Blocco C — Cookie banner inline**
+
 ```
 [Solo necessari]  [Accetta tutti]
 ```
@@ -86,6 +91,7 @@ CTA: "Inizia a creare →" → 50 crediti gratuiti aggiunti → `/dashboard`
 **Filosofia:** conversazionale. Step precedenti collassano mostrando il riassunto.
 
 ### Step 1 — Input idea
+
 ```
   Descrivi la tua idea 💬
   ┌────────────────────────────────────────────┐
@@ -95,6 +101,7 @@ CTA: "Inizia a creare →" → 50 crediti gratuiti aggiunti → `/dashboard`
 ```
 
 ### Step 2 — Stile visivo
+
 - 10 temi predefiniti con preview PNG (300×200)
 - Filtri: Minimal / Bold / Elegante / Playful / Dark / Corporate
 - Selezione opzionale ("Salta" disponibile)
@@ -115,11 +122,13 @@ CTA: "Inizia a creare →" → 50 crediti gratuiti aggiunti → `/dashboard`
 | luxury-gold | Aurum | Nero/Oro | Cormorant |
 
 ### Step 3 — Documento allegato
+
 - Upload drag-and-drop: PDF, DOC, DOCX, TXT, MD
 - Max 10MB, 1 file per MVP
 - Opzionale ("Salta" disponibile)
 
 ### Step 4 — Foto
+
 - Upload multiplo: max 6 immagini JPG/PNG/WebP, 5MB cad.
 - Thumbnail preview immediata
 - Nota GDPR sull'uso delle immagini
@@ -303,6 +312,7 @@ Oppure usa un tuo dominio:
 ```
 
 **Email di recap automatica:**
+
 - URL del sito pubblicato
 - Crediti usati / rimanenti
 - Link a: gestione progetto, export ZIP, guida DNS dominio custom

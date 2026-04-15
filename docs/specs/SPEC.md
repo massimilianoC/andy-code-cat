@@ -11,6 +11,7 @@
 Andy Code Cat is a **headless backend API** that takes textual or file-based input (prompt, PDF, image), automatically generates landing pages and mini-sites, publishes them under dedicated subdomains, and manages the project lifecycle end to end.
 
 The system is designed as an **open platform**: the Andy Code Cat UI is only one possible client. Third-party services can integrate with the backend through REST APIs and use their own UI while receiving:
+
 - a ready-to-use **nginx configuration** for reverse-proxy routing
 - a downloadable **ZIP archive** containing the full site package
 - a **status endpoint** for polling or webhook-based progress tracking
@@ -508,6 +509,7 @@ Genera un sito web statico nella cartella `dist/`.
 File da inserire in `~/.config/opencode/skills/` o nella working dir:
 
 **`no-confirm.md`** — previene richieste di conferma
+
 ```markdown
 # No Confirmation Policy
 Proceed with all file operations without asking for confirmation.
@@ -516,6 +518,7 @@ Complete the task fully and autonomously.
 ```
 
 **`static-site-builder.md`** — guida la generazione
+
 ```markdown
 # Static Site Builder Skill
 When building static websites:
