@@ -212,6 +212,8 @@ interface ProjectConfigPopupProps {
     presetLabel?: string;
     /** Optional guide questions from the active preset (shown when brief is empty). */
     briefGuideQuestions?: string[];
+    /** Optional suggested model label attached to the active preset. */
+    presetRecommendedModelLabel?: string;
 }
 
 export default function ProjectConfigPopup({
@@ -222,6 +224,7 @@ export default function ProjectConfigPopup({
     onRename,
     presetLabel,
     briefGuideQuestions,
+    presetRecommendedModelLabel,
 }: ProjectConfigPopupProps) {
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -352,8 +355,11 @@ export default function ProjectConfigPopup({
                                 <div className="p-5 space-y-5">
                                     {/* Preset badge */}
                                     {presetLabel && (
-                                        <div className="flex items-center gap-2 p-2 bg-primary/10 rounded-md border border-primary/20">
+                                        <div className="flex flex-wrap items-center gap-2 p-2 bg-primary/10 rounded-md border border-primary/20">
                                             <Badge variant="outline" className="text-xs border-primary/40 text-primary">{presetLabel}</Badge>
+                                            {presetRecommendedModelLabel ? (
+                                                <Badge variant="secondary" className="text-[10px]">Model: {presetRecommendedModelLabel}</Badge>
+                                            ) : null}
                                             <span className="text-xs text-muted-foreground">Preset attivo — brief e tag pre-compilati.</span>
                                         </div>
                                     )}

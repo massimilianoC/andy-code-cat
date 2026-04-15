@@ -6,6 +6,34 @@ export interface ProductPromptTemplates {
     reviewSystem: string;
 }
 
+export interface PromptTaskSetting {
+    enabled: boolean;
+    provider: string;
+    model: string;
+    temperature: number;
+    maxCompletionTokens: number;
+    systemTemplate: string;
+}
+
+export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
+    optimize_user_prompt: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.7,
+        maxCompletionTokens: 1200,
+        systemTemplate: "",
+    },
+    draft_template_model: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 1800,
+        systemTemplate: "",
+    },
+};
+
 export interface ProductInjectionConfig {
     headHtml: string;
     headerHtml: string;
@@ -57,6 +85,7 @@ export interface ProductNginxConfig {
 
 export interface ProductGovernanceConfig {
     promptTemplates: ProductPromptTemplates;
+    promptTaskSettings?: Record<string, PromptTaskSetting>;
     injections: ProductInjectionConfig;
     cookieBanner?: ProductCookieBannerConfig;
     legal?: ProductLegalConfig;
@@ -80,4 +109,23 @@ export interface PlatformConfig {
     updatedAt: Date;
     /** userId of the superadmin that last modified this config. */
     updatedByUserId?: string;
+}
+
+export function resolvePromptTaskSettingFromConfig(
+    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
+    productKey: string,
+    taskKey: string,
+): PromptTaskSetting {
+    const defaultTask = (DEFAULT_PROMPT_TASK_SETTINGS[taskKey] ?? DEFAULT_PROMPT_TASK_SETTINGS.optimize_user_prompt)!;
+    const fromDefault = platformConfig?.governanceByProduct?.default?.promptTaskSettings?.[taskKey];
+    const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.promptTaskSettings?.[taskKey];
+
+    return {
+        enabled: fromProduct?.enabled ?? fromDefault?.enabled ?? defaultTask.enabled,
+        provider: fromProduct?.provider || fromDefault?.provider || defaultTask.provider,
+        model: fromProduct?.model || fromDefault?.model || defaultTask.model,
+        temperature: fromProduct?.temperature ?? fromDefault?.temperature ?? defaultTask.temperature,
+        maxCompletionTokens: fromProduct?.maxCompletionTokens ?? fromDefault?.maxCompletionTokens ?? defaultTask.maxCompletionTokens,
+        systemTemplate: fromProduct?.systemTemplate || fromDefault?.systemTemplate || defaultTask.systemTemplate,
+    };
 }

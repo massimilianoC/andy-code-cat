@@ -28,6 +28,12 @@ export interface PresetTagDefaults {
     audienceTags?: string[];
 }
 
+export interface PresetRecommendedModelDto {
+    provider: string;
+    modelId: string;
+    label?: string;
+}
+
 export interface ProjectPreset {
     id: string;
     label: string;
@@ -35,6 +41,16 @@ export interface ProjectPreset {
     labelEn: string;
     hint: string;
     icon: string;
+    category?: string;
+    categoryLabel?: string;
+    categoryHint?: string;
+    tags?: string[];
+    sortOrder?: number;
+    isActive?: boolean;
+    scope?: "global" | "user" | "project";
+    status?: "draft" | "pending_review" | "published" | "archived";
+    ownerUserId?: string;
+    recommendedModel?: PresetRecommendedModelDto;
     outputSpec: PresetOutputSpec;
     defaultTags: PresetTagDefaults;
     briefTemplate: string;

@@ -17,6 +17,7 @@ const LAYER_SEPARATOR = "\n\n---\n\n";
  */
 export function composeSystemPrompt(opts: {
     presetId?: string | null;
+    presetLayer?: string;
     styleBlock?: string;
     prePromptTemplate?: string;
     outputBudgetPolicy?: string;
@@ -25,7 +26,7 @@ export function composeSystemPrompt(opts: {
 }): string {
     return [
         buildBaseConstraintsLayer(),
-        buildPresetLayer(opts.presetId),
+        opts.presetLayer ?? buildPresetLayer(opts.presetId),
         opts.styleBlock ?? "",
         opts.prePromptTemplate ?? "",
         opts.governanceSystemPrompt ?? "",
@@ -53,6 +54,7 @@ export interface ResolvedPromptLayers {
  */
 export function composeSystemPromptWithLayers(opts: {
     presetId?: string | null;
+    presetLayer?: string;
     styleBlock?: string;
     prePromptTemplate?: string;
     outputBudgetPolicy?: string;
@@ -60,7 +62,7 @@ export function composeSystemPromptWithLayers(opts: {
     governanceSystemPrompt?: string;
 }): ResolvedPromptLayers {
     const layerA = buildBaseConstraintsLayer();
-    const layerB = buildPresetLayer(opts.presetId);
+    const layerB = opts.presetLayer ?? buildPresetLayer(opts.presetId);
     const layerC = opts.styleBlock ?? "";
     const layerD = opts.prePromptTemplate ?? "";
     const layerE = opts.governanceSystemPrompt ?? "";

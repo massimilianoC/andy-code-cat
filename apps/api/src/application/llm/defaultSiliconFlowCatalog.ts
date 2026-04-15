@@ -1,4 +1,5 @@
 import type { LlmProviderCatalog, PipelineModelRole } from "../../domain/entities/LlmCatalog";
+import { decorateSeedModel } from "./modelRegistryPresets";
 import { SILICONFLOW_MODEL_PRICES } from "./siliconflowPricing";
 
 const DEFAULT_MODELS: Record<PipelineModelRole, string> = {
@@ -48,7 +49,7 @@ export function buildDefaultSiliconFlowCatalog(baseUrl: string): LlmProviderCata
 
     for (const [role, modelId] of Object.entries(DEFAULT_MODELS) as Array<[PipelineModelRole, string]>) {
         const sfPrice = SILICONFLOW_MODEL_PRICES[modelId];
-        models.push({
+        models.push(decorateSeedModel({
             id: modelId,
             provider: "siliconflow",
             role,
@@ -57,12 +58,12 @@ export function buildDefaultSiliconFlowCatalog(baseUrl: string): LlmProviderCata
             isFallback: false,
             isActive: true,
             ...(sfPrice ? { priceInputUsdPerM: sfPrice.input, priceOutputUsdPerM: sfPrice.output } : {})
-        });
+        }));
 
         const fallback = FALLBACK_MODELS[role];
         if (fallback) {
             const sfPriceFb = SILICONFLOW_MODEL_PRICES[fallback];
-            models.push({
+            models.push(decorateSeedModel({
                 id: fallback,
                 provider: "siliconflow",
                 role,
@@ -71,7 +72,7 @@ export function buildDefaultSiliconFlowCatalog(baseUrl: string): LlmProviderCata
                 isFallback: true,
                 isActive: true,
                 ...(sfPriceFb ? { priceInputUsdPerM: sfPriceFb.input, priceOutputUsdPerM: sfPriceFb.output } : {})
-            });
+            }));
         }
     }
 

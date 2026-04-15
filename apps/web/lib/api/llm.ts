@@ -130,6 +130,60 @@ export interface LlmPromptConfig {
     updatedAt: string;
 }
 
+export interface OptimizePromptInput {
+    rawPrompt: string;
+    assetIds?: string[];
+    conversationId?: string;
+    sessionId?: string;
+    provider?: string;
+    model?: string;
+}
+
+export interface OptimizePromptResult {
+    taskKey: string;
+    optimizedPrompt: string;
+    provider: string;
+    model: string;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    costEstimate?: {
+        currency: "EUR";
+        amount: number;
+        breakdown: {
+            tokenCost: number;
+            imageCost: number;
+            videoCost: number;
+        };
+        unitRates: {
+            textEurPer1kTokens: number;
+            imageEurPerAsset: number;
+            videoEurPerAsset: number;
+        };
+        providerCostUsd?: number;
+    };
+    durationMs: number;
+    skipped?: boolean;
+    rawResponse?: string;
+    finishReason?: string;
+    promptingTrace?: {
+        originalUserMessage: string;
+        effectiveSystemPrompt: string;
+        messagesSentToLlm: Array<{
+            role: "system" | "user";
+            content: string;
+        }>;
+    };
+}
+
+export interface PromptUsageSummaryResult {
+    totalCost: number;
+    totalTokens: number;
+    runs: number;
+}
+
 export type LlmChatStreamEvent =
     | { type: "thinking"; content: string }
     | { type: "answer"; content: string }
@@ -144,6 +198,12 @@ export type LlmChatStreamEvent =
         durationMs: number;
         partialReply?: string;
     };
+
+export type OptimizePromptStreamEvent =
+    | { type: "thinking"; content: string }
+    | { type: "answer"; content: string }
+    | { type: "done"; result: OptimizePromptResult }
+    | { type: "error"; message: string; durationMs?: number; error?: ApiErrorPayload };
 
 export interface LlmProviderCatalogDto {
     provider: string;
@@ -162,6 +222,10 @@ export interface LlmProviderCatalogDto {
         isDefault: boolean;
         isFallback: boolean;
         isActive: boolean;
+        displayName?: string;
+        description?: string;
+        promptTemplate?: string;
+        focusPromptTemplate?: string;
         priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
     }>;
 }
@@ -299,6 +363,91 @@ export function setLlmPromptConfig(
     input: { enabled: boolean; responseFormatVersion: string; prePromptTemplate: string }
 ) {
     return call<{ config: LlmPromptConfig }>("PUT", `/v1/projects/${projectId}/llm/prompt-config`, input, {
+        Authorization: `Bearer ${token}`,
+        "x-project-id": projectId,
+    });
+}
+
+export function optimizePrompt(token: string, projectId: string, input: OptimizePromptInput) {
+    return call<OptimizePromptResult>("POST", `/v1/projects/${projectId}/llm/optimize-prompt`, input, {
+        Authorization: `Bearer ${token}`,
+        "x-project-id": projectId,
+    });
+}
+
+export async function streamOptimizePrompt(
+    token: string,
+    projectId: string,
+    input: OptimizePromptInput,
+    onEvent: (event: OptimizePromptStreamEvent) => void,
+    signal?: AbortSignal
+) {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+    let effectiveToken = getAccessToken() ?? token;
+    if (isAccessTokenExpired()) {
+        try {
+            if (!getSharedRefreshPromise()) {
+                setSharedRefreshPromise(refreshAccessToken());
+            }
+            effectiveToken = await getSharedRefreshPromise()!;
+            setSharedRefreshPromise(null);
+        } catch {
+            setSharedRefreshPromise(null);
+            throw new ApiError(401, { error: "Sessione scaduta" });
+        }
+    }
+
+    const res = await fetch(`${baseUrl}/v1/projects/${projectId}/llm/optimize-prompt/stream`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+            Authorization: `Bearer ${effectiveToken}`,
+            "x-project-id": projectId,
+        },
+        body: JSON.stringify(input),
+        signal,
+    });
+
+    if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => "");
+        throw new ApiError(res.status, text || { error: "Optimizer stream unavailable" });
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+
+        for (const chunk of chunks) {
+            const line = chunk
+                .split("\n")
+                .find((l) => l.startsWith("data:"));
+            if (!line) continue;
+
+            const payload = line.slice(5).trim();
+            if (!payload) continue;
+
+            try {
+                const event = JSON.parse(payload) as OptimizePromptStreamEvent;
+                onEvent(event);
+            } catch {
+                continue;
+            }
+        }
+    }
+}
+
+export function getPromptUsageSummary(token: string, projectId: string) {
+    return call<PromptUsageSummaryResult>("GET", `/v1/projects/${projectId}/llm/prompt-usage-summary`, undefined, {
         Authorization: `Bearer ${token}`,
         "x-project-id": projectId,
     });

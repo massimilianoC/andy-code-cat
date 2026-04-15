@@ -1,4 +1,4 @@
-import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
+import { PRESET_MAP, type ProjectPreset } from "../../domain/entities/ProjectPreset";
 
 /**
  * Layer A — Base architectural constraints common to ALL Layer 1 output.
@@ -30,9 +30,7 @@ export function buildBaseConstraintsLayer(): string {
  * Contains the preset's systemPromptModule (structural format rules) and optional
  * cssConstraints (verbatim CSS required in the generated output).
  */
-export function buildPresetLayer(presetId?: string | null): string {
-    if (!presetId) return "";
-    const preset = PRESET_MAP.get(presetId);
+export function buildPresetLayerFromPreset(preset?: Pick<ProjectPreset, "outputSpec"> | null): string {
     if (!preset) return "";
 
     const parts: string[] = [preset.outputSpec.systemPromptModule];
@@ -46,4 +44,10 @@ export function buildPresetLayer(presetId?: string | null): string {
     }
 
     return parts.join("\n\n");
+}
+
+export function buildPresetLayer(presetId?: string | null): string {
+    if (!presetId) return "";
+    const preset = PRESET_MAP.get(presetId);
+    return buildPresetLayerFromPreset(preset);
 }

@@ -8,6 +8,30 @@ const REFRESH_TOKEN_KEY = "pf_refresh_token";
 const PROJECT_KEY = "pf_active_project";
 const PASSWORD_CHANGE_REQUIRED_KEY = "pf_password_change_required";
 
+function safeGetItem(key: string): string | null {
+    try {
+        return localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+function safeSetItem(key: string, value: string): void {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // storage unavailable or quota exceeded — non-fatal for auth UX
+    }
+}
+
+function safeRemoveItem(key: string): void {
+    try {
+        localStorage.removeItem(key);
+    } catch {
+        // ignore browser storage failures during cleanup
+    }
+}
+
 // ── JWT expiry helpers ──────────────────────────────────────────────────────
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -50,52 +74,52 @@ export function isRefreshTokenExpired(): boolean {
 
 export function saveSession(accessToken: string, refreshToken: string, projectId: string) {
     if (typeof window === "undefined") return;
-    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    localStorage.setItem(PROJECT_KEY, projectId);
+    safeSetItem(ACCESS_TOKEN_KEY, accessToken);
+    safeSetItem(REFRESH_TOKEN_KEY, refreshToken);
+    safeSetItem(PROJECT_KEY, projectId);
 }
 
 export function getAccessToken(): string | null {
     if (typeof window === "undefined") return null;
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
+    return safeGetItem(ACCESS_TOKEN_KEY);
 }
 
 export function getRefreshToken(): string | null {
     if (typeof window === "undefined") return null;
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
+    return safeGetItem(REFRESH_TOKEN_KEY);
 }
 
 export function setAccessToken(token: string) {
     if (typeof window === "undefined") return;
-    localStorage.setItem(ACCESS_TOKEN_KEY, token);
+    safeSetItem(ACCESS_TOKEN_KEY, token);
 }
 
 export function setRefreshToken(token: string) {
     if (typeof window === "undefined") return;
-    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    safeSetItem(REFRESH_TOKEN_KEY, token);
 }
 
 export function getActiveProject(): string | null {
     if (typeof window === "undefined") return null;
-    return localStorage.getItem(PROJECT_KEY);
+    return safeGetItem(PROJECT_KEY);
 }
 
 export function setPasswordChangeRequired(required: boolean) {
     if (typeof window === "undefined") return;
-    localStorage.setItem(PASSWORD_CHANGE_REQUIRED_KEY, required ? "true" : "false");
+    safeSetItem(PASSWORD_CHANGE_REQUIRED_KEY, required ? "true" : "false");
 }
 
 export function isPasswordChangeRequired(): boolean {
     if (typeof window === "undefined") return false;
-    return localStorage.getItem(PASSWORD_CHANGE_REQUIRED_KEY) === "true";
+    return safeGetItem(PASSWORD_CHANGE_REQUIRED_KEY) === "true";
 }
 
 export function clearSession() {
     if (typeof window === "undefined") return;
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(PROJECT_KEY);
-    localStorage.removeItem(PASSWORD_CHANGE_REQUIRED_KEY);
+    safeRemoveItem(ACCESS_TOKEN_KEY);
+    safeRemoveItem(REFRESH_TOKEN_KEY);
+    safeRemoveItem(PROJECT_KEY);
+    safeRemoveItem(PASSWORD_CHANGE_REQUIRED_KEY);
 }
 
 // Deprecated: kept for backward compatibility

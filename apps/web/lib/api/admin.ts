@@ -70,6 +70,15 @@ export interface ProductPromptTemplatesDto {
     reviewSystem: string;
 }
 
+export interface PromptTaskSettingDto {
+    enabled: boolean;
+    provider: string;
+    model: string;
+    temperature: number;
+    maxCompletionTokens: number;
+    systemTemplate: string;
+}
+
 export interface ProductInjectionsDto {
     headHtml: string;
     headerHtml: string;
@@ -113,10 +122,130 @@ export interface ProductNginxDto {
 
 export interface ProductGovernanceDto {
     promptTemplates: ProductPromptTemplatesDto;
+    promptTaskSettings?: Record<string, PromptTaskSettingDto>;
     injections: ProductInjectionsDto;
     cookieBanner?: ProductCookieBannerDto;
     legal?: ProductLegalDto;
     nginx: ProductNginxDto;
+}
+
+export interface AdminLlmModelDto {
+    id: string;
+    provider: string;
+    role: string;
+    capabilities: string[];
+    isDefault: boolean;
+    isFallback: boolean;
+    isActive: boolean;
+    displayName?: string;
+    description?: string;
+    promptTemplate?: string;
+    focusPromptTemplate?: string;
+    priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
+    priceInputUsdPerM?: number;
+    priceOutputUsdPerM?: number;
+}
+
+export interface AdminLlmProviderDto {
+    provider: string;
+    baseUrl: string;
+    apiType?: "openai-compatible" | "anthropic-compatible" | "custom";
+    authType?: "api-key" | "bearer" | "none";
+    isActive: boolean;
+    models: AdminLlmModelDto[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface AdminLlmRegistryDto {
+    source: string;
+    providers: AdminLlmProviderDto[];
+}
+
+export interface AdminPresetRecommendedModelDto {
+    provider: string;
+    modelId: string;
+    label?: string;
+}
+
+export interface AdminProjectPresetDto {
+    id: string;
+    label: string;
+    labelIt: string;
+    labelEn: string;
+    hint: string;
+    icon: string;
+    category?: string;
+    categoryLabel?: string;
+    categoryHint?: string;
+    tags?: string[];
+    sortOrder?: number;
+    isActive?: boolean;
+    scope?: "global" | "user" | "project";
+    status?: "draft" | "pending_review" | "published" | "archived";
+    ownerUserId?: string;
+    recommendedModel?: AdminPresetRecommendedModelDto;
+    outputSpec: {
+        pageModel: "single_page" | "multi_page" | "slide_deck" | "print_a4";
+        sectionModel: "scroll" | "paginated" | "masonry" | "stepped_form";
+        recommendedPageCount?: number;
+        aspectRatio?: "16:9" | "4:3" | "A4_portrait" | "A4_landscape" | "free";
+        cssConstraints?: string;
+        printReady: boolean;
+        systemPromptModule: string;
+    };
+    defaultTags: {
+        visualTags?: string[];
+        paletteTags?: string[];
+        typographyTags?: string[];
+        layoutTags?: string[];
+        toneTags?: string[];
+        featureTags?: string[];
+        audienceTags?: string[];
+    };
+    briefTemplate: string;
+    styleTemplate: string;
+    briefGuideQuestions: string[];
+}
+
+export interface AdminPresetRegistryDto {
+    source: string;
+    presets: AdminProjectPresetDto[];
+}
+
+export interface AdminDraftProjectTemplateInput {
+    instructions: string;
+    category?: string;
+    labelHint?: string;
+    existingDraft?: Partial<AdminProjectPresetDto>;
+}
+
+export interface AdminDraftProjectTemplateResult {
+    draft: Partial<AdminProjectPresetDto>;
+    provider: string;
+    model: string;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    costEstimate?: {
+        currency: "EUR";
+        amount: number;
+        breakdown: {
+            tokenCost: number;
+            imageCost: number;
+            videoCost: number;
+        };
+        unitRates: {
+            textEurPer1kTokens: number;
+            imageEurPerAsset: number;
+            videoEurPerAsset: number;
+        };
+        providerCostUsd?: number;
+    };
+    durationMs: number;
+    rawResponse?: string;
 }
 
 export interface AdminDeploymentDto {
@@ -171,6 +300,81 @@ export function updateProductGovernance(
             [productKey]: governancePatch,
         },
     });
+}
+
+export function getAdminLlmRegistry(token: string): Promise<AdminLlmRegistryDto> {
+    return call<AdminLlmRegistryDto>("GET", "/v1/admin/llm-registry", undefined, auth(token));
+}
+
+export function seedAdminLlmRegistry(token: string): Promise<AdminLlmRegistryDto & { ok: boolean; providersUpserted: number; modelsUpserted: number }> {
+    return call("POST", "/v1/admin/llm-registry/seed", {}, auth(token));
+}
+
+export function updateAdminLlmModel(
+    token: string,
+    provider: string,
+    modelId: string,
+    body: Partial<AdminLlmModelDto> & {
+        baseUrl?: string;
+        apiType?: "openai-compatible" | "anthropic-compatible" | "custom";
+        authType?: "api-key" | "bearer" | "none";
+        providerActive?: boolean;
+    }
+): Promise<AdminLlmProviderDto> {
+    return call(
+        "PUT",
+        `/v1/admin/llm-registry/providers/${encodeURIComponent(provider)}/models/${encodeURIComponent(modelId)}`,
+        body,
+        auth(token),
+    );
+}
+
+export function deleteAdminLlmModel(token: string, provider: string, modelId: string): Promise<AdminLlmProviderDto> {
+    return call(
+        "DELETE",
+        `/v1/admin/llm-registry/providers/${encodeURIComponent(provider)}/models/${encodeURIComponent(modelId)}`,
+        undefined,
+        auth(token),
+    );
+}
+
+export function getAdminPresetRegistry(token: string): Promise<AdminPresetRegistryDto> {
+    return call<AdminPresetRegistryDto>("GET", "/v1/admin/preset-registry", undefined, auth(token));
+}
+
+export function seedAdminPresetRegistry(token: string): Promise<AdminPresetRegistryDto & { ok: boolean; upserted: number }> {
+    return call("POST", "/v1/admin/preset-registry/seed", {}, auth(token));
+}
+
+export function updateAdminPreset(
+    token: string,
+    presetId: string,
+    body: Partial<AdminProjectPresetDto>,
+): Promise<AdminProjectPresetDto> {
+    return call(
+        "PUT",
+        `/v1/admin/preset-registry/${encodeURIComponent(presetId)}`,
+        body,
+        auth(token),
+    );
+}
+
+export function deleteAdminPreset(token: string, presetId: string): Promise<{ ok: boolean; presets: AdminProjectPresetDto[] }> {
+    return call(
+        "DELETE",
+        `/v1/admin/preset-registry/${encodeURIComponent(presetId)}`,
+        undefined,
+        auth(token),
+    );
+}
+
+export function draftAdminPreset(token: string, body: AdminDraftProjectTemplateInput): Promise<AdminDraftProjectTemplateResult> {
+    return call(
+        "POST",
+        "/v1/admin/preset-registry/draft",
+        body,
+        auth(token),
+    );
 }
 
 // ── User management ───────────────────────────────────────────────────────────

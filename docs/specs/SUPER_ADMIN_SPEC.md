@@ -229,6 +229,64 @@ SUPERADMIN_PASSWORD=
 
 ---
 
+## Delivery Status Snapshot — 2026-04-15
+
+The superadmin area now includes live governance surfaces for the current template-management wave:
+
+- `/admin/presets` — project-type template model library with category taxonomy, sort order, recommended runtime metadata, and CRUD persistence
+- `/admin/governance` — optimized preprompting controls for template-driven rewriting and runtime rules
+- `/dashboard` start UX now consumes the managed template catalog rather than only a static hardcoded list
+
+### Validation priority versus future additions
+
+For the current UX and end-to-end validation cycle, the only indispensable next activity is:
+
+- visual/authenticated QA of the template-model and preprompt flow in the browser
+
+The following remain useful but **additive**, not blocking:
+
+- drag-and-drop template ordering UX
+- user-private or pending-review template models with superadmin promotion
+- advanced low-level LLM runtime catalog maintenance
+
+## Project-Type Template Model Governance
+
+The current superadmin direction is centered on editable project-type template models.
+
+Each template model should be manageable from the admin side with:
+
+- category and tags
+- short description and start UX copy
+- brief starter template
+- style direction template
+- optimized preprompt module injected into the existing preprompting flow
+- optional suggested runtime hints
+
+The superadmin workflow should support AI-assisted authoring so that a new template model can be drafted from a few human instructions and refined through the optimizer before publication.
+
+The low-level LLM model catalog remains available only as a paused technical track and should not replace this template-first governance model.
+
+## Planned Extension — Prompting Task Governance
+
+The governance model should be extended with a modular prompt-task section for internal AI helper features such as:
+
+- optimize user prompt
+- summarize project brief
+- classify intent
+- describe uploaded assets
+- run content quality checks
+
+Each task should support:
+
+- enable/disable toggle
+- provider selection
+- model selection
+- temperature and max token limits
+- editable system and user templates
+- per-product overrides
+
+This extension is specified in `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` and is designed to be additive, preserving backward compatibility with the existing governance editor.
+
 ## Out of Scope (Future Milestones)
 
 - Limit enforcement in use-cases (billing milestone)

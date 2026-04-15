@@ -40,12 +40,30 @@ const MIME_MAP: Record<string, string> = {
 // Validate publishId: only lowercase alphanumeric, 6-12 chars
 const PUBLISH_ID_RE = /^[a-z0-9]{6,12}$/;
 
-function toDto(d: SiteDeployment) {
-    // Prefer customSlug for subdomain URL so human-readable link is shown when set
+function buildSubdomainUrl(d: SiteDeployment): string | null {
+    const domain = env.PUBLIC_DOMAIN?.trim();
+    if (!domain) return null;
+
+    // Localhost/ports/schemes are not valid wildcard publish domains.
+    // In those cases the safe local URL is the path-based /p/{publishId} route.
+    if (
+        domain.includes(":") ||
+        domain.includes("/") ||
+        /^https?:/i.test(domain) ||
+        domain === "localhost" ||
+        domain.startsWith("localhost.") ||
+        domain.endsWith(".localhost") ||
+        domain === "127.0.0.1"
+    ) {
+        return null;
+    }
+
     const identifier = d.customSlug ?? d.publishId;
-    const subdomainUrl = env.PUBLIC_DOMAIN
-        ? `http://${identifier}.${env.PUBLIC_DOMAIN}`
-        : null;
+    return `https://${identifier}.${domain}`;
+}
+
+function toDto(d: SiteDeployment) {
+    const subdomainUrl = buildSubdomainUrl(d);
     return {
         id: d.id,
         publishId: d.publishId,

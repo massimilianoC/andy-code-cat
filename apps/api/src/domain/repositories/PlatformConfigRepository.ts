@@ -8,7 +8,10 @@ export interface UpdatePlatformConfigInput {
     defaultUserLimits?: Partial<UserLimits>;
     governanceByProduct?: Record<string, Partial<{
         promptTemplates: Partial<ProductGovernanceConfig["promptTemplates"]>;
+        promptTaskSettings: Partial<Record<string, Partial<NonNullable<ProductGovernanceConfig["promptTaskSettings"]>[string]>>>;
         injections: Partial<ProductGovernanceConfig["injections"]>;
+        cookieBanner: Partial<NonNullable<ProductGovernanceConfig["cookieBanner"]>>;
+        legal: Partial<NonNullable<ProductGovernanceConfig["legal"]>>;
         nginx: Partial<ProductGovernanceConfig["nginx"]>;
     }>>;
     updatedByUserId?: string;

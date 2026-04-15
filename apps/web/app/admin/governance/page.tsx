@@ -9,17 +9,40 @@ import {
     type ProductGovernanceDto,
     type PlatformConfigDto,
     type CookieBannerLocaleText,
+    type PromptTaskSettingDto,
 } from "@/lib/api/admin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MonacoCodeEditor } from "@/components/admin/MonacoCodeEditor";
+import { PromptTaskSettingsCard } from "@/components/admin/PromptTaskSettingsCard";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const DEFAULT_PRODUCT_KEY = "default";
+const DEFAULT_PROMPT_TASK_KEY = "optimize_user_prompt";
+const TEMPLATE_DRAFT_TASK_KEY = "draft_template_model";
 const NGINX_RUNTIME_ENABLED = false;
+
+const PROMPT_TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
+    [DEFAULT_PROMPT_TASK_KEY]: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.7,
+        maxCompletionTokens: 1200,
+        systemTemplate: "",
+    },
+    [TEMPLATE_DRAFT_TASK_KEY]: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 1800,
+        systemTemplate: "",
+    },
+};
 
 /** Supported locales shown in the cookie banner and legal pages editors. */
 const LOCALES = [
@@ -35,6 +58,9 @@ const EMPTY_GOVERNANCE: ProductGovernanceDto = {
         generationSystem: "",
         focusedEditSystem: "",
         reviewSystem: "",
+    },
+    promptTaskSettings: {
+        ...PROMPT_TASK_DEFAULTS,
     },
     injections: {
         headHtml: "",
@@ -163,6 +189,15 @@ export default function AdminGovernancePage() {
     function mergeWithEmpty(src: Partial<ProductGovernanceDto>): ProductGovernanceDto {
         return {
             promptTemplates: { ...EMPTY_GOVERNANCE.promptTemplates, ...src.promptTemplates },
+            promptTaskSettings: Object.fromEntries(
+                Object.entries({ ...PROMPT_TASK_DEFAULTS, ...(src.promptTaskSettings ?? {}) }).map(([taskKey, task]) => [
+                    taskKey,
+                    {
+                        ...(PROMPT_TASK_DEFAULTS[taskKey] ?? PROMPT_TASK_DEFAULTS[DEFAULT_PROMPT_TASK_KEY]),
+                        ...task,
+                    },
+                ]),
+            ),
             injections: { ...EMPTY_GOVERNANCE.injections, ...src.injections },
             cookieBanner: { ...EMPTY_GOVERNANCE.cookieBanner, ...src.cookieBanner },
             legal: { ...EMPTY_GOVERNANCE.legal, ...src.legal },
@@ -212,6 +247,25 @@ export default function AdminGovernancePage() {
 
     function setPrompt<K extends keyof ProductGovernanceDto["promptTemplates"]>(key: K, value: string) {
         setGovernance((prev) => ({ ...prev, promptTemplates: { ...prev.promptTemplates, [key]: value } }));
+    }
+
+    function setPromptTaskField<K extends keyof PromptTaskSettingDto>(
+        taskKey: string,
+        key: K,
+        value: PromptTaskSettingDto[K],
+    ) {
+        const defaults = PROMPT_TASK_DEFAULTS[taskKey] ?? PROMPT_TASK_DEFAULTS[DEFAULT_PROMPT_TASK_KEY];
+        setGovernance((prev) => ({
+            ...prev,
+            promptTaskSettings: {
+                ...(prev.promptTaskSettings ?? {}),
+                [taskKey]: {
+                    ...defaults,
+                    ...(prev.promptTaskSettings?.[taskKey] ?? {}),
+                    [key]: value,
+                },
+            },
+        }));
     }
 
     function setNginx<K extends keyof ProductGovernanceDto["nginx"]>(key: K, value: ProductGovernanceDto["nginx"][K]) {
@@ -686,6 +740,22 @@ export default function AdminGovernancePage() {
                                         onChange={(v) => setPrompt("reviewSystem", v)}
                                     />
                                 </div>
+
+                                <PromptTaskSettingsCard
+                                    title="Optimized preprompting"
+                                    description="Controls the rewriting layer that strengthens the user brief before generation, aligned with the active project-type template model rather than raw technical output constraints."
+                                    helperText="Default fallback: SiliconFlow + MiniMax M2.5"
+                                    value={governance.promptTaskSettings?.[DEFAULT_PROMPT_TASK_KEY] ?? PROMPT_TASK_DEFAULTS[DEFAULT_PROMPT_TASK_KEY]}
+                                    onFieldChange={(key, value) => setPromptTaskField(DEFAULT_PROMPT_TASK_KEY, key, value)}
+                                />
+
+                                <PromptTaskSettingsCard
+                                    title="AI template drafter"
+                                    description="Reusable service task for superadmin-side creation and refinement of project-type template models from short natural-language instructions."
+                                    helperText="This powers dedicated admin authoring flows without introducing a separate prompting stack."
+                                    value={governance.promptTaskSettings?.[TEMPLATE_DRAFT_TASK_KEY] ?? PROMPT_TASK_DEFAULTS[TEMPLATE_DRAFT_TASK_KEY]}
+                                    onFieldChange={(key, value) => setPromptTaskField(TEMPLATE_DRAFT_TASK_KEY, key, value)}
+                                />
                             </CardContent>
                         </Card>
                     </>

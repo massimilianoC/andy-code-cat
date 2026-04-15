@@ -64,8 +64,18 @@ export const llmPromptConfigSchema = z.object({
     prePromptTemplate: z.string().min(10).max(50000),
 });
 
+export const optimizePromptSchema = z.object({
+    rawPrompt: z.string().min(1).max(20000),
+    assetIds: z.array(z.string().min(1).max(120)).max(12).optional(),
+    conversationId: z.string().min(1).max(120).optional(),
+    sessionId: z.string().min(1).max(120).optional(),
+    provider: z.string().min(1).max(80).optional(),
+    model: z.string().min(1).max(200).optional(),
+});
+
 export type LlmChatPreviewInput = z.infer<typeof llmChatPreviewSchema>;
 export type LlmPromptConfigInput = z.infer<typeof llmPromptConfigSchema>;
+export type OptimizePromptInput = z.infer<typeof optimizePromptSchema>;
 
 export interface LlmStructuredArtifacts {
     html: string;
@@ -147,6 +157,44 @@ export interface LlmPromptConfigDto {
     prePromptTemplate: string;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface OptimizePromptResult {
+    taskKey: string;
+    optimizedPrompt: string;
+    provider: string;
+    model: string;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    costEstimate?: {
+        currency: "EUR";
+        amount: number;
+        breakdown: {
+            tokenCost: number;
+            imageCost: number;
+            videoCost: number;
+        };
+        unitRates: {
+            textEurPer1kTokens: number;
+            imageEurPerAsset: number;
+            videoEurPerAsset: number;
+        };
+        providerCostUsd?: number;
+    };
+    durationMs: number;
+    skipped?: boolean;
+    rawResponse?: string;
+    finishReason?: string;
+    promptingTrace?: LlmPromptingTrace;
+}
+
+export interface PromptUsageSummaryResult {
+    totalCost: number;
+    totalTokens: number;
+    runs: number;
 }
 
 export interface LlmChatPreviewResult {

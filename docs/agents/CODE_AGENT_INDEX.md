@@ -11,7 +11,8 @@
 7. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
 8. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
 9. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 9 typed presets with `outputSpec` and `systemPromptModule`
-10. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
+10. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
+11. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
 
 ---
 

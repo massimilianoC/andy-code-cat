@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, LayoutTemplate, Files, FileImage, Presentation, FormInput, GalleryVertical, RectangleEllipsis, Plus } from "lucide-react";
+import { Sparkles, LayoutTemplate, Files, FileImage, Presentation, FormInput, GalleryVertical, RectangleEllipsis, Plus, BarChart3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
     listProjects,
@@ -10,8 +10,10 @@ import {
     deleteProject,
     duplicateProject,
     getLlmPromptConfig,
+    getPresets,
     ApiError,
     type Project,
+    type ProjectPreset,
 } from "../../lib/api";
 import { getToken, clearSession, isPasswordChangeRequired, getRoles } from "../../lib/token-store";
 import { PasswordChangeDialog } from "../../components/PasswordChangeDialog";
@@ -34,17 +36,17 @@ import {
 const RECENT_KEY = "pf_recent_projects";
 const MAX_RECENTS = 3;
 
-const PROJECT_PRESET_IDS = [
-    { id: "neutral", icon: Sparkles },
-    { id: "landing", icon: LayoutTemplate },
-    { id: "website", icon: Files },
-    { id: "form", icon: FormInput },
-    { id: "manifesto", icon: RectangleEllipsis },
-    { id: "slideshow", icon: Presentation },
-    { id: "keynote", icon: GalleryVertical },
-    { id: "a4poster", icon: FileImage },
-    { id: "infographic", icon: Sparkles },
-];
+const PRESET_ICON_MAP = {
+    Sparkles,
+    LayoutTemplate,
+    Files,
+    FileImage,
+    Presentation,
+    FormInput,
+    GalleryVertical,
+    RectangleEllipsis,
+    BarChart3,
+} as const;
 
 function getRecentIds(): string[] {
     try {
@@ -70,6 +72,8 @@ export default function DashboardPage() {
     const [createOpen, setCreateOpen] = useState(false);
     const [creating, setCreating] = useState(false);
     const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>(undefined);
+    const [presetCatalog, setPresetCatalog] = useState<ProjectPreset[]>([]);
+    const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>("all");
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
     const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
     const [canAccessSuperadmin, setCanAccessSuperadmin] = useState(false);
@@ -89,6 +93,7 @@ export default function DashboardPage() {
         setPasswordChangeRequiredState(isPasswordChangeRequired());
         setCheckingAuth(false);
         void load(tok);
+        void getPresets().then((res) => setPresetCatalog(res.presets ?? [])).catch(() => undefined);
     }, [router]);
 
     useEffect(() => {
@@ -196,6 +201,36 @@ export default function DashboardPage() {
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
+    const selectedPresetLabel = presetCatalog.find((preset) => preset.id === selectedPresetId)?.labelIt;
+    const blankPreset = presetCatalog.find((preset) => preset.id === "neutral");
+    const activePresets = presetCatalog
+        .filter((preset) => preset.id !== "neutral" && preset.isActive !== false)
+        .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+
+    const seenCategories = new Map<string, { key: string; label: string; hint: string }>();
+    for (const preset of activePresets) {
+        const key = preset.category ?? "custom";
+        if (!seenCategories.has(key)) {
+            seenCategories.set(key, {
+                key,
+                label: preset.categoryLabel ?? "Custom",
+                hint: preset.categoryHint ?? "",
+            });
+        }
+    }
+    const presetCategories = [...seenCategories.values()];
+
+    const filteredPresets = presetCategoryFilter === "all"
+        ? activePresets
+        : activePresets.filter((preset) => (preset.category ?? "custom") === presetCategoryFilter);
+
+    const groupedPresets = presetCategories
+        .map((category) => ({
+            ...category,
+            presets: filteredPresets.filter((preset) => (preset.category ?? "custom") === category.key),
+        }))
+        .filter((group) => group.presets.length > 0);
+
     return (
         <div className="min-h-screen bg-background flex flex-col">
             {token ? (
@@ -250,31 +285,101 @@ export default function DashboardPage() {
                 </section>
 
                 {/* Preset section */}
-                <section className="mb-16">
-                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-5">
-                        {t("dashboard.presets.title")}
-                    </h2>
-                    <div className="grid grid-cols-3 gap-4">
-                        {PROJECT_PRESET_IDS.map(({ id, icon: Icon }) => {
-                            const label = t(`presets.${id}.label`);
-                            const hint = t(`presets.${id}.hint`);
-                            return (
+                <section className="mb-16 space-y-5">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                        <div>
+                            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                {t("dashboard.presets.title")}
+                            </h2>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Libreria ordinata per categoria, con preset vuoto e modello consigliato quando disponibile.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant={presetCategoryFilter === "all" ? "default" : "outline"}
+                                onClick={() => setPresetCategoryFilter("all")}
+                            >
+                                Tutti
+                            </Button>
+                            {presetCategories.map((category) => (
                                 <Button
-                                    key={id}
-                                    variant="outline"
-                                    className="h-auto min-h-28 p-5 flex flex-col items-start justify-start gap-3 text-left"
-                                    onClick={() => handleCreateFromPreset(id, label)}
+                                    key={category.key}
+                                    type="button"
+                                    size="sm"
+                                    variant={presetCategoryFilter === category.key ? "default" : "outline"}
+                                    onClick={() => setPresetCategoryFilter(category.key)}
                                 >
-                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                        <Icon className="h-4 w-4 text-primary" />
-                                    </div>
-                                    <div>
-                                        <div className="text-sm font-semibold text-foreground leading-tight">{label}</div>
-                                        <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{hint}</div>
-                                    </div>
+                                    {category.label}
                                 </Button>
-                            );
-                        })}
+                            ))}
+                        </div>
+                    </div>
+
+                    {blankPreset ? (
+                        <Button
+                            variant="outline"
+                            className="w-full h-auto min-h-24 p-5 flex flex-col items-start justify-start gap-2 text-left border-dashed"
+                            onClick={() => handleCreateFromPreset(blankPreset.id, blankPreset.labelIt || blankPreset.label)}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                    <Sparkles className="h-4 w-4 text-primary" />
+                                </div>
+                                <div>
+                                    <div className="text-sm font-semibold text-foreground leading-tight">{blankPreset.labelIt || blankPreset.label}</div>
+                                    <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{blankPreset.hint}</div>
+                                </div>
+                            </div>
+                        </Button>
+                    ) : null}
+
+                    <div className="space-y-6">
+                        {groupedPresets.map((group) => (
+                            <div key={group.key} className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <h3 className="text-sm font-semibold text-foreground">{group.label}</h3>
+                                    {group.hint ? <span className="text-xs text-muted-foreground">{group.hint}</span> : null}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                    {group.presets.map((preset) => {
+                                        const Icon = PRESET_ICON_MAP[preset.icon as keyof typeof PRESET_ICON_MAP] ?? Sparkles;
+                                        return (
+                                            <Button
+                                                key={preset.id}
+                                                variant="outline"
+                                                className="h-auto min-h-32 p-5 flex flex-col items-start justify-start gap-3 text-left"
+                                                onClick={() => handleCreateFromPreset(preset.id, preset.labelIt || preset.label)}
+                                            >
+                                                <div className="flex items-start justify-between w-full gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                                        <Icon className="h-4 w-4 text-primary" />
+                                                    </div>
+                                                    {preset.recommendedModel?.label ? (
+                                                        <Badge variant="secondary" className="text-[10px]">
+                                                            {preset.recommendedModel.label}
+                                                        </Badge>
+                                                    ) : null}
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-semibold text-foreground leading-tight">{preset.labelIt || preset.label}</div>
+                                                    <div className="text-xs text-muted-foreground mt-1 leading-snug">{preset.hint}</div>
+                                                </div>
+                                                {preset.tags?.length ? (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {preset.tags.slice(0, 3).map((tag) => (
+                                                            <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
+                                            </Button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </section>
 
@@ -325,7 +430,7 @@ export default function DashboardPage() {
                         <DialogTitle>{t("dashboard.modal.title")}</DialogTitle>
                         <DialogDescription>
                             {selectedPresetId
-                                ? t("dashboard.modal.descPreset", { preset: t(`presets.${selectedPresetId}.label`) })
+                                ? t("dashboard.modal.descPreset", { preset: selectedPresetLabel ?? selectedPresetId })
                                 : t("dashboard.modal.descBlank")}
                         </DialogDescription>
                     </DialogHeader>

@@ -1,6 +1,6 @@
 import type { Collection } from "mongodb";
 import { getDb } from "../db/mongo";
-import type { PlatformConfig } from "../../domain/entities/PlatformConfig";
+import { DEFAULT_PROMPT_TASK_SETTINGS, type PlatformConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository, UpdatePlatformConfigInput } from "../../domain/repositories/PlatformConfigRepository";
 import { DEFAULT_USER_LIMITS } from "../../domain/entities/User";
 
@@ -35,6 +35,9 @@ const DEFAULT_PRODUCT_GOVERNANCE: NonNullable<PlatformConfig["governanceByProduc
         focusedEditSystem: "",
         reviewSystem: "",
     },
+    promptTaskSettings: {
+        ...DEFAULT_PROMPT_TASK_SETTINGS,
+    },
     injections: {
         headHtml: "",
         headerHtml: "",
@@ -46,6 +49,17 @@ const DEFAULT_PRODUCT_GOVERNANCE: NonNullable<PlatformConfig["governanceByProduc
         googleAnalyticsId: "",
         matomoSiteId: "",
         matomoUrl: "",
+    },
+    cookieBanner: {
+        enabled: false,
+        position: "bottom",
+        texts: {},
+    },
+    legal: {
+        privacyPolicyUrls: {},
+        cookiePolicyUrls: {},
+        privacyPolicyHtml: {},
+        cookiePolicyHtml: {},
     },
     nginx: {
         publicDomain: "",
@@ -98,9 +112,33 @@ export class MongoPlatformConfigRepository implements PlatformConfigRepository {
                         ...base.promptTemplates,
                         ...(patch.promptTemplates ?? {}),
                     },
+                    promptTaskSettings: Object.fromEntries(
+                        Object.entries({ ...DEFAULT_PROMPT_TASK_SETTINGS, ...(base.promptTaskSettings ?? {}), ...(patch.promptTaskSettings ?? {}) }).map(([taskKey, task]) => {
+                            const defaults = (DEFAULT_PROMPT_TASK_SETTINGS[taskKey] ?? DEFAULT_PROMPT_TASK_SETTINGS.optimize_user_prompt)!;
+                            return [
+                                taskKey,
+                                {
+                                    enabled: task?.enabled ?? defaults.enabled,
+                                    provider: task?.provider ?? defaults.provider,
+                                    model: task?.model ?? defaults.model,
+                                    temperature: task?.temperature ?? defaults.temperature,
+                                    maxCompletionTokens: task?.maxCompletionTokens ?? defaults.maxCompletionTokens,
+                                    systemTemplate: task?.systemTemplate ?? defaults.systemTemplate,
+                                },
+                            ];
+                        }),
+                    ),
                     injections: {
                         ...base.injections,
                         ...(patch.injections ?? {}),
+                    },
+                    cookieBanner: {
+                        ...(base.cookieBanner ?? { enabled: false, position: "bottom", texts: {} }),
+                        ...(patch.cookieBanner ?? {}),
+                    },
+                    legal: {
+                        ...(base.legal ?? { privacyPolicyUrls: {}, cookiePolicyUrls: {}, privacyPolicyHtml: {}, cookiePolicyHtml: {} }),
+                        ...(patch.legal ?? {}),
                     },
                     nginx: {
                         ...base.nginx,

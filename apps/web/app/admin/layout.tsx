@@ -9,7 +9,8 @@ const NAV_LINKS = [
     { href: "/admin/users", label: "Users" },
     { href: "/admin/projects", label: "Projects" },
     { href: "/admin/config", label: "Config" },
-    { href: "/admin/governance", label: "Governance" },
+    { href: "/admin/presets", label: "Template Models" },
+    { href: "/admin/governance", label: "Preprompting" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

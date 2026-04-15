@@ -250,7 +250,8 @@ export default function AdminDashboardPage() {
                     <QuickLink href="/admin/users" label="Users" description="Manage accounts, roles, and limits" />
                     <QuickLink href="/admin/projects" label="Projects" description="All projects across all users" />
                     <QuickLink href="/admin/config" label="Config" description="Registration, verification, defaults" />
-                    <QuickLink href="/admin/governance" label="Governance" description="Prompts, injections, runtime, legal" />
+                    <QuickLink href="/admin/presets" label="Template Models" description="Project-type templates, categories, and start UX" />
+                    <QuickLink href="/admin/governance" label="Preprompting" description="Optimized preprompt layers, legal, and runtime rules" />
                 </div>
             </div>
         </div>

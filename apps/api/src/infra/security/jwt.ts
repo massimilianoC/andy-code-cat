@@ -4,6 +4,30 @@ import { env } from "../../config";
 const accessTokenTtl = env.JWT_ACCESS_TTL as jwt.SignOptions["expiresIn"];
 const refreshTokenTtl = env.JWT_REFRESH_TTL as jwt.SignOptions["expiresIn"];
 
+function throwUnauthorizedTokenError(error: unknown, userMessage: string): never {
+    const normalizedError = new Error(userMessage) as Error & {
+        statusCode?: number;
+        code?: string;
+        userMessage?: string;
+        details?: unknown;
+    };
+
+    normalizedError.statusCode = 401;
+    normalizedError.userMessage = userMessage;
+
+    if (error instanceof Error && error.name === "TokenExpiredError") {
+        normalizedError.code = "TOKEN_EXPIRED";
+    } else {
+        normalizedError.code = "INVALID_TOKEN";
+    }
+
+    normalizedError.details = error instanceof Error
+        ? { name: error.name, message: error.message }
+        : undefined;
+
+    throw normalizedError;
+}
+
 export interface AccessTokenPayload {
     sub: string;
     roles: string[];
@@ -28,9 +52,17 @@ export function signRefreshToken(payload: RefreshTokenPayload): string {
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
-    return jwt.verify(token, env.JWT_ACCESS_SECRET) as AccessTokenPayload;
+    try {
+        return jwt.verify(token, env.JWT_ACCESS_SECRET) as AccessTokenPayload;
+    } catch (error) {
+        return throwUnauthorizedTokenError(error, "Invalid access token");
+    }
 }
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
-    return jwt.verify(token, env.JWT_REFRESH_SECRET) as RefreshTokenPayload;
+    try {
+        return jwt.verify(token, env.JWT_REFRESH_SECRET) as RefreshTokenPayload;
+    } catch (error) {
+        return throwUnauthorizedTokenError(error, "Invalid refresh token");
+    }
 }

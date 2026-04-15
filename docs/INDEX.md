@@ -36,6 +36,7 @@ Coding agents should read in this order before making changes:
 | Document | Description |
 |---|---|
 | [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Testable steps per milestone (M0 baseline → M5) |
+| [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Non-invasive production hardening plan and deploy best practices |
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker setup (dev and deploy mode) |
 | [docs/guides/AGENT_RELEASE_CHECKLIST.md](guides/AGENT_RELEASE_CHECKLIST.md) | Checklist for agents handling branch, commit, merge, release, and hotfix flows |
 | [docs/guides/GITFLOW_RELEASE_POLICY.md](guides/GITFLOW_RELEASE_POLICY.md) | Gitflow branch semantics, release flow, and `RELEASE_VERSION` policy |
@@ -73,6 +74,8 @@ Coding agents should read in this order before making changes:
 | [PRESET_TYPED_SPECS.md](specs/PRESET_TYPED_SPECS.md) | Typed preset catalog, output spec, modular prompt architecture |
 | [SECTION_CONTEXT_OPT_SPEC.md](specs/SECTION_CONTEXT_OPT_SPEC.md) | Section-aware context optimization (40-60% token reduction) |
 | [PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX — inline enrichment, undo buffer, rate limiting |
+| [PROMPTING_SERVICE_PLATFORM_SPEC.md](specs/PROMPTING_SERVICE_PLATFORM_SPEC.md) | Reusable internal prompting platform — task registry, admin-configurable models/templates, dedicated audit logs |
+| [ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md](specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md) | Low-impact plan for using project assets, links, documents, screenshots, and vision summaries in prompt optimization |
 | [BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | BaaS layer — forms, payments, webhooks, SDK |
 | [RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot for landing pages — BYOK, document ingestion, vanilla JS widget |
 | [MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-provider, multi-model platform playbook |
@@ -84,5 +87,7 @@ Coding agents should read in this order before making changes:
 
 | Document | Description |
 |---|---|
-| [SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Admin governance flow: per-product prompt templates, global HTML/JS injections, and nginx runtime knobs |
+| [SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Admin governance flow: per-product prompt templates, global HTML/JS injections, nginx runtime knobs, and live registries for presets/models |
 | [governance/PLATFORM_GOVERNANCE_POLICY.md](governance/PLATFORM_GOVERNANCE_POLICY.md) | Shared English policy for governance ownership, approval model, rollout boundaries, and audit expectations |
+
+> Runtime control surfaces now include both [apps/web/app/admin/models/page.tsx](../apps/web/app/admin/models/page.tsx) and [apps/web/app/admin/presets/page.tsx](../apps/web/app/admin/presets/page.tsx), backed by Mongo registries with static TypeScript fallbacks.
