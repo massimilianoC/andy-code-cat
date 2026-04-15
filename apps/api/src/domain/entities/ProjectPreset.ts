@@ -153,6 +153,54 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         sortOrder: 80,
         recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "High impact" },
     },
+    videogame: {
+        category: "game-xr",
+        categoryLabel: "Game & XR",
+        categoryHint: "Playable experiences",
+        tags: ["game", "interactive", "arcade"],
+        sortOrder: 90,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Gameplay-first" },
+    },
+    freerunner: {
+        category: "game-xr",
+        categoryLabel: "Game & XR",
+        categoryHint: "Playable experiences",
+        tags: ["runner", "arcade", "mobile"],
+        sortOrder: 100,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Arcade flow" },
+    },
+    seriousgame: {
+        category: "game-xr",
+        categoryLabel: "Game & XR",
+        categoryHint: "Playable experiences",
+        tags: ["learning", "simulation", "training"],
+        sortOrder: 110,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Learning UX" },
+    },
+    game3d: {
+        category: "game-xr",
+        categoryLabel: "Game & XR",
+        categoryHint: "Playable experiences",
+        tags: ["3d", "interaction", "scene"],
+        sortOrder: 120,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Immersive scene" },
+    },
+    "vr-aframe": {
+        category: "game-xr",
+        categoryLabel: "Game & XR",
+        categoryHint: "Playable experiences",
+        tags: ["vr", "aframe", "immersive"],
+        sortOrder: 130,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "VR scene" },
+    },
+    "interactive-story": {
+        category: "game-xr",
+        categoryLabel: "Game & XR",
+        categoryHint: "Playable experiences",
+        tags: ["story", "branching", "narrative"],
+        sortOrder: 140,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Narrative flow" },
+    },
 };
 
 function withPresetMeta(preset: ProjectPreset): ProjectPreset {
@@ -660,6 +708,203 @@ Pensa come un art director: impatto visivo → chiarezza → completezza.`,
             "Hai dati numerici o statistiche da visualizzare?",
             "È una sequenza narrativa (processo/timeline) o una panoramica comparativa?",
             "Hai icone o visual di brand da incorporare?",
+        ],
+    },
+
+    // ── VIDEOGAME EXPERIENCE ──
+    {
+        id: "videogame",
+        label: "Videogame Experience", labelIt: "Videogioco", labelEn: "Videogame Experience",
+        hint: "Esperienza giocabile browser-first con HUD e loop chiaro",
+        icon: "Gamepad2",
+        outputSpec: {
+            pageModel: 'single_page',
+            sectionModel: 'scroll',
+            printReady: false,
+            systemPromptModule: `FORMATO OUTPUT — VIDEOGAME WEB:
+Crea una vera esperienza giocabile browser-first in HTML/CSS/JS.
+STRUTTURA RICHIESTA:
+1. Start screen con titolo, obiettivo e bottone Play.
+2. Game area principale con canvas o stage dedicato.
+3. HUD visibile con score, vite/energia, timer o progresso.
+4. Feedback immediato su collisioni, premi, game over e restart.
+5. Supporto minimo keyboard + touch.
+Usa meccaniche semplici ma complete. Nessun backend richiesto. Il gioco deve essere eseguibile subito nel browser.`,
+        },
+        defaultTags: {
+            visualTags: ["visual:futuristic"],
+            featureTags: ["feature:interactive-preview"],
+            toneTags: ["tone:playful"],
+        },
+        briefTemplate: "Videogioco browser-first per {{projectName}}. Genere: [arcade/platform/puzzle/action]. Obiettivo del giocatore: [...]. Target: [...].",
+        styleTemplate: "HUD chiaro, contrasto alto, feedback rapidi, esperienza immediata da giocare.",
+        briefGuideQuestions: [
+            "Qual è il core loop di gioco da ripetere in pochi secondi?",
+            "Qual è la condizione di vittoria o il punteggio massimo desiderato?",
+            "Il gioco è pensato per desktop, mobile o entrambi?",
+        ],
+    },
+
+    // ── FREE RUNNER ──
+    {
+        id: "freerunner",
+        label: "Free Runner", labelIt: "Free Runner", labelEn: "Free Runner",
+        hint: "Runner arcade con ostacoli, progressione e retry immediato",
+        icon: "Zap",
+        outputSpec: {
+            pageModel: 'single_page',
+            sectionModel: 'scroll',
+            printReady: false,
+            systemPromptModule: `FORMATO OUTPUT — FREE RUNNER:
+Costruisci un endless runner o free runner leggero per browser.
+VINCOLI:
+- Il personaggio si muove automaticamente avanti.
+- Il giocatore può saltare, scivolare o cambiare corsia.
+- Ostacoli leggibili, incremento progressivo della difficoltà.
+- Score persistente solo in memoria locale del browser.
+- Restart rapido e onboarding minimo.
+Preferisci codice semplice, performance fluide e controlli molto reattivi.`,
+        },
+        defaultTags: {
+            visualTags: ["visual:bold"],
+            layoutTags: ["layout:hero-first"],
+            toneTags: ["tone:energetic"],
+        },
+        briefTemplate: "Free runner per {{projectName}}. Ambientazione: [...]. Ostacoli principali: [...]. Reward loop: [...].",
+        styleTemplate: "Velocità percepita alta, UI minimale, colori energici e leggibilità ottima.",
+        briefGuideQuestions: [
+            "Qual è l'ambientazione del percorso?",
+            "Quali azioni può fare il personaggio oltre al salto?",
+            "Vuoi missioni, monete o puro high-score?",
+        ],
+    },
+
+    // ── SERIOUS GAME ──
+    {
+        id: "seriousgame",
+        label: "Serious Game", labelIt: "Serious Game", labelEn: "Serious Game",
+        hint: "Esperienza educativa o formativa con feedback e obiettivi",
+        icon: "GraduationCap",
+        outputSpec: {
+            pageModel: 'single_page',
+            sectionModel: 'scroll',
+            printReady: false,
+            systemPromptModule: `FORMATO OUTPUT — SERIOUS GAME:
+Progetta un'esperienza interattiva educativa o di training.
+INCLUDI:
+1. Obiettivo didattico o comportamentale esplicito.
+2. Meccanica di gioco semplice (quiz, simulazione, scelta, drag/drop o task guidato).
+3. Feedback formativo dopo ogni azione.
+4. Riepilogo finale con risultato e consigli di miglioramento.
+Il divertimento deve sostenere l'apprendimento, non distrarlo.`,
+        },
+        defaultTags: {
+            toneTags: ["tone:helpful-supportive"],
+            audienceTags: ["audience:students"],
+        },
+        briefTemplate: "Serious game per {{projectName}}. Obiettivo formativo: [...]. Pubblico: [...]. Scenario o simulazione: [...].",
+        styleTemplate: "Chiarezza prima di tutto, interazione guidata, tono coinvolgente ma affidabile.",
+        briefGuideQuestions: [
+            "Quale competenza o messaggio deve apprendere l'utente?",
+            "Come misuriamo progresso o completamento?",
+            "Serve una simulazione, un quiz o una missione interattiva?",
+        ],
+    },
+
+    // ── 3D GAME ──
+    {
+        id: "game3d",
+        label: "3D Game", labelIt: "Gioco 3D", labelEn: "3D Game",
+        hint: "Scena interattiva pseudo-3D o 3D leggera per il web",
+        icon: "Box",
+        outputSpec: {
+            pageModel: 'single_page',
+            sectionModel: 'scroll',
+            printReady: false,
+            systemPromptModule: `FORMATO OUTPUT — GIOCO 3D WEB:
+Crea una demo giocabile con resa 3D leggera o pseudo-3D adatta al browser.
+REGOLE:
+- Nessuna pipeline complessa o build tool esterni.
+- Prediligi canvas, CSS transforms o librerie CDN leggere solo se davvero utili.
+- Introduci camera, scena, obiettivi chiari e controlli base.
+- Mantieni asset placeholder e geometrie semplici per stabilità e performance.
+L'obiettivo è un prototipo interattivo immediato, non un engine completo.`,
+        },
+        defaultTags: {
+            visualTags: ["visual:futuristic"],
+            toneTags: ["tone:playful"],
+        },
+        briefTemplate: "Gioco 3D browser-based per {{projectName}}. Meccanica: [...]. Camera/scene: [...]. Mood: [...].",
+        styleTemplate: "Immersivo ma leggero, leggibilità alta, interazioni fluide e asset minimali.",
+        briefGuideQuestions: [
+            "Qual è la meccanica 3D principale?",
+            "Vuoi esplorazione, corsa, raccolta oggetti o shooting leggero?",
+            "Quanto deve essere realistico vs stilizzato?",
+        ],
+    },
+
+    // ── VR A-FRAME ──
+    {
+        id: "vr-aframe",
+        label: "VR A-Frame", labelIt: "VR Experience A-Frame", labelEn: "VR Experience A-Frame",
+        hint: "Esperienza immersiva web VR pronta per A-Frame",
+        icon: "Glasses",
+        outputSpec: {
+            pageModel: 'single_page',
+            sectionModel: 'scroll',
+            printReady: false,
+            systemPromptModule: `FORMATO OUTPUT — VR EXPERIENCE CON A-FRAME:
+Genera una pagina con una scena VR A-Frame funzionante via CDN.
+OBBLIGATORIO:
+- Usa <a-scene> con asset minimi e componenti chiari.
+- Camera, cursore/gaze o controller-friendly fallback.
+- 1 esperienza immersiva precisa: showroom, mini gioco, tour, installazione o exhibit.
+- Overlay iniziale con istruzioni e bottone Enter VR.
+- Fallback desktop/mobile se la modalità VR non è disponibile.
+La scena deve restare ordinata, stabile e subito navigabile.`,
+        },
+        defaultTags: {
+            visualTags: ["visual:futuristic"],
+            featureTags: ["feature:interactive-preview"],
+        },
+        briefTemplate: "Esperienza VR A-Frame per {{projectName}}. Scenario: [...]. Interazioni: [...]. Utente finale: [...].",
+        styleTemplate: "Immersione, chiarezza dei punti di interesse, onboarding semplice e atmosfera forte.",
+        briefGuideQuestions: [
+            "Si tratta di un tour, un mini-game o uno showroom immersivo?",
+            "Quali hotspot o interazioni devono essere presenti?",
+            "Qual è il device target principale: desktop, mobile VR o visore?",
+        ],
+    },
+
+    // ── INTERACTIVE STORY ──
+    {
+        id: "interactive-story",
+        label: "Interactive Story", labelIt: "Storia interattiva", labelEn: "Interactive Story",
+        hint: "Narrativa a scelte, scene e bivi con forte atmosfera",
+        icon: "BookOpenText",
+        outputSpec: {
+            pageModel: 'single_page',
+            sectionModel: 'paginated',
+            printReady: false,
+            systemPromptModule: `FORMATO OUTPUT — STORIA INTERATTIVA:
+Crea un'esperienza narrativa a bivi giocabile nel browser.
+INCLUDI:
+- Intro breve con contesto e tono.
+- Scene successive con 2-4 scelte per volta.
+- Stato minimo del giocatore (energia, reputazione, oggetti o progresso).
+- Finali multipli o checkpoint narrativi.
+Privilegia atmosfera, leggibilità e ritmo. Ogni scelta deve produrre un effetto chiaro.`,
+        },
+        defaultTags: {
+            toneTags: ["tone:inspirational"],
+            featureTags: ["feature:interactive-preview"],
+        },
+        briefTemplate: "Storia interattiva per {{projectName}}. Ambientazione: [...]. Protagonista: [...]. Scelte principali: [...].",
+        styleTemplate: "Mood forte, leggibilità ottima, transizioni morbide e focus sulla narrazione.",
+        briefGuideQuestions: [
+            "Qual è il tono della storia: fantasy, sci-fi, educational, horror leggero?",
+            "Quali scelte cambiano davvero l'esito?",
+            "Vuoi un finale unico o multipli finali?",
         ],
     },
 ];

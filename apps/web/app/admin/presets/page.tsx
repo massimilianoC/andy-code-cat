@@ -233,7 +233,7 @@ export default function AdminPresetsPage() {
             <div>
                 <h1 className="text-[1.375rem] font-bold text-foreground mb-1">Project Template Models</h1>
                 <p className="text-sm text-muted-foreground max-w-4xl">
-                    This is the main superadmin surface for the project-type template models discussed in chat: layout, landing, website, keynote, casual game, serious game, 3D game, VR game with A-Frame, A4 onepager, poster 70×100, and other future categories.
+                    Main superadmin surface for project-type template models: landing, website, videogame, free runner, serious game, 3D game, VR with A-Frame, onepager, posters, presentations, and future families.
                 </p>
             </div>
 
@@ -247,7 +247,7 @@ export default function AdminPresetsPage() {
                 <CardHeader>
                     <CardTitle className="text-base">Template Model Source</CardTitle>
                     <CardDescription className="text-xs">
-                        Source: {source.toUpperCase()}. Seed from TypeScript to bootstrap the editable catalog of project-type template models.
+                        Source: {source.toUpperCase()}. Sync imports or updates the starter catalog in Mongo without resetting the existing database.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-3 items-center">
@@ -302,14 +302,14 @@ export default function AdminPresetsPage() {
                 <div className="space-y-6">
                     <PromptWorkbenchPanel
                         title="AI Template Workbench"
-                        description="Reusable frontend tool for specialized prompting tasks. Use a few instructions to draft or refine the current project-type template model."
-                        editorLabel="Admin instructions"
+                        description="Draft assistant for the current template model. Write a short brief, run it, and the generated draft is applied automatically to the fields below for review and save."
+                        editorLabel="Draft instructions"
                         value={assistantInstructions}
                         onChange={setAssistantInstructions}
                         onRun={() => void handleAiDraft()}
-                        runLabel="Generate AI draft"
+                        runLabel="Apply AI draft to form"
                         running={assistantBusy}
-                        helperText="Useful for new families such as casual game, serious game, 3D game, VR with A-Frame, onepager A4, or poster 70×100."
+                        helperText="This is a guided bozza editor: no manual copy-paste is required. Example: neon free runner mobile-first, or VR museum experience in A-Frame for education."
                         statusText={assistantStatus}
                     />
 

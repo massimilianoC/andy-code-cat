@@ -118,12 +118,13 @@ export class MongoProjectPresetRepository implements ProjectPresetRepository {
         const collection = await this.collection();
         const existing = await collection.findOne({ id: preset.id });
         const normalized = normalizePreset(preset, existing);
+        const { createdAt, ...mutableFields } = normalized;
 
         await collection.updateOne(
             { id: normalized.id },
             {
-                $set: normalized,
-                $setOnInsert: { createdAt: normalized.createdAt },
+                $set: mutableFields,
+                $setOnInsert: { createdAt },
             },
             { upsert: true },
         );
