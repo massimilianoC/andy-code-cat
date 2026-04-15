@@ -42,6 +42,12 @@ export interface PresetTagDefaults {
     audienceTags?: string[];
 }
 
+export interface PresetRecommendedModel {
+    provider: string;
+    modelId: string;
+    label?: string;
+}
+
 export interface ProjectPreset {
     id: string;
     label: string;
@@ -49,6 +55,18 @@ export interface ProjectPreset {
     labelEn: string;
     hint: string;
     icon: string;
+
+    /** Optional governance/catalog metadata for persisted preset management. */
+    category?: string;
+    categoryLabel?: string;
+    categoryHint?: string;
+    tags?: string[];
+    sortOrder?: number;
+    isActive?: boolean;
+    scope?: "global" | "user" | "project";
+    status?: "draft" | "pending_review" | "published" | "archived";
+    ownerUserId?: string;
+    recommendedModel?: PresetRecommendedModel;
 
     outputSpec: PresetOutputSpec;
     defaultTags: PresetTagDefaults;
@@ -63,9 +81,99 @@ export interface ProjectPreset {
     briefGuideQuestions: string[];
 }
 
+const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
+    neutral: {
+        category: "blank",
+        categoryLabel: "Blank",
+        categoryHint: "Start clean",
+        tags: ["blank", "freeform"],
+        sortOrder: 0,
+    },
+    landing: {
+        category: "web",
+        categoryLabel: "Web",
+        categoryHint: "Sites & forms",
+        tags: ["conversion", "lead-gen", "cta"],
+        sortOrder: 10,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Fast start" },
+    },
+    website: {
+        category: "web",
+        categoryLabel: "Web",
+        categoryHint: "Sites & forms",
+        tags: ["company", "services", "multi-section"],
+        sortOrder: 20,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Balanced" },
+    },
+    form: {
+        category: "web",
+        categoryLabel: "Web",
+        categoryHint: "Sites & forms",
+        tags: ["wizard", "contact", "lead"],
+        sortOrder: 30,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Clear UX" },
+    },
+    manifesto: {
+        category: "print-graphic",
+        categoryLabel: "Print & Graphic",
+        categoryHint: "Poster, print, visual",
+        tags: ["brand", "statement", "editorial"],
+        sortOrder: 40,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Tone-first" },
+    },
+    a4poster: {
+        category: "print-graphic",
+        categoryLabel: "Print & Graphic",
+        categoryHint: "Poster, print, visual",
+        tags: ["a4", "poster", "pdf"],
+        sortOrder: 50,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Print-ready" },
+    },
+    infographic: {
+        category: "print-graphic",
+        categoryLabel: "Print & Graphic",
+        categoryHint: "Poster, print, visual",
+        tags: ["data", "storytelling", "visual"],
+        sortOrder: 60,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Data visual" },
+    },
+    slideshow: {
+        category: "presentation",
+        categoryLabel: "Presentation",
+        categoryHint: "Slides & pitch",
+        tags: ["deck", "pitch", "slides"],
+        sortOrder: 70,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Pitch flow" },
+    },
+    keynote: {
+        category: "presentation",
+        categoryLabel: "Presentation",
+        categoryHint: "Slides & pitch",
+        tags: ["conference", "visual", "impact"],
+        sortOrder: 80,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "High impact" },
+    },
+};
+
+function withPresetMeta(preset: ProjectPreset): ProjectPreset {
+    const meta = PRESET_META_BY_ID[preset.id] ?? {};
+    return {
+        ...preset,
+        ...meta,
+        category: meta.category ?? preset.category ?? "custom",
+        categoryLabel: meta.categoryLabel ?? preset.categoryLabel ?? "Custom",
+        categoryHint: meta.categoryHint ?? preset.categoryHint ?? "",
+        tags: meta.tags ?? preset.tags ?? [],
+        sortOrder: meta.sortOrder ?? preset.sortOrder ?? 999,
+        isActive: preset.isActive ?? true,
+        scope: preset.scope ?? "global",
+        status: preset.status ?? "published",
+    };
+}
+
 // ─── Catalog ─────────────────────────────────────────────────────────────────
 
-export const PRESET_CATALOG: ProjectPreset[] = [
+const RAW_PRESET_CATALOG: ProjectPreset[] = [
 
     // ── NEUTRAL ──
     {
@@ -234,8 +342,8 @@ Contrasto netto tra sfondo e testo. Tono solenne ma energico.`,
     // ── SLIDESHOW ──
     {
         id: "slideshow",
-        label: "Presentazione", labelIt: "Presentazione", labelEn: "Slideshow",
-        hint: "Deck navigabile a slide — esportabile come PDF 16:9",
+        label: "Presentation / Pitch", labelIt: "Presentazione / Pitch", labelEn: "Presentation / Pitch",
+        hint: "Deck ordinato per pitch, meeting e review",
         icon: "Presentation",
         outputSpec: {
             pageModel: 'slide_deck',
@@ -290,8 +398,8 @@ Font grande (min 24px corpo), bullet points, mai testo denso.`,
     // ── KEYNOTE ──
     {
         id: "keynote",
-        label: "Keynote", labelIt: "Keynote", labelEn: "Keynote",
-        hint: "Presentazione visuale ad alto impatto — stile conferenza",
+        label: "Conference Keynote", labelIt: "Keynote conferenza", labelEn: "Conference Keynote",
+        hint: "Slide visuali ad alto impatto per palco o launch",
         icon: "GalleryVertical",
         outputSpec: {
             pageModel: 'slide_deck',
@@ -556,10 +664,14 @@ Pensa come un art director: impatto visivo → chiarezza → completezza.`,
     },
 ];
 
+export const PRESET_CATALOG: ProjectPreset[] = RAW_PRESET_CATALOG
+    .map(withPresetMeta)
+    .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+
 export const PRESET_MAP = new Map<string, ProjectPreset>(
-    PRESET_CATALOG.map(p => [p.id, p])
+    PRESET_CATALOG.map((p) => [p.id, p])
 );
 
 export const VALID_PRESET_IDS = new Set<string>(
-    PRESET_CATALOG.map(p => p.id)
+    PRESET_CATALOG.map((p) => p.id)
 );

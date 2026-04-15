@@ -14,6 +14,8 @@ import {
     getLlmPromptConfig,
     getLlmPromptPreview,
     setLlmPromptConfig,
+    streamOptimizePrompt,
+    getPromptUsageSummary,
     type LlmPromptPreviewDto,
     listPreviewSnapshots,
     createPreviewSnapshot,
@@ -48,7 +50,8 @@ import { useNotifications } from "../../../lib/notifications";
 import { saveThumbnail, savePromptExcerpt, incrementSnapCount } from "../../../lib/thumbnail";
 import ProjectConfigPopup from "../../../components/ProjectConfigPopup";
 import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
-import { Settings } from "lucide-react";
+import { Mic, Settings, Square } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
     ssr: false,
@@ -57,6 +60,42 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 
 
 const SPLIT_COOKIE = "andy-code-cat_workspace_split";
+
+type BrowserSpeechRecognitionResult = {
+    isFinal: boolean;
+    0: { transcript: string };
+};
+
+type BrowserSpeechRecognitionEvent = Event & {
+    resultIndex: number;
+    results: ArrayLike<BrowserSpeechRecognitionResult>;
+};
+
+type BrowserSpeechRecognitionErrorEvent = Event & {
+    error?: string;
+};
+
+type BrowserSpeechRecognition = {
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    onstart: (() => void) | null;
+    onend: (() => void) | null;
+    onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
+    onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+    start: () => void;
+    stop: () => void;
+    abort: () => void;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+declare global {
+    interface Window {
+        SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+        webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    }
+}
 
 function getCookie(name: string): string | null {
     if (typeof document === "undefined") return null;
@@ -113,6 +152,14 @@ function getStringDetail(details: unknown, key: string): string | undefined {
     if (!details || typeof details !== "object") return undefined;
     const value = (details as Record<string, unknown>)[key];
     return typeof value === "string" ? value : undefined;
+}
+
+function appendPromptSegment(base: string, addition: string): string {
+    const normalizedAddition = addition.trim();
+    if (!normalizedAddition) return base;
+    if (!base.trim()) return normalizedAddition;
+    const needsSpace = !/[\s\n]$/.test(base);
+    return `${base}${needsSpace ? " " : ""}${normalizedAddition}`;
 }
 
 /**
@@ -193,6 +240,10 @@ export default function WorkspacePage() {
     const [presetCatalog, setPresetCatalog] = useState<ProjectPreset[]>([]);
 
     const [prompt, setPrompt] = useState("");
+    const [optimizingPrompt, setOptimizingPrompt] = useState(false);
+    const [activeOperation, setActiveOperation] = useState<"chat" | "prompt-optimizer" | null>(null);
+    const [promptRestoreValue, setPromptRestoreValue] = useState<string | null>(null);
+    const [promptOpsSummary, setPromptOpsSummary] = useState({ totalCost: 0, totalTokens: 0, runs: 0 });
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [llmErrorDialog, setLlmErrorDialog] = useState<LlmProviderErrorDialogState | null>(null);
@@ -218,8 +269,15 @@ export default function WorkspacePage() {
     const [providersCatalog, setProvidersCatalog] = useState<LlmProviderCatalogDto[]>([]);
     const [selectedProvider, setSelectedProvider] = useState<string>("");
     const [selectedModel, setSelectedModel] = useState<string>("");
+    const presetRecommendationAppliedRef = useRef<string | null>(null);
+    const [voiceSupported, setVoiceSupported] = useState(false);
+    const [voiceListening, setVoiceListening] = useState(false);
+    const [voiceError, setVoiceError] = useState<string | null>(null);
 
     const [leftWidth, setLeftWidth] = useState(40);
+    const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+    const speechBasePromptRef = useRef("");
+    const speechCommittedTranscriptRef = useRef("");
     const [isDragging, setIsDragging] = useState(false);
     const [previewTab, setPreviewTab] = useState<"preview" | "html" | "css" | "js" | "prompt">("preview");
     const [promptTemplate, setPromptTemplate] = useState("");
@@ -373,6 +431,13 @@ export default function WorkspacePage() {
         getPublishStatus(token, projectId)
             .then((d) => setPublishDeployment(d))
             .catch(() => setPublishDeployment(null));
+    }, [token, projectId]);
+
+    useEffect(() => {
+        if (!token) return;
+        getPromptUsageSummary(token, projectId)
+            .then((summary) => setPromptOpsSummary(summary))
+            .catch(() => setPromptOpsSummary({ totalCost: 0, totalTokens: 0, runs: 0 }));
     }, [token, projectId]);
 
     // Debounced slug availability check
@@ -619,6 +684,23 @@ export default function WorkspacePage() {
         setSelectedModel(nextModel?.id ?? "");
     }, [selectedProvider, selectedModel, providersCatalog]);
 
+    useEffect(() => {
+        if (!projectPresetId || presetRecommendationAppliedRef.current === projectPresetId) return;
+        if (presetCatalog.length === 0 || providersCatalog.length === 0) return;
+
+        const preset = presetCatalog.find((entry) => entry.id === projectPresetId);
+        const recommendation = preset?.recommendedModel;
+        if (!recommendation?.provider || !recommendation.modelId) return;
+
+        const provider = providersCatalog.find((entry) => entry.provider === recommendation.provider);
+        const model = provider?.models.find((entry) => entry.isActive && entry.id === recommendation.modelId);
+        if (!provider || !model) return;
+
+        setSelectedProvider(provider.provider);
+        setSelectedModel(model.id);
+        presetRecommendationAppliedRef.current = projectPresetId;
+    }, [projectPresetId, presetCatalog, providersCatalog]);
+
     // Auto-load prompt preview when user opens the prompt tab
     useEffect(() => {
         if (previewTab === "prompt" && token && !promptPreview && !loadingPromptPreview) {
@@ -646,16 +728,16 @@ export default function WorkspacePage() {
     }, [activeConv?.messages, isUserScrolled]);
 
     useEffect(() => {
-        if (sending && !isUserScrolled) {
+        if ((sending || optimizingPrompt) && !isUserScrolled) {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
         }
-    }, [sending, thinkingText, draftAnswer, isUserScrolled]);
+    }, [sending, optimizingPrompt, thinkingText, draftAnswer, isUserScrolled]);
 
     useEffect(() => {
-        if (!sending) return;
+        if (!sending && !optimizingPrompt) return;
         if (!thinkingFlowRef.current) return;
         thinkingFlowRef.current.scrollTop = thinkingFlowRef.current.scrollHeight;
-    }, [sending, thinkingText]);
+    }, [sending, optimizingPrompt, thinkingText]);
 
     const loadSnapshots = useCallback(
         async (t: string) => {
@@ -1033,6 +1115,7 @@ export default function WorkspacePage() {
 
         setPrompt("");
         setSending(true);
+        setActiveOperation("chat");
         setError(null);
         setThinkingText("");
         setDraftAnswer("");
@@ -1245,7 +1328,14 @@ export default function WorkspacePage() {
             });
 
             setActiveConv((prev) =>
-                prev ? { ...prev, messages: [...prev.messages, assistantSaved.message] } : prev
+                prev
+                    ? {
+                        ...prev,
+                        totalTokens: prev.totalTokens + (llm.usage?.totalTokens ?? 0),
+                        totalCost: (prev.totalCost ?? 0) + (llm.costEstimate?.amount ?? 0),
+                        messages: [...prev.messages, assistantSaved.message],
+                    }
+                    : prev
             );
 
             // Persist preview snapshot to DB — only when html is non-empty.
@@ -1401,10 +1491,348 @@ export default function WorkspacePage() {
         } finally {
             abortControllerRef.current = null;
             setSending(false);
+            setActiveOperation(null);
         }
     }
 
+    async function handleOptimizePrompt() {
+        if (!token || !prompt.trim() || optimizingPrompt || conversationLoading) return;
+
+        const original = prompt.trim();
+        let trackedConversationId: string | null = activeConvId;
+        let trackedUserMessageId: string | null = null;
+        const notifId = addNotification({
+            label: "Prompt optimization",
+            status: "running",
+            message: "Analizzo e riscrivo il prompt nel flusso chat…",
+        });
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+
+        setOptimizingPrompt(true);
+        setActiveOperation("prompt-optimizer");
+        setError(null);
+        setThinkingText("");
+        setDraftAnswer("");
+        setIsUserScrolled(false);
+        setStreamPromptTokens(Math.max(1, Math.round(original.length / 4)));
+        setStreamUsageTokens(null);
+
+        try {
+            const convId = activeConvId;
+            if (!convId) {
+                throw new Error("Conversation not loaded yet");
+            }
+
+            const userSaved = await addMessage(token, projectId, convId, {
+                role: "user",
+                content: original,
+                metadata: {
+                    operation: {
+                        kind: "prompt_optimizer_request",
+                        mode: "operational",
+                        target: "input",
+                        label: "Prompt originale",
+                        suppressArtifacts: true,
+                    },
+                },
+            });
+            trackedConversationId = convId;
+            trackedUserMessageId = userSaved.message.id;
+            setActiveConv((prev) =>
+                prev ? { ...prev, messages: [...prev.messages, userSaved.message] } : prev
+            );
+
+            let finalResult: {
+                optimizedPrompt: string;
+                provider: string;
+                model: string;
+                usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+                costEstimate?: {
+                    currency: "EUR";
+                    amount: number;
+                    breakdown: { tokenCost: number; imageCost: number; videoCost: number };
+                    unitRates: { textEurPer1kTokens: number; imageEurPerAsset: number; videoEurPerAsset: number };
+                    providerCostUsd?: number;
+                };
+                durationMs: number;
+                skipped?: boolean;
+                rawResponse?: string;
+                finishReason?: string;
+                promptingTrace?: {
+                    originalUserMessage: string;
+                    effectiveSystemPrompt: string;
+                    messagesSentToLlm: Array<{ role: "system" | "user"; content: string }>;
+                };
+            } | null = null;
+
+            await streamOptimizePrompt(
+                token,
+                projectId,
+                {
+                    rawPrompt: original,
+                    conversationId: convId,
+                    provider: selectedProvider || undefined,
+                    model: selectedModel || undefined,
+                },
+                (event) => {
+                    if (event.type === "thinking") {
+                        setThinkingText((prev) => prev + event.content);
+                        return;
+                    }
+
+                    if (event.type === "answer") {
+                        setDraftAnswer((prev) => `${prev}${event.content}`);
+                        return;
+                    }
+
+                    if (event.type === "done") {
+                        finalResult = event.result;
+                        if (event.result.usage) {
+                            setStreamUsageTokens(event.result.usage);
+                        }
+                        return;
+                    }
+
+                    if (event.type === "error") {
+                        throw new ApiError(event.error?.status ?? 502, event.error ?? { error: event.message });
+                    }
+                },
+                abortController.signal
+            );
+
+            if (!finalResult) {
+                throw new Error("Optimizer stream ended without final payload");
+            }
+
+            const result = finalResult;
+            setPromptRestoreValue(original);
+            setPrompt(result.optimizedPrompt);
+            setPromptOpsSummary((prev) => ({
+                totalCost: prev.totalCost + (result.costEstimate?.amount ?? 0),
+                totalTokens: prev.totalTokens + (result.usage?.totalTokens ?? 0),
+                runs: prev.runs + (result.skipped ? 0 : 1),
+            }));
+
+            const assistantSaved = await addMessage(token, projectId, convId, {
+                role: "assistant",
+                content: result.optimizedPrompt,
+                metadata: {
+                    model: result.model,
+                    provider: result.provider,
+                    executionTimeMs: result.durationMs,
+                    finishReason: result.finishReason,
+                    rawResponse: result.rawResponse,
+                    promptingTrace: result.promptingTrace as MessageDto["metadata"]["promptingTrace"],
+                    tokenUsage: result.usage,
+                    costEstimate: result.costEstimate,
+                    operation: {
+                        kind: "prompt_optimizer",
+                        mode: "operational",
+                        target: "input",
+                        label: "Optimize prompt",
+                        suppressArtifacts: true,
+                    },
+                },
+            });
+
+            setActiveConv((prev) =>
+                prev
+                    ? {
+                        ...prev,
+                        totalTokens: prev.totalTokens + (result.usage?.totalTokens ?? 0),
+                        totalCost: (prev.totalCost ?? 0) + (result.costEstimate?.amount ?? 0),
+                        messages: [...prev.messages, assistantSaved.message],
+                    }
+                    : prev
+            );
+
+            if (trackedUserMessageId) {
+                await logBackgroundTask(token, projectId, convId, trackedUserMessageId, {
+                    type: "prompt_optimizer",
+                    pipelineProfile: "optimizer-stream",
+                    input: { prompt: original },
+                    output: {
+                        provider: result.provider,
+                        model: result.model,
+                        durationMs: result.durationMs,
+                        target: "input",
+                        optimizedPrompt: result.optimizedPrompt,
+                    },
+                    tokenUsage: result.usage,
+                    costEstimate: result.costEstimate,
+                    status: "completed",
+                });
+            }
+
+            updateNotification(notifId, {
+                status: "done",
+                message: result.skipped
+                    ? "Optimizer disattivato per questa configurazione prodotto."
+                    : `Prompt pronto in chat con ${result.provider} · ${result.model}`,
+            });
+        } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") {
+                updateNotification(notifId, { label: "Prompt optimization", status: "error", message: "Ottimizzazione interrotta" });
+                if (token && trackedConversationId) {
+                    try {
+                        const interruptedSaved = await addMessage(token, projectId, trackedConversationId, {
+                            role: "assistant",
+                            content: "⏹ Ottimizzazione prompt interrotta dall'utente",
+                            metadata: {
+                                operation: {
+                                    kind: "prompt_optimizer",
+                                    mode: "operational",
+                                    target: "input",
+                                    label: "Optimize prompt",
+                                    suppressArtifacts: true,
+                                },
+                            },
+                        });
+                        setActiveConv((prev) =>
+                            prev ? { ...prev, messages: [...prev.messages, interruptedSaved.message] } : prev
+                        );
+                    } catch {
+                        // non-blocking
+                    }
+                }
+                return;
+            }
+
+            const msg = err instanceof ApiError ? presentLlmError(err) : err instanceof Error ? err.message : "Prompt optimization failed";
+            setError(msg);
+
+            if (token && trackedConversationId) {
+                try {
+                    const errorSaved = await addMessage(token, projectId, trackedConversationId, {
+                        role: "error",
+                        content: `Optimize prompt: ${msg}`,
+                    });
+                    setActiveConv((prev) =>
+                        prev ? { ...prev, messages: [...prev.messages, errorSaved.message] } : prev
+                    );
+                } catch {
+                    // keep initial error only
+                }
+            }
+
+            if (token && trackedConversationId && trackedUserMessageId) {
+                try {
+                    await logBackgroundTask(token, projectId, trackedConversationId, trackedUserMessageId, {
+                        type: "prompt_optimizer",
+                        pipelineProfile: "optimizer-stream",
+                        input: { prompt: original },
+                        error: msg,
+                        status: "failed",
+                    });
+                } catch {
+                    // non-blocking
+                }
+            }
+
+            updateNotification(notifId, { label: "Prompt optimization", status: "error", message: msg });
+        } finally {
+            abortControllerRef.current = null;
+            setThinkingText("");
+            setDraftAnswer("");
+            setOptimizingPrompt(false);
+            setActiveOperation(null);
+        }
+    }
+
+    function handleRestoreOptimizedPrompt() {
+        if (!promptRestoreValue) return;
+        setPrompt(promptRestoreValue);
+        setPromptRestoreValue(null);
+    }
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        setVoiceSupported(Boolean(window.SpeechRecognition || window.webkitSpeechRecognition));
+
+        return () => {
+            speechRecognitionRef.current?.abort();
+            speechRecognitionRef.current = null;
+        };
+    }, []);
+
+    const handleToggleVoiceInput = useCallback(() => {
+        if (voiceListening) {
+            speechRecognitionRef.current?.stop();
+            return;
+        }
+
+        if (typeof window === "undefined") return;
+
+        const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!RecognitionCtor) {
+            setVoiceSupported(false);
+            setVoiceError("Dettatura disponibile solo in Chrome o Edge compatibili.");
+            return;
+        }
+
+        const recognition = speechRecognitionRef.current ?? new RecognitionCtor();
+        speechRecognitionRef.current = recognition;
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = document.documentElement.lang?.trim() || navigator.languages?.[0] || navigator.language || "it-IT";
+
+        recognition.onstart = () => {
+            speechBasePromptRef.current = prompt;
+            speechCommittedTranscriptRef.current = "";
+            setVoiceListening(true);
+            setVoiceError(null);
+        };
+
+        recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
+            let finalTranscript = "";
+            let interimTranscript = "";
+
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                const transcript = event.results[i]?.[0]?.transcript ?? "";
+                if (event.results[i]?.isFinal) {
+                    finalTranscript += transcript;
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+
+            if (finalTranscript) {
+                speechCommittedTranscriptRef.current = appendPromptSegment(
+                    speechCommittedTranscriptRef.current,
+                    finalTranscript
+                );
+            }
+
+            const liveTranscript = appendPromptSegment(
+                speechCommittedTranscriptRef.current,
+                interimTranscript
+            );
+
+            setPrompt(appendPromptSegment(speechBasePromptRef.current, liveTranscript));
+        };
+
+        recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
+            if (event.error && event.error !== "aborted" && event.error !== "no-speech") {
+                setVoiceError(`Dettatura non disponibile: ${event.error}.`);
+            }
+            setVoiceListening(false);
+        };
+
+        recognition.onend = () => {
+            setVoiceListening(false);
+        };
+
+        try {
+            recognition.start();
+        } catch {
+            setVoiceError("Microfono già in uso o permesso non concesso.");
+            setVoiceListening(false);
+        }
+    }, [prompt, voiceListening]);
+
     function handleStop() {
+        speechRecognitionRef.current?.stop();
         abortControllerRef.current?.abort();
     }
 
@@ -1458,7 +1886,7 @@ export default function WorkspacePage() {
                             style={controlSelectStyle}
                             value={selectedProvider}
                             onChange={(e) => setSelectedProvider(e.target.value)}
-                            disabled={providersCatalog.length === 0 || sending}
+                            disabled={providersCatalog.length === 0 || sending || optimizingPrompt}
                         >
                             {providersCatalog.length === 0 ? (
                                 <option value="">Provider</option>
@@ -1474,7 +1902,7 @@ export default function WorkspacePage() {
                             style={controlSelectStyle}
                             value={selectedModel}
                             onChange={(e) => setSelectedModel(e.target.value)}
-                            disabled={!currentProvider || currentProviderModels.length === 0 || sending}
+                            disabled={!currentProvider || currentProviderModels.length === 0 || sending || optimizingPrompt}
                         >
                             {currentProviderModels.length === 0 ? (
                                 <option value="">Model</option>
@@ -1500,6 +1928,11 @@ export default function WorkspacePage() {
                             {currentProvider.keyEnvironmentVariable ? ` Configura ${currentProvider.keyEnvironmentVariable} e riprova.` : " Configura la chiave del provider e riprova."}
                         </div>
                     )}
+                    {!currentProviderMissingKey && currentProvider && selectedModel && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                            Optimize prompt usa lo stesso provider e modello selezionati per la chat.
+                        </p>
+                    )}
                 </div>
 
                 <div className="workspace-chat-messages" ref={chatContainerRef}>
@@ -1512,13 +1945,15 @@ export default function WorkspacePage() {
                         <MessageBubble key={msg.id} message={msg} />
                     ))}
 
-                    {sending && (
+                    {(sending || optimizingPrompt) && (
                         <div className="workspace-stream-box">
                             <div className="workspace-stream-title">
-                                {draftAnswer ? "Risposta in corso..." : thinkingText ? "Ragionamento..." : "Connessione al provider..."}
+                                {activeOperation === "prompt-optimizer"
+                                    ? (draftAnswer ? "Ottimizzazione prompt in corso..." : thinkingText ? "Analisi optimizer..." : "Connessione optimizer...")
+                                    : (draftAnswer ? "Risposta in corso..." : thinkingText ? "Ragionamento..." : "Connessione al provider...")}
                             </div>
                             <div ref={thinkingFlowRef} className="workspace-thinking-flow">
-                                {thinkingText || "In attesa del ragionamento stream..."}
+                                {thinkingText || (activeOperation === "prompt-optimizer" ? "Sto elaborando il prompt nel flusso conversazionale..." : "In attesa del ragionamento stream...")}
                             </div>
                             {draftAnswer && (
                                 <div className="workspace-draft-box">
@@ -1528,7 +1963,7 @@ export default function WorkspacePage() {
                             <div className="workspace-stream-footer">
                                 <div className="workspace-thinking-spinner">
                                     <span className="workspace-spinner-dot" />
-                                    sto pensando...
+                                    {activeOperation === "prompt-optimizer" ? "ottimizzo il prompt..." : "sto pensando..."}
                                 </div>
                                 <div className="workspace-token-counter">
                                     {streamUsageTokens
@@ -1562,20 +1997,40 @@ export default function WorkspacePage() {
                 </div>
 
                 <form onSubmit={(e) => void handleSend(e)} className="workspace-input-form">
-                    <textarea
-                        style={textareaStyle}
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                void handleSend(e as unknown as React.FormEvent);
-                            }
-                        }}
-                        placeholder="Scrivi cosa vuoi realizzare..."
-                        rows={3}
-                        disabled={sending}
-                    />
+                    <div className="flex items-start gap-2">
+                        <textarea
+                            style={textareaStyle}
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    void handleSend(e as unknown as React.FormEvent);
+                                }
+                            }}
+                            placeholder="Scrivi cosa vuoi realizzare..."
+                            rows={3}
+                            disabled={sending || optimizingPrompt}
+                        />
+                        <Button
+                            type="button"
+                            variant={voiceListening ? "destructive" : "outline"}
+                            size="icon"
+                            onClick={handleToggleVoiceInput}
+                            disabled={!voiceSupported || sending || conversationLoading || optimizingPrompt}
+                            title={voiceListening ? "Ferma la dettatura" : "Detta il prompt con il microfono"}
+                            aria-label={voiceListening ? "Ferma dettatura" : "Avvia dettatura"}
+                            className="shrink-0"
+                        >
+                            {voiceListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                        </Button>
+                    </div>
+                    {(voiceSupported || voiceError) && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{voiceListening ? "🎙️ Ascolto in corso…" : "Chrome: dettatura vocale pronta"}</span>
+                            {voiceError && <span className="text-destructive">{voiceError}</span>}
+                        </div>
+                    )}
                     {/* Focus context indicator */}
                     {(inspectMode && selectedElement) && (
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.76rem", color: "var(--accent-text, #818cf8)", padding: "0.2rem 0" }}>
@@ -1614,12 +2069,31 @@ export default function WorkspacePage() {
                         </div>
                     )}
                     <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                        <div className="row" style={{ gap: "0.5rem", alignItems: "center" }}>
+                        <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
                             <button className="secondary" type="button" onClick={() => router.push("/dashboard")}>← Dashboard</button>
                             <RequestMetaInfo message={latestAssistant} variant="global" />
+                            {promptOpsSummary.runs > 0 && (
+                                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                    optimizer: {promptOpsSummary.runs} run{promptOpsSummary.runs === 1 ? "" : "s"} · {formatCostEur(promptOpsSummary.totalCost) || "€0"}
+                                </span>
+                            )}
                         </div>
-                        <div className="row" style={{ gap: "0.5rem" }}>
-                            {sending && (
+                        <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => void handleOptimizePrompt()}
+                                disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt || currentProviderMissingKey}
+                                title={selectedModel ? `Usa ${selectedProvider} · ${selectedModel}` : "Usa il provider/modello attivo della chat"}
+                            >
+                                {optimizingPrompt ? "Optimizing..." : "Optimize prompt"}
+                            </Button>
+                            {promptRestoreValue && (
+                                <Button type="button" variant="outline" onClick={handleRestoreOptimizedPrompt} disabled={sending || optimizingPrompt}>
+                                    Restore original
+                                </Button>
+                            )}
+                            {(sending || optimizingPrompt) && (
                                 <button
                                     type="button"
                                     className="secondary"
@@ -1630,7 +2104,7 @@ export default function WorkspacePage() {
                                     ⏹ Stop
                                 </button>
                             )}
-                            <button type="submit" disabled={!prompt.trim() || sending || conversationLoading}>{sending ? "Invio..." : "Invia"}</button>
+                            <button type="submit" disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt}>{sending ? "Invio..." : "Invia"}</button>
                         </div>
                     </div>
                 </form>
@@ -2392,6 +2866,7 @@ export default function WorkspacePage() {
             onRename={(name: string) => setProjectName(name)}
             presetLabel={presetCatalog.find(p => p.id === projectPresetId)?.labelIt}
             briefGuideQuestions={presetCatalog.find(p => p.id === projectPresetId)?.briefGuideQuestions}
+            presetRecommendedModelLabel={presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.label ?? presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.modelId}
         />
         <LlmProviderErrorDialog
             open={Boolean(llmErrorDialog)}
@@ -3245,6 +3720,7 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
     const usage = m.tokenUsage;
     const cost = m.costEstimate;
     const trace = m.promptingTrace;
+    const operation = m.operation;
 
     // Preprompt weight
     const systemMsg = trace?.messagesSentToLlm?.find((x) => x.role === "system");
@@ -3280,6 +3756,22 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
             {open && (
                 <div className="req-meta-tooltip">
                     <div className="req-meta-tooltip-title">{tooltipTitle}</div>
+
+                    {operation && (
+                        <>
+                            <div className="req-meta-section">
+                                <span className="req-meta-label">Flusso</span>
+                                <span className="req-meta-value">{operation.label ?? operation.kind}</span>
+                            </div>
+                            {operation.target && (
+                                <div className="req-meta-section">
+                                    <span className="req-meta-label">Target</span>
+                                    <span className="req-meta-value">{operation.target}</span>
+                                </div>
+                            )}
+                            <div className="req-meta-divider" />
+                        </>
+                    )}
 
                     {/* Provider / Model */}
                     <div className="req-meta-section">
@@ -3401,6 +3893,7 @@ function MessageBubble({ message }: { message: MessageDto }) {
     const [copyLabel, setCopyLabel] = useState("Copia");
     const isUser = message.role === "user";
     const isError = message.role === "error";
+    const operation = message.metadata?.operation;
 
     const chatStructured = message.metadata?.chatStructured ?? (!isUser && !isError ? parseChatFromContent(message.content) : null);
 
@@ -3438,6 +3931,30 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 >
                     {copyLabel}
                 </button>
+                {operation && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.45rem", flexWrap: "wrap" }}>
+                        <span
+                            style={{
+                                fontSize: "0.66rem",
+                                fontWeight: 700,
+                                letterSpacing: "0.04em",
+                                textTransform: "uppercase",
+                                padding: "0.12rem 0.4rem",
+                                borderRadius: "999px",
+                                background: "rgba(34,211,238,0.12)",
+                                color: "#22d3ee",
+                                border: "1px solid rgba(34,211,238,0.25)",
+                            }}
+                        >
+                            ⚙ {operation.label ?? operation.kind}
+                        </span>
+                        {operation.mode && (
+                            <span style={{ fontSize: "0.66rem", color: "var(--text-muted)" }}>
+                                {operation.mode}
+                            </span>
+                        )}
+                    </div>
+                )}
                 {chatStructured ? (
                     <div>
                         <p style={{ margin: 0 }}>{chatStructured.summary}</p>
@@ -3460,7 +3977,7 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 )}
             </div>
             <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.18rem" }}>
-                {message.role}
+                {operation?.label ? `${message.role} · ${operation.label}` : message.role}
             </span>
             {!isUser && !isError && <RequestMetaInfo message={message} />}
         </div>

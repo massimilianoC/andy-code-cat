@@ -113,6 +113,55 @@
 - Block the user
 - Expected: user becomes blocked and public published sites owned by the user return HTTP 403
 
+### Step 11d - Preset Registry and Start UX
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/presets`
+- Click `Sync presets → Mongo`
+- Expected: the preset seed is persisted and editable from the superadmin UI
+- Change category, short hint, sort order, or recommended model for one preset and save
+- Expected: the preset remains visible in the registry with the updated metadata
+- Open `/dashboard`
+- Expected: presets are grouped by category, `Blank` remains available, and recommended-model badges are shown when configured
+- Create a project from a preset that has a recommended model
+- Expected: the workspace defaults to that provider/model when available in the runtime catalog
+
+### Step 11e - Template Preprompting Governance
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/governance`
+- Verify the optimized preprompting section is visible and editable
+- Expected: the superadmin can tune the pre-generation rewriting layer used by the active project-type template model
+
+### Step 11e-bis - Advanced LLM Runtime Catalog (optional)
+
+- Open `/admin/models` only if runtime-provider maintenance is needed
+- Expected: this area is clearly secondary and does not replace the template-model governance flow
+
+### Step 11f - AI-assisted Template Authoring
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/presets`
+- In the `AI Template Workbench`, write a short instruction for a new template family (for example VR, 3D game, or poster format)
+- Click `Generate AI draft`
+- Expected: the current template form is enriched with AI-generated brief, style direction, tags, and preprompt module suggestions
+
+### Step 11g - Current UX/E2E Validation Boundary
+
+The current preset-governance wave is considered validated when:
+
+- Step 11d passes
+- Step 11e passes
+- the dashboard start flow remains smooth for blank and categorized template models
+- the workspace still opens correctly after project creation and recommended runtime auto-selection
+
+The following are **not blockers** for the current UX/E2E cycle:
+
+- drag-and-drop preset reordering
+- user-private presets or `pending_review` submission flows
+
+These two items are additive roadmap improvements and can be delivered after the current browser validation cycle.
+
 ---
 
 ## M0.5 - Focused Asset Control

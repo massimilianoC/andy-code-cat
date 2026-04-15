@@ -29,6 +29,7 @@ Required flow: `presentation → application → domain`, `infra → domain`
 - `Session` — session-bound refresh token rotation (only hashed refresh token stored in DB)
 - `Conversation` + `Message` + `MessageMetadata` + `BackgroundTask`
 - `LlmCatalog` — provider/model registry
+- `ProjectPreset` — preset library with category taxonomy, ordering, and recommended-model metadata
 - `LlmPromptConfig` — prePromptTemplate per progetto
 - `StyleTag` — catalog statico 82 tag, 10 categorie (identity, sector, audience, visual, palette, typography, layout, tone, reference, feature)
 - `UserStyleProfile` — profilo stilistico utente con onboarding state
@@ -59,6 +60,7 @@ Required flow: `presentation → application → domain`, `infra → domain`
 - `POST /v1/projects/:id/llm/chat-preview/stream` (SSE)
 - `GET/PUT /v1/projects/:id/llm/prompt-config`
 - `GET /v1/llm/providers`
+- `GET /v1/presets` (public preset catalog from Mongo with static fallback)
 - `GET /v1/style-tags` (public — no auth)
 - `GET|PUT /v1/users/me/profile`
 - `GET|PUT /v1/projects/:id/moodboard`
@@ -71,7 +73,7 @@ Required flow: `presentation → application → domain`, `infra → domain`
 - `/dashboard` — ProjectCard grid + GuideBanner + TipsPanel + toast
 - `/onboarding` — wizard 3-step con TagPicker (stili utente)
 - `/workspace/[projectId]` — split-panel: chat + preview iframe
-- `/admin` · `/admin/users` · `/admin/users/[userId]` · `/admin/config` · `/admin/governance` — superadmin-only control plane
+- `/admin` · `/admin/users` · `/admin/users/[userId]` · `/admin/config` · `/admin/presets` · `/admin/models` · `/admin/governance` — superadmin-only control plane
 
 ### Frontend components (✅)
 

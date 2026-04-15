@@ -2,11 +2,26 @@
 
 Andy Code Cat is developed in iterative releases. Each release is a shippable, testable increment.
 
+_Last review: 2026-04-15_
+
 ---
 
-## Current Status: R0 (Bootstrap + Core AI Loop)
+## Current Status: R1 largely delivered, R2–R3 active
 
-The core platform is operational:
+The product is now **beyond the original bootstrap phase**. The core platform is stable, the prompt architecture is substantially implemented, and the current focus is shifting toward **observability, publishing hardening, and domain management**.
+
+### Delivery Snapshot
+
+| Release | Status | Notes |
+|---|---|---|
+| R0 | ✅ Complete | Core AI loop, auth, WYSIWYG, export, publish, onboarding, i18n, preset catalog |
+| R1 | ✅ Functionally delivered | Layered prompting, preset-aware generation, style propagation, provider/model selector, prompt optimization |
+| R2 | 🟡 In progress | Execution log infrastructure and prompt usage summaries exist; dashboarding is still incomplete |
+| R3 | 🟡 Started | Path publish is live and slug/subdomain foundations exist; custom domains and SSL are still pending |
+| R4 | ⏸ Postponed | Deferred until R2/R3 stabilization is complete |
+| R5 | ⏸ Postponed | Deferred until the BaaS layer is ready |
+
+### Core platform already operational
 
 - [x] Docker Compose stack (API + Web + MongoDB + Redis + nginx)
 - [x] JWT authentication (register / login / refresh)
@@ -17,7 +32,7 @@ The core platform is operational:
 - [x] Focused edit — AI edits a selected section within the full page context
 - [x] Section-aware context optimization (40–60% token reduction)
 - [x] Export to static HTML (ZIP download)
-- [x] Path-based publish (`/p/{publishId}`)
+- [x] Path-based publish (/p/{publishId})
 - [x] Per-session cost tracking (EUR, with USD→EUR conversion)
 - [x] Onboarding wizard (style profiling, tag taxonomy)
 - [x] Prompt optimizer (inline enrichment)
@@ -28,32 +43,64 @@ The core platform is operational:
 
 ## R1 — Prompt Architecture & Preset Layer
 
-- [ ] Layer 2 PrepromptEngine — modular prompt injection (architectural constraints, output format, style context, template)
-- [ ] Preset-aware generation — output spec per preset type (page size, responsiveness, content blocks)
-- [ ] Style context propagation — user tag profile feeds Layer 0 preprompt
-- [ ] Extended model selector UI (provider + model per session)
+**Status: ✅ Delivered in production code, with room for further refinement rather than first-time implementation.**
+
+- [x] Layered prompt composition implemented through modular system prompt assembly (constraints, preset layer, style layer, project template, governance layer)
+- [x] Preset-aware generation — output specs and prompt modules exist for typed preset types
+- [x] Style context propagation — user profile + moodboard feed the prompt context
+- [x] Extended model selector UI (provider + model per session)
+- [x] Superadmin template-model registry — Mongo-backed project-type catalog with categories, sort order, recommended runtime hints, and static fallback
+- [x] Dashboard start UX by category, with preserved blank option and recommended-model badges
+- [x] Optimized preprompting controls exposed in the governance area for template-driven prompt rewriting
+- [x] AI template workbench in superadmin for drafting/refining template models from short instructions using the shared prompting service
+- [x] Asset-aware context enrichment for prompt optimization using project assets and prompt execution summaries
+
+**Notes**
+
+- The original “PrepromptEngine” objective has effectively been delivered through the current layered prompt composer and prompt preview/debug flows.
+- The preset/model governance wave is now implemented end-to-end in code and admin UI.
+- Remaining work in this area is mostly **validation, polish, and future modularization**, not a missing MVP feature.
 
 ---
 
 ## R2 — Execution Logging & Observability
 
-- [ ] `execution_logs` collection (MongoDB TTL 90d)
-- [ ] Per-operation log events: generation, focused edit, export, publish, optimizer
-- [ ] Admin/owner log query endpoint
-- [ ] Cost dashboard per project
+**Status: 🟡 Partially implemented and now a near-term priority.**
+
+- [x] execution_logs collection (MongoDB TTL 90d)
+- [x] Admin/owner log query endpoint
+- [x] Prompt execution logging and usage summary endpoints
+- [ ] Full per-operation log coverage for every export/publish/UI workflow
+- [ ] Dedicated cost dashboard per project
+
+**Notes**
+
+- Observability has already advanced ahead of the original roadmap thanks to structured execution logging and prompt usage tracking.
+- The next step is to turn these backend signals into a more complete **owner-facing dashboard and filtering UI**.
 
 ---
 
 ## R3 — Subdomain Publishing & Domain Management
 
-- [ ] Wildcard subdomain publish (`{slug}.yourdomain.com`)
+**Status: 🟡 Foundation in place, rollout not complete.**
+
+- [x] Path-based publish is live and stable
+- [x] Custom slug availability check and slug update flow
+- [ ] Wildcard subdomain publish ({slug}.yourdomain.com) end-to-end hardening
 - [ ] Custom domain mapping (BYOD — bring your own domain)
 - [ ] nginx dynamic vhost generation
 - [ ] SSL automation (Let's Encrypt)
 
+**Notes**
+
+- The publish layer already exposes the right primitives for deployment IDs, slugs, and public URLs.
+- The remaining work is mainly **infrastructure automation and ops hardening**, not the base publish capability itself.
+
 ---
 
 ## R4 — BaaS Services Layer
+
+**Status: ⏸ Postponed until observability and publishing are fully stabilized.**
 
 - [ ] Forms service (collect form submissions from published pages)
 - [ ] Payments BYOK (Stripe Connect passthrough)
@@ -61,14 +108,78 @@ The core platform is operational:
 - [ ] Shared service catalog (injectable into published pages as vanilla JS)
 - [ ] Envelope encryption for BYOK API secrets (AES-256-GCM)
 
+**Notes**
+
+- This release is still aligned with the long-term product direction.
+- It is intentionally deferred to avoid expanding surface area before R2/R3 are fully hardened.
+
 ---
 
 ## R5 — RAG Chatbot Integration
+
+**Status: ⏸ Postponed.**
 
 - [ ] RAG chatbot for landing pages (BYOK Flowise/n8n/generic)
 - [ ] Document ingestion from asset manager
 - [ ] Secure BaaS proxy
 - [ ] Visitor rate limiting
+
+**Notes**
+
+- This remains a valuable extension, but it should come **after** the services layer and publication governance are mature.
+
+---
+
+## Product Direction Lock — 2026-04-15
+
+The primary product direction is now explicitly locked on **project-type template models** and **optimized preprompting**.
+
+This means:
+
+- the main superadmin governance surface is the editable catalog of project templates
+- each template model represents a project type, not an LLM
+- each template model carries its own descriptive metadata and its own prompt module to inject into the preprompting flow already in place
+- the low-level LLM runtime catalog is kept available only as a paused/secondary infrastructure track and is not the current product center
+
+Examples of target template families include:
+
+- layout, landing, website, keynote
+- casual game, serious game, 3D game, VR game with A-Frame
+- A4 onepager, poster 70×100 cm, infographic, manifesto
+
+## Immediate Validation and Next Proposals
+
+The latest delivery wave is **already implemented**. The three immediate follow-up proposals should be read as follows:
+
+| Proposal | Nature | Needed for current UX/E2E test? | Why |
+|---|---|---|---|
+| Visual/authenticated QA of Template Models, Dashboard, Governance, and Workspace flow | Validation activity | **Yes** | This is the step that proves the delivered template-driven UX really works end-to-end in the browser |
+| Drag-and-drop or richer reorder UX for presets | Product polish | **No** | Current numeric `sortOrder` already allows ordering and does not block the present test cycle |
+| User-owned private/pending presets with superadmin approval | Future governance extension | **No** | The data model is prepared, but this is an additive feature and not required for current validation |
+
+### Broader roadmap focus
+
+1. Complete R2 with a real project-level cost and log dashboard
+2. Finish R3 domain automation (wildcard subdomain, SSL, custom domains)
+3. Re-open R4 only after the publishing pipeline is considered operationally solid
+4. Keep async project-generation orchestration in the documented backlog until R2/R3 are hardened
+
+---
+
+## Future Candidate Backlog
+
+### Async Project Orchestration & Resumable Generation
+
+**Status: ⏸ Deferred for a future cycle.**
+
+- [ ] Project-level background job orchestration for long-running prompt/artifact generation
+- [ ] Dashboard project-card running state (spinner/badge)
+- [ ] Global progress events aligned with ZIP/publish notifications
+- [ ] Resume/re-entry support so the user can leave the workspace and later recover task progress
+
+**Why deferred now**
+
+- High UX value, but also high regression risk around concurrency, snapshot ordering, cancel/resume semantics, and state consistency between workspace, dashboard, and persisted jobs.
 
 ---
 
@@ -83,4 +194,4 @@ The core platform is operational:
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.
-Detailed specs for each feature are in [`docs/specs/`](docs/specs/).
+Detailed specs for each feature are in [docs/specs/](docs/specs/).

@@ -13,8 +13,40 @@
 const THUMB_KEY = (id: string) => `pf_th_v1_${id}`;
 const PROMPT_KEY = (id: string) => `pf_pe_v1_${id}`;
 const COUNT_KEY = (id: string) => `pf_nv_v1_${id}`;
+const CACHE_PREFIXES = ["pf_th_v1_", "pf_pe_v1_", "pf_nv_v1_"];
 
 const MAX_DOC_SIZE = 64_000; // bytes — stay well inside 5 MB localStorage budget
+
+function purgeThumbnailCache(): void {
+    if (typeof localStorage === "undefined") return;
+    try {
+        const keysToDelete: string[] = [];
+        for (let i = 0; i < localStorage.length; i += 1) {
+            const key = localStorage.key(i);
+            if (key && CACHE_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+                keysToDelete.push(key);
+            }
+        }
+        for (const key of keysToDelete) {
+            localStorage.removeItem(key);
+        }
+    } catch {
+        // ignore cache cleanup errors
+    }
+}
+
+function safeCacheWrite(key: string, value: string): void {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        purgeThumbnailCache();
+        try {
+            localStorage.setItem(key, value);
+        } catch {
+            // quota exceeded — non-fatal
+        }
+    }
+}
 
 /** Build a self-contained HTML document from snapshot artifacts. */
 function buildDoc(artifacts: { html: string; css: string; js: string }): string {
@@ -32,11 +64,7 @@ export function saveThumbnail(
     if (typeof localStorage === "undefined") return;
     const doc = buildDoc(artifacts);
     if (doc.length > MAX_DOC_SIZE) return; // skip oversized documents
-    try {
-        localStorage.setItem(THUMB_KEY(projectId), doc);
-    } catch {
-        // quota exceeded — non-fatal
-    }
+    safeCacheWrite(THUMB_KEY(projectId), doc);
 }
 
 /**
@@ -47,11 +75,7 @@ export function savePromptExcerpt(
     prePromptTemplate: string | null | undefined
 ): void {
     if (typeof localStorage === "undefined" || !prePromptTemplate) return;
-    try {
-        localStorage.setItem(PROMPT_KEY(projectId), prePromptTemplate.slice(0, 250));
-    } catch {
-        // quota exceeded — non-fatal
-    }
+    safeCacheWrite(PROMPT_KEY(projectId), prePromptTemplate.slice(0, 250));
 }
 
 /**
@@ -61,7 +85,7 @@ export function incrementSnapCount(projectId: string): void {
     if (typeof localStorage === "undefined") return;
     try {
         const current = parseInt(localStorage.getItem(COUNT_KEY(projectId)) ?? "0", 10);
-        localStorage.setItem(COUNT_KEY(projectId), String(current + 1));
+        safeCacheWrite(COUNT_KEY(projectId), String(current + 1));
     } catch {
         // quota exceeded — non-fatal
     }

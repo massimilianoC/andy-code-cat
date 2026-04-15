@@ -64,6 +64,13 @@ export const addMessageSchema = z.object({
             bullets: z.array(z.string()),
             nextActions: z.array(z.string()),
         }).optional(),
+        operation: z.object({
+            kind: z.string().min(1).max(80),
+            mode: z.enum(["operational", "preview", "background"]).optional(),
+            target: z.enum(["input", "artifacts", "external"]).optional(),
+            label: z.string().max(120).optional(),
+            suppressArtifacts: z.boolean().optional(),
+        }).optional(),
     }).optional(),
 });
 

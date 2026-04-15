@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     llmChatPreviewSchema,
     llmPromptConfigSchema,
+    optimizePromptSchema,
     type LlmChatPreviewResult,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson, buildFormattedReply } from "../../../application/llm/llmParser";
@@ -16,6 +17,7 @@ import {
 } from "../../../application/llm/llmMessageBuilder";
 import { buildStyleContextBlock } from "../../../application/llm/styleContextBuilder";
 import { composeSystemPrompt, composeSystemPromptWithLayers } from "../../../application/llm/systemPromptComposer";
+import { buildPresetLayerFromPreset } from "../../../application/llm/systemPromptLayers";
 import { estimateCost } from "../../../application/llm/costPolicy";
 import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
 import { env } from "../../../config";
@@ -26,14 +28,19 @@ import { MongoProjectMoodboardRepository } from "../../../infra/repositories/Mon
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
 import { MongoUserStyleProfileRepository } from "../../../infra/repositories/MongoUserStyleProfileRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
+import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
+import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
 import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptConfig";
 import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptConfig";
+import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
+import { PRESET_MAP } from "../../../domain/entities/ProjectPreset";
 
 type LlmRuntimeContext = {
     providerCatalog: {
@@ -48,6 +55,10 @@ type LlmRuntimeContext = {
             isDefault: boolean;
             isFallback: boolean;
             isActive: boolean;
+            displayName?: string;
+            description?: string;
+            promptTemplate?: string;
+            focusPromptTemplate?: string;
             priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
             priceInputUsdPerM?: number;
             priceOutputUsdPerM?: number;
@@ -181,15 +192,34 @@ export function createLlmRoutes(): Router {
     const setLlmPromptConfig = new SetLlmPromptConfig(promptConfigRepository);
     const moodboardRepository = new MongoProjectMoodboardRepository();
     const userStyleProfileRepository = new MongoUserStyleProfileRepository();
+    const assetRepository = new MongoProjectAssetRepository();
     const userRepo = new MongoUserRepository();
     const platformConfigRepo = new MongoPlatformConfigRepository();
+    const presetRepository = new MongoProjectPresetRepository();
+    const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
 
     router.use(authMiddleware);
 
-    const getLlmCatalog =
-        env.LLM_CATALOG_SOURCE === "mongo"
-            ? new GetLlmCatalog("mongo", env.SILICONFLOW_BASE_URL, env.LMSTUDIO_BASE_URL, env.OPENROUTER_BASE_URL, new MongoLlmCatalogRepository(), env.hasOpenRouterApiKey)
-            : new GetLlmCatalog("env", env.SILICONFLOW_BASE_URL, env.LMSTUDIO_BASE_URL, env.OPENROUTER_BASE_URL, undefined, env.hasOpenRouterApiKey);
+    const llmCatalogRepository = new MongoLlmCatalogRepository();
+    const getLlmCatalog = new GetLlmCatalog(
+        env.LLM_CATALOG_SOURCE,
+        env.SILICONFLOW_BASE_URL,
+        env.LMSTUDIO_BASE_URL,
+        env.OPENROUTER_BASE_URL,
+        llmCatalogRepository,
+        env.hasOpenRouterApiKey,
+    );
+
+    const optimizeUserPrompt = new OptimizeUserPrompt(
+        projectRepository,
+        moodboardRepository,
+        userStyleProfileRepository,
+        assetRepository,
+        platformConfigRepo,
+        userRepo,
+        promptExecutionLogRepository,
+        getLlmCatalog,
+    );
 
     function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none") {
         if (authType === "none") {
@@ -320,6 +350,7 @@ export function createLlmRoutes(): Router {
             const mapped = textModels.map((m, index) => {
                 const id = String(m.id ?? "").trim();
                 const modality = m.architecture?.modality ?? "";
+                const existing = input.fallbackModels.find((model) => model.id === id);
 
                 // ── Attach real numeric prices ──────────────────────────────
                 let priceInputUsdPerM: number | undefined;
@@ -352,16 +383,22 @@ export function createLlmRoutes(): Router {
                     id.includes("gpt-4o") ||
                     (id.includes("gemini") && modality.includes("image"));
 
-                const capabilities: string[] = hasVision ? ["vision", "chat"] : ["chat"];
+                const capabilities: string[] = existing?.capabilities?.length
+                    ? existing.capabilities
+                    : hasVision ? ["vision", "chat"] : ["chat"];
 
                 return {
                     id,
                     provider: input.providerKey,
-                    role: "dialogue" as const,
+                    role: existing?.role ?? "dialogue",
                     capabilities,
-                    isDefault: index === 0,
-                    isFallback: index !== 0,
-                    isActive: true,
+                    isDefault: existing?.isDefault ?? index === 0,
+                    isFallback: existing?.isFallback ?? index !== 0,
+                    isActive: existing?.isActive ?? true,
+                    displayName: existing?.displayName,
+                    description: existing?.description,
+                    promptTemplate: existing?.promptTemplate,
+                    focusPromptTemplate: existing?.focusPromptTemplate,
                     ...(priceInputUsdPerM !== undefined ? { priceInputUsdPerM } : {}),
                     ...(priceOutputUsdPerM !== undefined ? { priceOutputUsdPerM } : {}),
                 };
@@ -391,20 +428,16 @@ export function createLlmRoutes(): Router {
             projectRepository.findByIdForUser(input.projectId, input.userId),
             platformConfigRepo.get().catch(() => null),
         ]);
+        const preset = project?.presetId
+            ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
+            : null;
 
         const governanceTemplates = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates;
         const governanceSystemPrompt = governanceTemplates?.generationSystem || undefined;
-        const governanceFocusedSystemPrompt = governanceTemplates?.focusedEditSystem || undefined;
+        const governanceFocusedBasePrompt = governanceTemplates?.focusedEditSystem || undefined;
 
         const styleBlock = buildStyleContextBlock(userProfile, moodboard);
-        const mkPrompt = () => composeSystemPrompt({
-            presetId: project?.presetId,
-            styleBlock,
-            prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-            outputBudgetPolicy: buildOutputBudgetPolicy(),
-            requestSystemPrompt: input.systemPrompt,
-            governanceSystemPrompt,
-        });
+        const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
 
         const providerCatalog =
             (input.provider
@@ -418,6 +451,42 @@ export function createLlmRoutes(): Router {
         }
 
         const providerModels = dedupeModelsById(providerCatalog.models);
+        const explicitModel = input.model
+            ? providerModels.find((model) => model.id === input.model)
+            : undefined;
+
+        const roleModel = explicitModel ??
+            (input.capability
+                ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
+                : undefined) ??
+            providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
+            providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
+            providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
+            providerModels.find((m) => m.isActive);
+
+        const effectivePrePromptTemplate = [
+            promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
+            roleModel?.promptTemplate,
+        ]
+            .filter((value): value is string => Boolean(value && value.trim()))
+            .join("\n\n---\n\n");
+
+        const systemPrompt = composeSystemPrompt({
+            presetId: project?.presetId,
+            presetLayer,
+            styleBlock,
+            prePromptTemplate: effectivePrePromptTemplate || undefined,
+            outputBudgetPolicy: buildOutputBudgetPolicy(),
+            requestSystemPrompt: input.systemPrompt,
+            governanceSystemPrompt,
+        });
+
+        const governanceFocusedSystemPrompt = [
+            roleModel?.focusPromptTemplate,
+            governanceFocusedBasePrompt,
+        ]
+            .filter((value): value is string => Boolean(value && value.trim()))
+            .join("\n\n");
 
         // For openai-compatible providers with an explicit model request, bypass the
         // local catalog lookup — the full model list is only available via live discovery
@@ -427,35 +496,9 @@ export function createLlmRoutes(): Router {
                 providerCatalog: { ...providerCatalog, models: providerModels },
                 modelId: input.model,
                 promptConfigId: promptConfig.id,
-                prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-                systemPrompt: mkPrompt(),
-                governanceFocusedSystemPrompt,
-            };
-        }
-
-        const roleModel =
-            (input.model
-                ? providerModels.find((m) => m.id === input.model && m.isActive)
-                : undefined) ??
-            (input.capability
-                ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
-                : undefined) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
-            providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.isActive);
-
-        if (!roleModel && input.model && providerCatalog.apiType === "openai-compatible") {
-            return {
-                providerCatalog: {
-                    ...providerCatalog,
-                    models: providerModels,
-                },
-                modelId: input.model,
-                promptConfigId: promptConfig.id,
-                prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-                systemPrompt: mkPrompt(),
-                governanceFocusedSystemPrompt,
+                prePromptTemplate: effectivePrePromptTemplate || undefined,
+                systemPrompt,
+                governanceFocusedSystemPrompt: governanceFocusedSystemPrompt || undefined,
             };
         }
 
@@ -470,9 +513,9 @@ export function createLlmRoutes(): Router {
             },
             modelId: roleModel.id,
             promptConfigId: promptConfig.id,
-            prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-            systemPrompt: mkPrompt(),
-            governanceFocusedSystemPrompt,
+            prePromptTemplate: effectivePrePromptTemplate || undefined,
+            systemPrompt,
+            governanceFocusedSystemPrompt: governanceFocusedSystemPrompt || undefined,
         };
     }
 
@@ -536,6 +579,150 @@ export function createLlmRoutes(): Router {
     });
 
     // R1.4 — Prompt preview debug endpoint: returns the resolved system prompt with all layers visible
+    router.get("/projects/:projectId/llm/prompt-usage-summary", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        try {
+            const summary = await promptExecutionLogRepository.summarizeByProject(req.sandbox!.projectId, req.auth!.userId);
+            res.json(summary);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.post("/projects/:projectId/llm/optimize-prompt", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        const startedAt = Date.now();
+        try {
+            const body = optimizePromptSchema.parse(req.body);
+            const result = await optimizeUserPrompt.execute({
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                rawPrompt: body.rawPrompt,
+                assetIds: body.assetIds,
+                conversationId: body.conversationId,
+                sessionId: body.sessionId,
+                provider: body.provider,
+                model: body.model,
+            });
+
+            ExecutionLogger.instance.emit({
+                projectId: req.sandbox!.projectId,
+                domain: "llm",
+                eventType: result.skipped ? "prompt_optimize_skipped" : "prompt_optimize_complete",
+                level: "info",
+                status: "success",
+                durationMs: result.durationMs,
+                metadata: {
+                    taskKey: result.taskKey,
+                    provider: result.provider,
+                    model: result.model,
+                    promptTokens: result.usage?.promptTokens,
+                    completionTokens: result.usage?.completionTokens,
+                    costEur: result.costEstimate?.amount,
+                    skipped: result.skipped ?? false,
+                },
+            });
+
+            res.json(result);
+        } catch (error) {
+            const normalized = normalizeHttpError(error);
+            emitLlmFailureLog({
+                projectId: req.sandbox!.projectId,
+                durationMs: Date.now() - startedAt,
+                provider: req.body?.provider,
+                model: req.body?.model,
+                code: normalized.code,
+                message: normalized.userMessage,
+                details: normalized.details,
+            });
+            next(error);
+        }
+    });
+
+    router.post("/projects/:projectId/llm/optimize-prompt/stream", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        const startedAt = Date.now();
+
+        try {
+            const body = optimizePromptSchema.parse(req.body);
+
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache, no-transform");
+            res.setHeader("Connection", "keep-alive");
+            res.setHeader("X-Accel-Buffering", "no");
+            res.flushHeaders?.();
+
+            sendSse(res, { type: "thinking", content: "Analizzo il prompt originale...\n" });
+            sendSse(res, { type: "thinking", content: "Recupero il contesto del progetto...\n" });
+            sendSse(res, { type: "thinking", content: "Sto preparando una versione piu chiara e completa...\n" });
+
+            const result = await optimizeUserPrompt.executeStream({
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                rawPrompt: body.rawPrompt,
+                assetIds: body.assetIds,
+                conversationId: body.conversationId,
+                sessionId: body.sessionId,
+                provider: body.provider,
+                model: body.model,
+            }, {
+                onThinking: (chunk) => sendSse(res, { type: "thinking", content: String(chunk) }),
+                onAnswer: (chunk) => sendSse(res, { type: "answer", content: String(chunk) }),
+            });
+
+            ExecutionLogger.instance.emit({
+                projectId: req.sandbox!.projectId,
+                domain: "llm",
+                eventType: result.skipped ? "prompt_optimize_skipped" : "prompt_optimize_complete",
+                level: "info",
+                status: "success",
+                durationMs: result.durationMs,
+                metadata: {
+                    taskKey: result.taskKey,
+                    provider: result.provider,
+                    model: result.model,
+                    promptTokens: result.usage?.promptTokens,
+                    completionTokens: result.usage?.completionTokens,
+                    costEur: result.costEstimate?.amount,
+                    skipped: result.skipped ?? false,
+                    streaming: true,
+                },
+            });
+
+            sendSse(res, { type: "done", result });
+            res.end();
+        } catch (error) {
+            const normalized = normalizeHttpError(error);
+            emitLlmFailureLog({
+                projectId: req.sandbox!.projectId,
+                durationMs: Date.now() - startedAt,
+                provider: req.body?.provider,
+                model: req.body?.model,
+                code: normalized.code,
+                message: normalized.userMessage,
+                details: normalized.details,
+            });
+
+            if (res.headersSent) {
+                if (!res.writableEnded && !res.destroyed) {
+                    sendSse(res, {
+                        type: "error",
+                        message: normalized.userMessage,
+                        durationMs: Date.now() - startedAt,
+                        error: {
+                            error: normalized.userMessage,
+                            code: normalized.code,
+                            status: normalized.statusCode,
+                            userMessage: normalized.userMessage,
+                            details: normalized.details,
+                        },
+                    });
+                    res.end();
+                }
+                return;
+            }
+
+            next(error);
+        }
+    });
+
     router.get("/projects/:projectId/llm/prompt-preview", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const promptConfig = await getLlmPromptConfig.execute(req.sandbox!.projectId);
@@ -545,10 +732,15 @@ export function createLlmRoutes(): Router {
                 projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId),
                 platformConfigRepo.get().catch(() => null),
             ]);
+            const preset = project?.presetId
+                ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
+                : null;
             const styleBlock = buildStyleContextBlock(userProfile, moodboard);
+            const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
             const governanceSystemPrompt = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates?.generationSystem || undefined;
             const layers = composeSystemPromptWithLayers({
                 presetId: project?.presetId,
+                presetLayer,
                 styleBlock,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 outputBudgetPolicy: buildOutputBudgetPolicy(),

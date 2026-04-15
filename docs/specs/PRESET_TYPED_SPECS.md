@@ -7,6 +7,53 @@
 
 ---
 
+## Decision Lock — 2026-04-15
+
+The preset system is now confirmed as the foundation for **project-type template models**.
+
+### Primary product meaning of a template model
+
+A template model is not an LLM configuration.
+It is a reusable project-type definition such as:
+
+- layout
+- landing page
+- website
+- keynote
+- casual game
+- serious game
+- 3D game
+- VR game with A-Frame
+- A4 onepager
+- 70×100 cm poster
+- infographic
+- manifesto
+
+Each template model must support:
+
+- category
+- tags
+- short and long descriptions
+- output specification
+- brief starter template
+- style direction template
+- optimized preprompt module to inject into the existing preprompting flow
+- superadmin CRUD and ordering
+
+### Authoring policy
+
+The superadmin must be able to create a new template model from a few natural-language instructions and then use the prompt optimizer to generate or refine:
+
+- the brief starter template
+- the style direction template
+- the optimized preprompt module
+- the descriptive catalog copy
+
+### Paused parallel track
+
+The low-level LLM model-template catalog is not the current product focus.
+It should be treated as a secondary infrastructure layer kept aside for future runtime tuning.
+
 ## 0. Contesto e Motivazione
 
 ### 0.1 Stato attuale

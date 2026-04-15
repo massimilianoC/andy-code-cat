@@ -25,16 +25,41 @@ export class GetPlatformConfig {
                         focusedEditSystem: governance.promptTemplates.focusedEditSystem ?? "",
                         reviewSystem: governance.promptTemplates.reviewSystem ?? "",
                     },
+                    promptTaskSettings: Object.fromEntries(
+                        Object.entries(governance.promptTaskSettings ?? {}).map(([taskKey, task]) => [
+                            taskKey,
+                            {
+                                enabled: task.enabled ?? true,
+                                provider: task.provider ?? "siliconflow",
+                                model: task.model ?? "MiniMaxAI/MiniMax-M2.5",
+                                temperature: task.temperature ?? 0.7,
+                                maxCompletionTokens: task.maxCompletionTokens ?? 1200,
+                                systemTemplate: task.systemTemplate ?? "",
+                            },
+                        ]),
+                    ),
                     injections: {
                         headHtml: governance.injections.headHtml ?? "",
                         headerHtml: governance.injections.headerHtml ?? "",
                         footerHtml: governance.injections.footerHtml ?? "",
                         scriptInHead: governance.injections.scriptInHead ?? "",
                         scriptBeforeBodyClose: governance.injections.scriptBeforeBodyClose ?? "",
+                        globalCss: governance.injections.globalCss ?? "",
                         googleTagManagerId: governance.injections.googleTagManagerId ?? "",
                         googleAnalyticsId: governance.injections.googleAnalyticsId ?? "",
                         matomoSiteId: governance.injections.matomoSiteId ?? "",
                         matomoUrl: governance.injections.matomoUrl ?? "",
+                    },
+                    cookieBanner: {
+                        enabled: governance.cookieBanner?.enabled ?? false,
+                        position: governance.cookieBanner?.position ?? "bottom",
+                        texts: governance.cookieBanner?.texts ?? {},
+                    },
+                    legal: {
+                        privacyPolicyUrls: governance.legal?.privacyPolicyUrls ?? {},
+                        cookiePolicyUrls: governance.legal?.cookiePolicyUrls ?? {},
+                        privacyPolicyHtml: governance.legal?.privacyPolicyHtml ?? {},
+                        cookiePolicyHtml: governance.legal?.cookiePolicyHtml ?? {},
                     },
                     nginx: {
                         publicDomain: governance.nginx.publicDomain ?? "",
