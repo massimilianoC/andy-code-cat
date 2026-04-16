@@ -64,7 +64,7 @@ export class UploadProjectAsset {
         const safeFilename = safenameFromOriginal(input.originalName);
         const storedFilename = `${assetId}-${safeFilename}`;
 
-        await this.storage.saveUpload(input.userId, input.projectId, storedFilename, input.buffer);
+        await this.storage.saveUpload(input.userId, input.projectId, storedFilename, input.buffer, input.mimeType);
 
         const semanticMetadata = env.MEDIA_AUTO_CLASSIFY_UPLOADS === true
             ? buildAssetSemanticMetadata({

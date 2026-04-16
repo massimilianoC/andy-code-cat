@@ -35,6 +35,9 @@ export interface LlmFocusContext {
         currentAlt?: string;
         backgroundImageUrl?: string;
         mediaMode?: "foreground" | "background" | "none";
+        originalWidth?: number;
+        originalHeight?: number;
+        aspectRatio?: number;
     };
     codeSelection?: {
         language: "html" | "css" | "js";

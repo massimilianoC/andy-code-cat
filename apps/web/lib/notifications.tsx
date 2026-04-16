@@ -68,7 +68,19 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
     const update = useCallback((id: string, patch: Partial<Omit<SystemNotification, "id">>) => {
         setNotifications((prev) =>
-            prev.map((n) => (n.id === id ? { ...n, ...patch } : n))
+            prev.map((n) => {
+                if (n.id !== id) return n;
+
+                const nextStatus = patch.status ?? n.status;
+                return {
+                    ...n,
+                    ...patch,
+                    completedAt:
+                        patch.completedAt ??
+                        (nextStatus === "running" ? n.completedAt : Date.now()),
+                    progress: nextStatus === "running" ? patch.progress ?? n.progress : 100,
+                };
+            })
         );
     }, []);
 

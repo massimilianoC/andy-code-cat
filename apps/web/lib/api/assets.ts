@@ -58,6 +58,44 @@ export interface ProjectAssetDto {
     createdAt: string;
 }
 
+export interface SuggestProjectImageIdeaInput {
+    prompt?: string;
+    targetMode?: "foreground" | "background";
+    selectedElement?: {
+        stableNodeId: string;
+        selector: string;
+        tag: string;
+        textSnippet?: string;
+        currentSrc?: string;
+        currentAlt?: string;
+        backgroundImageUrl?: string;
+        mediaMode?: "foreground" | "background" | "none";
+        originalWidth?: number;
+        originalHeight?: number;
+        aspectRatio?: number;
+    };
+}
+
+export interface SuggestProjectImageIdeaResult {
+    suggestion: string;
+    suggestedPrompt: string;
+    provider: string;
+    model: string;
+    durationMs: number;
+    skipped: boolean;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    costEstimate?: {
+        currency: "EUR";
+        amount: number;
+        source: "provider" | "flat-rate";
+        providerCostUsd?: number;
+    };
+}
+
 export interface GenerateProjectImageInput {
     prompt: string;
     fileNameHint?: string;
@@ -71,10 +109,14 @@ export interface GenerateProjectImageInput {
         stableNodeId: string;
         selector: string;
         tag: string;
+        textSnippet?: string;
         currentSrc?: string;
         currentAlt?: string;
         backgroundImageUrl?: string;
         mediaMode?: "foreground" | "background" | "none";
+        originalWidth?: number;
+        originalHeight?: number;
+        aspectRatio?: number;
     };
     mediaConfig?: {
         fit?: "cover" | "contain" | "auto";
@@ -201,6 +243,15 @@ export function deleteProjectAsset(token: string, projectId: string, assetId: st
         "DELETE",
         `/v1/projects/${projectId}/assets/${assetId}`,
         undefined,
+        { Authorization: `Bearer ${token}`, "x-project-id": projectId }
+    );
+}
+
+export function suggestProjectImageIdea(token: string, projectId: string, data: SuggestProjectImageIdeaInput) {
+    return call<SuggestProjectImageIdeaResult>(
+        "POST",
+        `/v1/projects/${projectId}/assets/suggest-image`,
+        data,
         { Authorization: `Bearer ${token}`, "x-project-id": projectId }
     );
 }

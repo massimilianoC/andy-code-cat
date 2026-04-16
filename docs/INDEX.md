@@ -23,6 +23,7 @@ Read in this order before making changes:
 | [README.md](../README.md) | Public project overview, quick start, and positioning |
 | [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Stable planning entry point for agents and contributors |
 | [docs/project/ROADMAP.md](project/ROADMAP.md) | Project roadmap and release direction |
+| [docs/project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md](project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md) | Reuse-first implementation plan for zero-effort flows, backend orchestration, and future node-based pipelines |
 | [docs/PRIVATE_CONFIG_GUIDE.md](PRIVATE_CONFIG_GUIDE.md) | Owner-only guidance for public/private repo hygiene |
 
 ---
@@ -90,6 +91,7 @@ Read in this order before making changes:
 | [docs/specs/PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX and guardrails |
 | [docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md](specs/PROMPTING_SERVICE_PLATFORM_SPEC.md) | Internal prompting platform and audit model |
 | [docs/specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md](specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md) | Asset-aware prompt enrichment plan |
+| [docs/specs/IMAGE_PROMPTING_PIPELINE_SPEC.md](specs/IMAGE_PROMPTING_PIPELINE_SPEC.md) | Structured image prompting, context enrichment, and versioning-aligned pipeline |
 | [docs/specs/BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | Backend-as-a-service extension layer |
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
 | [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-model platform playbook |

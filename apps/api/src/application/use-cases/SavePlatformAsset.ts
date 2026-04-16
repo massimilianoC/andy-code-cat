@@ -35,7 +35,7 @@ export class SavePlatformAsset {
         const safeName = safenameFromOriginal(input.originalName);
         const storedFilename = `${assetId}-${safeName}`;
 
-        await this.storage.saveUpload(input.userId, input.projectId, storedFilename, input.buffer);
+        await this.storage.saveUpload(input.userId, input.projectId, storedFilename, input.buffer, input.mimeType);
 
         return this.assetRepository.create({
             projectId: input.projectId,

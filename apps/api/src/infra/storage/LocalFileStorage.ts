@@ -57,7 +57,8 @@ export class LocalFileStorage implements IFileStorage {
         userId: string,
         projectId: string,
         storedFilename: string,
-        buffer: Buffer
+        buffer: Buffer,
+        _contentType?: string
     ): Promise<string> {
         const dir = this.uploadDirPath(userId, projectId);
         await this.ensureDir(dir);
