@@ -4,6 +4,10 @@ import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
+import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
+import { MongoUserStyleProfileRepository } from "../../../infra/repositories/MongoUserStyleProfileRepository";
+import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
+import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { UploadProjectAsset } from "../../../application/use-cases/UploadProjectAsset";
 import { UpdateProjectAsset } from "../../../application/use-cases/UpdateProjectAsset";
@@ -11,10 +15,17 @@ import { AddUrlReference } from "../../../application/use-cases/AddUrlReference"
 import { ListProjectAssets } from "../../../application/use-cases/ListProjectAssets";
 import { DeleteProjectAsset } from "../../../application/use-cases/DeleteProjectAsset";
 import type { RequestWithContext } from "../types";
-import { generateProjectImageSchema, type ProjectAssetDto } from "@andy-code-cat/contracts";
+import { generateProjectImageSchema, suggestProjectImageIdeaSchema, type ProjectAssetDto } from "@andy-code-cat/contracts";
 import { GenerateProjectImage } from "../../../application/use-cases/GenerateProjectImage";
 import { GetProjectAiAnalytics } from "../../../application/use-cases/GetProjectAiAnalytics";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
+import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptConfig";
+import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
+import { OptimizeImagePrompt } from "../../../application/prompting/OptimizeImagePrompt";
+import { SuggestProjectImageIdea } from "../../../application/prompting/SuggestProjectImageIdea";
+import { buildImagePromptContextPacket } from "../../../application/prompting/buildImagePromptContext";
+import { env } from "../../../config";
 
 // In-memory storage: the use case writes to disk itself after validation.
 const upload = multer({
@@ -94,6 +105,8 @@ export function createProjectAssetRoutes(): Router {
 
     const projectRepository = new MongoProjectRepository();
     const assetRepository = new MongoProjectAssetRepository();
+    const moodboardRepository = new MongoProjectMoodboardRepository();
+    const userStyleProfileRepository = new MongoUserStyleProfileRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
     const storage = getFileStorage();
 
@@ -102,8 +115,37 @@ export function createProjectAssetRoutes(): Router {
     const addUrlRef = new AddUrlReference(assetRepository);
     const listAssets = new ListProjectAssets(assetRepository);
     const deleteAsset = new DeleteProjectAsset(assetRepository, storage);
-    const generateProjectImage = new GenerateProjectImage(assetRepository, storage);
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const promptConfigRepository = new MongoLlmPromptConfigRepository();
+    const platformConfigRepository = new MongoPlatformConfigRepository();
+    const llmCatalogRepository = new MongoLlmCatalogRepository();
+    const getLlmCatalog = new GetLlmCatalog(
+        env.LLM_CATALOG_SOURCE,
+        env.SILICONFLOW_BASE_URL,
+        env.LMSTUDIO_BASE_URL,
+        env.OPENROUTER_BASE_URL,
+        llmCatalogRepository,
+        env.hasOpenRouterApiKey,
+    );
+    const optimizeImagePrompt = new OptimizeImagePrompt(
+        platformConfigRepository,
+        promptExecutionLogRepository,
+        getLlmCatalog,
+    );
+    const suggestProjectImageIdea = new SuggestProjectImageIdea(
+        platformConfigRepository,
+        promptExecutionLogRepository,
+        getLlmCatalog,
+    );
+    const generateProjectImage = new GenerateProjectImage(
+        assetRepository,
+        storage,
+        projectRepository,
+        moodboardRepository,
+        userStyleProfileRepository,
+        optimizeImagePrompt,
+    );
+    const getLlmPromptConfig = new GetLlmPromptConfig(promptConfigRepository);
     const getProjectAiAnalytics = new GetProjectAiAnalytics(promptExecutionLogRepository, assetRepository);
 
     router.use(authMiddleware);
@@ -161,6 +203,58 @@ export function createProjectAssetRoutes(): Router {
         }
     );
 
+    // POST /v1/projects/:projectId/assets/suggest-image — suggest a visual direction for the selected element
+    router.post(
+        "/projects/:projectId/assets/suggest-image",
+        sandboxMiddleware,
+        async (req: RequestWithContext, res, next) => {
+            try {
+                const input = suggestProjectImageIdeaSchema.parse(req.body);
+                const promptConfig = await getLlmPromptConfig.execute(req.sandbox!.projectId).catch(() => null);
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                if (!project) {
+                    res.status(404).json({ error: "Project not found" });
+                    return;
+                }
+
+                const [moodboard, userProfile, allAssets] = await Promise.all([
+                    moodboardRepository.findByProjectId(req.sandbox!.projectId).catch(() => null),
+                    userStyleProfileRepository.findByUserId(req.auth!.userId).catch(() => null),
+                    assetRepository.listByProject(req.sandbox!.projectId, req.auth!.userId).catch(() => []),
+                ]);
+
+                const packet = buildImagePromptContextPacket({
+                    project,
+                    moodboard,
+                    userProfile,
+                    assets: allAssets,
+                    targetMode: input.targetMode,
+                    selectedElement: input.selectedElement ? {
+                        ...input.selectedElement,
+                        classes: [],
+                        textSnippet: input.selectedElement.textSnippet,
+                    } : undefined,
+                    prePromptTemplate: promptConfig?.enabled ? promptConfig.prePromptTemplate : undefined,
+                });
+
+                const result = await suggestProjectImageIdea.execute({
+                    projectId: req.sandbox!.projectId,
+                    userId: req.auth!.userId,
+                    productKey: project.presetId ?? "default",
+                    rawPrompt: input.prompt,
+                    packet,
+                    projectPresetId: project.presetId,
+                    usedMoodboard: Boolean(moodboard),
+                    usedUserProfile: Boolean(userProfile),
+                });
+
+                res.json(result);
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
     // POST /v1/projects/:projectId/assets/generate-image — create a sandboxed deferred image asset
     router.post(
         "/projects/:projectId/assets/generate-image",
@@ -168,6 +262,7 @@ export function createProjectAssetRoutes(): Router {
         async (req: RequestWithContext, res, next) => {
             try {
                 const input = generateProjectImageSchema.parse(req.body);
+                const promptConfig = await getLlmPromptConfig.execute(req.sandbox!.projectId).catch(() => null);
                 const result = await generateProjectImage.execute({
                     projectId: req.sandbox!.projectId,
                     userId: req.auth!.userId,
@@ -184,6 +279,7 @@ export function createProjectAssetRoutes(): Router {
                         classes: [],
                     } : undefined,
                     mediaConfig: input.mediaConfig,
+                    prePromptTemplate: promptConfig?.enabled ? promptConfig.prePromptTemplate : undefined,
                 });
 
                 res.status(202).json({

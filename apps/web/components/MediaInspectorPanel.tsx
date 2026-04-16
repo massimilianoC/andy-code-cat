@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import type { AiUsageAnalyticsDto, ProjectAssetDto } from "@/lib/api/assets";
+import type { AiUsageAnalyticsDto, ProjectAssetDto, SuggestProjectImageIdeaResult } from "@/lib/api/assets";
 import type { LlmFocusContext } from "@/lib/api/llm";
 import { downloadProjectAssetDataUrl } from "@/lib/api/assets";
 
@@ -30,6 +30,8 @@ interface MediaInspectorPanelProps {
     mediaFilter: string;
     onMediaFilterChange: (value: string) => void;
     generating: boolean;
+    suggesting: boolean;
+    suggestion: SuggestProjectImageIdeaResult | null;
     imageModelOptions: Array<{ id: string; label: string }>;
     selectedImageModel: string;
     onImageModelChange: (value: string) => void;
@@ -40,6 +42,8 @@ interface MediaInspectorPanelProps {
     aiAnalytics: AiUsageAnalyticsDto | null;
     loadingAiAnalytics: boolean;
     onGenerate: () => void;
+    onSuggest: () => void;
+    onUseSuggestion: () => void;
     onOpenGallery: () => void;
     onApplyAsset: (asset: ProjectAssetDto) => void;
     onApplyCurrentStyles: () => void;
@@ -120,12 +124,34 @@ export default function MediaInspectorPanel(props: MediaInspectorPanelProps) {
                     <p className="text-xs italic text-muted-foreground">{props.chatPromptPlaceholder}</p>
                     {!props.chatPromptReady ? (
                         <p className="text-[11px] text-muted-foreground">
-                            First write the request in the main chat input.
+                            If you are unsure, ask for a suggestion first.
                         </p>
                     ) : null}
-                    <Button type="button" onClick={props.onGenerate} disabled={props.generating || !props.chatPromptReady}>
-                        {props.generating ? "Generating..." : "Generate from chat prompt"}
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="secondary" onClick={props.onSuggest} disabled={props.suggesting}>
+                            {props.suggesting ? "Suggesting..." : "Suggest idea"}
+                        </Button>
+                        <Button type="button" onClick={props.onGenerate} disabled={props.generating || !props.chatPromptReady}>
+                            {props.generating ? "Generating..." : "Generate from chat prompt"}
+                        </Button>
+                    </div>
+                    {props.suggestion ? (
+                        <div className="space-y-2 rounded-md border border-border bg-background/60 p-2">
+                            <p className="text-[11px] font-medium text-foreground">Suggested direction</p>
+                            <p className="text-xs text-muted-foreground">{props.suggestion.suggestion}</p>
+                            <div className="rounded bg-muted/20 p-2 text-[11px] text-foreground break-words">
+                                {props.suggestion.suggestedPrompt}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button type="button" size="sm" variant="outline" onClick={props.onUseSuggestion}>
+                                    Use as prompt
+                                </Button>
+                                <Badge variant="outline" className="text-[10px]">
+                                    {props.suggestion.provider} · {props.suggestion.model}
+                                </Badge>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </details>
 
@@ -228,6 +254,7 @@ export default function MediaInspectorPanel(props: MediaInspectorPanelProps) {
                                 <option value="768x768">768 × 768</option>
                                 <option value="1024x1024">1024 × 1024</option>
                                 <option value="1280x720">1280 × 720</option>
+                                <option value="720x1280">720 × 1280</option>
                             </select>
                         </div>
                         <div className="space-y-1.5">

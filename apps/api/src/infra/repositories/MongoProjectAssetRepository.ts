@@ -231,6 +231,8 @@ export class MongoProjectAssetRepository implements ProjectAssetRepository {
         projectId: string,
         userId: string,
         data: Partial<{
+            originalName: string;
+            storedFilename: string;
             label: string;
             useInProject: boolean;
             styleRole: AssetStyleRole;
@@ -245,6 +247,8 @@ export class MongoProjectAssetRepository implements ProjectAssetRepository {
     ): Promise<ProjectAsset | null> {
         const col = await this.col();
         const setFields: Record<string, unknown> = {};
+        if (data.originalName !== undefined) setFields["originalName"] = data.originalName.slice(0, 255);
+        if (data.storedFilename !== undefined) setFields["storedFilename"] = data.storedFilename;
         if (data.label !== undefined) setFields["label"] = data.label;
         if (data.useInProject !== undefined) setFields["useInProject"] = data.useInProject;
         if (data.styleRole !== undefined) setFields["styleRole"] = data.styleRole;

@@ -113,6 +113,46 @@ export const addUrlReferenceSchema = z.object({
     descriptionText: z.string().max(500).optional(),
 });
 
+export const suggestProjectImageIdeaSchema = z.object({
+    prompt: z.string().max(2000).optional(),
+    targetMode: z.enum(["foreground", "background"]).default("foreground"),
+    selectedElement: z.object({
+        stableNodeId: z.string().min(1).max(120),
+        selector: z.string().min(1).max(300),
+        tag: z.string().min(1).max(64),
+        textSnippet: z.string().max(500).optional(),
+        currentSrc: z.string().max(1500).optional(),
+        currentAlt: z.string().max(300).optional(),
+        backgroundImageUrl: z.string().max(1500).optional(),
+        mediaMode: z.enum(["foreground", "background", "none"]).optional(),
+        originalWidth: z.number().positive().max(10000).optional(),
+        originalHeight: z.number().positive().max(10000).optional(),
+        aspectRatio: z.number().positive().max(100).optional(),
+    }).optional(),
+});
+
+export type SuggestProjectImageIdeaInput = z.infer<typeof suggestProjectImageIdeaSchema>;
+
+export interface SuggestProjectImageIdeaResultDto {
+    suggestion: string;
+    suggestedPrompt: string;
+    provider: string;
+    model: string;
+    durationMs: number;
+    skipped: boolean;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    costEstimate?: {
+        currency: "EUR";
+        amount: number;
+        source: "provider" | "flat-rate";
+        providerCostUsd?: number;
+    };
+}
+
 export const generateProjectImageSchema = z.object({
     prompt: z.string().min(1).max(2000),
     fileNameHint: z.string().max(120).optional(),
@@ -126,10 +166,14 @@ export const generateProjectImageSchema = z.object({
         stableNodeId: z.string().min(1).max(120),
         selector: z.string().min(1).max(300),
         tag: z.string().min(1).max(64),
+        textSnippet: z.string().max(500).optional(),
         currentSrc: z.string().max(1500).optional(),
         currentAlt: z.string().max(300).optional(),
         backgroundImageUrl: z.string().max(1500).optional(),
         mediaMode: z.enum(["foreground", "background", "none"]).optional(),
+        originalWidth: z.number().positive().max(10000).optional(),
+        originalHeight: z.number().positive().max(10000).optional(),
+        aspectRatio: z.number().positive().max(100).optional(),
     }).optional(),
     mediaConfig: z.object({
         fit: z.enum(["cover", "contain", "auto"]).optional(),

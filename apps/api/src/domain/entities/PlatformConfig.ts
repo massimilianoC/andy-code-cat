@@ -24,6 +24,22 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 1200,
         systemTemplate: "",
     },
+    optimize_image_prompt: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.4,
+        maxCompletionTokens: 700,
+        systemTemplate: "",
+    },
+    suggest_image_direction: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 500,
+        systemTemplate: "",
+    },
     draft_template_model: {
         enabled: true,
         provider: "siliconflow",

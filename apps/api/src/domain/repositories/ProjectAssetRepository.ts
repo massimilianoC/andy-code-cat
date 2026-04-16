@@ -46,6 +46,8 @@ export interface ProjectAssetRepository {
         projectId: string,
         userId: string,
         data: Partial<{
+            originalName: string;
+            storedFilename: string;
             label: string;
             useInProject: boolean;
             styleRole: AssetStyleRole;

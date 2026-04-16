@@ -46,10 +46,12 @@ import {
     listProjectAssets,
     getProjectAiAnalytics,
     generateProjectImage,
+    suggestProjectImageIdea,
     downloadProjectAssetDataUrl,
     type SiteDeploymentDto,
     type ProjectAssetDto,
     type AiUsageAnalyticsDto,
+    type SuggestProjectImageIdeaResult,
 } from "../../../lib/api";
 import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
@@ -274,6 +276,15 @@ function sanitizeSelectedElementForFocus(
     const mediaMode = element.mediaMode === "foreground" || element.mediaMode === "background"
         ? element.mediaMode
         : ((currentSrc || backgroundImageUrl) ? "none" : undefined);
+    const originalWidth = typeof element.originalWidth === "number" && Number.isFinite(element.originalWidth) && element.originalWidth > 0
+        ? Math.round(element.originalWidth)
+        : undefined;
+    const originalHeight = typeof element.originalHeight === "number" && Number.isFinite(element.originalHeight) && element.originalHeight > 0
+        ? Math.round(element.originalHeight)
+        : undefined;
+    const aspectRatio = typeof element.aspectRatio === "number" && Number.isFinite(element.aspectRatio) && element.aspectRatio > 0
+        ? Math.round(element.aspectRatio * 1000) / 1000
+        : (originalWidth && originalHeight ? Math.round((originalWidth / originalHeight) * 1000) / 1000 : undefined);
 
     if (outerHtml && /^<(html|body)\b/i.test(outerHtml)) {
         return null;
@@ -290,6 +301,9 @@ function sanitizeSelectedElementForFocus(
         ...(currentAlt ? { currentAlt } : {}),
         ...(backgroundImageUrl ? { backgroundImageUrl } : {}),
         ...(mediaMode ? { mediaMode } : {}),
+        ...(originalWidth ? { originalWidth } : {}),
+        ...(originalHeight ? { originalHeight } : {}),
+        ...(aspectRatio ? { aspectRatio } : {}),
     };
 }
 
@@ -386,6 +400,7 @@ export default function WorkspacePage() {
     const [previewSnapshots, setPreviewSnapshots] = useState<PreviewSnapshot[]>([]);
     const [selectedBackendSnapshotId, setSelectedBackendSnapshotId] = useState<string | null>(null);
     const [loadingSnapshots, setLoadingSnapshots] = useState(false);
+    const selectedBackendSnapshotIdRef = useRef<string | null>(null);
     const [editorHtml, setEditorHtml] = useState("");
     const [editorCss, setEditorCss] = useState("");
     const [editorJs, setEditorJs] = useState("");
@@ -401,6 +416,8 @@ export default function WorkspacePage() {
     const [mediaOpacity, setMediaOpacity] = useState(1);
     const [mediaFilter, setMediaFilter] = useState("none");
     const [generatingMedia, setGeneratingMedia] = useState(false);
+    const [suggestingMedia, setSuggestingMedia] = useState(false);
+    const [mediaSuggestion, setMediaSuggestion] = useState<SuggestProjectImageIdeaResult | null>(null);
     const [selectedImageModel, setSelectedImageModel] = useState("");
     const [selectedImageSize, setSelectedImageSize] = useState("1024x1024");
     const [selectedImageSteps, setSelectedImageSteps] = useState(4);
@@ -888,6 +905,10 @@ export default function WorkspacePage() {
     );
 
     useEffect(() => {
+        selectedBackendSnapshotIdRef.current = selectedBackendSnapshotId;
+    }, [selectedBackendSnapshotId]);
+
+    useEffect(() => {
         if (!token) {
             setPreviewSnapshots([]);
             setSelectedBackendSnapshotId(null);
@@ -939,8 +960,25 @@ export default function WorkspacePage() {
         }
     }, [selectedElement]);
 
-    const applyMediaToPreview = useCallback((url: string) => {
-        if (!selectedElement) return;
+    useEffect(() => {
+        setMediaSuggestion(null);
+    }, [selectedElement?.stableNodeId, mediaMode]);
+
+    useEffect(() => {
+        if (!selectedElement?.aspectRatio) return;
+        if (selectedElement.aspectRatio >= 1.45) {
+            setSelectedImageSize("1280x720");
+            return;
+        }
+        if (selectedElement.aspectRatio <= 0.8) {
+            setSelectedImageSize("720x1280");
+            return;
+        }
+        setSelectedImageSize("1024x1024");
+    }, [selectedElement?.aspectRatio]);
+
+    const applyMediaToPreview = useCallback((url: string): string => {
+        if (!selectedElement) return "";
 
         iframeRef.current?.contentWindow?.postMessage({
             type: "pf-apply-media",
@@ -952,42 +990,65 @@ export default function WorkspacePage() {
             opacity: mediaOpacity,
             filter: mediaFilter,
             alt: selectedElement.currentAlt ?? "",
+            preserveWidth: selectedElement.originalWidth,
+            preserveHeight: selectedElement.originalHeight,
+            aspectRatio: selectedElement.aspectRatio,
         }, "*");
 
-        setEditorHtml((prev) => {
-            if (!prev.trim()) return prev;
+        const currentHtml = editorHtml;
+        let nextHtml = currentHtml;
+
+        if (currentHtml.trim()) {
             try {
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(prev, "text/html");
+                const doc = parser.parseFromString(currentHtml, "text/html");
                 const target = doc.querySelector(selectedElement.selector);
-                if (!target) return prev;
+                if (target) {
+                    if (mediaMode === "background") {
+                        const targetEl = target as HTMLElement;
+                        targetEl.style.backgroundImage = `url("${url}")`;
+                        targetEl.style.backgroundPosition = "center center";
+                        targetEl.style.backgroundSize = backgroundFit;
+                        targetEl.style.backgroundRepeat = backgroundRepeat;
+                        targetEl.style.opacity = String(mediaOpacity);
+                        targetEl.style.filter = mediaFilter;
+                    } else {
+                        const img = target.tagName.toLowerCase() === "img"
+                            ? target as HTMLImageElement
+                            : target.querySelector("img");
+                        if (img) {
+                            img.setAttribute("src", url);
+                            if (selectedElement.currentAlt) img.setAttribute("alt", selectedElement.currentAlt);
+                            const imgEl = img as HTMLImageElement & HTMLElement;
+                            imgEl.style.opacity = String(mediaOpacity);
+                            imgEl.style.filter = mediaFilter;
+                            imgEl.style.objectFit = backgroundFit === "auto" ? "cover" : backgroundFit;
+                            imgEl.style.maxWidth = imgEl.style.maxWidth || "100%";
+                            imgEl.style.display = imgEl.style.display || "block";
+                            if (!img.getAttribute("width") && !imgEl.style.width && selectedElement.originalWidth) {
+                                imgEl.style.width = `${selectedElement.originalWidth}px`;
+                            }
+                            if (!img.getAttribute("height") && !imgEl.style.height && selectedElement.originalHeight) {
+                                imgEl.style.height = `${selectedElement.originalHeight}px`;
+                            }
+                            if (selectedElement.aspectRatio && !imgEl.style.aspectRatio) {
+                                imgEl.style.aspectRatio = String(selectedElement.aspectRatio);
+                            }
+                        }
+                    }
 
-                if (mediaMode === "background") {
-                    const targetEl = target as HTMLElement;
-                    targetEl.style.backgroundImage = `url("${url}")`;
-                    targetEl.style.backgroundPosition = "center center";
-                    targetEl.style.backgroundSize = backgroundFit;
-                    targetEl.style.backgroundRepeat = backgroundRepeat;
-                    targetEl.style.opacity = String(mediaOpacity);
-                    targetEl.style.filter = mediaFilter;
-                } else {
-                    const img = target.tagName.toLowerCase() === "img"
-                        ? target as HTMLImageElement
-                        : target.querySelector("img");
-                    if (!img) return prev;
-                    img.setAttribute("src", url);
-                    if (selectedElement.currentAlt) img.setAttribute("alt", selectedElement.currentAlt);
-                    (img as HTMLElement).style.opacity = String(mediaOpacity);
-                    (img as HTMLElement).style.filter = mediaFilter;
+                    nextHtml = /<!doctype/i.test(currentHtml)
+                        ? `<!doctype html>${doc.documentElement.outerHTML}`
+                        : doc.body.innerHTML;
                 }
-
-                return /<!doctype/i.test(prev)
-                    ? `<!doctype html>${doc.documentElement.outerHTML}`
-                    : doc.body.innerHTML;
             } catch {
-                return prev;
+                nextHtml = currentHtml;
             }
-        });
+        }
+
+        if (nextHtml !== currentHtml) {
+            setEditorHtml(nextHtml);
+        }
 
         setSelectedElement((prev) => prev ? {
             ...prev,
@@ -995,7 +1056,49 @@ export default function WorkspacePage() {
             backgroundImageUrl: mediaMode === "background" ? url : prev.backgroundImageUrl,
             mediaMode,
         } : prev);
-    }, [selectedElement, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter]);
+
+        return nextHtml;
+    }, [selectedElement, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter, editorHtml]);
+
+    const persistWorkspaceSnapshot = useCallback(async (
+        snapshotId: string,
+        artifacts: { html: string; css: string; js: string },
+        options?: { promptExcerpt?: string; refreshList?: boolean; setSelected?: boolean },
+    ) => {
+        saveThumbnail(projectId, artifacts);
+        if (options?.promptExcerpt) {
+            savePromptExcerpt(projectId, options.promptExcerpt);
+        }
+        incrementSnapCount(projectId);
+        if (token && options?.refreshList !== false) {
+            await loadSnapshots(token);
+        }
+        if (options?.setSelected !== false) {
+            setSelectedBackendSnapshotId(snapshotId);
+        }
+    }, [projectId, token, loadSnapshots]);
+
+    const saveMediaVersion = useCallback(async (
+        html: string,
+        finishReason: string,
+        options?: { promptExcerpt?: string; refreshList?: boolean; setSelected?: boolean },
+    ): Promise<boolean> => {
+        if (!token || !activeConvId || !html.trim()) return false;
+
+        try {
+            const result = await createPreviewSnapshot(token, projectId, {
+                conversationId: activeConvId,
+                parentSnapshotId: selectedBackendSnapshotIdRef.current ?? undefined,
+                artifacts: { html, css: editorCss, js: editorJs },
+                metadata: { finishReason },
+                activate: true,
+            });
+            await persistWorkspaceSnapshot(result.snapshot.id, { html, css: editorCss, js: editorJs }, options);
+            return true;
+        } catch {
+            return false;
+        }
+    }, [token, activeConvId, projectId, editorCss, editorJs, persistWorkspaceSnapshot]);
 
     const handleApplyAsset = useCallback(async (asset: ProjectAssetDto) => {
         if (!token || !selectedElement) return;
@@ -1016,20 +1119,23 @@ export default function WorkspacePage() {
                 return;
             }
 
-            applyMediaToPreview(resolvedUrl);
+            const updatedHtml = applyMediaToPreview(resolvedUrl);
+            const versioned = await saveMediaVersion(updatedHtml || editorHtml, "media-apply");
             setConfigOpen(false);
             addNotification({
-                label: "Media applicato",
+                label: versioned ? "Media applicato e salvato" : "Media applicato",
                 status: "done",
-                message: `${asset.label ?? asset.originalName} collegato all'elemento selezionato.`,
+                message: versioned
+                    ? `${asset.label ?? asset.originalName} collegato all'elemento selezionato e salvato come nuova versione.`
+                    : `${asset.label ?? asset.originalName} collegato all'elemento selezionato.`,
             });
         } catch (err) {
             const message = err instanceof ApiError ? err.message : "Impossibile caricare l'asset selezionato";
             addNotification({ label: "Errore media", status: "error", message });
         }
-    }, [token, selectedElement, projectId, addNotification, applyMediaToPreview]);
+    }, [token, selectedElement, projectId, addNotification, applyMediaToPreview, saveMediaVersion, editorHtml]);
 
-    const handleApplyCurrentStyles = useCallback(() => {
+    const handleApplyCurrentStyles = useCallback(async () => {
         if (!selectedElement) return;
         const currentUrl = mediaMode === "background"
             ? (selectedElement.backgroundImageUrl || selectedElement.currentSrc)
@@ -1044,19 +1150,80 @@ export default function WorkspacePage() {
             return;
         }
 
-        applyMediaToPreview(currentUrl);
+        const updatedHtml = applyMediaToPreview(currentUrl);
+        const versioned = await saveMediaVersion(updatedHtml || editorHtml, "media-style-update");
         addNotification({
-            label: "Stile applicato",
+            label: versioned ? "Stile applicato e salvato" : "Stile applicato",
             status: "done",
-            message: "Fit, repeat, opacity e filter sono stati aggiornati nella preview.",
+            message: versioned
+                ? "Fit, repeat, opacity e filter sono stati aggiornati e salvati come nuova versione."
+                : "Fit, repeat, opacity e filter sono stati aggiornati nella preview.",
         });
-    }, [selectedElement, mediaMode, addNotification, applyMediaToPreview]);
+    }, [selectedElement, mediaMode, addNotification, applyMediaToPreview, saveMediaVersion, editorHtml]);
+
+    const handleSuggestMedia = useCallback(async () => {
+        if (!token || !selectedElement) return;
+
+        setSuggestingMedia(true);
+        const notifId = addNotification({
+            label: "Suggerimento immagine",
+            status: "running",
+            message: "Sto analizzando il contesto della sezione…",
+        });
+
+        try {
+            const result = await suggestProjectImageIdea(token, projectId, {
+                prompt: prompt.trim() || undefined,
+                targetMode: mediaMode,
+                selectedElement: {
+                    stableNodeId: selectedElement.stableNodeId,
+                    selector: selectedElement.selector,
+                    tag: selectedElement.tag,
+                    textSnippet: selectedElement.textSnippet,
+                    currentSrc: selectedElement.currentSrc,
+                    currentAlt: selectedElement.currentAlt,
+                    backgroundImageUrl: selectedElement.backgroundImageUrl,
+                    mediaMode: selectedElement.mediaMode,
+                    originalWidth: selectedElement.originalWidth,
+                    originalHeight: selectedElement.originalHeight,
+                    aspectRatio: selectedElement.aspectRatio,
+                },
+            });
+
+            setMediaSuggestion(result);
+            updateNotification(notifId, {
+                label: "Suggerimento pronto",
+                status: "done",
+                message: result.suggestion,
+            });
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : "Impossibile generare un suggerimento immagine";
+            updateNotification(notifId, { label: "Suggerimento fallito", status: "error", message });
+        } finally {
+            setSuggestingMedia(false);
+        }
+    }, [token, selectedElement, prompt, projectId, mediaMode, addNotification, updateNotification]);
+
+    const handleUseSuggestedMediaPrompt = useCallback(() => {
+        if (!mediaSuggestion?.suggestedPrompt) return;
+        setPrompt(mediaSuggestion.suggestedPrompt);
+        addNotification({
+            label: "Prompt aggiornato",
+            status: "done",
+            message: "Il suggerimento è stato copiato nel prompt principale.",
+        });
+    }, [mediaSuggestion, addNotification]);
 
     const handleGenerateMedia = useCallback(async () => {
         const generationPrompt = prompt.trim();
         if (!token || !selectedElement || !generationPrompt) return;
 
         setGeneratingMedia(true);
+        const notifId = addNotification({
+            label: "Generazione immagine",
+            status: "running",
+            message: "Invio richiesta al provider…",
+        });
         try {
             const result = await generateProjectImage(token, projectId, {
                 prompt: generationPrompt,
@@ -1071,10 +1238,14 @@ export default function WorkspacePage() {
                     stableNodeId: selectedElement.stableNodeId,
                     selector: selectedElement.selector,
                     tag: selectedElement.tag,
+                    textSnippet: selectedElement.textSnippet,
                     currentSrc: selectedElement.currentSrc,
                     currentAlt: selectedElement.currentAlt,
                     backgroundImageUrl: selectedElement.backgroundImageUrl,
                     mediaMode: selectedElement.mediaMode,
+                    originalWidth: selectedElement.originalWidth,
+                    originalHeight: selectedElement.originalHeight,
+                    aspectRatio: selectedElement.aspectRatio,
                 },
                 mediaConfig: {
                     fit: backgroundFit,
@@ -1089,10 +1260,10 @@ export default function WorkspacePage() {
 
             const placeholderUrl = await downloadProjectAssetDataUrl(token, projectId, result.asset.id);
             applyMediaToPreview(placeholderUrl);
-            addNotification({
+            updateNotification(notifId, {
                 label: "Generazione avviata",
                 status: "running",
-                message: "Placeholder applicato. Aggiorno automaticamente quando il file finale è pronto.",
+                message: "Placeholder applicato nella working view. Salvo una nuova versione solo quando l'immagine finale è pronta.",
             });
 
             void (async () => {
@@ -1114,28 +1285,35 @@ export default function WorkspacePage() {
                         }
 
                         if (trackedAsset.generationStatus === "failed") {
-                            addNotification({
+                            updateNotification(notifId, {
                                 label: "Generazione fallita",
                                 status: "error",
-                                message: trackedAsset.generationMetadata?.errorMessage ?? "Il provider non ha restituito un asset valido.",
+                                message: `${trackedAsset.generationMetadata?.errorMessage ?? "Il provider non ha restituito un asset valido."} Il placeholder resta nella working view corrente.`,
                             });
                             return;
                         }
 
                         if (trackedAsset.generationStatus === "ready" && trackedAsset.mimeType.startsWith("image/")) {
                             const finalUrl = await downloadProjectAssetDataUrl(token, projectId, trackedAsset.id);
-                            applyMediaToPreview(finalUrl);
-                            addNotification({
-                                label: "Immagine pronta",
+                            const finalHtml = applyMediaToPreview(finalUrl);
+                            const finalVersioned = await saveMediaVersion(
+                                finalHtml || editorHtml,
+                                "image-generation-ready",
+                                { promptExcerpt: generationPrompt },
+                            );
+                            updateNotification(notifId, {
+                                label: finalVersioned ? "Immagine pronta e salvata" : "Immagine pronta",
                                 status: "done",
-                                message: `${trackedAsset.label ?? trackedAsset.originalName} è stata aggiornata nella preview.`,
+                                message: finalVersioned
+                                    ? `${trackedAsset.label ?? trackedAsset.originalName} ha sostituito il placeholder ed è stata salvata come nuova versione.`
+                                    : `${trackedAsset.label ?? trackedAsset.originalName} è stata aggiornata nella preview.`,
                             });
                             return;
                         }
                     }
 
-                    addNotification({
-                        label: "Generazione in corso",
+                    updateNotification(notifId, {
+                        label: "Generazione ancora in corso",
                         status: "running",
                         message: "Il provider sta ancora completando il render. L'asset rimane in coda ma il flusso non è bloccato.",
                     });
@@ -1148,11 +1326,11 @@ export default function WorkspacePage() {
             })();
         } catch (err) {
             const message = err instanceof ApiError ? err.message : "Errore durante la generazione dell'immagine";
-            addNotification({ label: "Generazione fallita", status: "error", message });
+            updateNotification(notifId, { label: "Generazione fallita", status: "error", message });
         } finally {
             setGeneratingMedia(false);
         }
-    }, [token, selectedElement, prompt, projectId, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter, selectedImageModel, selectedImageSize, selectedImageSteps, addNotification, applyMediaToPreview, loadProjectAssets, loadProjectAiUsage]);
+    }, [token, selectedElement, prompt, projectId, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter, selectedImageModel, selectedImageSize, selectedImageSteps, assetScope, addNotification, updateNotification, applyMediaToPreview, saveMediaVersion, loadProjectAssets, loadProjectAiUsage, editorHtml]);
 
     const [isSavingEditorSnapshot, setIsSavingEditorSnapshot] = useState(false);
 
@@ -1513,6 +1691,13 @@ export default function WorkspacePage() {
         let trackedUserMessageId: string | null = null;
         const streamStartedAt = Date.now();
         let streamErrorDurationMs: number | undefined;
+        const notifId = addNotification({
+            label: inspectMode ? "Generazione AI con focus" : "Generazione AI",
+            status: "running",
+            message: inspectMode
+                ? "Sto elaborando la richiesta e aggiornando la preview…"
+                : "Sto elaborando la richiesta…",
+        });
 
         try {
             const convId = activeConvId;
@@ -1678,6 +1863,11 @@ export default function WorkspacePage() {
                             // non-blocking — UI will still clear the stream state
                         }
                     }
+                    updateNotification(notifId, {
+                        label: "Generazione interrotta",
+                        status: "error",
+                        message: "Elaborazione annullata dall'utente.",
+                    });
                     setThinkingText("");
                     setDraftAnswer("");
                     return;
@@ -1734,6 +1924,8 @@ export default function WorkspacePage() {
                     }
                     : prev
             );
+
+            let previewVersionSaved = false;
 
             // Persist preview snapshot to DB — only when html is non-empty.
             // In focused-patch mode the LLM returns artifacts:{html:"",…}; the server
@@ -1803,14 +1995,7 @@ export default function WorkspacePage() {
                     setTimeout(() => {
                         setPreviewRefreshing(false);
                     }, 3000);
-                    // Notify: new snapshot version saved
-                    addNotification({
-                        label: llm.focusPatchApplied ? "Focus patch applicata" : "Nuova versione salvata",
-                        status: "done",
-                        message: llm.focusPatchApplied
-                            ? "Elemento aggiornato — nuova versione attiva."
-                            : "Snapshot salvato e attivato dal backend.",
-                    });
+                    previewVersionSaved = true;
                 } catch {
                     // non-blocking — UI works without snapshot persistence
                 }
@@ -1850,11 +2035,30 @@ export default function WorkspacePage() {
                 });
             }
 
+            updateNotification(notifId, {
+                label: llm.focusPatchApplied
+                    ? "Focus patch applicata"
+                    : previewVersionSaved
+                        ? "Nuova versione salvata"
+                        : "Generazione completata",
+                status: "done",
+                message: llm.focusPatchApplied
+                    ? "Elemento aggiornato — nuova versione attiva."
+                    : previewVersionSaved
+                        ? "Snapshot salvato e attivato dal backend."
+                        : `Risposta pronta con ${llm.provider} · ${llm.model}`,
+            });
+
             setThinkingText("");
             setDraftAnswer("");
         } catch (err) {
             const msg = presentLlmError(err);
             setError(msg);
+            updateNotification(notifId, {
+                label: "Generazione fallita",
+                status: "error",
+                message: msg,
+            });
 
             if (token && trackedConversationId) {
                 try {
@@ -2494,6 +2698,8 @@ export default function WorkspacePage() {
                             mediaFilter={mediaFilter}
                             onMediaFilterChange={setMediaFilter}
                             generating={generatingMedia}
+                            suggesting={suggestingMedia}
+                            suggestion={mediaSuggestion}
                             imageModelOptions={imageModelOptions}
                             selectedImageModel={selectedImageModel}
                             onImageModelChange={setSelectedImageModel}
@@ -2504,6 +2710,8 @@ export default function WorkspacePage() {
                             aiAnalytics={projectAiAnalytics}
                             loadingAiAnalytics={loadingAiAnalytics}
                             onGenerate={() => void handleGenerateMedia()}
+                            onSuggest={() => void handleSuggestMedia()}
+                            onUseSuggestion={handleUseSuggestedMediaPrompt}
                             onOpenGallery={() => setConfigOpen(true)}
                             onApplyAsset={(asset) => void handleApplyAsset(asset)}
                             onApplyCurrentStyles={handleApplyCurrentStyles}
@@ -3638,10 +3846,10 @@ function nodeId(el){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-p
 function selectorFor(el,cls){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-pf-id');if(pf)return '[data-pf-id="'+clip(pf,80)+'"]';if(el.id)return '#'+clip(el.id,80);return clip(el.tagName.toLowerCase()+(cls.length?'.'+cls.slice(0,3).join('.'):''),240);}
 function score(el){if(!el||!el.tagName)return -999;var tag=el.tagName.toLowerCase();if(tag==='html'||tag==='body'||tag==='head'||tag==='script'||tag==='style'||tag==='meta'||tag==='link')return -999;var s=0;if(el.hasAttribute('data-pf-id'))s+=6;if(el.id)s+=5;if(BLOCK_TAGS[tag])s+=3;var html=el.outerHTML||'';if(html.length>8000)s-=8;return s;}
 function pickTarget(start){if(!start||!start.tagName)return null;var best=start,bestScore=score(start),cur=start,depth=0;while(cur&&cur.parentElement&&cur!==document.body&&depth<4){cur=cur.parentElement;var sc=score(cur);if(sc>bestScore&&(cur.hasAttribute('data-pf-id')||cur.id)){best=cur;bestScore=sc;}depth++;}return bestScore<-100?null:best;}
-function mkdata(el){el=pickTarget(el);if(!el)return null;var cls=cleanClasses(el);var txt=clip(el.textContent||'',160);var oh=el.outerHTML||'';oh=oh.replace(/ data-pf-[hse](="")?/g,'');oh=oh.replace(/ style=""/g,'');oh=oh.replace(/ (aos-init|aos-animate)/g,'');oh=clip(oh,8000);var selector=selectorFor(el,cls);var stable=nodeId(el);var img=(el.tagName&&el.tagName.toLowerCase()==='img')?el:(el.querySelector?el.querySelector('img'):null);var src=img&&img.getAttribute?clip(img.getAttribute('src')||'',1500):'';var alt=img&&img.getAttribute?clip(img.getAttribute('alt')||'',300):'';var bg='',bgUrl='';try{bg=(window.getComputedStyle(el).backgroundImage||'');}catch(x){}var m=bg&&bg.match(/url\((['"]?)(.*?)\\1\)/);if(m&&m[2])bgUrl=clip(m[2],1500);var mediaMode=src?'foreground':(bgUrl?'background':'none');if(!selector||!stable||/^<(html|body)\b/i.test(oh))return null;return{stableNodeId:stable,selector:selector,tag:el.tagName.toLowerCase(),classes:cls,textSnippet:txt||undefined,outerHtml:oh||undefined,currentSrc:src||undefined,currentAlt:alt||undefined,backgroundImageUrl:bgUrl||undefined,mediaMode:mediaMode};}
+function mkdata(el){el=pickTarget(el);if(!el)return null;var cls=cleanClasses(el);var txt=clip(el.textContent||'',160);var oh=el.outerHTML||'';oh=oh.replace(/ data-pf-[hse](="")?/g,'');oh=oh.replace(/ style=""/g,'');oh=oh.replace(/ (aos-init|aos-animate)/g,'');oh=clip(oh,8000);var selector=selectorFor(el,cls);var stable=nodeId(el);var img=(el.tagName&&el.tagName.toLowerCase()==='img')?el:(el.querySelector?el.querySelector('img'):null);var src=img&&img.getAttribute?clip(img.getAttribute('src')||'',1500):'';var alt=img&&img.getAttribute?clip(img.getAttribute('alt')||'',300):'';var bg='',bgUrl='';try{bg=(window.getComputedStyle(el).backgroundImage||'');}catch(x){}var m=bg&&bg.match(/url\((['"]?)(.*?)\\1\)/);if(m&&m[2])bgUrl=clip(m[2],1500);var rectW=0,rectH=0;try{var rect=(img&&img.getBoundingClientRect?img.getBoundingClientRect():el.getBoundingClientRect());rectW=Math.round((rect&&rect.width)||0);rectH=Math.round((rect&&rect.height)||0);}catch(x){}var aspectRatio=rectW>0&&rectH>0?Math.round(rectW/rectH*1000)/1000:undefined;var mediaMode=src?'foreground':(bgUrl?'background':'none');if(!selector||!stable||/^<(html|body)\b/i.test(oh))return null;return{stableNodeId:stable,selector:selector,tag:el.tagName.toLowerCase(),classes:cls,textSnippet:txt||undefined,outerHtml:oh||undefined,currentSrc:src||undefined,currentAlt:alt||undefined,backgroundImageUrl:bgUrl||undefined,mediaMode:mediaMode,originalWidth:rectW||undefined,originalHeight:rectH||undefined,aspectRatio:aspectRatio||undefined};}
 function over(e){if(inTb(e.target))return;var target=pickTarget(e.target)||e.target;if(hl&&hl!==target)hl.removeAttribute('data-pf-h');hl=target;if(hl)hl.setAttribute('data-pf-h','');}
 function clk(e){if(inTb(e.target))return;var target=pickTarget(e.target);var data=mkdata(target);if(!data||!target)return;e.preventDefault();e.stopPropagation();if(sl)sl.removeAttribute('data-pf-s');sl=target;if(sl)sl.setAttribute('data-pf-s','');try{window.parent.postMessage({type:'pf-select',element:data},'*');}catch(x){}}
-function applyMedia(d){if(!d||!d.selector||!d.url)return;try{var el=document.querySelector(d.selector);if(!el)return;var opacity=(typeof d.opacity==='number'&&isFinite(d.opacity))?String(d.opacity):'';var filter=typeof d.filter==='string'&&d.filter?d.filter:'none';if(d.mode==='background'){el.style.backgroundImage='url("'+String(d.url).replace(/"/g,'%22')+'")';el.style.backgroundPosition='center center';el.style.backgroundSize=d.fit==='contain'?'contain':d.fit==='auto'?'auto':'cover';el.style.backgroundRepeat=d.repeat||'no-repeat';if(opacity)el.style.opacity=opacity;el.style.filter=filter;return;}var img=(el.tagName&&el.tagName.toLowerCase()==='img')?el:(el.querySelector?el.querySelector('img'):null);if(img&&img.tagName==='IMG'){img.src=String(d.url);if(typeof d.alt==='string')img.alt=d.alt;if(opacity)img.style.opacity=opacity;img.style.filter=filter;}}catch(x){}}
+function applyMedia(d){if(!d||!d.selector||!d.url)return;try{var el=document.querySelector(d.selector);if(!el)return;var opacity=(typeof d.opacity==='number'&&isFinite(d.opacity))?String(d.opacity):'';var filter=typeof d.filter==='string'&&d.filter?d.filter:'none';if(d.mode==='background'){el.style.backgroundImage='url("'+String(d.url).replace(/"/g,'%22')+'")';el.style.backgroundPosition='center center';el.style.backgroundSize=d.fit==='contain'?'contain':d.fit==='auto'?'auto':'cover';el.style.backgroundRepeat=d.repeat||'no-repeat';if(opacity)el.style.opacity=opacity;el.style.filter=filter;return;}var img=(el.tagName&&el.tagName.toLowerCase()==='img')?el:(el.querySelector?el.querySelector('img'):null);if(img&&img.tagName==='IMG'){var preserveWidth=(typeof d.preserveWidth==='number'&&isFinite(d.preserveWidth)&&d.preserveWidth>0)?Math.round(d.preserveWidth):0;var preserveHeight=(typeof d.preserveHeight==='number'&&isFinite(d.preserveHeight)&&d.preserveHeight>0)?Math.round(d.preserveHeight):0;var aspectRatio=(typeof d.aspectRatio==='number'&&isFinite(d.aspectRatio)&&d.aspectRatio>0)?d.aspectRatio:0;img.src=String(d.url);if(typeof d.alt==='string')img.alt=d.alt;if(opacity)img.style.opacity=opacity;img.style.filter=filter;img.style.objectFit=d.fit==='contain'?'contain':'cover';img.style.maxWidth=img.style.maxWidth||'100%';img.style.display=img.style.display||'block';if(!img.getAttribute('width')&&!img.style.width&&preserveWidth)img.style.width=preserveWidth+'px';if(!img.getAttribute('height')&&!img.style.height&&preserveHeight)img.style.height=preserveHeight+'px';if(aspectRatio&&!img.style.aspectRatio)img.style.aspectRatio=String(aspectRatio);}}catch(x){}}
 function on(){sty.textContent='[data-pf-h]{outline:2px solid rgba(99,102,241,.6)!important;cursor:crosshair!important}[data-pf-s]{outline:2px solid #6366f1!important;outline-offset:2px!important}';document.addEventListener('mouseover',over);document.addEventListener('click',clk,true);}
 function off(){sty.textContent='';document.removeEventListener('mouseover',over);document.removeEventListener('click',clk,true);if(hl){hl.removeAttribute('data-pf-h');hl=null;}if(sl){sl.removeAttribute('data-pf-s');sl=null;}}
 window.addEventListener('message',function(e){if(e.data&&e.data.type==='pf-inspect'){if(e.data.on)on();else off();}if(e.data&&e.data.type==='pf-apply-media'){applyMedia(e.data);}});

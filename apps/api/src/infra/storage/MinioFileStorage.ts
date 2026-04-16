@@ -81,10 +81,22 @@ export class MinioFileStorage implements IFileStorage {
         return this.virtualUri(this.keyFor("uploads", userId, projectId, storedFilename));
     }
 
-    async saveUpload(userId: string, projectId: string, storedFilename: string, buffer: Buffer): Promise<string> {
+    async saveUpload(
+        userId: string,
+        projectId: string,
+        storedFilename: string,
+        buffer: Buffer,
+        contentType?: string,
+    ): Promise<string> {
         await this.ensureBucketReady();
         const key = this.keyFor("uploads", userId, projectId, storedFilename);
-        await this.client.putObject(this.bucket, key, buffer, buffer.byteLength);
+        await this.client.putObject(
+            this.bucket,
+            key,
+            buffer,
+            buffer.byteLength,
+            contentType ? { "Content-Type": contentType } : undefined,
+        );
         return this.virtualUri(key);
     }
 

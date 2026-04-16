@@ -7,7 +7,7 @@ export interface IFileStorage {
     // --- Uploads ---
     uploadDirPath(userId: string, projectId: string): string;
     uploadFilePath(userId: string, projectId: string, storedFilename: string): string;
-    saveUpload(userId: string, projectId: string, storedFilename: string, buffer: Buffer): Promise<string>;
+    saveUpload(userId: string, projectId: string, storedFilename: string, buffer: Buffer, contentType?: string): Promise<string>;
     deleteUpload(userId: string, projectId: string, storedFilename: string): Promise<void>;
     createReadStream(filePath: string): Promise<NodeJS.ReadableStream>;
 
