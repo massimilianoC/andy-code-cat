@@ -43,12 +43,19 @@ import {
     unpublishProject,
     checkSlugAvailability,
     updateDeploymentSlug,
+    listProjectAssets,
+    getProjectAiAnalytics,
+    generateProjectImage,
+    downloadProjectAssetDataUrl,
     type SiteDeploymentDto,
+    type ProjectAssetDto,
+    type AiUsageAnalyticsDto,
 } from "../../../lib/api";
 import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
 import { saveThumbnail, savePromptExcerpt, incrementSnapCount } from "../../../lib/thumbnail";
 import ProjectConfigPopup from "../../../components/ProjectConfigPopup";
+import MediaInspectorPanel from "../../../components/MediaInspectorPanel";
 import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
 import { Mic, Settings, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -261,6 +268,12 @@ function sanitizeSelectedElementForFocus(
 
     const textSnippet = clipFocusValue(element.textSnippet, MAX_FOCUS_TEXT_LEN);
     const outerHtml = clipFocusValue(element.outerHtml, MAX_FOCUS_OUTER_HTML_LEN);
+    const currentSrc = clipFocusValue(element.currentSrc, 1500);
+    const currentAlt = clipFocusValue(element.currentAlt, 300);
+    const backgroundImageUrl = clipFocusValue(element.backgroundImageUrl, 1500);
+    const mediaMode = element.mediaMode === "foreground" || element.mediaMode === "background"
+        ? element.mediaMode
+        : ((currentSrc || backgroundImageUrl) ? "none" : undefined);
 
     if (outerHtml && /^<(html|body)\b/i.test(outerHtml)) {
         return null;
@@ -273,6 +286,10 @@ function sanitizeSelectedElementForFocus(
         classes,
         ...(textSnippet ? { textSnippet } : {}),
         ...(outerHtml ? { outerHtml } : {}),
+        ...(currentSrc ? { currentSrc } : {}),
+        ...(currentAlt ? { currentAlt } : {}),
+        ...(backgroundImageUrl ? { backgroundImageUrl } : {}),
+        ...(mediaMode ? { mediaMode } : {}),
     };
 }
 
@@ -337,6 +354,19 @@ export default function WorkspacePage() {
     const [providersCatalog, setProvidersCatalog] = useState<LlmProviderCatalogDto[]>([]);
     const [selectedProvider, setSelectedProvider] = useState<string>("");
     const [selectedModel, setSelectedModel] = useState<string>("");
+    const imageModelOptions = React.useMemo(() => {
+        const siliconFlowProviders = providersCatalog.filter((provider) =>
+            provider.provider === "siliconflow"
+            && provider.models.some((model) => model.isActive && model.capabilities.includes("image_generation")),
+        );
+
+        return siliconFlowProviders.flatMap((provider) => provider.models
+            .filter((model) => model.isActive && model.capabilities.includes("image_generation"))
+            .map((model) => ({
+                id: model.id,
+                label: `${model.displayName ?? model.id}${model.priceTier ? ` · ${model.priceTier}` : ""}`,
+            })));
+    }, [providersCatalog]);
     const presetRecommendationAppliedRef = useRef<string | null>(null);
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
@@ -362,6 +392,20 @@ export default function WorkspacePage() {
     const [editorSelectionLabel, setEditorSelectionLabel] = useState<string>("Nessuna selezione");
     const [inspectMode, setInspectMode] = useState(false);
     const [selectedElement, setSelectedElement] = useState<LlmFocusContext["selectedElement"] | null>(null);
+    const [projectAssets, setProjectAssets] = useState<ProjectAssetDto[]>([]);
+    const [loadingProjectAssets, setLoadingProjectAssets] = useState(false);
+    const [assetScope, setAssetScope] = useState<"project" | "user">("project");
+    const [mediaMode, setMediaMode] = useState<"foreground" | "background">("foreground");
+    const [backgroundFit, setBackgroundFit] = useState<"cover" | "contain" | "auto">("cover");
+    const [backgroundRepeat, setBackgroundRepeat] = useState<"no-repeat" | "repeat" | "repeat-x" | "repeat-y">("no-repeat");
+    const [mediaOpacity, setMediaOpacity] = useState(1);
+    const [mediaFilter, setMediaFilter] = useState("none");
+    const [generatingMedia, setGeneratingMedia] = useState(false);
+    const [selectedImageModel, setSelectedImageModel] = useState("");
+    const [selectedImageSize, setSelectedImageSize] = useState("1024x1024");
+    const [selectedImageSteps, setSelectedImageSteps] = useState(4);
+    const [projectAiAnalytics, setProjectAiAnalytics] = useState<AiUsageAnalyticsDto | null>(null);
+    const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
     const [codeEditorSelection, setCodeEditorSelection] = useState<LlmFocusContext["codeSelection"] | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -753,6 +797,18 @@ export default function WorkspacePage() {
     }, [selectedProvider, selectedModel, providersCatalog]);
 
     useEffect(() => {
+        if (imageModelOptions.length === 0) {
+            setSelectedImageModel("");
+            return;
+        }
+        if (imageModelOptions.some((model) => model.id === selectedImageModel)) {
+            return;
+        }
+        const nextModel = imageModelOptions.find((model) => /schnell|turbo|fast/i.test(model.id)) ?? imageModelOptions[0];
+        setSelectedImageModel(nextModel?.id ?? "");
+    }, [imageModelOptions, selectedImageModel]);
+
+    useEffect(() => {
         if (!projectPresetId || presetRecommendationAppliedRef.current === projectPresetId) return;
         if (presetCatalog.length === 0 || providersCatalog.length === 0) return;
 
@@ -839,6 +895,264 @@ export default function WorkspacePage() {
         }
         void loadSnapshots(token);
     }, [token, loadSnapshots]);
+
+    const loadProjectAssets = useCallback(async (activeToken?: string) => {
+        const resolvedToken = activeToken ?? token;
+        if (!resolvedToken) return;
+        setLoadingProjectAssets(true);
+        try {
+            const res = await listProjectAssets(resolvedToken, projectId);
+            setProjectAssets(res.assets);
+        } catch {
+            setProjectAssets([]);
+        } finally {
+            setLoadingProjectAssets(false);
+        }
+    }, [token, projectId]);
+
+    const loadProjectAiUsage = useCallback(async (activeToken?: string) => {
+        const resolvedToken = activeToken ?? token;
+        if (!resolvedToken) return;
+        setLoadingAiAnalytics(true);
+        try {
+            const analytics = await getProjectAiAnalytics(resolvedToken, projectId);
+            setProjectAiAnalytics(analytics);
+        } catch {
+            setProjectAiAnalytics(null);
+        } finally {
+            setLoadingAiAnalytics(false);
+        }
+    }, [token, projectId]);
+
+    useEffect(() => {
+        if (!token) return;
+        void loadProjectAssets(token);
+        void loadProjectAiUsage(token);
+    }, [token, loadProjectAssets, loadProjectAiUsage]);
+
+    useEffect(() => {
+        if (!selectedElement) return;
+        if (selectedElement.mediaMode === "background") {
+            setMediaMode("background");
+        } else if (selectedElement.mediaMode === "foreground" || selectedElement.tag === "img") {
+            setMediaMode("foreground");
+        }
+    }, [selectedElement]);
+
+    const applyMediaToPreview = useCallback((url: string) => {
+        if (!selectedElement) return;
+
+        iframeRef.current?.contentWindow?.postMessage({
+            type: "pf-apply-media",
+            selector: selectedElement.selector,
+            mode: mediaMode,
+            url,
+            fit: backgroundFit,
+            repeat: backgroundRepeat,
+            opacity: mediaOpacity,
+            filter: mediaFilter,
+            alt: selectedElement.currentAlt ?? "",
+        }, "*");
+
+        setEditorHtml((prev) => {
+            if (!prev.trim()) return prev;
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(prev, "text/html");
+                const target = doc.querySelector(selectedElement.selector);
+                if (!target) return prev;
+
+                if (mediaMode === "background") {
+                    const targetEl = target as HTMLElement;
+                    targetEl.style.backgroundImage = `url("${url}")`;
+                    targetEl.style.backgroundPosition = "center center";
+                    targetEl.style.backgroundSize = backgroundFit;
+                    targetEl.style.backgroundRepeat = backgroundRepeat;
+                    targetEl.style.opacity = String(mediaOpacity);
+                    targetEl.style.filter = mediaFilter;
+                } else {
+                    const img = target.tagName.toLowerCase() === "img"
+                        ? target as HTMLImageElement
+                        : target.querySelector("img");
+                    if (!img) return prev;
+                    img.setAttribute("src", url);
+                    if (selectedElement.currentAlt) img.setAttribute("alt", selectedElement.currentAlt);
+                    (img as HTMLElement).style.opacity = String(mediaOpacity);
+                    (img as HTMLElement).style.filter = mediaFilter;
+                }
+
+                return /<!doctype/i.test(prev)
+                    ? `<!doctype html>${doc.documentElement.outerHTML}`
+                    : doc.body.innerHTML;
+            } catch {
+                return prev;
+            }
+        });
+
+        setSelectedElement((prev) => prev ? {
+            ...prev,
+            currentSrc: mediaMode === "foreground" ? url : prev.currentSrc,
+            backgroundImageUrl: mediaMode === "background" ? url : prev.backgroundImageUrl,
+            mediaMode,
+        } : prev);
+    }, [selectedElement, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter]);
+
+    const handleApplyAsset = useCallback(async (asset: ProjectAssetDto) => {
+        if (!token || !selectedElement) return;
+
+        try {
+            const resolvedUrl = asset.source === "url_reference"
+                ? (asset.externalUrl ?? "")
+                : asset.mimeType.startsWith("image/")
+                    ? await downloadProjectAssetDataUrl(token, projectId, asset.id)
+                    : "";
+
+            if (!resolvedUrl) {
+                addNotification({
+                    label: "Asset non applicabile",
+                    status: "error",
+                    message: "Seleziona un'immagine o un URL immagine valido.",
+                });
+                return;
+            }
+
+            applyMediaToPreview(resolvedUrl);
+            setConfigOpen(false);
+            addNotification({
+                label: "Media applicato",
+                status: "done",
+                message: `${asset.label ?? asset.originalName} collegato all'elemento selezionato.`,
+            });
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : "Impossibile caricare l'asset selezionato";
+            addNotification({ label: "Errore media", status: "error", message });
+        }
+    }, [token, selectedElement, projectId, addNotification, applyMediaToPreview]);
+
+    const handleApplyCurrentStyles = useCallback(() => {
+        if (!selectedElement) return;
+        const currentUrl = mediaMode === "background"
+            ? (selectedElement.backgroundImageUrl || selectedElement.currentSrc)
+            : (selectedElement.currentSrc || selectedElement.backgroundImageUrl);
+
+        if (!currentUrl) {
+            addNotification({
+                label: "Nessuna media attiva",
+                status: "error",
+                message: "Seleziona prima un'immagine o genera un nuovo asset.",
+            });
+            return;
+        }
+
+        applyMediaToPreview(currentUrl);
+        addNotification({
+            label: "Stile applicato",
+            status: "done",
+            message: "Fit, repeat, opacity e filter sono stati aggiornati nella preview.",
+        });
+    }, [selectedElement, mediaMode, addNotification, applyMediaToPreview]);
+
+    const handleGenerateMedia = useCallback(async () => {
+        const generationPrompt = prompt.trim();
+        if (!token || !selectedElement || !generationPrompt) return;
+
+        setGeneratingMedia(true);
+        try {
+            const result = await generateProjectImage(token, projectId, {
+                prompt: generationPrompt,
+                fileNameHint: `${selectedElement.tag || "media"}-${Date.now()}`,
+                scope: assetScope,
+                provider: "siliconflow",
+                model: selectedImageModel || undefined,
+                imageSize: selectedImageSize,
+                numInferenceSteps: selectedImageSteps,
+                targetMode: mediaMode,
+                selectedElement: {
+                    stableNodeId: selectedElement.stableNodeId,
+                    selector: selectedElement.selector,
+                    tag: selectedElement.tag,
+                    currentSrc: selectedElement.currentSrc,
+                    currentAlt: selectedElement.currentAlt,
+                    backgroundImageUrl: selectedElement.backgroundImageUrl,
+                    mediaMode: selectedElement.mediaMode,
+                },
+                mediaConfig: {
+                    fit: backgroundFit,
+                    repeat: backgroundRepeat,
+                    opacity: mediaOpacity,
+                    filter: mediaFilter,
+                },
+            });
+
+            setProjectAssets((prev) => [result.asset, ...prev.filter((entry) => entry.id !== result.asset.id)]);
+            void loadProjectAiUsage(token);
+
+            const placeholderUrl = await downloadProjectAssetDataUrl(token, projectId, result.asset.id);
+            applyMediaToPreview(placeholderUrl);
+            addNotification({
+                label: "Generazione avviata",
+                status: "running",
+                message: "Placeholder applicato. Aggiorno automaticamente quando il file finale è pronto.",
+            });
+
+            void (async () => {
+                const startedAt = Date.now();
+                const maxWaitMs = 45_000;
+                const pollIntervalMs = 2_000;
+
+                try {
+                    while (Date.now() - startedAt < maxWaitMs) {
+                        await new Promise((resolve) => window.setTimeout(resolve, pollIntervalMs));
+
+                        const refreshed = await listProjectAssets(token, projectId);
+                        setProjectAssets(refreshed.assets);
+                        void loadProjectAiUsage(token);
+                        const trackedAsset = refreshed.assets.find((entry) => entry.id === result.asset.id);
+
+                        if (!trackedAsset) {
+                            continue;
+                        }
+
+                        if (trackedAsset.generationStatus === "failed") {
+                            addNotification({
+                                label: "Generazione fallita",
+                                status: "error",
+                                message: trackedAsset.generationMetadata?.errorMessage ?? "Il provider non ha restituito un asset valido.",
+                            });
+                            return;
+                        }
+
+                        if (trackedAsset.generationStatus === "ready" && trackedAsset.mimeType.startsWith("image/")) {
+                            const finalUrl = await downloadProjectAssetDataUrl(token, projectId, trackedAsset.id);
+                            applyMediaToPreview(finalUrl);
+                            addNotification({
+                                label: "Immagine pronta",
+                                status: "done",
+                                message: `${trackedAsset.label ?? trackedAsset.originalName} è stata aggiornata nella preview.`,
+                            });
+                            return;
+                        }
+                    }
+
+                    addNotification({
+                        label: "Generazione in corso",
+                        status: "running",
+                        message: "Il provider sta ancora completando il render. L'asset rimane in coda ma il flusso non è bloccato.",
+                    });
+                    void loadProjectAssets(token);
+                    void loadProjectAiUsage(token);
+                } catch {
+                    void loadProjectAssets(token);
+                    void loadProjectAiUsage(token);
+                }
+            })();
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : "Errore durante la generazione dell'immagine";
+            addNotification({ label: "Generazione fallita", status: "error", message });
+        } finally {
+            setGeneratingMedia(false);
+        }
+    }, [token, selectedElement, prompt, projectId, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter, selectedImageModel, selectedImageSize, selectedImageSteps, addNotification, applyMediaToPreview, loadProjectAssets, loadProjectAiUsage]);
 
     const [isSavingEditorSnapshot, setIsSavingEditorSnapshot] = useState(false);
 
@@ -2083,6 +2397,7 @@ export default function WorkspacePage() {
                     <div className="flex items-start gap-2">
                         <textarea
                             style={textareaStyle}
+                            className={inspectMode && selectedElement ? "placeholder:italic" : undefined}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyDown={(e) => {
@@ -2091,7 +2406,11 @@ export default function WorkspacePage() {
                                     void handleSend(e as unknown as React.FormEvent);
                                 }
                             }}
-                            placeholder="Scrivi cosa vuoi realizzare..."
+                            placeholder={inspectMode && selectedElement
+                                ? (mediaMode === "background"
+                                    ? "Descrivi qui nella chat il nuovo background per l'elemento selezionato..."
+                                    : "Descrivi qui nella chat la nuova immagine per l'elemento selezionato...")
+                                : "Scrivi cosa vuoi realizzare..."}
                             rows={3}
                             disabled={sending || optimizingPrompt}
                         />
@@ -2150,6 +2469,45 @@ export default function WorkspacePage() {
                                 title="Rimuovi selezione codice"
                             >×</button>
                         </div>
+                    )}
+                    {token && inspectMode && selectedElement && previewTab === "preview" && (
+                        <MediaInspectorPanel
+                            token={token}
+                            projectId={projectId}
+                            selectedElement={selectedElement}
+                            assets={projectAssets}
+                            loadingAssets={loadingProjectAssets}
+                            chatPromptPlaceholder={mediaMode === "background"
+                                ? "Use the main chat prompt to describe the new background for this element…"
+                                : "Use the main chat prompt to describe the new image for this element…"}
+                            chatPromptReady={Boolean(prompt.trim())}
+                            assetScope={assetScope}
+                            onAssetScopeChange={setAssetScope}
+                            mediaMode={mediaMode}
+                            onMediaModeChange={setMediaMode}
+                            backgroundFit={backgroundFit}
+                            onBackgroundFitChange={setBackgroundFit}
+                            backgroundRepeat={backgroundRepeat}
+                            onBackgroundRepeatChange={setBackgroundRepeat}
+                            mediaOpacity={mediaOpacity}
+                            onMediaOpacityChange={setMediaOpacity}
+                            mediaFilter={mediaFilter}
+                            onMediaFilterChange={setMediaFilter}
+                            generating={generatingMedia}
+                            imageModelOptions={imageModelOptions}
+                            selectedImageModel={selectedImageModel}
+                            onImageModelChange={setSelectedImageModel}
+                            imageSize={selectedImageSize}
+                            onImageSizeChange={setSelectedImageSize}
+                            imageSteps={selectedImageSteps}
+                            onImageStepsChange={setSelectedImageSteps}
+                            aiAnalytics={projectAiAnalytics}
+                            loadingAiAnalytics={loadingAiAnalytics}
+                            onGenerate={() => void handleGenerateMedia()}
+                            onOpenGallery={() => setConfigOpen(true)}
+                            onApplyAsset={(asset) => void handleApplyAsset(asset)}
+                            onApplyCurrentStyles={handleApplyCurrentStyles}
+                        />
                     )}
                     <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
                         <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
@@ -2944,12 +3302,16 @@ export default function WorkspacePage() {
         <ProjectConfigPopup
             projectId={projectId}
             open={configOpen}
-            onClose={() => setConfigOpen(false)}
+            onClose={() => {
+                setConfigOpen(false);
+                void loadProjectAssets();
+            }}
             initialProjectName={projectName}
             onRename={(name: string) => setProjectName(name)}
             presetLabel={presetCatalog.find(p => p.id === projectPresetId)?.labelIt}
             briefGuideQuestions={presetCatalog.find(p => p.id === projectPresetId)?.briefGuideQuestions}
             presetRecommendedModelLabel={presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.label ?? presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.modelId}
+            onAssetPick={(asset) => void handleApplyAsset(asset)}
         />
         <LlmProviderErrorDialog
             open={Boolean(llmErrorDialog)}
@@ -3276,12 +3638,13 @@ function nodeId(el){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-p
 function selectorFor(el,cls){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-pf-id');if(pf)return '[data-pf-id="'+clip(pf,80)+'"]';if(el.id)return '#'+clip(el.id,80);return clip(el.tagName.toLowerCase()+(cls.length?'.'+cls.slice(0,3).join('.'):''),240);}
 function score(el){if(!el||!el.tagName)return -999;var tag=el.tagName.toLowerCase();if(tag==='html'||tag==='body'||tag==='head'||tag==='script'||tag==='style'||tag==='meta'||tag==='link')return -999;var s=0;if(el.hasAttribute('data-pf-id'))s+=6;if(el.id)s+=5;if(BLOCK_TAGS[tag])s+=3;var html=el.outerHTML||'';if(html.length>8000)s-=8;return s;}
 function pickTarget(start){if(!start||!start.tagName)return null;var best=start,bestScore=score(start),cur=start,depth=0;while(cur&&cur.parentElement&&cur!==document.body&&depth<4){cur=cur.parentElement;var sc=score(cur);if(sc>bestScore&&(cur.hasAttribute('data-pf-id')||cur.id)){best=cur;bestScore=sc;}depth++;}return bestScore<-100?null:best;}
-function mkdata(el){el=pickTarget(el);if(!el)return null;var cls=cleanClasses(el);var txt=clip(el.textContent||'',160);var oh=el.outerHTML||'';oh=oh.replace(/ data-pf-[hse](="")?/g,'');oh=oh.replace(/ style=""/g,'');oh=oh.replace(/ (aos-init|aos-animate)/g,'');oh=clip(oh,8000);var selector=selectorFor(el,cls);var stable=nodeId(el);if(!selector||!stable||/^<(html|body)\b/i.test(oh))return null;return{stableNodeId:stable,selector:selector,tag:el.tagName.toLowerCase(),classes:cls,textSnippet:txt||undefined,outerHtml:oh||undefined};}
+function mkdata(el){el=pickTarget(el);if(!el)return null;var cls=cleanClasses(el);var txt=clip(el.textContent||'',160);var oh=el.outerHTML||'';oh=oh.replace(/ data-pf-[hse](="")?/g,'');oh=oh.replace(/ style=""/g,'');oh=oh.replace(/ (aos-init|aos-animate)/g,'');oh=clip(oh,8000);var selector=selectorFor(el,cls);var stable=nodeId(el);var img=(el.tagName&&el.tagName.toLowerCase()==='img')?el:(el.querySelector?el.querySelector('img'):null);var src=img&&img.getAttribute?clip(img.getAttribute('src')||'',1500):'';var alt=img&&img.getAttribute?clip(img.getAttribute('alt')||'',300):'';var bg='',bgUrl='';try{bg=(window.getComputedStyle(el).backgroundImage||'');}catch(x){}var m=bg&&bg.match(/url\((['"]?)(.*?)\\1\)/);if(m&&m[2])bgUrl=clip(m[2],1500);var mediaMode=src?'foreground':(bgUrl?'background':'none');if(!selector||!stable||/^<(html|body)\b/i.test(oh))return null;return{stableNodeId:stable,selector:selector,tag:el.tagName.toLowerCase(),classes:cls,textSnippet:txt||undefined,outerHtml:oh||undefined,currentSrc:src||undefined,currentAlt:alt||undefined,backgroundImageUrl:bgUrl||undefined,mediaMode:mediaMode};}
 function over(e){if(inTb(e.target))return;var target=pickTarget(e.target)||e.target;if(hl&&hl!==target)hl.removeAttribute('data-pf-h');hl=target;if(hl)hl.setAttribute('data-pf-h','');}
 function clk(e){if(inTb(e.target))return;var target=pickTarget(e.target);var data=mkdata(target);if(!data||!target)return;e.preventDefault();e.stopPropagation();if(sl)sl.removeAttribute('data-pf-s');sl=target;if(sl)sl.setAttribute('data-pf-s','');try{window.parent.postMessage({type:'pf-select',element:data},'*');}catch(x){}}
+function applyMedia(d){if(!d||!d.selector||!d.url)return;try{var el=document.querySelector(d.selector);if(!el)return;var opacity=(typeof d.opacity==='number'&&isFinite(d.opacity))?String(d.opacity):'';var filter=typeof d.filter==='string'&&d.filter?d.filter:'none';if(d.mode==='background'){el.style.backgroundImage='url("'+String(d.url).replace(/"/g,'%22')+'")';el.style.backgroundPosition='center center';el.style.backgroundSize=d.fit==='contain'?'contain':d.fit==='auto'?'auto':'cover';el.style.backgroundRepeat=d.repeat||'no-repeat';if(opacity)el.style.opacity=opacity;el.style.filter=filter;return;}var img=(el.tagName&&el.tagName.toLowerCase()==='img')?el:(el.querySelector?el.querySelector('img'):null);if(img&&img.tagName==='IMG'){img.src=String(d.url);if(typeof d.alt==='string')img.alt=d.alt;if(opacity)img.style.opacity=opacity;img.style.filter=filter;}}catch(x){}}
 function on(){sty.textContent='[data-pf-h]{outline:2px solid rgba(99,102,241,.6)!important;cursor:crosshair!important}[data-pf-s]{outline:2px solid #6366f1!important;outline-offset:2px!important}';document.addEventListener('mouseover',over);document.addEventListener('click',clk,true);}
 function off(){sty.textContent='';document.removeEventListener('mouseover',over);document.removeEventListener('click',clk,true);if(hl){hl.removeAttribute('data-pf-h');hl=null;}if(sl){sl.removeAttribute('data-pf-s');sl=null;}}
-window.addEventListener('message',function(e){if(e.data&&e.data.type==='pf-inspect'){if(e.data.on)on();else off();}});
+window.addEventListener('message',function(e){if(e.data&&e.data.type==='pf-inspect'){if(e.data.on)on();else off();}if(e.data&&e.data.type==='pf-apply-media'){applyMedia(e.data);}});
 })();<\/script>`;
 
 /**

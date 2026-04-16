@@ -31,6 +31,8 @@ import { DraftProjectTemplate } from "../../../application/use-cases/DraftProjec
 import { env } from "../../../config";
 import { PRESET_CATALOG } from "../../../domain/entities/ProjectPreset";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
+import { GetAdminAiAnalytics, GetProjectAiAnalytics } from "../../../application/use-cases/GetProjectAiAnalytics";
 import type { RequestWithContext } from "../types";
 
 function getRequiredRouteParam(value: string | undefined, name: string): string {
@@ -53,6 +55,7 @@ export function createAdminRoutes(): Router {
     const llmCatalogRepo = new MongoLlmCatalogRepository();
     const presetRepo = new MongoProjectPresetRepository();
     const promptExecutionLogRepo = new MongoPromptExecutionLogRepository();
+    const assetRepo = new MongoProjectAssetRepository();
 
     // Use-cases
     const listUsers = new ListUsers(userRepo);
@@ -92,6 +95,8 @@ export function createAdminRoutes(): Router {
         userRepo,
         getLlmCatalog,
     );
+    const getAdminAiAnalytics = new GetAdminAiAnalytics(promptExecutionLogRepo, assetRepo);
+    const getProjectAiAnalytics = new GetProjectAiAnalytics(promptExecutionLogRepo, assetRepo);
 
     // All admin routes require auth + superadmin role
     router.use(authMiddleware, requireSuperAdmin);
@@ -101,6 +106,35 @@ export function createAdminRoutes(): Router {
         try {
             const stats = await getPlatformStats.execute();
             res.json(stats);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.get("/admin/ai-analytics", async (_req, res, next) => {
+        try {
+            const analytics = await getAdminAiAnalytics.execute();
+            res.json(analytics);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.get("/admin/projects/:projectId/ai-analytics", async (req, res, next) => {
+        try {
+            const projectId = getRequiredRouteParam(req.params.projectId, "projectId");
+            const project = await projectRepo.findById(projectId);
+            if (!project) {
+                res.status(404).json({ error: "Project not found" });
+                return;
+            }
+            const analytics = await getProjectAiAnalytics.execute(projectId, project.ownerUserId);
+            res.json({
+                projectId,
+                projectName: project.name,
+                ownerUserId: project.ownerUserId,
+                ...analytics,
+            });
         } catch (err) {
             next(err);
         }

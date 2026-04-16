@@ -8,6 +8,8 @@ loadEnv({ path: path.resolve(__dirname, "../../../.env") });
 // Default DATA_DIR: monorepo root's /data — works both locally and in Docker
 // (__dirname = apps/api/src → ../../../ = monorepo root)
 const DEFAULT_DATA_DIR = path.resolve(__dirname, "../../../data");
+const DEFAULT_SILICONFLOW_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell";
+const DEFAULT_SILICONFLOW_IMAGE_SIZE = "1024x1024";
 
 const envSchema = z.object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -43,6 +45,10 @@ const envSchema = z.object({
     LMSTUDIO_BASE_URL: z.string().url().default("http://192.168.1.78:1234/v1"),
     SILICONFLOW_BASE_URL: z.string().url().default("https://api.siliconflow.com/v1"),
     SILICONFLOW_API_KEY: z.string().optional(),
+    SILICONFLOW_IMAGE_MODEL: z.string().default(DEFAULT_SILICONFLOW_IMAGE_MODEL),
+    SILICONFLOW_IMAGE_SIZE: z.string().default(DEFAULT_SILICONFLOW_IMAGE_SIZE),
+    SILICONFLOW_IMAGE_STEPS: z.coerce.number().int().positive().default(4),
+    SILICONFLOW_IMAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),
     OPENROUTER_BASE_URL: z.string().url().default("https://openrouter.ai/api/v1"),
     OPEN_ROUTER_API_KEY: z.string().optional(),
     LLM_PROVIDER_API_KEYS_JSON: z.string().optional(),
@@ -63,6 +69,17 @@ const envSchema = z.object({
     CORS_ORIGIN: z.string().default("*"),
     // --- File storage & export ---
     DATA_DIR: z.string().default(DEFAULT_DATA_DIR),
+    STORAGE_ADAPTER: z.enum(["local", "minio"]).default("local"),
+    MINIO_ENDPOINT: z.string().default("localhost"),
+    MINIO_PORT: z.coerce.number().int().positive().default(9000),
+    MINIO_USE_SSL: z.string().default("false"),
+    MINIO_ACCESS_KEY: z.string().default("minioadmin"),
+    MINIO_SECRET_KEY: z.string().default("minioadmin"),
+    MINIO_BUCKET: z.string().default("andy-code-cat-media"),
+    MINIO_REGION: z.string().default("us-east-1"),
+    MINIO_ROOT_PREFIX: z.string().default("andy-code-cat"),
+    MEDIA_AUTO_CLASSIFY_UPLOADS: z.string().default("true"),
+    MEDIA_CLASSIFIER_MODEL: z.string().default("heuristic-media-classifier-v1"),
     EXPORT_JWT_SECRET: z.string().min(16).default("change-me-export-secret-32chars!!"),
     EXPORT_DOWNLOAD_TTL: z.string().default("3600"),
     UPLOAD_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
@@ -77,8 +94,15 @@ if (!parsed.success) {
 
 export const env = {
     ...parsed.data,
+    SILICONFLOW_IMAGE_MODEL: parsed.data.SILICONFLOW_IMAGE_MODEL?.trim() || DEFAULT_SILICONFLOW_IMAGE_MODEL,
+    SILICONFLOW_IMAGE_SIZE: parsed.data.SILICONFLOW_IMAGE_SIZE?.trim() || DEFAULT_SILICONFLOW_IMAGE_SIZE,
+    MINIO_ENDPOINT: parsed.data.MINIO_ENDPOINT?.trim() || "localhost",
+    MINIO_ACCESS_KEY: parsed.data.MINIO_ACCESS_KEY?.trim() || "minioadmin",
+    MINIO_SECRET_KEY: parsed.data.MINIO_SECRET_KEY?.trim() || "minioadmin",
     authBypassEmailVerification: parsed.data.AUTH_BYPASS_EMAIL_VERIFICATION === "true",
     llmAutoSeedOnStartup: parsed.data.LLM_AUTO_SEED_ON_STARTUP === "true",
+    MINIO_USE_SSL: parsed.data.MINIO_USE_SSL === "true",
+    MEDIA_AUTO_CLASSIFY_UPLOADS: parsed.data.MEDIA_AUTO_CLASSIFY_UPLOADS === "true",
     hasSiliconFlowApiKey: Boolean(parsed.data.SILICONFLOW_API_KEY?.trim()),
     hasOpenRouterApiKey: Boolean(parsed.data.OPEN_ROUTER_API_KEY?.trim()),
     providerApiKeys: (() => {

@@ -4,6 +4,7 @@
  * The bearer token is injected automatically by the `call` helper.
  */
 import { call } from "./call";
+import type { AiUsageAnalyticsDto } from "./assets";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -270,6 +271,22 @@ function auth(token: string): Record<string, string> {
 
 export function getAdminStats(token: string): Promise<PlatformStatsDto> {
     return call<PlatformStatsDto>("GET", "/v1/admin/stats", undefined, auth(token));
+}
+
+export function getAdminAiAnalytics(token: string): Promise<AiUsageAnalyticsDto> {
+    return call<AiUsageAnalyticsDto>("GET", "/v1/admin/ai-analytics", undefined, auth(token));
+}
+
+export function getAdminProjectAiAnalytics(
+    token: string,
+    projectId: string,
+): Promise<AiUsageAnalyticsDto & { projectId: string; projectName?: string; ownerUserId?: string }> {
+    return call<AiUsageAnalyticsDto & { projectId: string; projectName?: string; ownerUserId?: string }>(
+        "GET",
+        `/v1/admin/projects/${projectId}/ai-analytics`,
+        undefined,
+        auth(token),
+    );
 }
 
 // ── Platform config ───────────────────────────────────────────────────────────

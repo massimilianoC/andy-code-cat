@@ -1,4 +1,4 @@
-import type { ProjectAsset, AssetSource } from "../entities/ProjectAsset";
+import type { AssetScope, AssetSource, AssetStyleRole, ProjectAsset, AssetSemanticMetadata, AssetGenerationStatus, AssetGenerationMetadata, AssetGenerationUsageSummary } from "../entities/ProjectAsset";
 
 export interface ProjectAssetRepository {
     create(input: {
@@ -9,11 +9,16 @@ export interface ProjectAssetRepository {
         mimeType: string;
         fileSize: number;
         source: AssetSource;
+        scope?: AssetScope;
         label?: string;
         useInProject?: boolean;
-        styleRole?: "inspiration" | "material";
+        styleRole?: AssetStyleRole;
         descriptionText?: string;
         externalUrl?: string;
+        generationStatus?: AssetGenerationStatus;
+        generationPrompt?: string;
+        generationMetadata?: AssetGenerationMetadata;
+        semanticMetadata?: AssetSemanticMetadata;
     }): Promise<ProjectAsset>;
 
     listByProject(projectId: string, userId: string, source?: AssetSource): Promise<ProjectAsset[]>;
@@ -27,11 +32,30 @@ export interface ProjectAssetRepository {
 
     countByProject(projectId: string, userId: string): Promise<number>;
 
+    summarizeGenerationByProject(projectId: string, userId: string): Promise<AssetGenerationUsageSummary>;
+
+    listRecentGeneratedByProject(projectId: string, userId: string, limit?: number): Promise<ProjectAsset[]>;
+
+    summarizeGenerationAll(): Promise<AssetGenerationUsageSummary>;
+
+    listRecentGeneratedAll(limit?: number): Promise<ProjectAsset[]>;
+
     /** Partial update of user-editable metadata fields. Enforces ownership via projectId/userId. */
     update(
         id: string,
         projectId: string,
         userId: string,
-        data: Partial<{ label: string; useInProject: boolean; styleRole: "inspiration" | "material"; descriptionText: string }>
+        data: Partial<{
+            label: string;
+            useInProject: boolean;
+            styleRole: AssetStyleRole;
+            descriptionText: string;
+            mimeType: string;
+            fileSize: number;
+            generationStatus: AssetGenerationStatus;
+            generationPrompt: string;
+            generationMetadata: AssetGenerationMetadata;
+            semanticMetadata: AssetSemanticMetadata;
+        }>
     ): Promise<ProjectAsset | null>;
 }

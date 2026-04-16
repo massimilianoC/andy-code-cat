@@ -48,6 +48,10 @@ export const llmFocusContextSchema = z.object({
         /** outerHTML of the element as serialized by the browser DOM — used as anchor hint.
          *  Silently truncated to 8000 chars server-side — never rejected. */
         outerHtml: optionalTrimmedString(8000),
+        currentSrc: optionalTrimmedString(1500),
+        currentAlt: optionalTrimmedString(300),
+        backgroundImageUrl: optionalTrimmedString(1500),
+        mediaMode: z.enum(["foreground", "background", "none"]).optional(),
     }).optional(),
     codeSelection: z.object({
         language: z.enum(["html", "css", "js"]),
@@ -170,6 +174,10 @@ export interface LlmFocusContext {
         textSnippet?: string;
         /** outerHTML of the element as serialized by the browser DOM — used as anchor hint */
         outerHtml?: string;
+        currentSrc?: string;
+        currentAlt?: string;
+        backgroundImageUrl?: string;
+        mediaMode?: "foreground" | "background" | "none";
     };
     codeSelection?: {
         language: "html" | "css" | "js";

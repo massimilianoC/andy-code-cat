@@ -6,6 +6,7 @@
 - **api**: Express + TypeScript — backend API built with Clean Architecture
 - **mongodb**: primary database (host port 27018)
 - **redis**: cache and BullMQ queue (host port 6380)
+- **minio**: S3-like object storage for user/project media assets (host ports 9000 and 9001)
 - **workspace**: container for the OpenCode worker (planned for M3)
 
 ## Clean Architecture Map (API)
@@ -85,10 +86,17 @@ Required flow: `presentation → application → domain`, `infra → domain`
 
 ### Storage adapters (✅)
 
-- `IFileStorage` — port interface (`upload` / `getSignedUrl` / `delete`)
-- `LocalFileStorage` — disk-based storage for DEV (`STORAGE_DRIVER=local`)
-- `MinioFileStorage` — MinIO/S3 storage for PROD (`STORAGE_DRIVER=minio`)
-- `StorageFactory` — selects the adapter from env
+- `IFileStorage` — port interface for media and private file persistence
+- `LocalFileStorage` — disk-based storage for local fallback (`STORAGE_ADAPTER=local`)
+- `MinioFileStorage` — MinIO-backed S3-like storage for user/project media (`STORAGE_ADAPTER=minio`)
+- `StorageFactory` — selects the validated adapter from env while keeping publish/export flows locally compatible
+
+### Media generation flow (✅ local-first, provider-backed)
+
+- `POST /v1/projects/:id/assets/generate-image` creates a sandboxed media job for the selected WYSIWYG element
+- The route stores a placeholder asset immediately so the editor can react without blocking
+- When SiliconFlow is configured, the backend fetches the real generated image, persists it to MinIO, and updates the same asset record
+- The asset document retains the full generation ledger: provider, model, prompt, semantic classification, latency, cost, token usage when available, and provider response summary
 
 ### Layer 1 — Chat Preview (✅)
 
