@@ -1,6 +1,7 @@
 import { addUrlReferenceSchema } from "@andy-code-cat/contracts";
 import type { ProjectAsset } from "../../domain/entities/ProjectAsset";
 import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAssetRepository";
+import { buildAssetSemanticMetadata } from "../media/projectAssetSemantics";
 
 /**
  * Adds a URL-only reference asset. No file is stored on disk.
@@ -32,11 +33,18 @@ export class AddUrlReference {
             storedFilename: "",
             mimeType: "text/uri-list",
             fileSize: 0,
-            source: "user_upload",
+            source: "url_reference",
+            scope: data.scope ?? "project",
             label: data.label,
-            styleRole: data.styleRole,
+            styleRole: data.styleRole ?? "reference",
             descriptionText: data.descriptionText,
             externalUrl: data.url,
+            generationStatus: "ready",
+            semanticMetadata: buildAssetSemanticMetadata({
+                promptOrName: `${data.label ?? originalName} ${data.descriptionText ?? ""}`,
+                mimeType: "text/uri-list",
+                mediaKind: "reference",
+            }),
         });
     }
 }

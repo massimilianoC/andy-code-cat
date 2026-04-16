@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import type { ProjectAsset } from "../../domain/entities/ProjectAsset";
 import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAssetRepository";
-import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
+import type { IFileStorage } from "../../infra/storage/IFileStorage";
 
 /**
  * SavePlatformAsset — internal use-case for storing platform-generated assets.
@@ -19,7 +19,7 @@ import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 export class SavePlatformAsset {
     constructor(
         private readonly assetRepository: ProjectAssetRepository,
-        private readonly storage: LocalFileStorage
+        private readonly storage: IFileStorage
     ) { }
 
     async execute(input: {
@@ -29,6 +29,7 @@ export class SavePlatformAsset {
         mimeType: string;
         buffer: Buffer;
         label?: string;
+        scope?: "project" | "user";
     }): Promise<ProjectAsset> {
         const assetId = randomUUID();
         const safeName = safenameFromOriginal(input.originalName);
@@ -44,7 +45,9 @@ export class SavePlatformAsset {
             mimeType: input.mimeType,
             fileSize: input.buffer.byteLength,
             source: "platform_generated",
+            scope: input.scope ?? "project",
             label: input.label,
+            generationStatus: "ready",
         });
     }
 }

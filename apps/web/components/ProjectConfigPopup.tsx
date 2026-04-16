@@ -25,6 +25,7 @@ import {
     addUrlReference,
     updateProjectAsset,
     deleteProjectAsset,
+    downloadProjectAssetDataUrl,
     type ProjectMoodboardDto,
     type ProjectAssetDto,
     type StyleTagCatalog,
@@ -67,22 +68,42 @@ function AssetThumb({
     projectId,
     onUpdate,
     onDelete,
+    onPick,
 }: {
     asset: ProjectAssetDto;
     token: string;
     projectId: string;
     onUpdate: (id: string, data: Partial<ProjectAssetDto>) => void;
     onDelete: (id: string) => void;
+    onPick?: (asset: ProjectAssetDto) => void;
 }) {
     const [showMeta, setShowMeta] = useState(false);
     const [descText, setDescText] = useState(asset.descriptionText ?? "");
+    const [previewUrl, setPreviewUrl] = useState<string>("");
 
     const isImage = asset.mimeType.startsWith("image/");
     const isPdf = asset.mimeType === "application/pdf";
     const isUrl = asset.source === "url_reference";
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-    const downloadUrl = `${baseUrl}/v1/projects/${projectId}/assets/${asset.id}/download`;
+    useEffect(() => {
+        if (!isImage) {
+            setPreviewUrl("");
+            return;
+        }
+
+        let disposed = false;
+        downloadProjectAssetDataUrl(token, projectId, asset.id)
+            .then((url) => {
+                if (!disposed) setPreviewUrl(url);
+            })
+            .catch(() => {
+                if (!disposed) setPreviewUrl("");
+            });
+
+        return () => {
+            disposed = true;
+        };
+    }, [asset.id, isImage, projectId, token]);
 
     async function handleUseChange(checked: boolean) {
         await updateProjectAsset(token, projectId, asset.id, { useInProject: checked }).catch(() => {});
@@ -109,10 +130,10 @@ function AssetThumb({
         <div className="relative group border border-border rounded-md p-1.5 bg-card/50 hover:bg-card transition-colors">
             {/* Thumbnail */}
             <div className="w-full aspect-square flex items-center justify-center overflow-hidden rounded mb-1 bg-muted/30">
-                {isImage ? (
+                {isImage && previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                        src={downloadUrl}
+                        src={previewUrl}
                         alt={asset.label ?? asset.originalName}
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -135,6 +156,14 @@ function AssetThumb({
             >
                 {asset.label ?? asset.originalName}
             </p>
+            <div className="mt-1 flex items-center justify-center gap-1 flex-wrap">
+                <Badge variant="outline" className="text-[9px] uppercase tracking-wide">
+                    {asset.scope === "user" ? "my library" : asset.scope}
+                </Badge>
+                {asset.generationStatus === "queued" ? (
+                    <Badge variant="secondary" className="text-[9px] uppercase tracking-wide">queued</Badge>
+                ) : null}
+            </div>
 
             {/* Always-visible bottom bar: useInProject toggle + delete */}
             <div className="flex items-center justify-between mt-1 px-0.5">
@@ -152,14 +181,21 @@ function AssetThumb({
                     <Bookmark className="w-2.5 h-2.5" />
                     <span>{asset.useInProject ? "in uso" : "usa"}</span>
                 </button>
-                <button
-                    type="button"
-                    title="Elimina asset"
-                    onClick={handleDelete}
-                    className="text-muted-foreground hover:text-destructive transition-colors p-0.5 rounded"
-                >
-                    <Trash2 className="w-3 h-3" />
-                </button>
+                <div className="flex items-center gap-1">
+                    {onPick ? (
+                        <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={() => onPick(asset)}>
+                            Use
+                        </Button>
+                    ) : null}
+                    <button
+                        type="button"
+                        title="Elimina asset"
+                        onClick={handleDelete}
+                        className="text-muted-foreground hover:text-destructive transition-colors p-0.5 rounded"
+                    >
+                        <Trash2 className="w-3 h-3" />
+                    </button>
+                </div>
             </div>
 
             {/* Settings button — role & description (still gear-hover) */}
@@ -182,10 +218,13 @@ function AssetThumb({
                         onChange={(e) => handleRoleChange(e.target.value)}
                     >
                         <option value="">Ruolo stile…</option>
-                        <option value="mood">Mood</option>
-                        <option value="reference">Riferimento</option>
-                        <option value="palette">Palette</option>
-                        <option value="typography">Tipografia</option>
+                        <option value="inspiration">Inspiration</option>
+                        <option value="material">Material</option>
+                        <option value="logo">Logo</option>
+                        <option value="background">Background</option>
+                        <option value="icon">Icon</option>
+                        <option value="watermark">Watermark</option>
+                        <option value="reference">Reference</option>
                     </select>
                     <Input
                         placeholder="Descrizione…"
@@ -214,6 +253,7 @@ interface ProjectConfigPopupProps {
     briefGuideQuestions?: string[];
     /** Optional suggested model label attached to the active preset. */
     presetRecommendedModelLabel?: string;
+    onAssetPick?: (asset: ProjectAssetDto) => void;
 }
 
 export default function ProjectConfigPopup({
@@ -225,6 +265,7 @@ export default function ProjectConfigPopup({
     presetLabel,
     briefGuideQuestions,
     presetRecommendedModelLabel,
+    onAssetPick,
 }: ProjectConfigPopupProps) {
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -238,6 +279,7 @@ export default function ProjectConfigPopup({
     const [urlPanelOpen, setUrlPanelOpen] = useState(false);
     const [urlInput, setUrlInput] = useState("");
     const [urlLabel, setUrlLabel] = useState("");
+    const [assetScope, setAssetScope] = useState<"project" | "user">("project");
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -304,7 +346,7 @@ export default function ProjectConfigPopup({
         if (!token || !e.target.files?.[0]) return;
         const file = e.target.files[0];
         try {
-            const res = await uploadProjectAsset(token, projectId, file);
+            const res = await uploadProjectAsset(token, projectId, file, { scope: assetScope });
             setAssets((a) => [res.asset, ...a]);
         } catch (err) {
             console.error("[ProjectConfigPopup] upload error", err);
@@ -318,6 +360,7 @@ export default function ProjectConfigPopup({
             const res = await addUrlReference(token, projectId, {
                 url: urlInput.trim(),
                 label: urlLabel.trim() || undefined,
+                scope: assetScope,
             });
             setAssets((a) => [res.asset, ...a]);
             setUrlInput("");
@@ -488,6 +531,33 @@ export default function ProjectConfigPopup({
                             {/* ── RIGHT COLUMN: Asset gallery ───────────── */}
                             <ScrollArea className="h-full">
                                 <div className="p-5 space-y-4">
+                                    <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+                                        <p className="text-xs font-semibold text-foreground">Nuovi media</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button
+                                                type="button"
+                                                variant={assetScope === "project" ? "default" : "outline"}
+                                                size="sm"
+                                                className="text-xs"
+                                                onClick={() => setAssetScope("project")}
+                                            >
+                                                Questo progetto
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant={assetScope === "user" ? "default" : "outline"}
+                                                size="sm"
+                                                className="text-xs"
+                                                onClick={() => setAssetScope("user")}
+                                            >
+                                                La mia libreria
+                                            </Button>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            La galleria sotto unisce media del progetto e media riutilizzabili del tuo account.
+                                        </p>
+                                    </div>
+
                                     {/* Upload controls */}
                                     <div className="flex gap-2">
                                         <Button
@@ -562,10 +632,10 @@ export default function ProjectConfigPopup({
                                         <div className="flex flex-col items-center justify-center py-12 text-center">
                                             <Upload className="w-10 h-10 text-muted-foreground/40 mb-3" />
                                             <p className="text-sm text-muted-foreground">
-                                                Nessun asset.
+                                                Nessun media in libreria.
                                             </p>
                                             <p className="text-xs text-muted-foreground/70 mt-1">
-                                                Carica immagini, PDF o aggiungi link di riferimento.
+                                                Carica immagini, PDF o link: qui vedrai insieme progetto e libreria utente.
                                             </p>
                                         </div>
                                     ) : (
@@ -579,6 +649,7 @@ export default function ProjectConfigPopup({
                                                         projectId={projectId}
                                                         onUpdate={handleAssetUpdate}
                                                         onDelete={handleAssetDelete}
+                                                        onPick={onAssetPick}
                                                     />
                                                 ))}
                                         </div>

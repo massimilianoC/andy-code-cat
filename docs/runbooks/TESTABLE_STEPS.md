@@ -194,6 +194,22 @@ These two items are additive roadmap improvements and can be delivered after the
 - Expected: 3 snapshots ordered by timestamp, browsable from the history combo box
 - Expected: restoring a previous snapshot is available
 
+### Step 16a - Asset Storage Adapter
+
+- Set `STORAGE_ADAPTER=minio` with valid MinIO credentials and start the stack
+- Upload an image from the project asset manager
+- Expected: upload, list, download, and delete continue to work through the same API routes
+- Verify: the object is isolated under the same user/project sandbox path and the file can still be streamed back from the API
+
+### Step 16b - Provider-backed Image Generation
+
+- Ensure `SILICONFLOW_API_KEY` is configured and `STORAGE_ADAPTER=minio`
+- In the workspace, enable `Inspect`, select an element, open the media inspector, and click `Generate image`
+- Expected: `POST /v1/projects/:id/assets/generate-image` returns `202 queued` with a placeholder asset immediately
+- Expected: within a few seconds, the asset changes to `generationStatus = ready`
+- Verify: the saved asset now includes provider metadata such as provider, model, image size, prompt, timing, cost, and the persisted semantic classification payload
+- Verify: the binary is stored in MinIO and can be applied back into the WYSIWYG preview
+
 ---
 
 ## M1 — Context Bridge

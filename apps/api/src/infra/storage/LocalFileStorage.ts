@@ -1,4 +1,5 @@
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import { env } from "../../config";
 import type { IFileStorage } from "./IFileStorage";
@@ -73,6 +74,10 @@ export class LocalFileStorage implements IFileStorage {
             // If file is already gone, ignore (idempotent delete).
             if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
         }
+    }
+
+    async createReadStream(filePath: string): Promise<NodeJS.ReadableStream> {
+        return fsSync.createReadStream(filePath);
     }
 
     async writeExportFile(

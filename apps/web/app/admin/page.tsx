@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
-import { getAdminStats, type PlatformStatsDto } from "@/lib/api/admin";
+import { getAdminAiAnalytics, getAdminStats, type PlatformStatsDto } from "@/lib/api/admin";
+import type { AiUsageAnalyticsDto } from "@/lib/api/assets";
+import AiUsageSummaryPanel from "@/components/AiUsageSummaryPanel";
 
 // ── Stat card ──────────────────────────────────────────────────────────────────
 
@@ -110,15 +112,26 @@ function QuickLink({ href, label, description }: { href: string; label: string; 
 export default function AdminDashboardPage() {
     const router = useRouter();
     const [stats, setStats] = useState<PlatformStatsDto | null>(null);
+    const [aiAnalytics, setAiAnalytics] = useState<AiUsageAnalyticsDto | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const token = getToken();
         if (!token) { router.replace("/login"); return; }
-        getAdminStats(token)
-            .then(setStats)
-            .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load stats"))
+        Promise.allSettled([getAdminStats(token), getAdminAiAnalytics(token)])
+            .then((results) => {
+                const [statsResult, aiResult] = results;
+                if (statsResult.status === "fulfilled") {
+                    setStats(statsResult.value);
+                } else {
+                    setError(statsResult.reason instanceof Error ? statsResult.reason.message : "Failed to load stats");
+                }
+
+                if (aiResult.status === "fulfilled") {
+                    setAiAnalytics(aiResult.value);
+                }
+            })
             .finally(() => setLoading(false));
     }, [router]);
 
@@ -193,6 +206,13 @@ export default function AdminDashboardPage() {
                     sub="all users combined"
                 />
             </div>
+
+            <AiUsageSummaryPanel
+                title="Superadmin AI monitoring"
+                subtitle="Platform-wide spend and recent LLM or image-generation requests."
+                analytics={aiAnalytics}
+                loading={loading}
+            />
 
             {/* ── Roles breakdown ──────────────────────────────────────────── */}
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>

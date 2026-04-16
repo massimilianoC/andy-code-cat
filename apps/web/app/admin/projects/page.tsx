@@ -7,8 +7,10 @@ import {
     adminListProjects,
     adminDeleteProject,
     adminBlockDeployment,
+    getAdminProjectAiAnalytics,
     type AdminProjectDto,
 } from "@/lib/api/admin";
+import type { AiUsageAnalyticsDto } from "@/lib/api/assets";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +26,7 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import AiUsageSummaryPanel from "@/components/AiUsageSummaryPanel";
 
 type ConfirmAction = "delete-project" | "block-deployment" | "unblock-deployment";
 
@@ -33,12 +36,13 @@ interface ConfirmState {
     publishId?: string;
 }
 
-type SidebarTab = "overview" | "deployment" | "danger";
+type SidebarTab = "overview" | "ai" | "deployment" | "danger";
 
 /** Segment-control tab bar for the project sidebar. */
 function SidebarTabs({ active, onChange }: { active: SidebarTab; onChange: (t: SidebarTab) => void }) {
     const tabs: { id: SidebarTab; label: string; danger?: boolean }[] = [
         { id: "overview", label: "Overview" },
+        { id: "ai", label: "AI Usage" },
         { id: "deployment", label: "Deployment" },
         { id: "danger", label: "Danger", danger: true },
     ];
@@ -75,6 +79,8 @@ export default function AdminProjectsPage() {
     const [selectedProject, setSelectedProject] = useState<AdminProjectDto | null>(null);
     const [sidebarTab, setSidebarTab] = useState<SidebarTab>("overview");
     const [actionMessage, setActionMessage] = useState<string | null>(null);
+    const [projectAiAnalytics, setProjectAiAnalytics] = useState<AiUsageAnalyticsDto | null>(null);
+    const [loadingProjectAiAnalytics, setLoadingProjectAiAnalytics] = useState(false);
     const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
     const [actionInFlight, setActionInFlight] = useState(false);
 
@@ -151,6 +157,19 @@ export default function AdminProjectsPage() {
         const updated = projects.find((p) => p.id === selectedProject.id);
         if (updated) setSelectedProject(updated);
     }, [projects, selectedProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        const token = getToken();
+        if (!token || !selectedProject) {
+            setProjectAiAnalytics(null);
+            return;
+        }
+        setLoadingProjectAiAnalytics(true);
+        getAdminProjectAiAnalytics(token, selectedProject.id)
+            .then((result) => setProjectAiAnalytics(result))
+            .catch(() => setProjectAiAnalytics(null))
+            .finally(() => setLoadingProjectAiAnalytics(false));
+    }, [selectedProject?.id]);
 
     function getConfirmCopy(state: ConfirmState): { title: string; description: string } {
         if (state.action === "delete-project")
@@ -374,6 +393,15 @@ export default function AdminProjectsPage() {
                                             </CardContent>
                                         </Card>
                                     </div>
+                                )}
+
+                                {sidebarTab === "ai" && (
+                                    <AiUsageSummaryPanel
+                                        title="Project AI analytics"
+                                        subtitle="Incremental LLM and image-generation cost for this project."
+                                        analytics={projectAiAnalytics}
+                                        loading={loadingProjectAiAnalytics}
+                                    />
                                 )}
 
                                 {/* ── Tab: Deployment ── */}

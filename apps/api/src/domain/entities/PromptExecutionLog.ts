@@ -35,8 +35,17 @@ export interface PromptExecutionLog {
     createdAt: Date;
 }
 
+export interface PromptExecutionModelSummary {
+    provider: string;
+    model: string;
+    runs: number;
+    totalCost: number;
+    totalTokens: number;
+}
+
 export interface PromptExecutionUsageSummary {
     totalCost: number;
     totalTokens: number;
     runs: number;
+    topModels?: PromptExecutionModelSummary[];
 }

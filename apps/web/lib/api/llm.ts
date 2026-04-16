@@ -31,6 +31,10 @@ export interface LlmFocusContext {
         classes: string[];
         textSnippet?: string;
         outerHtml?: string;
+        currentSrc?: string;
+        currentAlt?: string;
+        backgroundImageUrl?: string;
+        mediaMode?: "foreground" | "background" | "none";
     };
     codeSelection?: {
         language: "html" | "css" | "js";
