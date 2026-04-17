@@ -126,6 +126,12 @@ export class MongoSiteDeploymentRepository implements SiteDeploymentRepository {
         return result.deletedCount === 1;
     }
 
+    async findActivesByUserId(userId: string): Promise<SiteDeployment[]> {
+        const col = await this.col();
+        const docs = await col.find({ userId, status: "live" }).sort({ updatedAt: -1 }).toArray();
+        return docs.map(toEntity);
+    }
+
     async isPublishIdTaken(publishId: string): Promise<boolean> {
         const col = await this.col();
         const count = await col.countDocuments({ publishId, status: { $in: ["deploying", "live"] } });

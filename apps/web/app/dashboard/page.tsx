@@ -321,12 +321,12 @@ export default function DashboardPage() {
                     {blankPreset ? (
                         <Button
                             variant="outline"
-                            className="w-full h-auto min-h-24 p-5 flex flex-col items-start justify-start gap-2 text-left border-dashed"
+                            className="w-full h-auto min-h-16 p-4 flex flex-col items-start justify-start gap-2 text-left border-dashed"
                             onClick={() => handleCreateFromPreset(blankPreset.id, blankPreset.labelIt || blankPreset.label)}
                         >
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                    <Sparkles className="h-4 w-4 text-primary" />
+                            <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
+                                    <Sparkles className="h-3.5 w-3.5 text-primary" />
                                 </div>
                                 <div>
                                     <div className="text-sm font-semibold text-foreground leading-tight">{blankPreset.labelIt || blankPreset.label}</div>
@@ -343,34 +343,34 @@ export default function DashboardPage() {
                                     <h3 className="text-sm font-semibold text-foreground">{group.label}</h3>
                                     {group.hint ? <span className="text-xs text-muted-foreground">{group.hint}</span> : null}
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
                                     {group.presets.map((preset) => {
                                         const Icon = PRESET_ICON_MAP[preset.icon as keyof typeof PRESET_ICON_MAP] ?? Sparkles;
                                         return (
                                             <Button
                                                 key={preset.id}
                                                 variant="outline"
-                                                className="h-auto min-h-32 p-5 flex flex-col items-start justify-start gap-3 text-left"
+                                                className="h-auto min-h-20 p-3 flex flex-col items-start justify-start gap-2 text-left"
                                                 onClick={() => handleCreateFromPreset(preset.id, preset.labelIt || preset.label)}
                                             >
-                                                <div className="flex items-start justify-between w-full gap-3">
-                                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                                                        <Icon className="h-4 w-4 text-primary" />
+                                                <div className="flex items-start justify-between w-full gap-2">
+                                                    <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                                        <Icon className="h-3.5 w-3.5 text-primary" />
                                                     </div>
                                                     {preset.recommendedModel?.label ? (
-                                                        <Badge variant="secondary" className="text-[10px]">
+                                                        <Badge variant="secondary" className="text-[9px] leading-tight">
                                                             {preset.recommendedModel.label}
                                                         </Badge>
                                                     ) : null}
                                                 </div>
                                                 <div>
-                                                    <div className="text-sm font-semibold text-foreground leading-tight">{preset.labelIt || preset.label}</div>
-                                                    <div className="text-xs text-muted-foreground mt-1 leading-snug">{preset.hint}</div>
+                                                    <div className="text-xs font-semibold text-foreground leading-tight">{preset.labelIt || preset.label}</div>
+                                                    <div className="text-[10px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{preset.hint}</div>
                                                 </div>
                                                 {preset.tags?.length ? (
                                                     <div className="flex flex-wrap gap-1">
-                                                        {preset.tags.slice(0, 3).map((tag) => (
-                                                            <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>
+                                                        {preset.tags.slice(0, 2).map((tag) => (
+                                                            <Badge key={tag} variant="outline" className="text-[9px] px-1 py-0">{tag}</Badge>
                                                         ))}
                                                     </div>
                                                 ) : null}

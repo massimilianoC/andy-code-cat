@@ -6,6 +6,10 @@ export interface Project {
     ownerUserId: string;
     presetId?: string;
     createdAt: string;
+    /** Total LLM cost in EUR for this project (sum of succeeded runs). */
+    totalCostEur?: number;
+    /** Relative URL of the live published site, e.g. /p/{publishId}. Null if not published. */
+    publishedUrl?: string | null;
 }
 
 export interface PresetOutputSpec {
