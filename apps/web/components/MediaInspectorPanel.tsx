@@ -32,7 +32,7 @@ interface MediaInspectorPanelProps {
     generating: boolean;
     suggesting: boolean;
     suggestion: SuggestProjectImageIdeaResult | null;
-    imageModelOptions: Array<{ id: string; label: string }>;
+    imageModelOptions: Array<{ id: string; label: string; provider: string; providerLabel: string }>;
     selectedImageModel: string;
     onImageModelChange: (value: string) => void;
     imageSize: string;
@@ -237,9 +237,21 @@ export default function MediaInspectorPanel(props: MediaInspectorPanelProps) {
                                 {props.imageModelOptions.length === 0 ? (
                                     <option value="">No image model available</option>
                                 ) : (
-                                    props.imageModelOptions.map((model) => (
-                                        <option key={model.id} value={model.id}>{model.label}</option>
-                                    ))
+                                    (() => {
+                                        const groups = new Map<string, typeof props.imageModelOptions>();
+                                        for (const opt of props.imageModelOptions) {
+                                            const list = groups.get(opt.provider) ?? [];
+                                            list.push(opt);
+                                            groups.set(opt.provider, list);
+                                        }
+                                        return Array.from(groups.entries()).map(([provider, models]) => (
+                                            <optgroup key={provider} label={models[0].providerLabel}>
+                                                {models.map((model) => (
+                                                    <option key={model.id} value={model.id}>{model.label}</option>
+                                                ))}
+                                            </optgroup>
+                                        ));
+                                    })()
                                 )}
                             </select>
                         </div>

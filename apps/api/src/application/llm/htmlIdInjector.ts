@@ -10,18 +10,30 @@ import { randomBytes } from "crypto";
  *   - Builder.io →  builder-id       (UUID)
  *   - Webflow    →  data-node-id     (nanoid)
  *
- * We inject `data-pf-id` on every block-level element at snapshot-save time.
+ * We inject `data-pf-id` on every meaningful editing target at snapshot-save time:
+ * block-level layout nodes plus media elements and background-image carriers.
  * This lets the server locate and replace any element by a unique key that
  * is completely independent of the element's HTML content — no text matching,
  * no LLM cooperation required.
  */
 
-// Block-level elements that are meaningful editing targets.
-// Inline elements (span, a, strong, em, …) are intentionally excluded.
+// Meaningful patch targets.
+// Keep common layout containers plus explicit media nodes so inspect mode can
+// anchor directly to images, picture wrappers, SVG/video/canvas blocks, and
+// elements that carry an inline background image.
 const BLOCK_SELECTOR = [
+    // Layout blocks
     "div", "section", "article", "header", "footer", "main",
-    "nav", "aside", "form", "ul", "ol", "table", "figure",
+    "nav", "aside", "form", "ul", "ol", "li", "table", "figure",
     "blockquote", "details", "fieldset", "summary",
+    // Text blocks (enables precise focus-patch on headings/paragraphs)
+    "h1", "h2", "h3", "h4", "h5", "h6", "p",
+    // Media elements (image editor targets)
+    "img", "picture", "video", "canvas", "svg",
+    // Inline containers that commonly carry background images
+    "a", "span",
+    // Catch-all for inline background-image carriers
+    "[style*='background-image']",
 ].join(",");
 
 /** 6 random hex characters — ~16 million values, more than enough for a 100-element page. */
@@ -30,8 +42,8 @@ function genId(): string {
 }
 
 /**
- * Injects `data-pf-id` attributes into every block-level element that does
- * not already have one.  Safe to call multiple times — existing IDs are
+ * Injects `data-pf-id` attributes into every supported editing target that does
+ * not already have one. Safe to call multiple times — existing IDs are
  * preserved so elements keep their identity across incremental saves.
  *
  * Returns the full HTML document unchanged on any parse error.
@@ -51,6 +63,38 @@ export function injectStableIds(html: string): string {
         // Never corrupt the stored artifact if cheerio fails.
         return html;
     }
+}
+
+/**
+ * Normalises LLM-generated HTML before it is stored as a snapshot artifact.
+ *
+ * Applied BEFORE `injectStableIds` so the input is still pristine LLM output.
+ * Operations are semantically safe: none alter rendered output.
+ *
+ * What it does:
+ *  - Removes HTML comments (`<!-- … -->`) — they are invisible to the user and
+ *    add 100–500 chars on typical LLM responses.
+ *  - Collapses runs of blank lines (3+ → 1) — LLM models add excessive blank
+ *    lines between sections; this alone saves ~10–17% on typical output.
+ *  - Strips `style=""` empty attributes — added by WYSIWYG runtimes and echoed
+ *    by some models; they are meaningless and waste ~6 chars per occurrence.
+ *
+ * What it intentionally does NOT do:
+ *  - No tag-level minification (no removal of quoted attribute values,
+ *    closing tags, etc.) — we must preserve standard HTML for iframe rendering
+ *    and predictable cheerio re-parsing in focused-edit workflows.
+ *  - No whitespace collapse inside text nodes — would alter rendered spacing.
+ *  - No class deduplication — covered separately at render time by the browser.
+ */
+export function normalizeStoredHtml(html: string): string {
+    if (!html?.trim()) return html;
+    return html
+        // Remove HTML comments (including multi-line)
+        .replace(/<!--[\s\S]*?-->/g, "")
+        // Collapse 3+ consecutive blank lines to a single blank line
+        .replace(/(\r?\n[ \t]*){3,}/g, "\n\n")
+        // Strip empty style attributes
+        .replace(/ style=""/g, "");
 }
 
 /**

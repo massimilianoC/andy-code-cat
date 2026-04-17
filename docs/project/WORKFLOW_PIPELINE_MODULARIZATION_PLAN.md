@@ -4,6 +4,10 @@
 > Date: 2026-04-16  
 > Scope: zero-effort generation flow, dynamic UX difficulty modes, backend-first orchestration, reusable pipeline templates, and future node-based workflow editor
 
+Related execution-grade handoff:
+
+- [docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md](../specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md)
+
 ---
 
 ## 1. Executive Summary

@@ -59,8 +59,10 @@ import { saveThumbnail, savePromptExcerpt, incrementSnapCount } from "../../../l
 import ProjectConfigPopup from "../../../components/ProjectConfigPopup";
 import MediaInspectorPanel from "../../../components/MediaInspectorPanel";
 import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
+import { MediaGrid, type MediaItem } from "@/components/media";
 import { Mic, Settings, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
     ssr: false,
@@ -169,6 +171,47 @@ function appendPromptSegment(base: string, addition: string): string {
     if (!base.trim()) return normalizedAddition;
     const needsSpace = !/[\s\n]$/.test(base);
     return `${base}${needsSpace ? " " : ""}${normalizedAddition}`;
+}
+
+const PROJECT_ASSET_DOWNLOAD_PATH_RE = /\/v1\/projects\/([^/]+)\/assets\/([^/]+)\/download(?:$|\?)/i;
+
+function parseProtectedAssetDownloadUrl(rawSrc: string): { projectId: string; assetId: string } | null {
+    const trimmed = String(rawSrc ?? "").trim();
+    if (!trimmed || typeof window === "undefined") return null;
+
+    try {
+        const url = new URL(trimmed, window.location.origin);
+        const match = url.pathname.match(PROJECT_ASSET_DOWNLOAD_PATH_RE);
+        if (!match?.[1] || !match?.[2]) return null;
+        return {
+            projectId: decodeURIComponent(match[1]),
+            assetId: decodeURIComponent(match[2]),
+        };
+    } catch {
+        return null;
+    }
+}
+
+function sanitizeMediaElementPayload(element: SelectedFocusElement) {
+    const safeUrl = (value?: string) => {
+        const trimmed = value?.trim();
+        if (!trimmed || trimmed.startsWith("data:")) return undefined;
+        return trimmed.length > 1500 ? trimmed.slice(0, 1500) : trimmed;
+    };
+
+    return {
+        stableNodeId: element.stableNodeId,
+        selector: element.selector,
+        tag: element.tag,
+        textSnippet: clipFocusValue(element.textSnippet, 500),
+        currentSrc: safeUrl(element.currentSrc),
+        currentAlt: clipFocusValue(element.currentAlt, 300),
+        backgroundImageUrl: safeUrl(element.backgroundImageUrl),
+        mediaMode: element.mediaMode,
+        originalWidth: element.originalWidth,
+        originalHeight: element.originalHeight,
+        aspectRatio: element.aspectRatio,
+    };
 }
 
 /**
@@ -369,16 +412,17 @@ export default function WorkspacePage() {
     const [selectedProvider, setSelectedProvider] = useState<string>("");
     const [selectedModel, setSelectedModel] = useState<string>("");
     const imageModelOptions = React.useMemo(() => {
-        const siliconFlowProviders = providersCatalog.filter((provider) =>
-            provider.provider === "siliconflow"
-            && provider.models.some((model) => model.isActive && model.capabilities.includes("image_generation")),
+        const imageProviders = providersCatalog.filter((provider) =>
+            provider.models.some((model) => model.isActive && model.capabilities.includes("image_generation")),
         );
 
-        return siliconFlowProviders.flatMap((provider) => provider.models
+        return imageProviders.flatMap((provider) => provider.models
             .filter((model) => model.isActive && model.capabilities.includes("image_generation"))
             .map((model) => ({
                 id: model.id,
                 label: `${model.displayName ?? model.id}${model.priceTier ? ` · ${model.priceTier}` : ""}`,
+                provider: provider.provider,
+                providerLabel: provider.provider,
             })));
     }, [providersCatalog]);
     const presetRecommendationAppliedRef = useRef<string | null>(null);
@@ -404,9 +448,16 @@ export default function WorkspacePage() {
     const [editorHtml, setEditorHtml] = useState("");
     const [editorCss, setEditorCss] = useState("");
     const [editorJs, setEditorJs] = useState("");
+    const editorHtmlRef = useRef("");
+    const editorCssRef = useRef("");
+    const editorJsRef = useRef("");
     const [editorSelectionLabel, setEditorSelectionLabel] = useState<string>("Nessuna selezione");
     const [inspectMode, setInspectMode] = useState(false);
     const [selectedElement, setSelectedElement] = useState<LlmFocusContext["selectedElement"] | null>(null);
+    const [selectedElementSource, setSelectedElementSource] = useState<"inspect" | "edit-media" | null>(null);
+    const [mediaToolsOpen, setMediaToolsOpen] = useState(false);
+    // EDIT-mode media asset list scanned from the live preview iframe
+    const [editMediaList, setEditMediaList] = useState<MediaItem[]>([]);
     const [projectAssets, setProjectAssets] = useState<ProjectAssetDto[]>([]);
     const [loadingProjectAssets, setLoadingProjectAssets] = useState(false);
     const [assetScope, setAssetScope] = useState<"project" | "user">("project");
@@ -425,6 +476,39 @@ export default function WorkspacePage() {
     const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
     const [codeEditorSelection, setCodeEditorSelection] = useState<LlmFocusContext["codeSelection"] | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    const assetPreviewUrlCacheRef = useRef<Map<string, string>>(new Map());
+    const resolveSidebarMediaSrc = useCallback(async (rawSrc: string): Promise<string> => {
+        const trimmed = String(rawSrc ?? "").trim();
+        if (!trimmed) return "";
+        if (/^(data|blob):/i.test(trimmed)) return trimmed;
+        if (!token) return trimmed;
+
+        const parsed = parseProtectedAssetDownloadUrl(trimmed);
+        if (!parsed) return trimmed;
+
+        const cacheKey = `${parsed.projectId}:${parsed.assetId}`;
+        const cached = assetPreviewUrlCacheRef.current.get(cacheKey);
+        if (cached) return cached;
+
+        try {
+            const dataUrl = await downloadProjectAssetDataUrl(token, parsed.projectId, parsed.assetId);
+            if (dataUrl) {
+                assetPreviewUrlCacheRef.current.set(cacheKey, dataUrl);
+                return dataUrl;
+            }
+        } catch {
+            // Fall back to the original URL; the thumbnail component will handle any load failure gracefully.
+        }
+
+        return trimmed;
+    }, [token]);
+    const hasPreviewArtifacts = Boolean(editorHtml || editorCss || editorJs);
+    const clearSelectedElement = useCallback(() => {
+        setSelectedElement(null);
+        setSelectedElementSource(null);
+        setMediaSuggestion(null);
+        setMediaToolsOpen(false);
+    }, []);
 
     // ── WYSIWYG EDIT mode state ──────────────────────────────────────────────
     const [editMode, setEditMode] = useState(false);
@@ -821,7 +905,9 @@ export default function WorkspacePage() {
         if (imageModelOptions.some((model) => model.id === selectedImageModel)) {
             return;
         }
-        const nextModel = imageModelOptions.find((model) => /schnell|turbo|fast/i.test(model.id)) ?? imageModelOptions[0];
+        const siliconFlowFast = imageModelOptions.find((m) => m.provider === "siliconflow" && /schnell|turbo|fast/i.test(m.id));
+        const anyFast = imageModelOptions.find((m) => /schnell|turbo|fast/i.test(m.id));
+        const nextModel = siliconFlowFast ?? anyFast ?? imageModelOptions[0];
         setSelectedImageModel(nextModel?.id ?? "");
     }, [imageModelOptions, selectedImageModel]);
 
@@ -907,6 +993,10 @@ export default function WorkspacePage() {
     useEffect(() => {
         selectedBackendSnapshotIdRef.current = selectedBackendSnapshotId;
     }, [selectedBackendSnapshotId]);
+
+    useEffect(() => { editorHtmlRef.current = editorHtml; }, [editorHtml]);
+    useEffect(() => { editorCssRef.current = editorCss; }, [editorCss]);
+    useEffect(() => { editorJsRef.current = editorJs; }, [editorJs]);
 
     useEffect(() => {
         if (!token) {
@@ -995,7 +1085,7 @@ export default function WorkspacePage() {
             aspectRatio: selectedElement.aspectRatio,
         }, "*");
 
-        const currentHtml = editorHtml;
+        const currentHtml = editorHtmlRef.current;
         let nextHtml = currentHtml;
 
         if (currentHtml.trim()) {
@@ -1058,7 +1148,7 @@ export default function WorkspacePage() {
         } : prev);
 
         return nextHtml;
-    }, [selectedElement, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter, editorHtml]);
+    }, [selectedElement, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter]);
 
     const persistWorkspaceSnapshot = useCallback(async (
         snapshotId: string,
@@ -1070,35 +1160,67 @@ export default function WorkspacePage() {
             savePromptExcerpt(projectId, options.promptExcerpt);
         }
         incrementSnapCount(projectId);
+
+        // Fetch the snapshot list BEFORE setting state so we can batch ALL
+        // state updates into ONE synchronous React render.  If the list fetch
+        // and the selectedId update land in different batches, React may fire
+        // an intermediate render where artifactsKey already points to the new
+        // snapshot but editorHtml still holds stale content — the iframe
+        // remounts with blank/stale srcDoc.  (Same pattern used by the
+        // streaming flow at the handleSend level.)
+        let freshSnapshots: typeof previewSnapshots | null = null;
         if (token && options?.refreshList !== false) {
-            await loadSnapshots(token);
+            try {
+                const res = await listPreviewSnapshots(token, projectId);
+                freshSnapshots = res.snapshots;
+            } catch { /* silent — snapshot list is supplementary */ }
+        }
+
+        // --- single batched render from here ---
+        if (freshSnapshots) {
+            setPreviewSnapshots(freshSnapshots);
         }
         if (options?.setSelected !== false) {
             setSelectedBackendSnapshotId(snapshotId);
+            // Pre-populate editor state in the same render so the iframe
+            // remounts with correct content, not a stale/blank doc.
+            setEditorHtml(artifacts.html);
+            setEditorCss(artifacts.css);
+            setEditorJs(artifacts.js);
         }
-    }, [projectId, token, loadSnapshots]);
+    }, [projectId, token]);
 
     const saveMediaVersion = useCallback(async (
         html: string,
         finishReason: string,
         options?: { promptExcerpt?: string; refreshList?: boolean; setSelected?: boolean },
     ): Promise<boolean> => {
-        if (!token || !activeConvId || !html.trim()) return false;
+        if (!token || !html.trim()) return false;
 
         try {
+            let conversationId = activeConvId;
+            if (!conversationId) {
+                const response = await getOrCreateProjectConversation(token, projectId);
+                setActiveConv(response.conversation);
+                setActiveConvId(response.conversation.id);
+                conversationId = response.conversation.id;
+            }
+
+            if (!conversationId) return false;
+
             const result = await createPreviewSnapshot(token, projectId, {
-                conversationId: activeConvId,
+                conversationId,
                 parentSnapshotId: selectedBackendSnapshotIdRef.current ?? undefined,
-                artifacts: { html, css: editorCss, js: editorJs },
+                artifacts: { html, css: editorCssRef.current, js: editorJsRef.current },
                 metadata: { finishReason },
                 activate: true,
             });
-            await persistWorkspaceSnapshot(result.snapshot.id, { html, css: editorCss, js: editorJs }, options);
+            await persistWorkspaceSnapshot(result.snapshot.id, { html, css: editorCssRef.current, js: editorJsRef.current }, options);
             return true;
         } catch {
             return false;
         }
-    }, [token, activeConvId, projectId, editorCss, editorJs, persistWorkspaceSnapshot]);
+    }, [token, activeConvId, projectId, persistWorkspaceSnapshot]);
 
     const handleApplyAsset = useCallback(async (asset: ProjectAssetDto) => {
         if (!token || !selectedElement) return;
@@ -1120,7 +1242,7 @@ export default function WorkspacePage() {
             }
 
             const updatedHtml = applyMediaToPreview(resolvedUrl);
-            const versioned = await saveMediaVersion(updatedHtml || editorHtml, "media-apply");
+            const versioned = await saveMediaVersion(updatedHtml || editorHtmlRef.current, "media-apply");
             setConfigOpen(false);
             addNotification({
                 label: versioned ? "Media applicato e salvato" : "Media applicato",
@@ -1133,7 +1255,7 @@ export default function WorkspacePage() {
             const message = err instanceof ApiError ? err.message : "Impossibile caricare l'asset selezionato";
             addNotification({ label: "Errore media", status: "error", message });
         }
-    }, [token, selectedElement, projectId, addNotification, applyMediaToPreview, saveMediaVersion, editorHtml]);
+    }, [token, selectedElement, projectId, addNotification, applyMediaToPreview, saveMediaVersion]);
 
     const handleApplyCurrentStyles = useCallback(async () => {
         if (!selectedElement) return;
@@ -1151,7 +1273,7 @@ export default function WorkspacePage() {
         }
 
         const updatedHtml = applyMediaToPreview(currentUrl);
-        const versioned = await saveMediaVersion(updatedHtml || editorHtml, "media-style-update");
+        const versioned = await saveMediaVersion(updatedHtml || editorHtmlRef.current, "media-style-update");
         addNotification({
             label: versioned ? "Stile applicato e salvato" : "Stile applicato",
             status: "done",
@@ -1159,7 +1281,7 @@ export default function WorkspacePage() {
                 ? "Fit, repeat, opacity e filter sono stati aggiornati e salvati come nuova versione."
                 : "Fit, repeat, opacity e filter sono stati aggiornati nella preview.",
         });
-    }, [selectedElement, mediaMode, addNotification, applyMediaToPreview, saveMediaVersion, editorHtml]);
+    }, [selectedElement, mediaMode, addNotification, applyMediaToPreview, saveMediaVersion]);
 
     const handleSuggestMedia = useCallback(async () => {
         if (!token || !selectedElement) return;
@@ -1173,21 +1295,9 @@ export default function WorkspacePage() {
 
         try {
             const result = await suggestProjectImageIdea(token, projectId, {
-                prompt: prompt.trim() || undefined,
+                prompt: prompt.trim().slice(0, 2000) || undefined,
                 targetMode: mediaMode,
-                selectedElement: {
-                    stableNodeId: selectedElement.stableNodeId,
-                    selector: selectedElement.selector,
-                    tag: selectedElement.tag,
-                    textSnippet: selectedElement.textSnippet,
-                    currentSrc: selectedElement.currentSrc,
-                    currentAlt: selectedElement.currentAlt,
-                    backgroundImageUrl: selectedElement.backgroundImageUrl,
-                    mediaMode: selectedElement.mediaMode,
-                    originalWidth: selectedElement.originalWidth,
-                    originalHeight: selectedElement.originalHeight,
-                    aspectRatio: selectedElement.aspectRatio,
-                },
+                selectedElement: sanitizeMediaElementPayload(selectedElement),
             });
 
             setMediaSuggestion(result);
@@ -1214,39 +1324,40 @@ export default function WorkspacePage() {
         });
     }, [mediaSuggestion, addNotification]);
 
-    const handleGenerateMedia = useCallback(async () => {
-        const generationPrompt = prompt.trim();
-        if (!token || !selectedElement || !generationPrompt) return;
+    const runMediaGeneration = useCallback(async (
+        generationPromptRaw: string,
+        options?: { label?: string; initialMessage?: string; notificationId?: string },
+    ): Promise<boolean> => {
+        const generationPrompt = generationPromptRaw.trim().slice(0, 2000);
+        if (!token || !selectedElement) return false;
+        if (!generationPrompt) {
+            const message = "Scrivi un prompt oppure usa prima il suggerimento immagine.";
+            if (options?.notificationId) {
+                updateNotification(options.notificationId, { label: "Prompt mancante", status: "error", message });
+            } else {
+                addNotification({ label: "Prompt mancante", status: "error", message });
+            }
+            return false;
+        }
 
         setGeneratingMedia(true);
-        const notifId = addNotification({
-            label: "Generazione immagine",
+        const notifId = options?.notificationId ?? addNotification({
+            label: options?.label ?? "Generazione immagine",
             status: "running",
-            message: "Invio richiesta al provider…",
+            message: options?.initialMessage ?? "Invio richiesta al provider…",
         });
+
         try {
             const result = await generateProjectImage(token, projectId, {
                 prompt: generationPrompt,
                 fileNameHint: `${selectedElement.tag || "media"}-${Date.now()}`,
                 scope: assetScope,
-                provider: "siliconflow",
+                provider: imageModelOptions.find((m) => m.id === selectedImageModel)?.provider || "siliconflow",
                 model: selectedImageModel || undefined,
                 imageSize: selectedImageSize,
                 numInferenceSteps: selectedImageSteps,
                 targetMode: mediaMode,
-                selectedElement: {
-                    stableNodeId: selectedElement.stableNodeId,
-                    selector: selectedElement.selector,
-                    tag: selectedElement.tag,
-                    textSnippet: selectedElement.textSnippet,
-                    currentSrc: selectedElement.currentSrc,
-                    currentAlt: selectedElement.currentAlt,
-                    backgroundImageUrl: selectedElement.backgroundImageUrl,
-                    mediaMode: selectedElement.mediaMode,
-                    originalWidth: selectedElement.originalWidth,
-                    originalHeight: selectedElement.originalHeight,
-                    aspectRatio: selectedElement.aspectRatio,
-                },
+                selectedElement: sanitizeMediaElementPayload(selectedElement),
                 mediaConfig: {
                     fit: backgroundFit,
                     repeat: backgroundRepeat,
@@ -1258,12 +1369,30 @@ export default function WorkspacePage() {
             setProjectAssets((prev) => [result.asset, ...prev.filter((entry) => entry.id !== result.asset.id)]);
             void loadProjectAiUsage(token);
 
-            const placeholderUrl = await downloadProjectAssetDataUrl(token, projectId, result.asset.id);
-            applyMediaToPreview(placeholderUrl);
+            let placeholderApplied = false;
+            let placeholderVersioned = false;
+            try {
+                const placeholderUrl = await downloadProjectAssetDataUrl(token, projectId, result.asset.id);
+                const placeholderHtml = applyMediaToPreview(placeholderUrl);
+                placeholderApplied = true;
+                placeholderVersioned = await saveMediaVersion(
+                    placeholderHtml || editorHtmlRef.current,
+                    "image-generation-placeholder",
+                    { promptExcerpt: generationPrompt, setSelected: false },
+                );
+            } catch {
+                placeholderApplied = false;
+                placeholderVersioned = false;
+            }
+
             updateNotification(notifId, {
                 label: "Generazione avviata",
                 status: "running",
-                message: "Placeholder applicato nella working view. Salvo una nuova versione solo quando l'immagine finale è pronta.",
+                message: placeholderApplied
+                    ? (placeholderVersioned
+                        ? "Placeholder applicato e salvato come nuova versione. L'immagine finale avanzerà di nuovo la working view quando sarà pronta."
+                        : "Placeholder applicato nella working view. Se il salvataggio versione non è ancora disponibile, l'immagine finale verrà comunque registrata appena pronta.")
+                    : "Richiesta inviata correttamente. Se il placeholder non è subito disponibile, l'immagine finale verrà comunque applicata appena pronta.",
             });
 
             void (async () => {
@@ -1275,10 +1404,15 @@ export default function WorkspacePage() {
                     while (Date.now() - startedAt < maxWaitMs) {
                         await new Promise((resolve) => window.setTimeout(resolve, pollIntervalMs));
 
-                        const refreshed = await listProjectAssets(token, projectId);
-                        setProjectAssets(refreshed.assets);
-                        void loadProjectAiUsage(token);
-                        const trackedAsset = refreshed.assets.find((entry) => entry.id === result.asset.id);
+                        let trackedAsset: ProjectAssetDto | undefined;
+                        try {
+                            const refreshed = await listProjectAssets(token, projectId);
+                            setProjectAssets(refreshed.assets);
+                            void loadProjectAiUsage(token);
+                            trackedAsset = refreshed.assets.find((entry) => entry.id === result.asset.id);
+                        } catch {
+                            continue;
+                        }
 
                         if (!trackedAsset) {
                             continue;
@@ -1297,7 +1431,7 @@ export default function WorkspacePage() {
                             const finalUrl = await downloadProjectAssetDataUrl(token, projectId, trackedAsset.id);
                             const finalHtml = applyMediaToPreview(finalUrl);
                             const finalVersioned = await saveMediaVersion(
-                                finalHtml || editorHtml,
+                                finalHtml || editorHtmlRef.current,
                                 "image-generation-ready",
                                 { promptExcerpt: generationPrompt },
                             );
@@ -1324,13 +1458,65 @@ export default function WorkspacePage() {
                     void loadProjectAiUsage(token);
                 }
             })();
+
+            return true;
         } catch (err) {
             const message = err instanceof ApiError ? err.message : "Errore durante la generazione dell'immagine";
             updateNotification(notifId, { label: "Generazione fallita", status: "error", message });
+            return false;
         } finally {
             setGeneratingMedia(false);
         }
-    }, [token, selectedElement, prompt, projectId, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter, selectedImageModel, selectedImageSize, selectedImageSteps, assetScope, addNotification, updateNotification, applyMediaToPreview, saveMediaVersion, loadProjectAssets, loadProjectAiUsage, editorHtml]);
+    }, [token, selectedElement, projectId, assetScope, selectedImageModel, selectedImageSize, selectedImageSteps, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter, imageModelOptions, updateNotification, addNotification, loadProjectAiUsage, applyMediaToPreview, saveMediaVersion, loadProjectAssets]);
+
+    const handleGenerateMedia = useCallback(async () => {
+        const generationPrompt = (prompt.trim() || mediaSuggestion?.suggestedPrompt?.trim() || "").trim().slice(0, 2000);
+        await runMediaGeneration(generationPrompt, { label: "Generazione immagine" });
+    }, [prompt, mediaSuggestion, runMediaGeneration]);
+
+    const handleQuickGenerateMedia = useCallback(async () => {
+        if (!token || !selectedElement) return;
+
+        setSuggestingMedia(true);
+        const notifId = addNotification({
+            label: "Gen image AI",
+            status: "running",
+            message: "Analizzo il contesto semantico della pagina…",
+        });
+
+        try {
+            const suggestionResult = await suggestProjectImageIdea(token, projectId, {
+                prompt: prompt.trim().slice(0, 2000) || undefined,
+                targetMode: mediaMode,
+                selectedElement: sanitizeMediaElementPayload(selectedElement),
+            });
+
+            setMediaSuggestion(suggestionResult);
+
+            const autoPrompt = (
+                suggestionResult.suggestedPrompt?.trim()
+                || suggestionResult.suggestion?.trim()
+                || "Refresh or improve the selected image while preserving the page style."
+            ).slice(0, 2000);
+
+            updateNotification(notifId, {
+                label: "Gen image AI",
+                status: "running",
+                message: "Brief pronto. Avvio la generazione automatica…",
+            });
+
+            await runMediaGeneration(autoPrompt, {
+                label: "Gen image AI",
+                initialMessage: "Brief pronto. Avvio la generazione automatica…",
+                notificationId: notifId,
+            });
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : "Impossibile avviare la generazione automatica dell'immagine";
+            updateNotification(notifId, { label: "Gen image AI", status: "error", message });
+        } finally {
+            setSuggestingMedia(false);
+        }
+    }, [token, selectedElement, addNotification, projectId, prompt, mediaMode, updateNotification, runMediaGeneration]);
 
     const [isSavingEditorSnapshot, setIsSavingEditorSnapshot] = useState(false);
 
@@ -1365,6 +1551,17 @@ export default function WorkspacePage() {
             if (event.data.type === "pf-select") {
                 const safeElement = sanitizeSelectedElementForFocus(event.data.element as LlmFocusContext["selectedElement"]);
                 setSelectedElement(safeElement);
+                setSelectedElementSource(safeElement ? "inspect" : null);
+                setMediaToolsOpen(false);
+                return;
+            }
+            if (event.data.type === "pf-edit-img-click") {
+                const safeElement = sanitizeSelectedElementForFocus((event.data.element ?? event.data) as LlmFocusContext["selectedElement"]);
+                setSelectedElement(safeElement);
+                setSelectedElementSource(safeElement ? "edit-media" : null);
+                if (!safeElement) {
+                    setMediaToolsOpen(false);
+                }
                 return;
             }
             if (event.data.type === "pf-edit-save") {
@@ -1373,10 +1570,40 @@ export default function WorkspacePage() {
                 pendingEditHtmlRef.current = html;
                 void handleCommitEditVersionRef.current(html);
             }
+            if (event.data.type === "pf-edit-media-list") {
+                // Map iframe-scanned items to the reusable MediaItem shape.
+                // Protected project asset URLs are resolved with auth; generated data URLs must stay intact.
+                const raw: Array<{ selector: string; stableNodeId: string; tag: string; src: string; alt: string; mediaMode: string; w: number; h: number }> =
+                    Array.isArray(event.data.items) ? event.data.items : [];
+
+                void (async () => {
+                    const items = await Promise.all(
+                        raw.map(async (r) => ({
+                            id: r.stableNodeId || r.selector,
+                            src: await resolveSidebarMediaSrc(r.src),
+                            alt: r.alt,
+                            label: r.tag,
+                            mediaType: r.mediaMode === "background" ? "background" as const : "image" as const,
+                            width: r.w,
+                            height: r.h,
+                            meta: { selector: r.selector, stableNodeId: r.stableNodeId },
+                        })),
+                    );
+
+                    setEditMediaList(items);
+                })();
+            }
         }
         window.addEventListener("message", onMessage);
         return () => window.removeEventListener("message", onMessage);
-    }, []);
+    }, [resolveSidebarMediaSrc]);
+
+    useEffect(() => {
+        if (!hasPreviewArtifacts && inspectMode) {
+            setInspectMode(false);
+            clearSelectedElement();
+        }
+    }, [clearSelectedElement, hasPreviewArtifacts, inspectMode]);
 
     // Propagate inspect mode toggles to the iframe via postMessage
     useEffect(() => {
@@ -1408,8 +1635,13 @@ export default function WorkspacePage() {
                 clearTimeout(editAutosaveTimerRef.current);
                 editAutosaveTimerRef.current = null;
             }
+            clearSelectedElement();
+            setEditMediaList([]);
             return;
         }
+
+        setInspectMode(false);
+        clearSelectedElement();
 
         // Turning ON — ensure a backend session exists
         try {
@@ -1429,7 +1661,7 @@ export default function WorkspacePage() {
             }
             // Non-blocking: EDIT Light still works without a backend session (degraded mode)
         }
-    }, [token, activeConvId, editMode, selectedBackendSnapshotId, projectId, editorHtml, editorCss, editorJs]);
+    }, [token, activeConvId, editMode, selectedBackendSnapshotId, projectId, editorHtml, editorCss, editorJs, clearSelectedElement]);
 
     /**
      * Trigger the iframe to serialize the current edited DOM, then receive it
@@ -1546,8 +1778,8 @@ export default function WorkspacePage() {
         // rebuilt or a focused patch replaced the root element, the element gets a new
         // ID. Keeping the old outerHtml (with the stale ID) would make Strategy 0 fail
         // on the next focused-edit turn because the ID is no longer present in the base.
-        setSelectedElement(null);
-    }, [artifactsKey, artifacts?.html, artifacts?.css, artifacts?.js]);
+        clearSelectedElement();
+    }, [artifactsKey, artifacts?.html, artifacts?.css, artifacts?.js, clearSelectedElement]);
 
     // Watchdog: if the iframe key changes but onLoad never fires within 4 s
     // (browser bug, blank srcDoc race), bump previewForceKey to force a new mount.
@@ -1592,11 +1824,18 @@ export default function WorkspacePage() {
         const provider = getStringDetail(err.details, "provider") ?? currentProvider?.provider ?? undefined;
         const model = getStringDetail(err.details, "model") ?? (selectedModel || undefined);
         const keyEnvironmentVariable = getStringDetail(err.details, "keyEnvironmentVariable");
-        const message = err.userMessage ?? err.message;
+        const rawMessage = err.userMessage ?? err.message;
+        const looksLikeValidationOverflow = err.code === "VALIDATION_ERROR"
+            || /request validation failed|campi della richiesta non sono validi/i.test(rawMessage);
+        const message = looksLikeValidationOverflow
+            ? "Contesto troppo lungo o risposta troppo pesante per questa richiesta. Ho ridotto la memoria inviata: riprova con l'ultima azione."
+            : rawMessage;
         const title = err.code === "LLM_PROVIDER_API_KEY_MISSING"
             ? "Configura la API key del provider"
-            : "Errore durante la chiamata al provider";
-        const shouldOpenDialog = Boolean(err.code?.startsWith("LLM_"));
+            : looksLikeValidationOverflow
+                ? "Contesto troppo lungo"
+                : "Errore durante la chiamata al provider";
+        const shouldOpenDialog = Boolean(err.code?.startsWith("LLM_") || looksLikeValidationOverflow);
 
         addNotification({
             label: err.code === "LLM_PROVIDER_API_KEY_MISSING" ? "Provider non configurato" : "Errore LLM",
@@ -1720,29 +1959,47 @@ export default function WorkspacePage() {
                 throw new Error("Conversation ID not available");
             }
 
-            // Build conversation history sent to the backend.
-            // Assistant messages store the raw LLM JSON blob (with full HTML) in content —
-            // sending that as history overflows the schema limit and is useless to the model.
-            // Use chatStructured.summary instead; fall back to truncated raw content.
+            // Build a compact conversation history for the backend.
+            // Long conversations and full artifact payloads can push the request over the
+            // provider/validation budget, so we always keep only a small, recent memory window.
+            const historyMaxMessages = Math.max(2, Math.min(chatDefaults.historyMaxMessages ?? 8, inspectMode ? 6 : 8));
+            const historyMessageMaxChars = Math.max(300, Math.min(chatDefaults.historyMessageMaxChars ?? 1200, inspectMode ? 900 : 1200));
             const history = (activeConv?.messages ?? [])
                 .filter((m): m is MessageDto & { role: "user" | "assistant" } =>
                     m.role === "user" || m.role === "assistant"
                 )
+                .slice(-historyMaxMessages)
                 .map((m) => {
                     if (m.role === "assistant") {
                         const s = m.metadata?.chatStructured;
                         const compact = s
                             ? [s.summary, ...(s.bullets ?? [])].filter(Boolean).join(" | ")
-                            : m.content.slice(0, 2000);
-                        return { role: "assistant" as const, content: compact };
+                            : m.content;
+                        return { role: "assistant" as const, content: compact.trim().slice(0, historyMessageMaxChars) };
                     }
-                    return { role: "user" as const, content: m.content };
-                });
+                    return { role: "user" as const, content: m.content.trim().slice(0, historyMessageMaxChars) };
+                })
+                .filter((m) => m.content.length > 0);
 
-            const currentArtifacts =
+            const currentArtifactsSource =
                 editorHtml || editorCss || editorJs
                     ? { html: editorHtml, css: editorCss, js: editorJs }
                     : activeBaselineSnapshot?.artifacts ?? latestAssistant?.metadata?.generatedArtifacts;
+            // In focused edit mode the server needs the full HTML for section extraction
+            // and patch merging (data-pf-id lookup). Use Zod schema max (80K/20K/20K)
+            // for focus; server-side buildMessagesWithHistory truncates for the LLM prompt.
+            // 80K accommodates base HTML + data-pf-id overhead + GrapesJS inflation.
+            const isFocusedRequest = inspectMode && !!selectedElement;
+            const htmlLimit = isFocusedRequest ? 80000 : 20000;
+            const cssLimit = isFocusedRequest ? 20000 : 10000;
+            const jsLimit = isFocusedRequest ? 20000 : 10000;
+            const currentArtifacts = currentArtifactsSource
+                ? {
+                    html: (currentArtifactsSource.html ?? "").slice(0, htmlLimit),
+                    css: (currentArtifactsSource.css ?? "").slice(0, cssLimit),
+                    js: (currentArtifactsSource.js ?? "").slice(0, jsLimit),
+                }
+                : undefined;
 
             // Build focusContext from active inspect selection or code editor selection
             const focusContext: LlmFocusContext | undefined = (() => {
@@ -1751,7 +2008,7 @@ export default function WorkspacePage() {
                     if (safeSelectedElement) {
                         return {
                             mode: "preview-element" as const,
-                            targetType: getElementTargetType(safeSelectedElement.tag),
+                            targetType: getElementTargetType(safeSelectedElement.tag, safeSelectedElement.mediaMode),
                             userIntent: content,
                             selectedElement: safeSelectedElement,
                         };
@@ -1875,7 +2132,7 @@ export default function WorkspacePage() {
                 const retryWithoutFocusContext = Boolean(focusContext && isFocusContextValidationError(streamErr));
 
                 if (retryWithoutFocusContext) {
-                    setSelectedElement(null);
+                    clearSelectedElement();
                     addNotification({
                         label: "Inspect limitato",
                         status: "error",
@@ -1896,9 +2153,13 @@ export default function WorkspacePage() {
                 });
             }
 
+            const assistantContent = (llm.reply?.trim()
+                || llm.structured?.chat?.summary?.trim()
+                || "Risposta AI generata senza testo visibile.").slice(0, 50000);
+
             const assistantSaved = await addMessage(token, projectId, convId, {
                 role: "assistant",
-                content: llm.reply,
+                content: assistantContent,
                 metadata: {
                     model: llm.model,
                     provider: llm.provider,
@@ -1984,11 +2245,15 @@ export default function WorkspacePage() {
                     } catch { /* silent — snapshot list is supplementary */ }
 
                     // --- single batched render from here ---
+                    // Use snapshot artifacts (which have data-pf-id injected by the server)
+                    // instead of the raw LLM response so the iframe DOM and the next
+                    // request's currentArtifacts include stable IDs for focused editing.
+                    const snapArt = snap.snapshot.artifacts;
                     setPreviewSnapshots(freshSnapshots);
                     setSelectedBackendSnapshotId(snap.snapshot.id);
-                    setEditorHtml(llm.structured.artifacts.html ?? "");
-                    setEditorCss(llm.structured.artifacts.css ?? "");
-                    setEditorJs(llm.structured.artifacts.js ?? "");
+                    setEditorHtml(snapArt?.html ?? llm.structured.artifacts.html ?? "");
+                    setEditorCss(snapArt?.css ?? llm.structured.artifacts.css ?? "");
+                    setEditorJs(snapArt?.js ?? llm.structured.artifacts.js ?? "");
                     // Spinner cleared by iframe onLoad; fallback timeout in case user is on another tab
                     setPreviewRefreshing(true);
                     setPreviewPending(true);
@@ -2001,13 +2266,25 @@ export default function WorkspacePage() {
                 }
             }
 
+            // When focused-mode JSON parsing failed entirely, notify the user
+            // and suggest switching model — the page was left untouched.
+            if (llm.focusPatchParseError && focusContext?.mode === "preview-element") {
+                clearSelectedElement();
+                setEditorSelectionLabel("Nessuna selezione");
+                addNotification({
+                    label: "Errore di parsing focus patch",
+                    status: "error",
+                    message: "Il modello ha prodotto JSON non interpretabile. Prova a cambiare modello e ripetere la richiesta.",
+                });
+            }
+
             // Inform the user when a focused-patch merge failed on the server.
             // This happens when the element's data-pf-id is stale (e.g. the active
             // snapshot was replaced without the element being re-selected) and all
             // text-matching fallbacks also failed.  The selection is cleared so the
             // next focused-edit starts fresh with a valid anchor.
             if (llm.focusPatchApplied === false && focusContext?.mode === "preview-element") {
-                setSelectedElement(null);
+                clearSelectedElement();
                 setEditorSelectionLabel("Nessuna selezione");
                 addNotification({
                     label: "Focus patch non applicata",
@@ -2036,17 +2313,21 @@ export default function WorkspacePage() {
             }
 
             updateNotification(notifId, {
-                label: llm.focusPatchApplied
-                    ? "Focus patch applicata"
-                    : previewVersionSaved
-                        ? "Nuova versione salvata"
-                        : "Generazione completata",
-                status: "done",
-                message: llm.focusPatchApplied
-                    ? "Elemento aggiornato — nuova versione attiva."
-                    : previewVersionSaved
-                        ? "Snapshot salvato e attivato dal backend."
-                        : `Risposta pronta con ${llm.provider} · ${llm.model}`,
+                label: llm.focusPatchParseError
+                    ? "Errore parsing risposta"
+                    : llm.focusPatchApplied
+                        ? "Focus patch applicata"
+                        : previewVersionSaved
+                            ? "Nuova versione salvata"
+                            : "Generazione completata",
+                status: llm.focusPatchParseError ? "error" : "done",
+                message: llm.focusPatchParseError
+                    ? "Risposta LLM non interpretabile — cambia modello e riprova."
+                    : llm.focusPatchApplied
+                        ? "Elemento aggiornato — nuova versione attiva."
+                        : previewVersionSaved
+                            ? "Snapshot salvato e attivato dal backend."
+                            : `Risposta pronta con ${llm.provider} · ${llm.model}`,
             });
 
             setThinkingText("");
@@ -2217,7 +2498,7 @@ export default function WorkspacePage() {
 
             const assistantSaved = await addMessage(token, projectId, convId, {
                 role: "assistant",
-                content: result.optimizedPrompt,
+                content: (result.optimizedPrompt?.trim() || "Prompt ottimizzato pronto.").slice(0, 50000),
                 metadata: {
                     model: result.model,
                     provider: result.provider,
@@ -2612,8 +2893,8 @@ export default function WorkspacePage() {
                             }}
                             placeholder={inspectMode && selectedElement
                                 ? (mediaMode === "background"
-                                    ? "Descrivi qui nella chat il nuovo background per l'elemento selezionato..."
-                                    : "Descrivi qui nella chat la nuova immagine per l'elemento selezionato...")
+                                    ? "Descrivi qui la modifica focus patch per il background selezionato..."
+                                    : "Descrivi qui la modifica focus patch per l'elemento selezionato...")
                                 : "Scrivi cosa vuoi realizzare..."}
                             rows={3}
                             disabled={sending || optimizingPrompt}
@@ -2657,7 +2938,7 @@ export default function WorkspacePage() {
                             <button
                                 type="button"
                                 style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.9rem", lineHeight: 1 }}
-                                onClick={() => setSelectedElement(null)}
+                                onClick={clearSelectedElement}
                                 title="Rimuovi selezione elemento"
                             >×</button>
                         </div>
@@ -2674,49 +2955,108 @@ export default function WorkspacePage() {
                             >×</button>
                         </div>
                     )}
-                    {token && inspectMode && selectedElement && previewTab === "preview" && (
-                        <MediaInspectorPanel
-                            token={token}
-                            projectId={projectId}
-                            selectedElement={selectedElement}
-                            assets={projectAssets}
-                            loadingAssets={loadingProjectAssets}
-                            chatPromptPlaceholder={mediaMode === "background"
-                                ? "Use the main chat prompt to describe the new background for this element…"
-                                : "Use the main chat prompt to describe the new image for this element…"}
-                            chatPromptReady={Boolean(prompt.trim())}
-                            assetScope={assetScope}
-                            onAssetScopeChange={setAssetScope}
-                            mediaMode={mediaMode}
-                            onMediaModeChange={setMediaMode}
-                            backgroundFit={backgroundFit}
-                            onBackgroundFitChange={setBackgroundFit}
-                            backgroundRepeat={backgroundRepeat}
-                            onBackgroundRepeatChange={setBackgroundRepeat}
-                            mediaOpacity={mediaOpacity}
-                            onMediaOpacityChange={setMediaOpacity}
-                            mediaFilter={mediaFilter}
-                            onMediaFilterChange={setMediaFilter}
-                            generating={generatingMedia}
-                            suggesting={suggestingMedia}
-                            suggestion={mediaSuggestion}
-                            imageModelOptions={imageModelOptions}
-                            selectedImageModel={selectedImageModel}
-                            onImageModelChange={setSelectedImageModel}
-                            imageSize={selectedImageSize}
-                            onImageSizeChange={setSelectedImageSize}
-                            imageSteps={selectedImageSteps}
-                            onImageStepsChange={setSelectedImageSteps}
-                            aiAnalytics={projectAiAnalytics}
-                            loadingAiAnalytics={loadingAiAnalytics}
-                            onGenerate={() => void handleGenerateMedia()}
-                            onSuggest={() => void handleSuggestMedia()}
-                            onUseSuggestion={handleUseSuggestedMediaPrompt}
-                            onOpenGallery={() => setConfigOpen(true)}
-                            onApplyAsset={(asset) => void handleApplyAsset(asset)}
-                            onApplyCurrentStyles={handleApplyCurrentStyles}
-                        />
+                    {token && inspectMode && !selectedElement && previewTab === "preview" && hasPreviewArtifacts && (
+                        <div style={{
+                            border: "1px dashed var(--border)",
+                            borderRadius: "var(--radius)",
+                            padding: "0.65rem 0.8rem",
+                            fontSize: "0.78rem",
+                            color: "var(--text-muted)",
+                            background: "rgba(99,102,241,0.06)",
+                        }}>
+                            Clicca un elemento nella preview per selezionarlo. Per le immagini puoi cliccare direttamente la foto; con Shift o Alt selezioni il contenitore più ampio.
+                        </div>
                     )}
+                    {token && editMode && selectedElementSource === "edit-media" && selectedElement && previewTab === "preview" && (
+                        <div className="mt-2 space-y-3 rounded-lg border border-border bg-card/60 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-foreground">Image tools in EDIT</p>
+                                    <p className="truncate text-[11px] text-muted-foreground">{selectedElement.selector}</p>
+                                    <p className="mt-1 text-[11px] text-muted-foreground">
+                                        In EDIT, text keeps priority. Click directly on the image area to target the media underneath.
+                                    </p>
+                                </div>
+                                <Button type="button" variant="ghost" size="sm" onClick={clearSelectedElement}>
+                                    Chiudi
+                                </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => void handleQuickGenerateMedia()}
+                                    disabled={generatingMedia || suggestingMedia}
+                                >
+                                    {(generatingMedia || suggestingMedia) ? "Elaborazione…" : "Gen image AI"}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setMediaToolsOpen(true)}
+                                >
+                                    Avanzate
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                    <Dialog
+                        open={Boolean(mediaToolsOpen && token && editMode && selectedElementSource === "edit-media" && selectedElement && previewTab === "preview")}
+                        onOpenChange={setMediaToolsOpen}
+                    >
+                        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+                            <DialogHeader>
+                                <DialogTitle>Image AI tools</DialogTitle>
+                                <DialogDescription>
+                                    Manual generation and advanced image settings are separated from the chat and available only inside EDIT mode.
+                                </DialogDescription>
+                            </DialogHeader>
+                            {token && editMode && selectedElementSource === "edit-media" && selectedElement && previewTab === "preview" && (
+                                <MediaInspectorPanel
+                                    token={token}
+                                    projectId={projectId}
+                                    selectedElement={selectedElement}
+                                    assets={projectAssets}
+                                    loadingAssets={loadingProjectAssets}
+                                    chatPromptPlaceholder={mediaMode === "background"
+                                        ? "Use an optional manual prompt or ask for a semantic suggestion for this background…"
+                                        : "Use an optional manual prompt or ask for a semantic suggestion for this image…"}
+                                    chatPromptReady={Boolean(prompt.trim() || mediaSuggestion?.suggestedPrompt?.trim())}
+                                    assetScope={assetScope}
+                                    onAssetScopeChange={setAssetScope}
+                                    mediaMode={mediaMode}
+                                    onMediaModeChange={setMediaMode}
+                                    backgroundFit={backgroundFit}
+                                    onBackgroundFitChange={setBackgroundFit}
+                                    backgroundRepeat={backgroundRepeat}
+                                    onBackgroundRepeatChange={setBackgroundRepeat}
+                                    mediaOpacity={mediaOpacity}
+                                    onMediaOpacityChange={setMediaOpacity}
+                                    mediaFilter={mediaFilter}
+                                    onMediaFilterChange={setMediaFilter}
+                                    generating={generatingMedia}
+                                    suggesting={suggestingMedia}
+                                    suggestion={mediaSuggestion}
+                                    imageModelOptions={imageModelOptions}
+                                    selectedImageModel={selectedImageModel}
+                                    onImageModelChange={setSelectedImageModel}
+                                    imageSize={selectedImageSize}
+                                    onImageSizeChange={setSelectedImageSize}
+                                    imageSteps={selectedImageSteps}
+                                    onImageStepsChange={setSelectedImageSteps}
+                                    aiAnalytics={projectAiAnalytics}
+                                    loadingAiAnalytics={loadingAiAnalytics}
+                                    onGenerate={() => void handleGenerateMedia()}
+                                    onSuggest={() => void handleSuggestMedia()}
+                                    onUseSuggestion={handleUseSuggestedMediaPrompt}
+                                    onOpenGallery={() => setConfigOpen(true)}
+                                    onApplyAsset={(asset) => void handleApplyAsset(asset)}
+                                    onApplyCurrentStyles={handleApplyCurrentStyles}
+                                />
+                            )}
+                        </DialogContent>
+                    </Dialog>
                     <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
                         <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
                             <button className="secondary" type="button" onClick={() => router.push("/dashboard")}>← Dashboard</button>
@@ -2899,15 +3239,19 @@ export default function WorkspacePage() {
                                 type="button"
                                 className="secondary"
                                 data-active={inspectMode ? "true" : "false"}
+                                disabled={!hasPreviewArtifacts}
                                 onClick={() => {
+                                    if (!hasPreviewArtifacts) return;
                                     const next = !inspectMode;
                                     setInspectMode(next);
-                                    if (!next) setSelectedElement(null);
+                                    clearSelectedElement();
                                     // Disable EDIT mode when Inspect is activated
                                     if (next && editMode) setEditMode(false);
                                 }}
-                                style={{ marginLeft: "auto", fontSize: "0.74rem", padding: "0.2rem 0.6rem" }}
-                                title={inspectMode ? "Disattiva Inspect" : "Attiva Inspect: clicca elementi nella preview per selezionarli"}
+                                style={{ marginLeft: "auto", fontSize: "0.74rem", padding: "0.2rem 0.6rem", opacity: hasPreviewArtifacts ? 1 : 0.5, cursor: hasPreviewArtifacts ? "pointer" : "not-allowed" }}
+                                title={hasPreviewArtifacts
+                                    ? (inspectMode ? "Disattiva Inspect" : "Attiva Inspect: seleziona un elemento e usa solo il flow focus patch in chat")
+                                    : "Inspect disponibile solo quando la preview contiene codice generato"}
                             >
                                 {inspectMode ? "◎ Inspect ON" : "◎ Inspect"}
                             </button>
@@ -2919,7 +3263,7 @@ export default function WorkspacePage() {
                                     data-active={editMode ? "true" : "false"}
                                     onClick={() => void handleToggleEditMode()}
                                     style={{ fontSize: "0.74rem", padding: "0.2rem 0.6rem" }}
-                                    title={editMode ? "Disattiva EDIT Light" : "Attiva EDIT Light: clicca testo o immagini per modificarli direttamente"}
+                                    title={editMode ? "Disattiva EDIT Light" : "Attiva EDIT Light: clicca il testo per modificarlo o un'immagine per aprire gli strumenti AI"}
                                 >
                                     {editMode ? "✎ EDIT ON" : "✎ EDIT"}
                                 </button>
@@ -3271,7 +3615,9 @@ export default function WorkspacePage() {
                     )}
 
                     {artifacts && previewTab === "preview" && (
-                        <>
+                        <div style={{ display: "flex", flex: 1, minHeight: 0, gap: 0, position: "relative" }}>
+                        {/* Main preview area */}
+                        <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", flexDirection: "column" }}>
                         {previewRefreshing && (
                             <div
                                 style={{
@@ -3344,7 +3690,43 @@ export default function WorkspacePage() {
                                 }
                             }}
                         />
-                        </>
+                        </div>
+                        {/* EDIT media sidebar — reusable MediaGrid */}
+                        {editMode && editMediaList.length > 0 && (
+                            <MediaGrid
+                                items={editMediaList}
+                                selectedId={
+                                    selectedElement?.selector
+                                        ? editMediaList.find((m) => m.meta?.selector === selectedElement.selector)?.id ?? null
+                                        : null
+                                }
+                                onSelect={(item) => {
+                                    const selector = item.meta?.selector as string | undefined;
+                                    const pfId = item.meta?.stableNodeId as string | undefined;
+                                    iframeRef.current?.contentWindow?.postMessage({
+                                        type: "pf-edit-scroll-to",
+                                        selector: selector || "",
+                                        pfId: pfId?.startsWith("pf:") ? pfId.slice(3) : undefined,
+                                    }, "*");
+                                }}
+                                title="🖼 Assets"
+                                columns={1}
+                                filters={[
+                                    { key: "img", label: "Immagini", match: (i) => i.mediaType === "image" },
+                                    { key: "bg", label: "Sfondi", match: (i) => i.mediaType === "background" },
+                                ]}
+                                headerActions={
+                                    <button
+                                        type="button"
+                                        onClick={() => iframeRef.current?.contentWindow?.postMessage({ type: "pf-edit-scan-media" }, "*")}
+                                        className="bg-transparent border-none cursor-pointer text-muted-foreground text-[0.7rem] px-1 hover:text-foreground transition-colors"
+                                        title="Rescan immagini dalla preview"
+                                    >↻</button>
+                                }
+                                className="w-[160px] min-w-[160px]"
+                            />
+                        )}
+                        </div>
                     )}
 
                     {artifacts && previewTab === "html" && (
@@ -3838,17 +4220,22 @@ const PF_INSPECT_SCRIPT = `<script data-pf-injected>(function(){
 var hl=null,sl=null,sty=document.createElement('style');sty.id='__pf_i';
 (document.head||document.body).appendChild(sty);
 var BLOCK_TAGS={section:1,article:1,main:1,header:1,footer:1,nav:1,aside:1,form:1,div:1,li:1,ul:1,ol:1,figure:1,blockquote:1};
+var MEDIA_TAGS={img:1,picture:1,video:1,canvas:1,svg:1,figure:1};
 function pfTb(){return document.getElementById('__pf_tb');}
 function inTb(el){var t=pfTb();return !!(t&&el&&t.contains(el));}
 function clip(v,max){v=String(v||'').trim();return v.length>max?v.slice(0,max):v;}
 function cleanClasses(el){return Array.prototype.slice.call((el&&el.classList)||[]).filter(function(c){return c&&c.length<=60&&c!=='aos-init'&&c!=='aos-animate'&&!/^data-pf-/.test(c);}).slice(0,8);}
+function hasBg(el){try{var bg=(window.getComputedStyle(el).backgroundImage||'');return !!(bg&&bg!=='none'&&bg.indexOf('url(')!==-1);}catch(x){return false;}}
+function hasDirectMediaChild(el){if(!el||!el.querySelector)return false;try{return !!el.querySelector(':scope > img, :scope > picture, :scope > video, :scope > canvas, :scope > svg');}catch(x){return !!el.querySelector('img,picture,video,canvas,svg');}}
+function isMediaTarget(el){if(!el||!el.tagName)return false;var tag=el.tagName.toLowerCase();return !!(MEDIA_TAGS[tag]||hasBg(el)||hasDirectMediaChild(el));}
 function nodeId(el){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-pf-id');if(pf)return clip('pf:'+pf,120);if(el.id)return clip('id:'+el.id,120);var p=[],c=el,d=0;while(c&&c.parentElement&&c!==document.body&&d<6){var par=c.parentElement,idx=Array.prototype.indexOf.call(par.children,c);p.unshift(c.tagName.toLowerCase()+':'+idx);c=par;d++;}return clip('body>'+p.join('>'),120);}
 function selectorFor(el,cls){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-pf-id');if(pf)return '[data-pf-id="'+clip(pf,80)+'"]';if(el.id)return '#'+clip(el.id,80);return clip(el.tagName.toLowerCase()+(cls.length?'.'+cls.slice(0,3).join('.'):''),240);}
-function score(el){if(!el||!el.tagName)return -999;var tag=el.tagName.toLowerCase();if(tag==='html'||tag==='body'||tag==='head'||tag==='script'||tag==='style'||tag==='meta'||tag==='link')return -999;var s=0;if(el.hasAttribute('data-pf-id'))s+=6;if(el.id)s+=5;if(BLOCK_TAGS[tag])s+=3;var html=el.outerHTML||'';if(html.length>8000)s-=8;return s;}
-function pickTarget(start){if(!start||!start.tagName)return null;var best=start,bestScore=score(start),cur=start,depth=0;while(cur&&cur.parentElement&&cur!==document.body&&depth<4){cur=cur.parentElement;var sc=score(cur);if(sc>bestScore&&(cur.hasAttribute('data-pf-id')||cur.id)){best=cur;bestScore=sc;}depth++;}return bestScore<-100?null:best;}
-function mkdata(el){el=pickTarget(el);if(!el)return null;var cls=cleanClasses(el);var txt=clip(el.textContent||'',160);var oh=el.outerHTML||'';oh=oh.replace(/ data-pf-[hse](="")?/g,'');oh=oh.replace(/ style=""/g,'');oh=oh.replace(/ (aos-init|aos-animate)/g,'');oh=clip(oh,8000);var selector=selectorFor(el,cls);var stable=nodeId(el);var img=(el.tagName&&el.tagName.toLowerCase()==='img')?el:(el.querySelector?el.querySelector('img'):null);var src=img&&img.getAttribute?clip(img.getAttribute('src')||'',1500):'';var alt=img&&img.getAttribute?clip(img.getAttribute('alt')||'',300):'';var bg='',bgUrl='';try{bg=(window.getComputedStyle(el).backgroundImage||'');}catch(x){}var m=bg&&bg.match(/url\((['"]?)(.*?)\\1\)/);if(m&&m[2])bgUrl=clip(m[2],1500);var rectW=0,rectH=0;try{var rect=(img&&img.getBoundingClientRect?img.getBoundingClientRect():el.getBoundingClientRect());rectW=Math.round((rect&&rect.width)||0);rectH=Math.round((rect&&rect.height)||0);}catch(x){}var aspectRatio=rectW>0&&rectH>0?Math.round(rectW/rectH*1000)/1000:undefined;var mediaMode=src?'foreground':(bgUrl?'background':'none');if(!selector||!stable||/^<(html|body)\b/i.test(oh))return null;return{stableNodeId:stable,selector:selector,tag:el.tagName.toLowerCase(),classes:cls,textSnippet:txt||undefined,outerHtml:oh||undefined,currentSrc:src||undefined,currentAlt:alt||undefined,backgroundImageUrl:bgUrl||undefined,mediaMode:mediaMode,originalWidth:rectW||undefined,originalHeight:rectH||undefined,aspectRatio:aspectRatio||undefined};}
-function over(e){if(inTb(e.target))return;var target=pickTarget(e.target)||e.target;if(hl&&hl!==target)hl.removeAttribute('data-pf-h');hl=target;if(hl)hl.setAttribute('data-pf-h','');}
-function clk(e){if(inTb(e.target))return;var target=pickTarget(e.target);var data=mkdata(target);if(!data||!target)return;e.preventDefault();e.stopPropagation();if(sl)sl.removeAttribute('data-pf-s');sl=target;if(sl)sl.setAttribute('data-pf-s','');try{window.parent.postMessage({type:'pf-select',element:data},'*');}catch(x){}}
+function score(el,preferLow){if(!el||!el.tagName)return -999;var tag=el.tagName.toLowerCase();if(tag==='html'||tag==='body'||tag==='head'||tag==='script'||tag==='style'||tag==='meta'||tag==='link')return -999;var s=0;if(el.hasAttribute('data-pf-id'))s+=6;if(el.id)s+=5;if(BLOCK_TAGS[tag])s+=3;if(MEDIA_TAGS[tag])s+=8;if(hasBg(el))s+=7;if(hasDirectMediaChild(el))s+=4;if(preferLow&&MEDIA_TAGS[tag])s+=4;var html=el.outerHTML||'';if(html.length>8000)s-=8;else if(preferLow&&html.length>4000)s-=3;return s;}
+function pickMediaTarget(start){if(!start||!start.tagName)return null;var cur=start,depth=0;while(cur&&cur.tagName&&depth<4){if(isMediaTarget(cur))return cur;cur=cur.parentElement;depth++;}return null;}
+function pickTarget(start,preferBroad){if(!start||!start.tagName)return null;var preferLow=!preferBroad;var mediaBase=pickMediaTarget(start);var best=mediaBase||start,bestScore=score(best,preferLow),cur=best,depth=0;while(cur&&cur.parentElement&&cur!==document.body&&depth<4){cur=cur.parentElement;var sc=score(cur,preferLow);var canUse=preferLow?(isMediaTarget(cur)||cur.hasAttribute('data-pf-id')||cur.id):(cur.hasAttribute('data-pf-id')||cur.id);if(canUse&&sc>bestScore){if(preferLow&&(cur.outerHTML||'').length>6000){depth++;continue;}best=cur;bestScore=sc;}depth++;}return bestScore<-100?null:best;}
+function mkdata(el,preferBroad){el=pickTarget(el,!!preferBroad);if(!el)return null;var cls=cleanClasses(el);var txt=clip(el.textContent||'',160);var oh=el.outerHTML||'';oh=oh.replace(/ data-pf-[hse](="")?/g,'');oh=oh.replace(/ style=""/g,'');oh=oh.replace(/ (aos-init|aos-animate)/g,'');oh=clip(oh,8000);var selector=selectorFor(el,cls);var stable=nodeId(el);var img=(el.tagName&&el.tagName.toLowerCase()==='img')?el:(el.querySelector?el.querySelector('img'):null);var src=img&&img.getAttribute?clip(img.getAttribute('src')||'',1500):'';var alt=img&&img.getAttribute?clip(img.getAttribute('alt')||'',300):'';var bg='',bgUrl='';try{bg=(window.getComputedStyle(el).backgroundImage||'');}catch(x){}var m=bg&&bg.match(/url\\((['"]?)(.*?)\\1\\)/);if(m&&m[2])bgUrl=clip(m[2],1500);var rectW=0,rectH=0;try{var rect=(img&&img.getBoundingClientRect?img.getBoundingClientRect():el.getBoundingClientRect());rectW=Math.round((rect&&rect.width)||0);rectH=Math.round((rect&&rect.height)||0);}catch(x){}var aspectRatio=rectW>0&&rectH>0?Math.round(rectW/rectH*1000)/1000:undefined;var mediaMode=src?'foreground':(bgUrl?'background':'none');if(!selector||!stable||/^<(html|body)\\b/i.test(oh))return null;return{stableNodeId:stable,selector:selector,tag:el.tagName.toLowerCase(),classes:cls,textSnippet:txt||undefined,outerHtml:oh||undefined,currentSrc:src||undefined,currentAlt:alt||undefined,backgroundImageUrl:bgUrl||undefined,mediaMode:mediaMode,originalWidth:rectW||undefined,originalHeight:rectH||undefined,aspectRatio:aspectRatio||undefined};}
+function over(e){if(inTb(e.target))return;var target=pickTarget(e.target,e.altKey||e.shiftKey)||e.target;if(hl&&hl!==target)hl.removeAttribute('data-pf-h');hl=target;if(hl)hl.setAttribute('data-pf-h','');}
+function clk(e){if(inTb(e.target))return;var preferBroad=!!(e.altKey||e.shiftKey);var target=pickTarget(e.target,preferBroad);var data=mkdata(target,preferBroad);if(!data||!target)return;e.preventDefault();e.stopPropagation();if(sl)sl.removeAttribute('data-pf-s');sl=target;if(sl)sl.setAttribute('data-pf-s','');try{window.parent.postMessage({type:'pf-select',element:data},'*');}catch(x){}}
 function applyMedia(d){if(!d||!d.selector||!d.url)return;try{var el=document.querySelector(d.selector);if(!el)return;var opacity=(typeof d.opacity==='number'&&isFinite(d.opacity))?String(d.opacity):'';var filter=typeof d.filter==='string'&&d.filter?d.filter:'none';if(d.mode==='background'){el.style.backgroundImage='url("'+String(d.url).replace(/"/g,'%22')+'")';el.style.backgroundPosition='center center';el.style.backgroundSize=d.fit==='contain'?'contain':d.fit==='auto'?'auto':'cover';el.style.backgroundRepeat=d.repeat||'no-repeat';if(opacity)el.style.opacity=opacity;el.style.filter=filter;return;}var img=(el.tagName&&el.tagName.toLowerCase()==='img')?el:(el.querySelector?el.querySelector('img'):null);if(img&&img.tagName==='IMG'){var preserveWidth=(typeof d.preserveWidth==='number'&&isFinite(d.preserveWidth)&&d.preserveWidth>0)?Math.round(d.preserveWidth):0;var preserveHeight=(typeof d.preserveHeight==='number'&&isFinite(d.preserveHeight)&&d.preserveHeight>0)?Math.round(d.preserveHeight):0;var aspectRatio=(typeof d.aspectRatio==='number'&&isFinite(d.aspectRatio)&&d.aspectRatio>0)?d.aspectRatio:0;img.src=String(d.url);if(typeof d.alt==='string')img.alt=d.alt;if(opacity)img.style.opacity=opacity;img.style.filter=filter;img.style.objectFit=d.fit==='contain'?'contain':'cover';img.style.maxWidth=img.style.maxWidth||'100%';img.style.display=img.style.display||'block';if(!img.getAttribute('width')&&!img.style.width&&preserveWidth)img.style.width=preserveWidth+'px';if(!img.getAttribute('height')&&!img.style.height&&preserveHeight)img.style.height=preserveHeight+'px';if(aspectRatio&&!img.style.aspectRatio)img.style.aspectRatio=String(aspectRatio);}}catch(x){}}
 function on(){sty.textContent='[data-pf-h]{outline:2px solid rgba(99,102,241,.6)!important;cursor:crosshair!important}[data-pf-s]{outline:2px solid #6366f1!important;outline-offset:2px!important}';document.addEventListener('mouseover',over);document.addEventListener('click',clk,true);}
 function off(){sty.textContent='';document.removeEventListener('mouseover',over);document.removeEventListener('click',clk,true);if(hl){hl.removeAttribute('data-pf-h');hl=null;}if(sl){sl.removeAttribute('data-pf-s');sl=null;}}
@@ -3866,6 +4253,8 @@ window.addEventListener('message',function(e){if(e.data&&e.data.type==='pf-inspe
  *   { type: 'pf-edit', on: bool }         — arm / disarm the script
  *   { type: 'pf-edit-trigger-save' }       — serialise DOM, send pf-edit-save to parent
  *   { type: 'pf-edit-set-img-src', selector, newSrc } — update an img src
+ *   { type: 'pf-edit-scroll-to', selector }           — scroll to element + highlight
+ *   { type: 'pf-edit-scan-media' }                    — re-scan media assets and send list
  */
 const PF_EDIT_SCRIPT = `<script data-pf-injected>(function(){
 var editOn=false,eds=new Set();
@@ -3981,6 +4370,12 @@ function enableEl(el){if(el.__pfE)return;el.__pfE=true;el.contentEditable='true'
   el.style.outline='2px dashed rgba(34,211,238,0.6)';el.style.outlineOffset='1px';eds.add(el);}
 function disableAll(){eds.forEach(function(el){el.contentEditable='false';
   el.style.outline='';el.style.outlineOffset='';el.__pfE=false;});eds.clear();hideTb();}
+function cleanClasses(el){return Array.prototype.slice.call((el&&el.classList)||[]).filter(function(c){return c&&c.length<=60&&!/^data-pf-/.test(c);}).slice(0,8);}
+function nodeId(el){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-pf-id');if(pf)return ('pf:'+pf).slice(0,120);if(el.id)return ('id:'+el.id).slice(0,120);var p=[],c=el,d=0;while(c&&c.parentElement&&c!==document.body&&d<6){var par=c.parentElement,idx=Array.prototype.indexOf.call(par.children,c);p.unshift(c.tagName.toLowerCase()+':'+idx);c=par;d++;}return ('body>'+p.join('>')).slice(0,120);}
+function selectorFor(el,cls){if(!el||!el.tagName)return '';var pf=el.getAttribute('data-pf-id');if(pf)return '[data-pf-id="'+String(pf).slice(0,80)+'"]';if(el.id)return '#'+String(el.id).slice(0,80);return (el.tagName.toLowerCase()+(cls.length?'.'+cls.slice(0,3).join('.'):'' )).slice(0,240);}
+function hasBgEdit(el){try{var bg=(window.getComputedStyle(el).backgroundImage||'');return !!(bg&&bg!=='none'&&bg.indexOf('url(')!==-1);}catch(x){return false;}}
+function pickMediaEl(start){var cur=start,depth=0;while(cur&&cur.tagName&&depth<4){var tag=cur.tagName.toLowerCase();if(tag==='img'||tag==='picture'||tag==='figure'||tag==='video'||tag==='canvas'||tag==='svg'||hasBgEdit(cur))return cur;cur=cur.parentElement;depth++;}return null;}
+function mkMediaData(el){var target=pickMediaEl(el)||el;if(!target||!target.tagName)return null;var cls=cleanClasses(target);var oh=target.outerHTML||'';oh=oh.replace(/ data-pf-[hse](="")?/g,'');oh=oh.replace(/ style=""/g,'');oh=oh.slice(0,8000);var selector=selectorFor(target,cls);var stable=nodeId(target);var img=(target.tagName&&target.tagName.toLowerCase()==='img')?target:(target.querySelector?target.querySelector('img'):null);var src=img&&img.getAttribute?String(img.getAttribute('src')||'').slice(0,1500):'';var alt=img&&img.getAttribute?String(img.getAttribute('alt')||'').slice(0,300):'';var bg='',bgUrl='';try{bg=(window.getComputedStyle(target).backgroundImage||'');}catch(x){}var m=bg&&bg.match(/url\\((['"]?)(.*?)\\1\\)/);if(m&&m[2])bgUrl=String(m[2]).slice(0,1500);var rectW=0,rectH=0;try{var rect=(img&&img.getBoundingClientRect?img.getBoundingClientRect():target.getBoundingClientRect());rectW=Math.round((rect&&rect.width)||0);rectH=Math.round((rect&&rect.height)||0);}catch(x){}var aspectRatio=rectW>0&&rectH>0?Math.round(rectW/rectH*1000)/1000:undefined;var text=((target.textContent||'').trim()).slice(0,160);var mediaMode=src?'foreground':(bgUrl?'background':'none');if(!selector||!stable)return null;return{stableNodeId:stable,selector:selector,tag:target.tagName.toLowerCase(),classes:cls,textSnippet:text||undefined,outerHtml:oh||undefined,currentSrc:src||undefined,currentAlt:alt||undefined,backgroundImageUrl:bgUrl||undefined,mediaMode:mediaMode,originalWidth:rectW||undefined,originalHeight:rectH||undefined,aspectRatio:aspectRatio||undefined};}
 function cleanHtml(){var cl=document.documentElement.cloneNode(true);
   cl.querySelectorAll('#__pf_tb,[data-pf-injected],style#__pf_i').forEach(function(e){e.remove();});
   cl.querySelectorAll('[contenteditable]').forEach(function(e){e.removeAttribute('contenteditable');
@@ -3991,11 +4386,10 @@ function cleanHtml(){var cl=document.documentElement.cloneNode(true);
 function onClick(e){if(!editOn)return;
   if(tb.contains(e.target))return;
   var el=e.target;
-  if(el.tagName==='IMG'){e.preventDefault();e.stopPropagation();
-  try{window.parent.postMessage({type:'pf-edit-img-click',selector:el.id?'#'+el.id:el.tagName.toLowerCase(),currentSrc:el.src},'*');}catch(x){}
-  return;}
   if(TEXT_TAGS.includes(el.tagName)){enableEl(el);activeEditEl=el;showTb(el.getBoundingClientRect());return;}
-  if(!el.children.length&&(el.textContent||'').trim()&&el.tagName!=='SCRIPT'&&el.tagName!=='STYLE'){enableEl(el);activeEditEl=el;showTb(el.getBoundingClientRect());}}
+  if(!el.children.length&&(el.textContent||'').trim()&&el.tagName!=='SCRIPT'&&el.tagName!=='STYLE'){enableEl(el);activeEditEl=el;showTb(el.getBoundingClientRect());return;}
+  var mediaData=mkMediaData(el);
+  if(mediaData&&(mediaData.currentSrc||mediaData.backgroundImageUrl||mediaData.tag==='img'||mediaData.tag==='picture'||mediaData.tag==='figure')){e.preventDefault();e.stopPropagation();hideTb();try{window.parent.postMessage({type:'pf-edit-img-click',element:mediaData},'*');}catch(x){}return;}}
 document.addEventListener('mouseup',function(){
   if(!editOn)return;setTimeout(function(){showTb();},10);
 });
@@ -4008,17 +4402,99 @@ document.addEventListener('mousedown',function(e){
   if(!editOn)return;
   if(!tb.contains(e.target))hideTb();
 });
+/* ── Media asset scanning — sends thumbnail list to parent ── */
+var _scanTimer=null;
+function scanMedia(){
+  if(_scanTimer)clearTimeout(_scanTimer);
+  _scanTimer=setTimeout(function(){_scanTimer=null;_doScan();},200);
+}
+/* Ensure element has a data-pf-id; assign one on the fly if missing */
+function ensurePfId(el){
+  if(!el||!el.tagName)return;
+  if(!el.getAttribute('data-pf-id')){
+    el.setAttribute('data-pf-id','pf-'+Math.random().toString(36).slice(2,8));
+  }
+}
+function _doScan(){
+  function safeMediaSrc(raw){
+    var value=String(raw||'').trim();
+    if(!value)return '';
+    /* Generated/project assets are often data: URLs; truncating them breaks the thumbnail. */
+    if(/^data:|^blob:/i.test(value))return value;
+    return value.slice(0,1500);
+  }
+  var items=[];var seen=new Set();
+  /* foreground images */
+  document.querySelectorAll('img').forEach(function(img){
+    if(!img.src||img.closest('#__pf_tb,[data-pf-injected]'))return;
+    var src=safeMediaSrc(img.src);if(!src||seen.has(src))return;seen.add(src);
+    ensurePfId(img);
+    var cls=cleanClasses(img);var sel=selectorFor(img,cls);var stable=nodeId(img);
+    if(!sel||!stable)return;
+    var alt=String(img.getAttribute('alt')||'').slice(0,200);
+    var r=img.getBoundingClientRect();
+    items.push({selector:sel,stableNodeId:stable,tag:'img',src:src,alt:alt,
+      mediaMode:'foreground',w:Math.round(r.width),h:Math.round(r.height)});
+  });
+  /* background images */
+  document.querySelectorAll('*').forEach(function(el){
+    if(el.closest('#__pf_tb,[data-pf-injected]'))return;
+    if(!hasBgEdit(el))return;
+    var bg=window.getComputedStyle(el).backgroundImage||'';
+    var m=bg.match(/url\\((['"]?)(.*?)\\1\\)/);if(!m||!m[2])return;
+    var bgUrl=safeMediaSrc(m[2]);if(!bgUrl||seen.has(bgUrl))return;seen.add(bgUrl);
+    ensurePfId(el);
+    var cls=cleanClasses(el);var sel=selectorFor(el,cls);var stable=nodeId(el);
+    if(!sel||!stable)return;
+    var r=el.getBoundingClientRect();
+    items.push({selector:sel,stableNodeId:stable,tag:el.tagName.toLowerCase(),src:bgUrl,alt:'',
+      mediaMode:'background',w:Math.round(r.width),h:Math.round(r.height)});
+  });
+  try{window.parent.postMessage({type:'pf-edit-media-list',items:items},'*');}catch(x){}
+}
+/* highlight + scroll-to for sidebar selection */
+var _hlEl=null;
+function scrollToSel(selector){
+  try{
+    if(_hlEl){_hlEl.style.outline='';_hlEl.style.outlineOffset='';_hlEl=null;}
+    var el=document.querySelector(selector);
+    /* Fallback: if selector failed, try finding by data-pf-id extracted from the selector string */
+    if(!el){
+      var pfMatch=selector.match(/data-pf-id=["']([^"']+)["']/);
+      if(pfMatch&&pfMatch[1]){
+        el=document.querySelector('[data-pf-id="'+pfMatch[1]+'"]');
+      }
+    }
+    if(!el){console.warn('[pf-edit] scrollToSel: element not found for',selector);return;}
+    el.scrollIntoView({behavior:'smooth',block:'center'});
+    el.style.outline='3px solid rgba(99,102,241,0.8)';el.style.outlineOffset='3px';
+    _hlEl=el;
+    setTimeout(function(){if(_hlEl===el){el.style.outline='';el.style.outlineOffset='';_hlEl=null;}},2500);
+    var md=mkMediaData(el);
+    if(md)try{window.parent.postMessage({type:'pf-edit-img-click',element:md},'*');}catch(x){}
+  }catch(x){console.warn('[pf-edit] scrollToSel error',x);}
+}
+/* observe DOM mutations to rescan */
+var _obs=null;
+function startObs(){if(_obs)_obs.disconnect();_obs=new MutationObserver(function(){if(editOn)scanMedia();});
+  _obs.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['src','style']});}
 window.addEventListener('message',function(e){if(!e.data||typeof e.data!=='object')return;
-  if(e.data.type==='pf-edit'){editOn=e.data.on;if(!editOn)disableAll();}
+  if(e.data.type==='pf-edit'){editOn=e.data.on;if(!editOn){disableAll();if(_obs)_obs.disconnect();}else{scanMedia();startObs();}}
   if(e.data.type==='pf-edit-trigger-save'){try{window.parent.postMessage({type:'pf-edit-save',html:cleanHtml()},'*');}catch(x){}}
   if(e.data.type==='pf-edit-set-img-src'){try{var img=document.querySelector(e.data.selector);
-  if(img&&img.tagName==='IMG')img.src=e.data.newSrc;}catch(x){}}});
+  if(img&&img.tagName==='IMG')img.src=e.data.newSrc;}catch(x){}}
+  if(e.data.type==='pf-edit-scroll-to'){scrollToSel(e.data.selector||e.data.pfId&&'[data-pf-id=\"'+e.data.pfId+'\"]'||'');}
+  if(e.data.type==='pf-edit-scan-media'){scanMedia();}});
 document.addEventListener('click',onClick,true);
 })();<` + `/script>`;
 
-function getElementTargetType(tag: string): "html" | "css" | "js" | "component" | "section" {
+function getElementTargetType(
+    tag: string,
+    mediaMode?: SelectedFocusElement["mediaMode"],
+): "html" | "css" | "js" | "component" | "section" {
+    if (mediaMode === "foreground" || mediaMode === "background") return "component";
     if (["section", "main", "article", "header", "footer", "nav", "aside"].includes(tag)) return "section";
-    if (["button", "input", "select", "textarea", "form", "canvas", "svg", "img", "video"].includes(tag)) return "component";
+    if (["button", "input", "select", "textarea", "form", "canvas", "svg", "img", "picture", "figure", "video"].includes(tag)) return "component";
     return "html";
 }
 
