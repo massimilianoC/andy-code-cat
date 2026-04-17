@@ -85,7 +85,7 @@ export const llmChatPreviewSchema = z.object({
     systemPrompt: z.string().max(4000).optional(),
     history: z.array(llmHistoryMessageSchema).max(100).optional(),
     currentArtifacts: z.object({
-        html: z.string().max(50000).optional(),
+        html: z.string().max(80000).optional(),
         css: z.string().max(20000).optional(),
         js: z.string().max(20000).optional(),
     }).optional(),
@@ -246,6 +246,8 @@ export interface LlmChatPreviewResult {
     structured?: LlmStructuredResponse;
     /** true when a focused-mode patch was successfully applied; false/undefined when merge failed or mode was not focused. */
     focusPatchApplied?: boolean;
+    /** true when focused-mode was active but the LLM response could not be parsed at all (malformed JSON). */
+    focusPatchParseError?: boolean;
     provider: string;
     model: string;
     finishReason?: string;

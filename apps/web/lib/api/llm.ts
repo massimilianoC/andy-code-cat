@@ -115,6 +115,7 @@ export interface LlmChatPreviewResult {
     durationMs: number;
     simulated: boolean;
     focusPatchApplied?: boolean;
+    focusPatchParseError?: boolean;
 }
 
 export interface LlmChatDefaults {

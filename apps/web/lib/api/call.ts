@@ -174,6 +174,7 @@ export async function call<T>(
 
     const requestInit: RequestInit = {
         method,
+        cache: "no-store",
         headers: {
             "Content-Type": "application/json",
             ...resolvedHeaders,

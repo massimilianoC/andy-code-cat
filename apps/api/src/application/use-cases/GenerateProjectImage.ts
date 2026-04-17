@@ -80,7 +80,7 @@ export class GenerateProjectImage {
         prompt: string;
         fileNameHint?: string;
         scope?: "project" | "user";
-        provider?: "siliconflow" | "system";
+        provider?: string;
         model?: string;
         imageSize?: string;
         numInferenceSteps?: number;

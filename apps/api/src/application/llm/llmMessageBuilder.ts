@@ -59,6 +59,7 @@ export function buildOutputBudgetPolicy(): string {
         "- Return ONLY one raw JSON object — no markdown fences, no prose before or after the JSON.",
         "- Required keys: chat (with summary, bullets, nextActions) and artifacts (with html, css, js).",
         `- TOTAL OUTPUT MUST stay under ${maxTok.toLocaleString()} tokens. Target 8000–32000 tokens for typical requests, up to budget for large/complex outputs. Never repeat the entire artifact if only a small change is needed.`,
+        "- HTML target: under 30 KB. Factor repeated visual blocks into CSS classes rather than duplicating markup.",
         "- Keep artifacts concise and functional; avoid unnecessary boilerplate.",
         "- artifacts.css and artifacts.js must be plain code strings without <style> or <script> wrappers.",
         "- Use standard single-backslash JSON escaping: \\\" for quotes inside HTML, \\n for newlines. Never double-escape.",
@@ -212,10 +213,14 @@ export function buildMessagesWithHistory(
             ? jsRaw.slice(0, MAX_JS_CHARS) + "\n// [js-troncato]"
             : jsRaw;
 
+        // Strip data-pf-id from the section HTML: they are server-infrastructure
+        // annotations that the LLM must not echo back, and they waste ~4 tokens each.
+        const sectionHtmlForLlm = sectionContextOpts.sectionHtml.replace(/ data-pf-id="[^"]*"/g, "");
+
         const parts: string[] = [
             "[Sezione target — contesto ottimizzato per focused-edit]",
             `Mappa struttura pagina: ${serializePageMap(sectionContextOpts.pageMap)}`,
-            `\nHTML sezione target (NON modificare altri elementi fuori da questa sezione):\n${sectionContextOpts.sectionHtml}`,
+            `\nHTML sezione target (NON modificare altri elementi fuori da questa sezione):\n${sectionHtmlForLlm}`,
         ];
         if (sectionContextOpts.filteredCss) {
             parts.push(`CSS rilevante per questa sezione:\n${sectionContextOpts.filteredCss}`);
@@ -225,9 +230,12 @@ export function buildMessagesWithHistory(
         }
         artifactBlock = parts.join("\n\n");
     } else if (currentArtifacts && (currentArtifacts.html || currentArtifacts.css || currentArtifacts.js)) {
-        // FULL-ARTIFACT path: original behaviour.
+        // FULL-ARTIFACT path: strip data-pf-id annotations before sending to the LLM.
+        // They are server-infrastructure attributes the LLM must not echo back,
+        // and removing them saves ~300–600 prompt tokens on typical pages.
+        const htmlForLlm = (currentArtifacts.html ?? "").replace(/ data-pf-id="[^"]*"/g, "");
         const parts: string[] = ["[Codice attualmente generato — usalo come base per evoluzioni]"];
-        if (currentArtifacts.html) parts.push(`HTML:\n${currentArtifacts.html}`);
+        if (htmlForLlm) parts.push(`HTML:\n${htmlForLlm}`);
         if (currentArtifacts.css) parts.push(`CSS:\n${currentArtifacts.css}`);
         if (currentArtifacts.js) parts.push(`JS:\n${currentArtifacts.js}`);
         const full = parts.join("\n\n");

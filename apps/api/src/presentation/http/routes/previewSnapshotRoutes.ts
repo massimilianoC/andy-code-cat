@@ -4,7 +4,7 @@ import {
     createPreviewSnapshotSchema,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson } from "../../../application/llm/llmParser";
-import { injectStableIds } from "../../../application/llm/htmlIdInjector";
+import { injectStableIds, normalizeStoredHtml } from "../../../application/llm/htmlIdInjector";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import type { RequestWithContext } from "../types";
@@ -95,11 +95,12 @@ export function createPreviewSnapshotRoutes(): Router {
                     }
                 }
 
-                // Inject stable element IDs on every block element before storing.
-                // This enables selector-based replacement in future focus-edit requests,
-                // making patch application completely independent of text content matching.
+                // Normalise then inject stable IDs before storing.
+                // normalizeStoredHtml removes comments, collapses blank lines, and strips
+                // empty style= attributes — typically saves 10–17% on LLM output.
+                // injectStableIds tags every block element with data-pf-id for focused edits.
                 if (artifacts.html) {
-                    artifacts = { ...artifacts, html: injectStableIds(artifacts.html) };
+                    artifacts = { ...artifacts, html: injectStableIds(normalizeStoredHtml(artifacts.html)) };
                 }
 
                 const snapshot = await createPreviewSnapshot.execute({

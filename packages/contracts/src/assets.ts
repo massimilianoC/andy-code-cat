@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+const optionalTrimmedString = (max: number) =>
+    z.preprocess(
+        (value) => {
+            if (typeof value === "string") {
+                return value.trim().slice(0, max);
+            }
+            return value == null ? undefined : value;
+        },
+        z.string().max(max).optional(),
+    );
+
+const requiredTrimmedString = (max: number) =>
+    z.preprocess(
+        (value) => (typeof value === "string" ? value.trim().slice(0, max) : value),
+        z.string().min(1).max(max),
+    );
+
 export const uploadProjectAssetSchema = z.object({
     // file is handled by multer, this schema validates any extra body fields if needed
 });
@@ -114,16 +131,16 @@ export const addUrlReferenceSchema = z.object({
 });
 
 export const suggestProjectImageIdeaSchema = z.object({
-    prompt: z.string().max(2000).optional(),
+    prompt: optionalTrimmedString(2000),
     targetMode: z.enum(["foreground", "background"]).default("foreground"),
     selectedElement: z.object({
-        stableNodeId: z.string().min(1).max(120),
-        selector: z.string().min(1).max(300),
-        tag: z.string().min(1).max(64),
-        textSnippet: z.string().max(500).optional(),
-        currentSrc: z.string().max(1500).optional(),
-        currentAlt: z.string().max(300).optional(),
-        backgroundImageUrl: z.string().max(1500).optional(),
+        stableNodeId: requiredTrimmedString(120),
+        selector: requiredTrimmedString(300),
+        tag: requiredTrimmedString(64),
+        textSnippet: optionalTrimmedString(500),
+        currentSrc: optionalTrimmedString(1500),
+        currentAlt: optionalTrimmedString(300),
+        backgroundImageUrl: optionalTrimmedString(1500),
         mediaMode: z.enum(["foreground", "background", "none"]).optional(),
         originalWidth: z.number().positive().max(10000).optional(),
         originalHeight: z.number().positive().max(10000).optional(),
@@ -154,22 +171,22 @@ export interface SuggestProjectImageIdeaResultDto {
 }
 
 export const generateProjectImageSchema = z.object({
-    prompt: z.string().min(1).max(2000),
+    prompt: requiredTrimmedString(2000),
     fileNameHint: z.string().max(120).optional(),
     scope: userFacingAssetScopeSchema.optional(),
-    provider: z.enum(["siliconflow", "system"]).optional(),
+    provider: z.string().min(1).max(80).optional(),
     model: z.string().min(1).max(160).optional(),
     imageSize: z.string().regex(/^\d+x\d+$/).optional(),
     numInferenceSteps: z.number().int().min(1).max(50).optional(),
     targetMode: z.enum(["foreground", "background"]).default("foreground"),
     selectedElement: z.object({
-        stableNodeId: z.string().min(1).max(120),
-        selector: z.string().min(1).max(300),
-        tag: z.string().min(1).max(64),
-        textSnippet: z.string().max(500).optional(),
-        currentSrc: z.string().max(1500).optional(),
-        currentAlt: z.string().max(300).optional(),
-        backgroundImageUrl: z.string().max(1500).optional(),
+        stableNodeId: requiredTrimmedString(120),
+        selector: requiredTrimmedString(300),
+        tag: requiredTrimmedString(64),
+        textSnippet: optionalTrimmedString(500),
+        currentSrc: optionalTrimmedString(1500),
+        currentAlt: optionalTrimmedString(300),
+        backgroundImageUrl: optionalTrimmedString(1500),
         mediaMode: z.enum(["foreground", "background", "none"]).optional(),
         originalWidth: z.number().positive().max(10000).optional(),
         originalHeight: z.number().positive().max(10000).optional(),

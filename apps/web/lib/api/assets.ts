@@ -100,7 +100,7 @@ export interface GenerateProjectImageInput {
     prompt: string;
     fileNameHint?: string;
     scope?: "project" | "user";
-    provider?: "siliconflow" | "system";
+    provider?: string;
     model?: string;
     imageSize?: string;
     numInferenceSteps?: number;
@@ -203,6 +203,7 @@ export async function uploadProjectAsset(
 
     const res = await fetch(`${baseUrl}/v1/projects/${projectId}/assets`, {
         method: "POST",
+        cache: "no-store",
         headers: { Authorization: `Bearer ${token}`, "x-project-id": projectId },
         body: formData,
     });
@@ -276,6 +277,7 @@ export function getProjectAiAnalytics(token: string, projectId: string) {
 
 export async function downloadProjectAssetDataUrl(token: string, projectId: string, assetId: string): Promise<string> {
     const res = await fetch(getAssetDownloadUrl(projectId, assetId), {
+        cache: "no-store",
         headers: { Authorization: `Bearer ${token}`, "x-project-id": projectId },
     });
 

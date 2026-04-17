@@ -31,6 +31,7 @@ import { MongoPlatformConfigRepository } from "../../../infra/repositories/Mongo
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
 import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
+import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
@@ -224,6 +225,7 @@ export function createLlmRoutes(): Router {
     const platformConfigRepo = new MongoPlatformConfigRepository();
     const presetRepository = new MongoProjectPresetRepository();
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const snapshotRepository = new MongoPreviewSnapshotRepository();
 
     router.use(authMiddleware);
 
@@ -431,8 +433,17 @@ export function createLlmRoutes(): Router {
                 };
             });
 
+            // Re-inject image_generation (and other non-text) models from the
+            // seed catalog that were intentionally excluded from the /models
+            // discovery (FLUX, stable-diffusion…).  Without this merge the
+            // client sees "no image model available".
+            const discoveredIds = new Set(mapped.map((m) => m.id));
+            const nonTextFallbacks = input.fallbackModels
+                .filter((m) => m.isActive && !discoveredIds.has(m.id) && !m.capabilities.includes("chat"))
+                .map((m) => ({ ...m, provider: input.providerKey }));
+
             // Assign percentile-based € tiers per-provider after all prices are known
-            return assignPriceTiers(mapped);
+            return assignPriceTiers([...mapped, ...nonTextFallbacks]);
         } catch {
             return dedupeModelsById(input.fallbackModels);
         }
@@ -921,6 +932,7 @@ export function createLlmRoutes(): Router {
             const parsed = tryParseStructuredJson(rawReply);
             let structured = parsed.structured ?? buildFallbackStructured(body.message);
             let focusPatchApplied: boolean | undefined;
+            let focusPatchParseError: boolean | undefined;
             if (isFocusedMode && body.currentArtifacts) {
                 if (parsed.structured?.focusPatch) {
                     // When selectedElement is present, derive anchor server-side from outerHtml
@@ -949,6 +961,32 @@ export function createLlmRoutes(): Router {
                     };
                     structured = { ...structured, artifacts: patchedArtifacts };
                     focusPatchApplied = patchResult.patchApplied;
+                    // Fallback: client HTML may have been truncated (htmlLimit) so the target
+                    // element was cut off. Retry the merge against the server's stored active
+                    // snapshot which always contains the full artifact HTML.
+                    if (!focusPatchApplied) {
+                        const activeSnap = await snapshotRepository.getActiveForProject(req.sandbox!.projectId).catch(() => null);
+                        if (activeSnap?.artifacts.html) {
+                            const retryResult = applyFocusPatch(
+                                activeSnap.artifacts,
+                                parsed.structured.focusPatch,
+                                activeSnap.artifacts,
+                                serverAnchor
+                            );
+                            if (retryResult.patchApplied) {
+                                console.info("[focusPatch] server-snapshot fallback applied successfully");
+                                structured = {
+                                    ...structured,
+                                    artifacts: {
+                                        ...retryResult.artifacts,
+                                        css: [retryResult.artifacts.css, companionCss].filter(Boolean).join("\n"),
+                                        js: [retryResult.artifacts.js, companionJs].filter(Boolean).join("\n"),
+                                    },
+                                };
+                                focusPatchApplied = true;
+                            }
+                        }
+                    }
                 } else {
                     // Focused mode but no focusPatch (parse failed or LLM chat-only) —
                     // preserve currentArtifacts so no snapshot is created with fallback HTML.
@@ -961,9 +999,26 @@ export function createLlmRoutes(): Router {
                         },
                     };
                     focusPatchApplied = false;
+                    // When the JSON parse itself failed in focused mode, craft a
+                    // user-friendly reply instead of dumping the raw LLM output,
+                    // and flag the error so the frontend can suggest a model switch.
+                    if (!parsed.parseValid) {
+                        focusPatchParseError = true;
+                        structured = {
+                            ...structured,
+                            chat: {
+                                summary: "Il modello ha prodotto una risposta non interpretabile (JSON malformato). L'elemento non è stato modificato.",
+                                bullets: [
+                                    "La pagina resta invariata.",
+                                    "Prova a cambiare modello o ripetere la richiesta.",
+                                ],
+                                nextActions: [],
+                            },
+                        };
+                    }
                 }
             }
-            const reply = parsed.parseValid ? buildFormattedReply(structured) : rawReply;
+            const reply = (parsed.parseValid || focusPatchParseError) ? buildFormattedReply(structured) : rawReply;
             const resolvedUsage = resolveUsageWithFallback({
                 usage: sfJson?.usage
                     ? {
@@ -1007,6 +1062,7 @@ export function createLlmRoutes(): Router {
                 },
                 structured,
                 focusPatchApplied,
+                focusPatchParseError,
                 provider: context.providerCatalog.provider,
                 model: context.modelId,
                 finishReason: sfJson?.choices?.[0]?.finish_reason,
@@ -1354,6 +1410,7 @@ export function createLlmRoutes(): Router {
             const parsed = tryParseStructuredJson(trimmedRaw);
             let structured = parsed.structured ?? buildFallbackStructured(body.message);
             let focusPatchAppliedStream: boolean | undefined;
+            let focusPatchParseErrorStream: boolean | undefined;
             if (isFocusedMode && body.currentArtifacts) {
                 if (parsed.structured?.focusPatch) {
                     const serverAnchor = body.focusContext?.selectedElement?.outerHtml;
@@ -1372,6 +1429,32 @@ export function createLlmRoutes(): Router {
                     };
                     structured = { ...structured, artifacts: patchedArtifactsStream };
                     focusPatchAppliedStream = patchResult.patchApplied;
+                    // Fallback: client HTML may have been truncated (htmlLimit) so the target
+                    // element was cut off. Retry the merge against the server's stored active
+                    // snapshot which always contains the full artifact HTML.
+                    if (!focusPatchAppliedStream) {
+                        const activeSnap = await snapshotRepository.getActiveForProject(req.sandbox!.projectId).catch(() => null);
+                        if (activeSnap?.artifacts.html) {
+                            const retryResult = applyFocusPatch(
+                                activeSnap.artifacts,
+                                parsed.structured.focusPatch,
+                                activeSnap.artifacts,
+                                serverAnchor
+                            );
+                            if (retryResult.patchApplied) {
+                                console.info("[focusPatch] server-snapshot fallback applied successfully");
+                                structured = {
+                                    ...structured,
+                                    artifacts: {
+                                        ...retryResult.artifacts,
+                                        css: [retryResult.artifacts.css, companionCssStream].filter(Boolean).join("\n"),
+                                        js: [retryResult.artifacts.js, companionJsStream].filter(Boolean).join("\n"),
+                                    },
+                                };
+                                focusPatchAppliedStream = true;
+                            }
+                        }
+                    }
                 } else {
                     structured = {
                         ...structured,
@@ -1382,9 +1465,23 @@ export function createLlmRoutes(): Router {
                         },
                     };
                     focusPatchAppliedStream = false;
+                    if (!parsed.parseValid) {
+                        focusPatchParseErrorStream = true;
+                        structured = {
+                            ...structured,
+                            chat: {
+                                summary: "Il modello ha prodotto una risposta non interpretabile (JSON malformato). L'elemento non è stato modificato.",
+                                bullets: [
+                                    "La pagina resta invariata.",
+                                    "Prova a cambiare modello o ripetere la richiesta.",
+                                ],
+                                nextActions: [],
+                            },
+                        };
+                    }
                 }
             }
-            const reply = parsed.parseValid ? buildFormattedReply(structured) : trimmedRaw;
+            const reply = (parsed.parseValid || focusPatchParseErrorStream) ? buildFormattedReply(structured) : trimmedRaw;
             const resolvedUsage = resolveUsageWithFallback({
                 usage,
                 messages,
@@ -1426,6 +1523,7 @@ export function createLlmRoutes(): Router {
                 durationMs: Date.now() - startedAt,
                 simulated: false,
                 focusPatchApplied: focusPatchAppliedStream,
+                focusPatchParseError: focusPatchParseErrorStream,
             };
 
             // ── Execution log (fire-and-forget) ──────────────────────────────
