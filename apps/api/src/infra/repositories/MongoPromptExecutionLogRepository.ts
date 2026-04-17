@@ -108,6 +108,19 @@ export class MongoPromptExecutionLogRepository implements PromptExecutionLogRepo
         return this.summarize({});
     }
 
+    async summarizeCostsByUser(userId: string): Promise<Record<string, number>> {
+        const col = await this.col();
+        const rows = await col.aggregate<{ _id: string; totalCost: number }>([
+            { $match: { userId, status: "succeeded" } },
+            { $group: { _id: "$projectId", totalCost: { $sum: { $ifNull: ["$costEstimate.amount", 0] } } } },
+        ]).toArray();
+        const result: Record<string, number> = {};
+        for (const row of rows) {
+            result[row._id] = row.totalCost;
+        }
+        return result;
+    }
+
     async listRecentByProject(projectId: string, userId: string, limit = 8): Promise<PromptExecutionLog[]> {
         const col = await this.col();
         const docs = await col.find({ projectId, userId }).sort({ createdAt: -1 }).limit(limit).toArray();

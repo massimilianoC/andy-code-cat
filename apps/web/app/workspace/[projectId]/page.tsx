@@ -4279,7 +4279,20 @@ function formatDuration(ms: number | undefined): string {
 
 function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto | undefined; variant?: "message" | "global" }) {
     const [open, setOpen] = useState(false);
+    const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
     const containerRef = useRef<HTMLDivElement>(null);
+
+    function openTooltip() {
+        if (containerRef.current) {
+            const r = containerRef.current.getBoundingClientRect();
+            setTooltipStyle({
+                position: "fixed",
+                bottom: `calc(100vh - ${Math.round(r.top)}px + 8px)`,
+                left: `${Math.round(r.left)}px`,
+            });
+        }
+        setOpen(true);
+    }
 
     if (!message || !message.metadata) return null;
 
@@ -4308,7 +4321,7 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
 
     return (
         <div ref={containerRef} className="req-meta-info"
-            onMouseEnter={() => setOpen(true)}
+            onMouseEnter={openTooltip}
             onMouseLeave={() => setOpen(false)}
         >
             <button
@@ -4321,7 +4334,7 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
             </button>
 
             {open && (
-                <div className="req-meta-tooltip">
+                <div className="req-meta-tooltip" style={tooltipStyle}>
                     <div className="req-meta-tooltip-title">{tooltipTitle}</div>
 
                     {operation && (

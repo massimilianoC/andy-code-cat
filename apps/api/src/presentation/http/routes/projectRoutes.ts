@@ -8,6 +8,8 @@ import { MongoProjectMoodboardRepository } from "../../../infra/repositories/Mon
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
 import { MongoSessionRepository } from "../../../infra/repositories/MongoSessionRepository";
 import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
+import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
 import { DeleteProject } from "../../../application/use-cases/DeleteProject";
 import { DuplicateProject } from "../../../application/use-cases/DuplicateProject";
 import { GetProjectMoodboard } from "../../../application/use-cases/GetProjectMoodboard";
@@ -53,6 +55,8 @@ export function createProjectRoutes(): Router {
     const moodboardRepository = new MongoProjectMoodboardRepository();
     const promptConfigRepository = new MongoLlmPromptConfigRepository();
     const presetRepository = new MongoProjectPresetRepository();
+    const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const siteDeploymentRepository = new MongoSiteDeploymentRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
     const deleteProject = new DeleteProject(projectRepository, moodboardRepository);
@@ -64,8 +68,28 @@ export function createProjectRoutes(): Router {
 
     router.get("/projects", async (req: RequestWithContext, res, next) => {
         try {
-            const projects = await projectRepository.listForUser(req.auth!.userId);
-            res.json({ projects });
+            const userId = req.auth!.userId;
+            const projects = await projectRepository.listForUser(userId);
+
+            const [costMap, liveDeployments] = await Promise.all([
+                promptExecutionLogRepository.summarizeCostsByUser(userId),
+                siteDeploymentRepository.findActivesByUserId(userId),
+            ]);
+
+            const deploymentByProject = new Map<string, string>();
+            for (const d of liveDeployments) {
+                if (!deploymentByProject.has(d.projectId)) {
+                    deploymentByProject.set(d.projectId, d.url);
+                }
+            }
+
+            const enriched = projects.map((p) => ({
+                ...p,
+                totalCostEur: costMap[p.id] ?? 0,
+                publishedUrl: deploymentByProject.get(p.id) ?? null,
+            }));
+
+            res.json({ projects: enriched });
         } catch (error) {
             next(error);
         }

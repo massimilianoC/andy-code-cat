@@ -730,10 +730,8 @@ a.link:hover {
 }
 
 .req-meta-tooltip {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 0;
-    z-index: 100;
+    position: fixed;
+    z-index: 9999;
     min-width: 280px;
     max-width: 340px;
     background: rgba(22, 24, 33, 0.97);
