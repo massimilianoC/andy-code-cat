@@ -1,0 +1,106 @@
+"use client";
+
+import { Bell, Loader2, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useNotifications } from "@/lib/notifications";
+
+function formatCostEur(amount: number): string {
+    if (!amount || amount <= 0) return "";
+    if (amount < 0.0001) return "<€0.0001";
+    if (amount < 0.01) return `€${amount.toFixed(4)}`;
+    if (amount < 1) return `€${amount.toFixed(3)}`;
+    return `€${amount.toFixed(2)}`;
+}
+
+interface WorkspaceHeaderProps {
+    projectName: string;
+    /** Combined cost across chat + optimizer (in EUR) */
+    totalCostEur: number;
+    onConfigOpen: () => void;
+    onDashboard: () => void;
+}
+
+export function WorkspaceHeader({
+    projectName,
+    totalCostEur,
+    onConfigOpen,
+    onDashboard,
+}: WorkspaceHeaderProps) {
+    const { notifications, panelOpen, setPanelOpen } = useNotifications();
+
+    const runningCount = notifications.filter((n) => n.status === "running").length;
+    const errorCount = notifications.filter((n) => n.status === "error").length;
+    const hasAny = notifications.length > 0;
+    const costLabel = formatCostEur(totalCostEur);
+
+    return (
+        <header className="workspace-header">
+            {/* LEFT — navigation + project identity */}
+            <div className="workspace-header-left">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={onDashboard}
+                    className="workspace-header-back"
+                >
+                    ← Dashboard
+                </Button>
+                <span className="workspace-header-project" title={projectName}>
+                    {projectName || "…"}
+                </span>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={onConfigOpen}
+                    title="Configura progetto"
+                    className="workspace-header-config"
+                >
+                    <Settings size={14} />
+                </Button>
+            </div>
+
+            {/* CENTER — total project cost */}
+            <div className="workspace-header-center">
+                {costLabel ? (
+                    <span
+                        className="workspace-header-cost"
+                        title="Costo totale progetto (chat LLM + optimizer)"
+                    >
+                        {costLabel}
+                    </span>
+                ) : (
+                    <span className="workspace-header-cost-empty">—</span>
+                )}
+            </div>
+
+            {/* RIGHT — notifications */}
+            <div className="workspace-header-right">
+                {hasAny && (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPanelOpen(!panelOpen)}
+                        title={panelOpen ? "Nascondi notifiche" : "Mostra notifiche"}
+                        className={`workspace-header-notif-btn gap-1.5 ${runningCount > 0 ? "text-primary" : ""}`}
+                    >
+                        {runningCount > 0 ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <Bell className="h-4 w-4" />
+                        )}
+                        <Badge
+                            variant={runningCount > 0 ? "accent" : errorCount > 0 ? "destructive" : "outline"}
+                            className="text-[10px] px-1.5 py-0"
+                        >
+                            {runningCount > 0 ? runningCount : notifications.length}
+                        </Badge>
+                    </Button>
+                )}
+            </div>
+        </header>
+    );
+}

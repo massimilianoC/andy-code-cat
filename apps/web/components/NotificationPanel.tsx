@@ -68,7 +68,7 @@ function NotificationRow({ n, onRemove }: { n: SystemNotification; onRemove: () 
     );
 }
 
-export function NotificationPanel() {
+export function NotificationPanel({ hideTrigger = false }: { hideTrigger?: boolean }) {
     const { t } = useTranslation();
     const { notifications, remove, panelOpen, setPanelOpen } = useNotifications();
     const panelRef = useRef<HTMLDivElement>(null);
@@ -108,10 +108,10 @@ export function NotificationPanel() {
     return (
         <div
             ref={panelRef}
-            className="fixed right-4 top-4 z-[1000] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2"
+            className="fixed right-4 top-[52px] z-[1000] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2"
             aria-live="polite"
         >
-            {hasAny && (
+            {!hideTrigger && hasAny && (
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-card/95 p-2 shadow-xl backdrop-blur">
                     <Button
                         type="button"
