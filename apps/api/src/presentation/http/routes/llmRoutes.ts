@@ -1122,6 +1122,25 @@ export function createLlmRoutes(): Router {
             }
             // ── end execution log ─────────────────────────────────────────────
 
+            // ── Cost accounting: write chat call to PromptExecutionLog ─────────
+            // This ensures chat costs are included in project cost totals alongside
+            // optimize/suggest costs. Fire-and-forget — never block the response.
+            promptExecutionLogRepository.create({
+                taskKey: "chat",
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                conversationId: body.conversationId,
+                provider: result.provider,
+                model: result.model,
+                inputPrompt: body.message.slice(0, 2000),
+                contextMeta: { usedMoodboard: false, usedUserProfile: false },
+                usage: result.usage,
+                costEstimate: result.costEstimate,
+                status: "succeeded",
+                durationMs: result.durationMs,
+            }).catch(() => { });
+            // ── end cost accounting ───────────────────────────────────────────
+
             res.json(result);
         } catch (error) {
             const normalized = normalizeHttpError(error);
@@ -1564,6 +1583,23 @@ export function createLlmRoutes(): Router {
                 });
             }
             // ── end execution log ─────────────────────────────────────────────
+
+            // ── Cost accounting: write chat-stream call to PromptExecutionLog ──
+            promptExecutionLogRepository.create({
+                taskKey: "chat",
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                conversationId: body.conversationId,
+                provider: result.provider,
+                model: result.model,
+                inputPrompt: body.message.slice(0, 2000),
+                contextMeta: { usedMoodboard: false, usedUserProfile: false },
+                usage: result.usage,
+                costEstimate: result.costEstimate,
+                status: "succeeded",
+                durationMs: result.durationMs,
+            }).catch(() => { });
+            // ── end cost accounting ───────────────────────────────────────────
 
             sendSse(res, { type: "done", result });
             res.end();

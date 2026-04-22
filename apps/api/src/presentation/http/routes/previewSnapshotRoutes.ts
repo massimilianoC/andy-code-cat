@@ -18,6 +18,8 @@ import { GetPreviewSnapshot } from "../../../application/use-cases/GetPreviewSna
 import { CapturePreviewSnapshot } from "../../../application/use-cases/CapturePreviewSnapshot";
 import { DeletePreviewSnapshot } from "../../../application/use-cases/DeletePreviewSnapshot";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
+import { SnapshotThumbnailJob } from "../../../application/services/SnapshotThumbnailJob";
+import { getFileStorage } from "../../../infra/storage/StorageFactory";
 
 export function createPreviewSnapshotRoutes(): Router {
     const router = Router();
@@ -138,6 +140,17 @@ export function createPreviewSnapshotRoutes(): Router {
                 });
                 // ── end execution log ─────────────────────────────────────────
 
+                // ── Background thumbnail job (fire-and-forget) ────────────────
+                if (body.activate && artifacts.html) {
+                    SnapshotThumbnailJob.schedule(
+                        req.sandbox!.projectId,
+                        snapshot.id,
+                        artifacts,
+                        previewSnapshotRepository
+                    );
+                }
+                // ── end thumbnail job ─────────────────────────────────────────
+
                 res.status(201).json({ snapshot });
             } catch (error) {
                 next(error);
@@ -198,6 +211,17 @@ export function createPreviewSnapshotRoutes(): Router {
                     },
                 });
                 // ── end execution log ─────────────────────────────────────────
+
+                // ── Background thumbnail job (fire-and-forget) ────────────────
+                if (snapshot.artifacts.html) {
+                    SnapshotThumbnailJob.schedule(
+                        req.sandbox!.projectId,
+                        snapshot.id,
+                        snapshot.artifacts,
+                        previewSnapshotRepository
+                    );
+                }
+                // ── end thumbnail job ─────────────────────────────────────────
 
                 res.json({ snapshot });
             } catch (error) {
@@ -261,6 +285,40 @@ export function createPreviewSnapshotRoutes(): Router {
                     req.params.snapshotId!
                 );
                 res.status(204).send();
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    // -----------------------------------------------------------------------
+    // GET /projects/:projectId/preview-snapshots/:snapshotId/thumbnail
+    // Streams the stored Puppeteer JPEG thumbnail.
+    // Returns 404 while the background job has not yet completed.
+    // Adds a long-lived Cache-Control header since thumbnails are immutable
+    // per snapshotId.
+    // -----------------------------------------------------------------------
+    router.get(
+        "/projects/:projectId/preview-snapshots/:snapshotId/thumbnail",
+        sandboxMiddleware,
+        async (req: RequestWithContext, res, next) => {
+            try {
+                const snapshot = await getPreviewSnapshot.execute(
+                    req.sandbox!.projectId,
+                    req.params.snapshotId!
+                );
+                if (!snapshot || !snapshot.thumbnailPath) {
+                    res.status(404).json({ error: "Thumbnail not ready" });
+                    return;
+                }
+
+                const storage = getFileStorage();
+                const stream = await storage.getThumbnailStream(snapshot.thumbnailPath);
+
+                res.setHeader("Content-Type", "image/jpeg");
+                // Immutable per snapshotId — safe to cache for 1 year
+                res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+                stream.pipe(res);
             } catch (error) {
                 next(error);
             }

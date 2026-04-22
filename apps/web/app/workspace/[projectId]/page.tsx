@@ -1,11 +1,13 @@
-﻿"use client";
+"use client";
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import dynamic from "next/dynamic";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
     getOrCreateProjectConversation,
+    getConversation,
     addMessage,
     llmChatPreview,
     streamLlmChatPreview,
@@ -64,7 +66,7 @@ import { Mic, Settings, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
-import { PreviewViewportSelector, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
+import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
 import type { PreviewViewport } from "../../../components/workspace/PreviewViewportSelector";
 import { SnapshotHistoryPanel } from "../../../components/workspace/SnapshotHistoryPanel";
 import { PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT } from "./iframe-scripts";
@@ -369,8 +371,10 @@ function isFocusContextValidationError(error: unknown): boolean {
 }
 
 export default function WorkspacePage() {
+    const { t } = useTranslation();
     const router = useRouter();
     const params = useParams();
+    const searchParams = useSearchParams();
     const projectId = Array.isArray(params.projectId) ? params.projectId[0] : params.projectId;
 
     const { add: addNotification, update: updateNotification } = useNotifications();
@@ -462,11 +466,12 @@ export default function WorkspacePage() {
     const editorHtmlRef = useRef("");
     const editorCssRef = useRef("");
     const editorJsRef = useRef("");
-    const [editorSelectionLabel, setEditorSelectionLabel] = useState<string>("Nessuna selezione");
+    const [editorSelectionLabel, setEditorSelectionLabel] = useState<string>("");
     const [inspectMode, setInspectMode] = useState(false);
     const [selectedElement, setSelectedElement] = useState<LlmFocusContext["selectedElement"] | null>(null);
     const [selectedElementSource, setSelectedElementSource] = useState<"inspect" | "edit-media" | null>(null);
     const [mediaToolsOpen, setMediaToolsOpen] = useState(false);
+    const [mediaInspectorSection, setMediaInspectorSection] = useState<"gen-image" | "gallery">("gen-image");
     // EDIT-mode media asset list scanned from the live preview iframe
     const [editMediaList, setEditMediaList] = useState<MediaItem[]>([]);
     const [projectAssets, setProjectAssets] = useState<ProjectAssetDto[]>([]);
@@ -557,9 +562,9 @@ export default function WorkspacePage() {
         setExportState("loading");
         setExportError(null);
         const notifId = addNotification({
-            label: "Export ZIP (con screenshot)",
+            label: t("workspace.notifications.export.label"),
             status: "running",
-            message: "Cattura screenshot + archivio in corso…",
+            message: t("workspace.notifications.export.running"),
         });
         try {
             // 1. Create the export record on the server
@@ -567,7 +572,7 @@ export default function WorkspacePage() {
             const res = await requestLayer1Export(token, projectId, snapshotId);
 
             // 2. Download the ZIP blob using the Bearer token (no JWT-in-URL fragility)
-            updateNotification(notifId, { message: "Download ZIP…" });
+            updateNotification(notifId, { message: t("workspace.notifications.export.downloading") });
             const blob = await downloadExportBlob(token, res.id);
 
             // 3. Trigger browser download
@@ -581,16 +586,16 @@ export default function WorkspacePage() {
             URL.revokeObjectURL(objectUrl);
 
             setExportState("idle");
-            updateNotification(notifId, { status: "done", message: "ZIP scaricato" });
+            updateNotification(notifId, { status: "done", message: t("workspace.notifications.export.done") });
         } catch (err) {
             // 401 from the blob download = sessione scaduta — mostra la modal
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
                 setExportState("idle");
-                updateNotification(notifId, { status: "error", message: "Sessione scaduta" });
+                updateNotification(notifId, { status: "error", message: t("workspace.notifications.export.sessionExpired") });
                 return;
             }
-            const msg = err instanceof Error ? err.message : "Errore export";
+            const msg = err instanceof Error ? err.message : t("workspace.notifications.export.error");
             setExportError(msg);
             setExportState("error");
             updateNotification(notifId, { status: "error", message: msg });
@@ -613,9 +618,9 @@ export default function WorkspacePage() {
         setCaptureState("loading");
         setCaptureDropdownOpen(false);
         const notifId = addNotification({
-            label: `Cattura screenshot ${format.toUpperCase()}`,
+        label: t("workspace.notifications.capture.label", { format: format.toUpperCase() }),
             status: "running",
-            message: "Rendering pagina in corso…",
+            message: t("workspace.notifications.capture.running"),
         });
         try {
             // Calls the backend Puppeteer endpoint:
@@ -632,15 +637,15 @@ export default function WorkspacePage() {
             URL.revokeObjectURL(objectUrl);
 
             setCaptureState("idle");
-            updateNotification(notifId, { status: "done", message: "File scaricato" });
+            updateNotification(notifId, { status: "done", message: t("workspace.notifications.capture.done") });
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
                 setCaptureState("idle");
-                updateNotification(notifId, { status: "error", message: "Sessione scaduta" });
+                updateNotification(notifId, { status: "error", message: t("workspace.notifications.capture.sessionExpired") });
                 return;
             }
-            const msg = err instanceof Error ? err.message : "Errore cattura";
+            const msg = err instanceof Error ? err.message : t("workspace.notifications.capture.error");
             console.error("[snapshot-capture]", err);
             setCaptureState("error");
             updateNotification(notifId, { status: "error", message: msg });
@@ -691,9 +696,9 @@ export default function WorkspacePage() {
         setPublishState("loading");
         const activeId = previewSnapshots.find((s) => s.isActive)?.id ?? null;
         const notifId = addNotification({
-            label: "Pubblicazione",
+            label: t("workspace.notifications.publish.label"),
             status: "running",
-            message: "Pubblicazione in corso…",
+            message: t("workspace.notifications.publish.running"),
         });
         try {
             // Never pass selectedBackendSnapshotId here — the user may have browsed to an
@@ -711,17 +716,17 @@ export default function WorkspacePage() {
             })();
             updateNotification(notifId, {
                 status: "done",
-                message: vn ? `Pubblicato! (v${vn} attiva)` : "Pubblicato!",
+                message: vn ? t("workspace.notifications.publish.doneVersioned", { vn }) : t("workspace.notifications.publish.done"),
             });
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
                 setPublishState("idle");
-                updateNotification(notifId, { status: "error", message: "Sessione scaduta" });
+                updateNotification(notifId, { status: "error", message: t("workspace.notifications.publish.sessionExpired") });
                 return;
             }
             setPublishState("error");
-            const msg = err instanceof Error ? err.message : "Errore pubblicazione";
+            const msg = err instanceof Error ? err.message : t("workspace.notifications.publish.error");
             updateNotification(notifId, { status: "error", message: msg });
             window.setTimeout(() => setPublishState("idle"), 3000);
         }
@@ -845,19 +850,22 @@ export default function WorkspacePage() {
     }, [router]);
 
     const loadProjectConversation = useCallback(
-        async (t: string) => {
+        async (authToken: string) => {
             setConversationLoading(true);
             try {
-                const res = await getOrCreateProjectConversation(t, projectId);
+                const convParam = searchParams?.get("conv");
+                const res = convParam
+                    ? await getConversation(authToken, projectId, convParam)
+                    : await getOrCreateProjectConversation(authToken, projectId);
                 setActiveConv(res.conversation);
                 setActiveConvId(res.conversation.id);
             } catch (err) {
-                setError(err instanceof ApiError ? String(err.message) : "Errore caricamento conversazione");
+                setError(err instanceof ApiError ? String(err.message) : t("workspace.notifications.conversation.loadError"));
             } finally {
                 setConversationLoading(false);
             }
         },
-        [projectId]
+        [projectId, searchParams, t]
     );
 
     useEffect(() => {
@@ -1249,9 +1257,9 @@ export default function WorkspacePage() {
 
             if (!resolvedUrl) {
                 addNotification({
-                    label: "Asset non applicabile",
+                    label: t("workspace.notifications.media.notApplicableLabel"),
                     status: "error",
-                    message: "Seleziona un'immagine o un URL immagine valido.",
+                    message: t("workspace.notifications.media.notApplicable"),
                 });
                 return;
             }
@@ -1260,15 +1268,15 @@ export default function WorkspacePage() {
             const versioned = await saveMediaVersion(updatedHtml || editorHtmlRef.current, "media-apply");
             setConfigOpen(false);
             addNotification({
-                label: versioned ? "Media applicato e salvato" : "Media applicato",
+            label: versioned ? t("workspace.notifications.media.doneSaved") : t("workspace.notifications.media.done"),
                 status: "done",
                 message: versioned
-                    ? `${asset.label ?? asset.originalName} collegato all'elemento selezionato e salvato come nuova versione.`
-                    : `${asset.label ?? asset.originalName} collegato all'elemento selezionato.`,
+                    ? t("workspace.notifications.media.doneSavedMessage", { name: asset.label ?? asset.originalName })
+                    : t("workspace.notifications.media.doneMessage", { name: asset.label ?? asset.originalName }),
             });
         } catch (err) {
-            const message = err instanceof ApiError ? err.message : "Impossibile caricare l'asset selezionato";
-            addNotification({ label: "Errore media", status: "error", message });
+            const message = err instanceof ApiError ? err.message : t("workspace.notifications.media.error");
+            addNotification({ label: t("workspace.notifications.media.errorLabel"), status: "error", message });
         }
     }, [token, selectedElement, projectId, addNotification, applyMediaToPreview, saveMediaVersion]);
 
@@ -1280,9 +1288,9 @@ export default function WorkspacePage() {
 
         if (!currentUrl) {
             addNotification({
-                label: "Nessuna media attiva",
+                label: t("workspace.notifications.media.noActiveLabel"),
                 status: "error",
-                message: "Seleziona prima un'immagine o genera un nuovo asset.",
+                message: t("workspace.notifications.media.noActive"),
             });
             return;
         }
@@ -1290,11 +1298,11 @@ export default function WorkspacePage() {
         const updatedHtml = applyMediaToPreview(currentUrl);
         const versioned = await saveMediaVersion(updatedHtml || editorHtmlRef.current, "media-style-update");
         addNotification({
-            label: versioned ? "Stile applicato e salvato" : "Stile applicato",
+            label: versioned ? t("workspace.notifications.style.doneSaved") : t("workspace.notifications.style.done"),
             status: "done",
             message: versioned
-                ? "Fit, repeat, opacity e filter sono stati aggiornati e salvati come nuova versione."
-                : "Fit, repeat, opacity e filter sono stati aggiornati nella preview.",
+                ? t("workspace.notifications.style.doneSavedMessage")
+                : t("workspace.notifications.style.doneMessage"),
         });
     }, [selectedElement, mediaMode, addNotification, applyMediaToPreview, saveMediaVersion]);
 
@@ -1303,9 +1311,9 @@ export default function WorkspacePage() {
 
         setSuggestingMedia(true);
         const notifId = addNotification({
-            label: "Suggerimento immagine",
+            label: t("workspace.notifications.imageSuggestion.label"),
             status: "running",
-            message: "Sto analizzando il contesto della sezione…",
+            message: t("workspace.notifications.imageSuggestion.running"),
         });
 
         try {
@@ -1317,13 +1325,13 @@ export default function WorkspacePage() {
 
             setMediaSuggestion(result);
             updateNotification(notifId, {
-                label: "Suggerimento pronto",
+                label: t("workspace.notifications.imageSuggestion.done"),
                 status: "done",
                 message: result.suggestion,
             });
         } catch (err) {
-            const message = err instanceof ApiError ? err.message : "Impossibile generare un suggerimento immagine";
-            updateNotification(notifId, { label: "Suggerimento fallito", status: "error", message });
+            const message = err instanceof ApiError ? err.message : t("workspace.notifications.imageSuggestion.error");
+            updateNotification(notifId, { label: t("workspace.notifications.imageSuggestion.failed"), status: "error", message });
         } finally {
             setSuggestingMedia(false);
         }
@@ -1333,9 +1341,9 @@ export default function WorkspacePage() {
         if (!mediaSuggestion?.suggestedPrompt) return;
         setPrompt(mediaSuggestion.suggestedPrompt);
         addNotification({
-            label: "Prompt aggiornato",
+            label: t("workspace.notifications.prompt.updated"),
             status: "done",
-            message: "Il suggerimento è stato copiato nel prompt principale.",
+            message: t("workspace.notifications.prompt.updatedMessage"),
         });
     }, [mediaSuggestion, addNotification]);
 
@@ -1346,20 +1354,20 @@ export default function WorkspacePage() {
         const generationPrompt = generationPromptRaw.trim().slice(0, 2000);
         if (!token || !selectedElement) return false;
         if (!generationPrompt) {
-            const message = "Scrivi un prompt oppure usa prima il suggerimento immagine.";
+            const message = t("workspace.notifications.prompt.missing");
             if (options?.notificationId) {
-                updateNotification(options.notificationId, { label: "Prompt mancante", status: "error", message });
+                updateNotification(options.notificationId, { label: t("workspace.notifications.prompt.missingLabel"), status: "error", message });
             } else {
-                addNotification({ label: "Prompt mancante", status: "error", message });
+                addNotification({ label: t("workspace.notifications.prompt.missingLabel"), status: "error", message });
             }
             return false;
         }
 
         setGeneratingMedia(true);
         const notifId = options?.notificationId ?? addNotification({
-            label: options?.label ?? "Generazione immagine",
+            label: options?.label ?? t("workspace.notifications.imageGeneration.label"),
             status: "running",
-            message: options?.initialMessage ?? "Invio richiesta al provider…",
+            message: options?.initialMessage ?? t("workspace.notifications.imageGeneration.running"),
         });
 
         try {
@@ -1401,7 +1409,7 @@ export default function WorkspacePage() {
             }
 
             updateNotification(notifId, {
-                label: "Generazione avviata",
+                label: t("workspace.notifications.imageGeneration.started"),
                 status: "running",
                 message: placeholderApplied
                     ? (placeholderVersioned
@@ -1435,9 +1443,9 @@ export default function WorkspacePage() {
 
                         if (trackedAsset.generationStatus === "failed") {
                             updateNotification(notifId, {
-                                label: "Generazione fallita",
+                                label: t("workspace.notifications.imageGeneration.failed"),
                                 status: "error",
-                                message: `${trackedAsset.generationMetadata?.errorMessage ?? "Il provider non ha restituito un asset valido."} Il placeholder resta nella working view corrente.`,
+                                message: t("workspace.notifications.imageGeneration.failedMessage", { error: trackedAsset.generationMetadata?.errorMessage ?? "" }),
                             });
                             return;
                         }
@@ -1451,20 +1459,20 @@ export default function WorkspacePage() {
                                 { promptExcerpt: generationPrompt },
                             );
                             updateNotification(notifId, {
-                                label: finalVersioned ? "Immagine pronta e salvata" : "Immagine pronta",
+                                label: finalVersioned ? t("workspace.notifications.imageGeneration.doneSaved") : t("workspace.notifications.imageGeneration.done"),
                                 status: "done",
                                 message: finalVersioned
-                                    ? `${trackedAsset.label ?? trackedAsset.originalName} ha sostituito il placeholder ed è stata salvata come nuova versione.`
-                                    : `${trackedAsset.label ?? trackedAsset.originalName} è stata aggiornata nella preview.`,
+                                    ? t("workspace.notifications.imageGeneration.doneSavedMessage", { name: trackedAsset.label ?? trackedAsset.originalName })
+                                    : t("workspace.notifications.imageGeneration.doneMessage", { name: trackedAsset.label ?? trackedAsset.originalName }),
                             });
                             return;
                         }
                     }
 
                     updateNotification(notifId, {
-                        label: "Generazione ancora in corso",
+                        label: t("workspace.notifications.imageGeneration.stillRunning"),
                         status: "running",
-                        message: "Il provider sta ancora completando il render. L'asset rimane in coda ma il flusso non è bloccato.",
+                        message: t("workspace.notifications.imageGeneration.stillRunningMessage"),
                     });
                     void loadProjectAssets(token);
                     void loadProjectAiUsage(token);
@@ -1476,8 +1484,8 @@ export default function WorkspacePage() {
 
             return true;
         } catch (err) {
-            const message = err instanceof ApiError ? err.message : "Errore durante la generazione dell'immagine";
-            updateNotification(notifId, { label: "Generazione fallita", status: "error", message });
+            const message = err instanceof ApiError ? err.message : t("workspace.notifications.imageGeneration.error");
+            updateNotification(notifId, { label: t("workspace.notifications.imageGeneration.failed"), status: "error", message });
             return false;
         } finally {
             setGeneratingMedia(false);
@@ -1486,7 +1494,7 @@ export default function WorkspacePage() {
 
     const handleGenerateMedia = useCallback(async () => {
         const generationPrompt = (prompt.trim() || mediaSuggestion?.suggestedPrompt?.trim() || "").trim().slice(0, 2000);
-        await runMediaGeneration(generationPrompt, { label: "Generazione immagine" });
+        await runMediaGeneration(generationPrompt, { label: t("workspace.notifications.imageGeneration.label") });
     }, [prompt, mediaSuggestion, runMediaGeneration]);
 
     const handleQuickGenerateMedia = useCallback(async () => {
@@ -1494,9 +1502,9 @@ export default function WorkspacePage() {
 
         setSuggestingMedia(true);
         const notifId = addNotification({
-            label: "Gen image AI",
+            label: t("workspace.notifications.imageGeneration.autoLabel"),
             status: "running",
-            message: "Analizzo il contesto semantico della pagina…",
+            message: t("workspace.notifications.imageGeneration.autoRunning"),
         });
 
         try {
@@ -1515,19 +1523,19 @@ export default function WorkspacePage() {
             ).slice(0, 2000);
 
             updateNotification(notifId, {
-                label: "Gen image AI",
+                label: t("workspace.notifications.imageGeneration.autoLabel"),
                 status: "running",
-                message: "Brief pronto. Avvio la generazione automatica…",
+                message: t("workspace.notifications.imageGeneration.autoBrief"),
             });
 
             await runMediaGeneration(autoPrompt, {
-                label: "Gen image AI",
-                initialMessage: "Brief pronto. Avvio la generazione automatica…",
+                label: t("workspace.notifications.imageGeneration.autoLabel"),
+                initialMessage: t("workspace.notifications.imageGeneration.autoBrief"),
                 notificationId: notifId,
             });
         } catch (err) {
-            const message = err instanceof ApiError ? err.message : "Impossibile avviare la generazione automatica dell'immagine";
-            updateNotification(notifId, { label: "Gen image AI", status: "error", message });
+            const message = err instanceof ApiError ? err.message : t("workspace.notifications.imageGeneration.autoError");
+            updateNotification(notifId, { label: t("workspace.notifications.imageGeneration.autoLabel"), status: "error", message });
         } finally {
             setSuggestingMedia(false);
         }
@@ -1549,7 +1557,7 @@ export default function WorkspacePage() {
             incrementSnapCount(projectId);
             await loadSnapshots(token);
             setSelectedBackendSnapshotId(result.snapshot.id);
-            addNotification({ label: "Versione salvata dall'editor", status: "done", message: "Snapshot attivato." });
+            addNotification({ label: t("workspace.notifications.snapshot.savedLabel"), status: "done", message: t("workspace.notifications.snapshot.saved") });
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
@@ -1722,7 +1730,7 @@ export default function WorkspacePage() {
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
             }
-            addNotification({ label: "Versione EDIT salvata", status: "done", message: "Modifiche manuali versionate." });
+            addNotification({ label: t("workspace.notifications.snapshot.editSavedLabel"), status: "done", message: t("workspace.notifications.snapshot.editSaved") });
             setEditMode(false);
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
@@ -1786,7 +1794,7 @@ export default function WorkspacePage() {
         setEditorHtml(artifacts?.html ?? "");
         setEditorCss(artifacts?.css ?? "");
         setEditorJs(artifacts?.js ?? "");
-        setEditorSelectionLabel("Nessuna selezione");
+        setEditorSelectionLabel("");
         setCodeEditorSelection(null);
         // Clear the selected element when the active snapshot changes.
         // data-pf-id values are snapshot-version-specific: if the snapshot HTML was
@@ -1829,7 +1837,7 @@ export default function WorkspacePage() {
 
         if (!(err instanceof ApiError)) {
             addNotification({
-                label: "Errore LLM",
+                label: t("workspace.notifications.llm.errorLabel"),
                 status: "error",
                 message: fallbackMessage,
             });
@@ -2158,9 +2166,9 @@ export default function WorkspacePage() {
                         }
                     }
                     updateNotification(notifId, {
-                        label: "Generazione interrotta",
+                        label: t("workspace.notifications.llm.abortedLabel"),
                         status: "error",
-                        message: "Elaborazione annullata dall'utente.",
+                        message: t("workspace.notifications.llm.aborted"),
                     });
                     setThinkingText("");
                     setDraftAnswer("");
@@ -2171,9 +2179,9 @@ export default function WorkspacePage() {
                 if (retryWithoutFocusContext) {
                     clearSelectedElement();
                     addNotification({
-                        label: "Inspect limitato",
+                        label: t("workspace.notifications.focusPatch.limitedLabel"),
                         status: "error",
-                        message: "La selezione non era valida per la focus patch. Continuo con il contesto completo del progetto.",
+                        message: t("workspace.notifications.focusPatch.limited"),
                     });
                 }
 
@@ -2222,6 +2230,14 @@ export default function WorkspacePage() {
                     }
                     : prev
             );
+
+            // Keep promptOpsSummary in sync so the workspace header total cost
+            // reflects chat costs immediately (backend now writes chat to PromptExecutionLog).
+            setPromptOpsSummary((prev) => ({
+                totalCost: prev.totalCost + (llm.costEstimate?.amount ?? 0),
+                totalTokens: prev.totalTokens + (llm.usage?.totalTokens ?? 0),
+                runs: prev.runs + 1,
+            }));
 
             let previewVersionSaved = false;
 
@@ -2307,11 +2323,11 @@ export default function WorkspacePage() {
             // and suggest switching model — the page was left untouched.
             if (llm.focusPatchParseError && focusContext?.mode === "preview-element") {
                 clearSelectedElement();
-                setEditorSelectionLabel("Nessuna selezione");
+                setEditorSelectionLabel("");
                 addNotification({
-                    label: "Errore di parsing focus patch",
+                    label: t("workspace.notifications.focusPatch.parseErrorLabel"),
                     status: "error",
-                    message: "Il modello ha prodotto JSON non interpretabile. Prova a cambiare modello e ripetere la richiesta.",
+                    message: t("workspace.notifications.focusPatch.parseError"),
                 });
             }
 
@@ -2322,11 +2338,11 @@ export default function WorkspacePage() {
             // next focused-edit starts fresh with a valid anchor.
             if (llm.focusPatchApplied === false && focusContext?.mode === "preview-element") {
                 clearSelectedElement();
-                setEditorSelectionLabel("Nessuna selezione");
+                setEditorSelectionLabel("");
                 addNotification({
-                    label: "Focus patch non applicata",
+                    label: t("workspace.notifications.focusPatch.notAppliedLabel"),
                     status: "error",
-                    message: "Elemento non trovato nella versione corrente. Riseleziona l'elemento nel preview e riprova.",
+                    message: t("workspace.notifications.focusPatch.notApplied"),
                 });
             }
 
@@ -2351,20 +2367,20 @@ export default function WorkspacePage() {
 
             updateNotification(notifId, {
                 label: llm.focusPatchParseError
-                    ? "Errore parsing risposta"
+                    ? t("workspace.notifications.focusPatch.parseResponseLabel")
                     : llm.focusPatchApplied
-                        ? "Focus patch applicata"
+                        ? t("workspace.notifications.focusPatch.appliedLabel")
                         : previewVersionSaved
-                            ? "Nuova versione salvata"
-                            : "Generazione completata",
+                            ? t("workspace.notifications.snapshot.newVersionLabel")
+                            : t("workspace.notifications.llm.doneLabel"),
                 status: llm.focusPatchParseError ? "error" : "done",
                 message: llm.focusPatchParseError
-                    ? "Risposta LLM non interpretabile — cambia modello e riprova."
+                    ? t("workspace.notifications.focusPatch.parseResponseMessage")
                     : llm.focusPatchApplied
-                        ? "Elemento aggiornato — nuova versione attiva."
+                        ? t("workspace.notifications.focusPatch.appliedMessage")
                         : previewVersionSaved
-                            ? "Snapshot salvato e attivato dal backend."
-                            : `Risposta pronta con ${llm.provider} · ${llm.model}`,
+                            ? t("workspace.notifications.snapshot.newVersionMessage")
+                            : t("workspace.notifications.llm.doneMessage", { provider: llm.provider, model: llm.model }),
             });
 
             setThinkingText("");
@@ -2373,7 +2389,7 @@ export default function WorkspacePage() {
             const msg = presentLlmError(err);
             setError(msg);
             updateNotification(notifId, {
-                label: "Generazione fallita",
+                label: t("workspace.notifications.llm.abortedLabel"),
                 status: "error",
                 message: msg,
             });
@@ -2421,9 +2437,9 @@ export default function WorkspacePage() {
         let trackedConversationId: string | null = activeConvId;
         let trackedUserMessageId: string | null = null;
         const notifId = addNotification({
-            label: "Prompt optimization",
+            label: t("workspace.notifications.promptOptimizer.label"),
             status: "running",
-            message: "Analizzo e riscrivo il prompt nel flusso chat…",
+            message: t("workspace.notifications.promptOptimizer.running"),
         });
         const abortController = new AbortController();
         abortControllerRef.current = abortController;
@@ -2451,7 +2467,7 @@ export default function WorkspacePage() {
                         kind: "prompt_optimizer_request",
                         mode: "operational",
                         target: "input",
-                        label: "Prompt originale",
+                        label: t("workspace.notifications.promptOptimizer.inputLabel"),
                         suppressArtifacts: true,
                     },
                 },
@@ -2549,7 +2565,7 @@ export default function WorkspacePage() {
                         kind: "prompt_optimizer",
                         mode: "operational",
                         target: "input",
-                        label: "Optimize prompt",
+                        label: t("workspace.notifications.promptOptimizer.outputLabel"),
                         suppressArtifacts: true,
                     },
                 },
@@ -2587,23 +2603,23 @@ export default function WorkspacePage() {
             updateNotification(notifId, {
                 status: "done",
                 message: result.skipped
-                    ? "Optimizer disattivato per questa configurazione prodotto."
-                    : `Prompt pronto in chat con ${result.provider} · ${result.model}`,
+                    ? t("workspace.notifications.promptOptimizer.skipped")
+                    : t("workspace.notifications.promptOptimizer.done", { provider: result.provider, model: result.model }),
             });
         } catch (err) {
             if (err instanceof Error && err.name === "AbortError") {
-                updateNotification(notifId, { label: "Prompt optimization", status: "error", message: "Ottimizzazione interrotta" });
+                updateNotification(notifId, { label: t("workspace.notifications.promptOptimizer.label"), status: "error", message: t("workspace.notifications.promptOptimizer.aborted") });
                 if (token && trackedConversationId) {
                     try {
                         const interruptedSaved = await addMessage(token, projectId, trackedConversationId, {
                             role: "assistant",
-                            content: "⏹ Ottimizzazione prompt interrotta dall'utente",
+                            content: t("workspace.notifications.promptOptimizer.abortedContent"),
                             metadata: {
                                 operation: {
                                     kind: "prompt_optimizer",
                                     mode: "operational",
                                     target: "input",
-                                    label: "Optimize prompt",
+                                    label: t("workspace.notifications.promptOptimizer.outputLabel"),
                                     suppressArtifacts: true,
                                 },
                             },
@@ -2649,7 +2665,7 @@ export default function WorkspacePage() {
                 }
             }
 
-            updateNotification(notifId, { label: "Prompt optimization", status: "error", message: msg });
+            updateNotification(notifId, { label: t("workspace.notifications.promptOptimizer.label"), status: "error", message: msg });
         } finally {
             abortControllerRef.current = null;
             setThinkingText("");
@@ -2763,7 +2779,7 @@ export default function WorkspacePage() {
         <div className="workspace-outer">
         <WorkspaceHeader
             projectName={projectName}
-            totalCostEur={(activeConv?.totalCost ?? 0) + (promptOpsSummary.totalCost ?? 0)}
+            totalCostEur={promptOpsSummary.totalCost + (projectAiAnalytics?.totals.imageCost ?? 0)}
             onConfigOpen={() => setConfigOpen(true)}
             onDashboard={() => router.push("/dashboard")}
         />
@@ -2838,7 +2854,7 @@ export default function WorkspacePage() {
                     )}
                     {!currentProviderMissingKey && currentProvider && selectedModel && (
                         <p className="mt-2 text-xs text-muted-foreground">
-                            Optimize prompt usa lo stesso provider e modello selezionati per la chat.
+                            Optimize prompt usa <strong className="text-foreground">{selectedProvider} · {selectedModel.split("/").pop()}</strong>
                         </p>
                     )}
                 </div>
@@ -3018,7 +3034,11 @@ export default function WorkspacePage() {
                                 <Button
                                     type="button"
                                     size="sm"
-                                    onClick={() => void handleQuickGenerateMedia()}
+                                    onClick={() => {
+                                        setMediaInspectorSection("gen-image");
+                                        setMediaToolsOpen(true);
+                                        void handleSuggestMedia();
+                                    }}
                                     disabled={generatingMedia || suggestingMedia}
                                 >
                                     {(generatingMedia || suggestingMedia) ? "Elaborazione…" : "Gen image AI"}
@@ -3027,9 +3047,12 @@ export default function WorkspacePage() {
                                     type="button"
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => setMediaToolsOpen(true)}
+                                    onClick={() => {
+                                        setMediaInspectorSection("gallery");
+                                        setMediaToolsOpen(true);
+                                    }}
                                 >
-                                    Avanzate
+                                    Image Gallery
                                 </Button>
                             </div>
                         </div>
@@ -3055,7 +3078,6 @@ export default function WorkspacePage() {
                                     chatPromptPlaceholder={mediaMode === "background"
                                         ? "Use an optional manual prompt or ask for a semantic suggestion for this background…"
                                         : "Use an optional manual prompt or ask for a semantic suggestion for this image…"}
-                                    chatPromptReady={Boolean(prompt.trim() || mediaSuggestion?.suggestedPrompt?.trim())}
                                     assetScope={assetScope}
                                     onAssetScopeChange={setAssetScope}
                                     mediaMode={mediaMode}
@@ -3080,9 +3102,12 @@ export default function WorkspacePage() {
                                     onImageStepsChange={setSelectedImageSteps}
                                     aiAnalytics={projectAiAnalytics}
                                     loadingAiAnalytics={loadingAiAnalytics}
-                                    onGenerate={() => void handleGenerateMedia()}
-                                    onSuggest={() => void handleSuggestMedia()}
-                                    onUseSuggestion={handleUseSuggestedMediaPrompt}
+                                    initialSection={mediaInspectorSection}
+                                    onGenerateWithPrompt={(p) => {
+                                        setPrompt(p);
+                                        void runMediaGeneration(p.slice(0, 2000), { label: t("workspace.notifications.imageGeneration.label") });
+                                        setMediaToolsOpen(false);
+                                    }}
                                     onOpenGallery={() => setConfigOpen(true)}
                                     onApplyAsset={(asset) => void handleApplyAsset(asset)}
                                     onApplyCurrentStyles={handleApplyCurrentStyles}
@@ -3107,7 +3132,11 @@ export default function WorkspacePage() {
                                 disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt || currentProviderMissingKey}
                                 title={selectedModel ? `Usa ${selectedProvider} · ${selectedModel}` : "Usa il provider/modello attivo della chat"}
                             >
-                                {optimizingPrompt ? "Optimizing..." : "Optimize prompt"}
+                                {optimizingPrompt
+                                    ? "Optimizing..."
+                                    : selectedModel
+                                        ? `Optimize · ${selectedModel.split("/").pop()}`
+                                        : "Optimize prompt"}
                             </Button>
                             {promptRestoreValue && (
                                 <Button type="button" variant="outline" onClick={handleRestoreOptimizedPrompt} disabled={sending || optimizingPrompt}>
@@ -3248,7 +3277,7 @@ export default function WorkspacePage() {
                                             setSelectedBackendSnapshotId(id);
                                             setPreviewRefreshing(true);
                                             await loadSnapshots(token);
-                                            addNotification({ label: "Versione attivata", status: "done", message: "Snapshot selezionato come versione attiva." });
+                                            addNotification({ label: t("workspace.notifications.snapshot.activatedLabel"), status: "done", message: t("workspace.notifications.snapshot.activated") });
                                         } catch { /* silent */ }
                                     }}
                                     onDelete={async (id) => {
@@ -3373,7 +3402,7 @@ export default function WorkspacePage() {
 
                     {previewTab !== "preview" && (
                         <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: "0.75rem" }}>
-                            {editorSelectionLabel}
+                            {editorSelectionLabel || t("workspace.selectionNone")}
                         </span>
                     )}
 
@@ -3614,18 +3643,33 @@ export default function WorkspacePage() {
 
                     {artifacts && previewTab === "preview" && (
                         <div style={{ display: "flex", flex: 1, minHeight: 0, gap: 0, position: "relative" }}>
-                        {/* Main preview area with optional viewport width constraint */}
-                        <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                        {/* Viewport-constrained inner frame */}
+                        {/* Main preview area with optional viewport width+height constraint */}
                         <div style={{
-                            width: viewportWidth(previewViewport) ?? "100%",
-                            maxWidth: "100%",
                             flex: 1,
+                            minWidth: 0,
                             minHeight: 0,
                             position: "relative",
                             display: "flex",
                             flexDirection: "column",
-                            transition: "width 0.2s ease",
+                            alignItems: "center",
+                            // for constrained viewports scroll vertically
+                            overflowY: viewportDimensions(previewViewport) ? "auto" : "hidden",
+                            padding: viewportDimensions(previewViewport) ? "16px 0 24px" : 0,
+                        }}>
+                        {/* Viewport-constrained inner frame */}
+                        <div style={{
+                            width: viewportDimensions(previewViewport)?.w ?? "100%",
+                            height: viewportDimensions(previewViewport)?.h,
+                            maxWidth: "100%",
+                            flex: viewportDimensions(previewViewport) ? "none" : 1,
+                            minHeight: viewportDimensions(previewViewport) ? undefined : 0,
+                            position: "relative",
+                            display: "flex",
+                            flexDirection: "column",
+                            transition: "width 0.2s ease, height 0.2s ease",
+                            boxShadow: viewportDimensions(previewViewport) ? "0 8px 40px rgba(0,0,0,0.55), 0 0 0 1px var(--border)" : undefined,
+                            borderRadius: viewportDimensions(previewViewport) ? "var(--radius)" : undefined,
+                            overflow: viewportDimensions(previewViewport) ? "hidden" : undefined,
                         }}>
                         {previewRefreshing && (
                             <div
@@ -3722,8 +3766,8 @@ export default function WorkspacePage() {
                                 title="🖼 Assets"
                                 columns={1}
                                 filters={[
-                                    { key: "img", label: "Immagini", match: (i) => i.mediaType === "image" },
-                                    { key: "bg", label: "Sfondi", match: (i) => i.mediaType === "background" },
+                                    { key: "img", label: t("workspace.editMediaFilters.images"), match: (i) => i.mediaType === "image" },
+                                    { key: "bg", label: t("workspace.editMediaFilters.backgrounds"), match: (i) => i.mediaType === "background" },
                                 ]}
                                 headerActions={
                                     <button

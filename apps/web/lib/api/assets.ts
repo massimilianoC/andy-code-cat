@@ -298,3 +298,13 @@ export function getAssetDownloadUrl(projectId: string, assetId: string): string 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
     return `${baseUrl}/v1/projects/${projectId}/assets/${assetId}/download`;
 }
+
+/** Lists all assets owned by the current user across all projects (user media library). */
+export function listUserMediaLibrary(token: string) {
+    return call<{ assets: ProjectAssetDto[] }>(
+        "GET",
+        "/v1/users/me/media-library",
+        undefined,
+        { Authorization: `Bearer ${token}` }
+    );
+}

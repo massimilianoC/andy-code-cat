@@ -316,6 +316,37 @@ export class LocalFileStorage implements IFileStorage {
         await walk(dir);
         return results;
     }
+
+    // -----------------------------------------------------------------------
+    // Snapshot thumbnails — /data/thumbnails/{projectId}/{snapshotId}.jpg
+    // -----------------------------------------------------------------------
+
+    private thumbnailsRoot(): string {
+        return path.join(dataRoot(), "thumbnails");
+    }
+
+    thumbnailFilePath(projectId: string, snapshotId: string): string {
+        return path.join(this.thumbnailsRoot(), projectId, `${snapshotId}.jpg`);
+    }
+
+    async saveThumbnailFile(projectId: string, snapshotId: string, buffer: Buffer): Promise<string> {
+        const filePath = this.thumbnailFilePath(projectId, snapshotId);
+        await this.ensureDir(path.dirname(filePath));
+        await fs.writeFile(filePath, buffer);
+        return filePath;
+    }
+
+    async getThumbnailStream(storedPath: string): Promise<NodeJS.ReadableStream> {
+        return fsSync.createReadStream(storedPath);
+    }
+
+    async deleteThumbnailFile(storedPath: string): Promise<void> {
+        try {
+            await fs.unlink(storedPath);
+        } catch (err: unknown) {
+            if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        }
+    }
 }
 
 export const localFileStorage = new LocalFileStorage();

@@ -90,6 +90,7 @@ export const llmChatPreviewSchema = z.object({
         js: z.string().max(20000).optional(),
     }).optional(),
     focusContext: llmFocusContextSchema.optional(),
+    conversationId: z.string().min(1).max(120).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({

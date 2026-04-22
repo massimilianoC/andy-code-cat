@@ -172,8 +172,8 @@ export function createProjectAssetRoutes(): Router {
                     label: typeof req.body["label"] === "string" ? req.body["label"] : undefined,
                     scope: req.body["scope"] === "user" ? "user" : "project",
                     useInProject: req.body["useInProject"] === "true" || req.body["useInProject"] === true,
-                    styleRole: (req.body["styleRole"] === "inspiration" || req.body["styleRole"] === "material")
-                        ? req.body["styleRole"] as "inspiration" | "material"
+                    styleRole: (["inspiration", "material", "logo", "background", "icon", "watermark", "reference"] as const).includes(req.body["styleRole"])
+                        ? req.body["styleRole"] as "inspiration" | "material" | "logo" | "background" | "icon" | "watermark" | "reference"
                         : undefined,
                     descriptionText: typeof req.body["descriptionText"] === "string" ? req.body["descriptionText"] : undefined,
                 });

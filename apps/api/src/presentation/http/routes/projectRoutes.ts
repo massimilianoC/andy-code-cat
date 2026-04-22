@@ -10,6 +10,8 @@ import { MongoSessionRepository } from "../../../infra/repositories/MongoSession
 import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
+import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
+import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { DeleteProject } from "../../../application/use-cases/DeleteProject";
 import { DuplicateProject } from "../../../application/use-cases/DuplicateProject";
 import { GetProjectMoodboard } from "../../../application/use-cases/GetProjectMoodboard";
@@ -57,6 +59,8 @@ export function createProjectRoutes(): Router {
     const presetRepository = new MongoProjectPresetRepository();
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
     const siteDeploymentRepository = new MongoSiteDeploymentRepository();
+    const assetRepository = new MongoProjectAssetRepository();
+    const previewSnapshotRepository = new MongoPreviewSnapshotRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
     const deleteProject = new DeleteProject(projectRepository, moodboardRepository);
@@ -71,9 +75,13 @@ export function createProjectRoutes(): Router {
             const userId = req.auth!.userId;
             const projects = await projectRepository.listForUser(userId);
 
-            const [costMap, liveDeployments] = await Promise.all([
+            const projectIds = projects.map((p) => p.id);
+
+            const [costMap, imageGenCostMap, liveDeployments, activeSnapshotMap] = await Promise.all([
                 promptExecutionLogRepository.summarizeCostsByUser(userId),
+                assetRepository.summarizeGenerationCostsByUser(userId),
                 siteDeploymentRepository.findActivesByUserId(userId),
+                previewSnapshotRepository.getActiveForProjects(projectIds),
             ]);
 
             const deploymentByProject = new Map<string, string>();
@@ -83,11 +91,15 @@ export function createProjectRoutes(): Router {
                 }
             }
 
-            const enriched = projects.map((p) => ({
-                ...p,
-                totalCostEur: costMap[p.id] ?? 0,
-                publishedUrl: deploymentByProject.get(p.id) ?? null,
-            }));
+            const enriched = projects.map((p) => {
+                const activeSnap = activeSnapshotMap.get(p.id);
+                return {
+                    ...p,
+                    totalCostEur: (costMap[p.id] ?? 0) + (imageGenCostMap[p.id] ?? 0),
+                    publishedUrl: deploymentByProject.get(p.id) ?? null,
+                    activeThumbnailSnapshotId: activeSnap?.thumbnailPath ? activeSnap.id : undefined,
+                };
+            });
 
             res.json({ projects: enriched });
         } catch (error) {

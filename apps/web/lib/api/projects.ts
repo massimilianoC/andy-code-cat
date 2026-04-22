@@ -10,6 +10,11 @@ export interface Project {
     totalCostEur?: number;
     /** Relative URL of the live published site, e.g. /p/{publishId}. Null if not published. */
     publishedUrl?: string | null;
+    /**
+     * Snapshot ID of the active snapshot that has a ready Puppeteer thumbnail.
+     * Present only after the background job completes. Used to build the thumbnail URL.
+     */
+    activeThumbnailSnapshotId?: string;
 }
 
 export interface PresetOutputSpec {

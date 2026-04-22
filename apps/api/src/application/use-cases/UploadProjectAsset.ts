@@ -39,7 +39,7 @@ export class UploadProjectAsset {
         label?: string;
         scope?: "project" | "user";
         useInProject?: boolean;
-        styleRole?: "inspiration" | "material";
+        styleRole?: "inspiration" | "material" | "logo" | "background" | "icon" | "watermark" | "reference";
         descriptionText?: string;
     }): Promise<ProjectAsset> {
         if (!isAllowedMime(input.mimeType)) {
