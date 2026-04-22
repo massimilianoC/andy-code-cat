@@ -11,6 +11,7 @@ const NAV_LINKS = [
     { href: "/admin/config", label: "Config" },
     { href: "/admin/presets", label: "Template Models" },
     { href: "/admin/governance", label: "Preprompting" },
+    { href: "/admin/zero-effort", label: "Zero Effort" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

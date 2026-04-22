@@ -31,4 +31,13 @@ export interface PreviewSnapshotRepository {
 
     /** Delete a single snapshot. Returns true if deleted, false if not found. */
     deleteById(projectId: string, snapshotId: string): Promise<boolean>;
+
+    /** Persist the stored thumbnail path after the background Puppeteer job completes. */
+    updateThumbnailPath(projectId: string, snapshotId: string, storedPath: string): Promise<void>;
+
+    /**
+     * Return the single active snapshot (with thumbnailPath if present) for each of the
+     * given projectIds. Returned as a Map keyed by projectId.
+     */
+    getActiveForProjects(projectIds: string[]): Promise<Map<string, PreviewSnapshot>>;
 }

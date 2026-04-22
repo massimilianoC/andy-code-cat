@@ -1,7 +1,7 @@
 # LOCAL DEV stack — hot-reload with bind mounts.
 # Use: npm run local:dev:up / local:dev:down
 # See docker-compose.deploy.yml for local prod-test builds.
-name: andy-code-cat-dev
+name: andy-code-cat
 
 services:
   workspace:

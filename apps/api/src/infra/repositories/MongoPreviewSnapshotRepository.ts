@@ -16,6 +16,7 @@ interface PreviewSnapshotDocument {
     artifacts: PreviewSnapshot["artifacts"];
     focusContext?: PreviewSnapshot["focusContext"];
     metadata?: PreviewSnapshot["metadata"];
+    thumbnailPath?: string;
     createdAt: Date;
     activatedAt?: Date;
 }
@@ -152,5 +153,28 @@ export class MongoPreviewSnapshotRepository implements PreviewSnapshotRepository
         const col = await this.col();
         const result = await col.deleteOne({ _id: snapshotId, projectId } as Filter<PreviewSnapshotDocument>);
         return result.deletedCount === 1;
+    }
+
+    async updateThumbnailPath(projectId: string, snapshotId: string, storedPath: string): Promise<void> {
+        const col = await this.col();
+        await col.updateOne(
+            { _id: snapshotId, projectId } as Filter<PreviewSnapshotDocument>,
+            { $set: { thumbnailPath: storedPath } }
+        );
+    }
+
+    async getActiveForProjects(projectIds: string[]): Promise<Map<string, PreviewSnapshot>> {
+        if (projectIds.length === 0) return new Map();
+        const col = await this.col();
+        const docs = await col
+            .find({ projectId: { $in: projectIds }, isActive: true } as Filter<PreviewSnapshotDocument>)
+            .project({ _id: 1, projectId: 1, isActive: 1, thumbnailPath: 1, createdAt: 1, activatedAt: 1, conversationId: 1, sourceMessageId: 1, parentSnapshotId: 1 })
+            .toArray();
+        const map = new Map<string, PreviewSnapshot>();
+        for (const doc of docs) {
+            // Cast — the projection keeps all required fields; artifacts omitted intentionally for perf
+            map.set(doc.projectId, toEntity(doc as unknown as PreviewSnapshotDocument));
+        }
+        return map;
     }
 }

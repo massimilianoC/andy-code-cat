@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, LayoutTemplate, Files, FileImage, Presentation, FormInput, GalleryVertical, RectangleEllipsis, Plus, BarChart3 } from "lucide-react";
+import { Sparkles, LayoutTemplate, Files, FileImage, Presentation, FormInput, GalleryVertical, RectangleEllipsis, Plus, BarChart3, Rocket, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
     listProjects,
@@ -35,6 +35,19 @@ import {
 
 const RECENT_KEY = "pf_recent_projects";
 const MAX_RECENTS = 3;
+const ACCORDION_KEY = "pf_preset_accordion";
+
+function loadAccordionState(): Record<string, boolean> {
+    try {
+        return JSON.parse(localStorage.getItem(ACCORDION_KEY) ?? "{}");
+    } catch {
+        return {};
+    }
+}
+
+function saveAccordionState(state: Record<string, boolean>) {
+    localStorage.setItem(ACCORDION_KEY, JSON.stringify(state));
+}
 
 const PRESET_ICON_MAP = {
     Sparkles,
@@ -73,7 +86,8 @@ export default function DashboardPage() {
     const [creating, setCreating] = useState(false);
     const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>(undefined);
     const [presetCatalog, setPresetCatalog] = useState<ProjectPreset[]>([]);
-    const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>("all");
+    const [accordionOpen, setAccordionOpen] = useState<Record<string, boolean>>({});
+    const [createDestination, setCreateDestination] = useState<"workspace" | "launch">("workspace");
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
     const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
     const [canAccessSuperadmin, setCanAccessSuperadmin] = useState(false);
@@ -88,6 +102,7 @@ export default function DashboardPage() {
         }
         setToken(tok);
         setRecentIds(getRecentIds());
+        setAccordionOpen(loadAccordionState());
         const roles = getRoles();
         setCanAccessSuperadmin(roles.includes("admin") || roles.includes("superadmin"));
         setPasswordChangeRequiredState(isPasswordChangeRequired());
@@ -127,7 +142,7 @@ export default function DashboardPage() {
             setCreateOpen(false);
             pushRecentId(res.project.id);
             setRecentIds(getRecentIds());
-            router.push(`/workspace/${res.project.id}`);
+            router.push(createDestination === "launch" ? `/launch/${res.project.id}` : `/workspace/${res.project.id}`);
         } catch {
             showToast(t("dashboard.toast.loadError"), false);
         } finally {
@@ -182,6 +197,14 @@ export default function DashboardPage() {
         }
     }
 
+    function toggleAccordion(key: string) {
+        setAccordionOpen((prev) => {
+            const next = { ...prev, [key]: !prev[key] };
+            saveAccordionState(next);
+            return next;
+        });
+    }
+
     function handleLogout() {
         clearSession();
         router.replace("/login");
@@ -220,14 +243,10 @@ export default function DashboardPage() {
     }
     const presetCategories = [...seenCategories.values()];
 
-    const filteredPresets = presetCategoryFilter === "all"
-        ? activePresets
-        : activePresets.filter((preset) => (preset.category ?? "custom") === presetCategoryFilter);
-
     const groupedPresets = presetCategories
         .map((category) => ({
             ...category,
-            presets: filteredPresets.filter((preset) => (preset.category ?? "custom") === category.key),
+            presets: activePresets.filter((preset) => (preset.category ?? "custom") === category.key),
         }))
         .filter((group) => group.presets.length > 0);
 
@@ -252,7 +271,26 @@ export default function DashboardPage() {
                     {canAccessSuperadmin ? (
                         <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>Superadmin</Button>
                     ) : null}
-                    <Button size="sm" className="gap-1" onClick={() => setCreateOpen(true)}>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => {
+                            setCreateDestination("launch");
+                            setCreateOpen(true);
+                        }}
+                    >
+                        <Rocket className="h-3.5 w-3.5" />
+                        Zero Effort
+                    </Button>
+                    <Button
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => {
+                            setCreateDestination("workspace");
+                            setCreateOpen(true);
+                        }}
+                    >
                         <Plus className="h-3.5 w-3.5" />
                         {t("dashboard.newProject")}
                     </Button>
@@ -285,37 +323,11 @@ export default function DashboardPage() {
                 </section>
 
                 {/* Preset section */}
-                <section className="mb-16 space-y-5">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                        <div>
-                            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                {t("dashboard.presets.title")}
-                            </h2>
-                            <p className="text-sm text-muted-foreground mt-1">
-                                Libreria ordinata per categoria, con preset vuoto e modello consigliato quando disponibile.
-                            </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant={presetCategoryFilter === "all" ? "default" : "outline"}
-                                onClick={() => setPresetCategoryFilter("all")}
-                            >
-                                Tutti
-                            </Button>
-                            {presetCategories.map((category) => (
-                                <Button
-                                    key={category.key}
-                                    type="button"
-                                    size="sm"
-                                    variant={presetCategoryFilter === category.key ? "default" : "outline"}
-                                    onClick={() => setPresetCategoryFilter(category.key)}
-                                >
-                                    {category.label}
-                                </Button>
-                            ))}
-                        </div>
+                <section className="mb-16 space-y-4">
+                    <div>
+                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            {t("dashboard.presets.title")}
+                        </h2>
                     </div>
 
                     {blankPreset ? (
@@ -336,50 +348,69 @@ export default function DashboardPage() {
                         </Button>
                     ) : null}
 
-                    <div className="space-y-6">
-                        {groupedPresets.map((group) => (
-                            <div key={group.key} className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                    <h3 className="text-sm font-semibold text-foreground">{group.label}</h3>
-                                    {group.hint ? <span className="text-xs text-muted-foreground">{group.hint}</span> : null}
+                    <div className="space-y-2">
+                        {groupedPresets.map((group) => {
+                            const isOpen = !!accordionOpen[group.key];
+                            return (
+                                <div key={group.key} className="border border-border rounded-lg overflow-hidden">
+                                    {/* Accordion header */}
+                                    <button
+                                        type="button"
+                                        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                                        onClick={() => toggleAccordion(group.key)}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-sm font-semibold text-foreground">{group.label}</h3>
+                                            {group.hint ? <span className="text-xs text-muted-foreground">{group.hint}</span> : null}
+                                            <span className="text-xs text-muted-foreground/60">({group.presets.length})</span>
+                                        </div>
+                                        <ChevronDown
+                                            className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                                        />
+                                    </button>
+                                    {/* Accordion body */}
+                                    {isOpen && (
+                                        <div className="px-4 pb-4 pt-1">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                                {group.presets.map((preset) => {
+                                                    const Icon = PRESET_ICON_MAP[preset.icon as keyof typeof PRESET_ICON_MAP] ?? Sparkles;
+                                                    return (
+                                                        <Button
+                                                            key={preset.id}
+                                                            variant="outline"
+                                                            className="h-auto min-h-24 p-4 flex flex-col items-start justify-start gap-2 text-left"
+                                                            onClick={() => handleCreateFromPreset(preset.id, preset.labelIt || preset.label)}
+                                                        >
+                                                            <div className="flex items-start justify-between w-full gap-2">
+                                                                <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                                                    <Icon className="h-4 w-4 text-primary" />
+                                                                </div>
+                                                                {preset.recommendedModel?.label ? (
+                                                                    <Badge variant="secondary" className="text-[10px] leading-tight">
+                                                                        {preset.recommendedModel.label}
+                                                                    </Badge>
+                                                                ) : null}
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-sm font-semibold text-foreground leading-tight">{preset.labelIt || preset.label}</div>
+                                                                <div className="text-xs text-muted-foreground mt-1 leading-snug line-clamp-2">{preset.hint}</div>
+                                                            </div>
+                                                            {preset.tags?.length ? (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {preset.tags.slice(0, 3).map((tag) => (
+                                                                        <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0">{tag}</Badge>
+                                                                    ))}
+                                                                </div>
+                                                            ) : null}
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
-                                    {group.presets.map((preset) => {
-                                        const Icon = PRESET_ICON_MAP[preset.icon as keyof typeof PRESET_ICON_MAP] ?? Sparkles;
-                                        return (
-                                            <Button
-                                                key={preset.id}
-                                                variant="outline"
-                                                className="h-auto min-h-20 p-3 flex flex-col items-start justify-start gap-2 text-left"
-                                                onClick={() => handleCreateFromPreset(preset.id, preset.labelIt || preset.label)}
-                                            >
-                                                <div className="flex items-start justify-between w-full gap-2">
-                                                    <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                                                        <Icon className="h-3.5 w-3.5 text-primary" />
-                                                    </div>
-                                                    {preset.recommendedModel?.label ? (
-                                                        <Badge variant="secondary" className="text-[9px] leading-tight">
-                                                            {preset.recommendedModel.label}
-                                                        </Badge>
-                                                    ) : null}
-                                                </div>
-                                                <div>
-                                                    <div className="text-xs font-semibold text-foreground leading-tight">{preset.labelIt || preset.label}</div>
-                                                    <div className="text-[10px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{preset.hint}</div>
-                                                </div>
-                                                {preset.tags?.length ? (
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {preset.tags.slice(0, 2).map((tag) => (
-                                                            <Badge key={tag} variant="outline" className="text-[9px] px-1 py-0">{tag}</Badge>
-                                                        ))}
-                                                    </div>
-                                                ) : null}
-                                            </Button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </section>
 
@@ -424,7 +455,13 @@ export default function DashboardPage() {
             </footer>
 
             {/* Create project modal */}
-            <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setSelectedPresetId(undefined); }}>
+            <Dialog open={createOpen} onOpenChange={(open) => {
+                setCreateOpen(open);
+                if (!open) {
+                    setSelectedPresetId(undefined);
+                    setCreateDestination("workspace");
+                }
+            }}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>{t("dashboard.modal.title")}</DialogTitle>
@@ -448,7 +485,10 @@ export default function DashboardPage() {
                             <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
                                 {t("dashboard.modal.cancel")}
                             </Button>
-                            <Button type="submit" disabled={creating}>
+                            <Button type="submit" variant="outline" disabled={creating} onClick={() => setCreateDestination("launch")}>
+                                {creating ? t("dashboard.modal.creating") : "Start Zero Effort"}
+                            </Button>
+                            <Button type="submit" disabled={creating} onClick={() => setCreateDestination("workspace")}>
                                 {creating ? t("dashboard.modal.creating") : t("dashboard.modal.create")}
                             </Button>
                         </DialogFooter>

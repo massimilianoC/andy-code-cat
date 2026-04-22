@@ -48,6 +48,22 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 1800,
         systemTemplate: "",
     },
+    zero_effort_optimize: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.7,
+        maxCompletionTokens: 1200,
+        systemTemplate: "",
+    },
+    zero_effort_generate: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 14000,
+        systemTemplate: "",
+    },
 };
 
 export interface ProductInjectionConfig {

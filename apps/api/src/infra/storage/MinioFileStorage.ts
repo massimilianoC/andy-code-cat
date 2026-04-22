@@ -68,7 +68,11 @@ export class MinioFileStorage implements IFileStorage {
                 if (!exists) {
                     await this.client.makeBucket(this.bucket, env.MINIO_REGION);
                 }
-            })();
+            })().catch((err) => {
+                // Reset so the next call retries instead of re-awaiting a stale rejection.
+                this.bucketReady = undefined;
+                throw err;
+            });
         }
         await this.bucketReady;
     }
@@ -246,5 +250,41 @@ export class MinioFileStorage implements IFileStorage {
         await this.ensureBucketReady();
         const stat = await this.client.statObject(bucket, key);
         return stat.size;
+    }
+
+    // -----------------------------------------------------------------------
+    // Snapshot thumbnails — stored in MinIO under thumbnails/{projectId}/{snapshotId}.jpg
+    // -----------------------------------------------------------------------
+
+    thumbnailFilePath(projectId: string, snapshotId: string): string {
+        return this.virtualUri(this.keyFor("thumbnails", projectId, `${snapshotId}.jpg`));
+    }
+
+    async saveThumbnailFile(projectId: string, snapshotId: string, buffer: Buffer): Promise<string> {
+        await this.ensureBucketReady();
+        const key = this.keyFor("thumbnails", projectId, `${snapshotId}.jpg`);
+        await this.client.putObject(this.bucket, key, buffer, buffer.byteLength, { "Content-Type": "image/jpeg" });
+        return this.virtualUri(key);
+    }
+
+    async getThumbnailStream(storedPath: string): Promise<NodeJS.ReadableStream> {
+        if (!isVirtualMinioPath(storedPath)) {
+            return this.fallback.getThumbnailStream(storedPath);
+        }
+        const { bucket, key } = this.parseVirtualPath(storedPath);
+        await this.ensureBucketReady();
+        return this.client.getObject(bucket, key);
+    }
+
+    async deleteThumbnailFile(storedPath: string): Promise<void> {
+        if (!isVirtualMinioPath(storedPath)) {
+            return this.fallback.deleteThumbnailFile(storedPath);
+        }
+        const { bucket, key } = this.parseVirtualPath(storedPath);
+        try {
+            await this.client.removeObject(bucket, key);
+        } catch {
+            // idempotent
+        }
     }
 }

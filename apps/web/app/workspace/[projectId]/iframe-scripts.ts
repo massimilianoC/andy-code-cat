@@ -1,4 +1,4 @@
-﻿// Minified scripts injected into preview iframes by workspace page.
+// Minified scripts injected into preview iframes by workspace page.
 // Do not edit inline — these are separate from the React component tree.
 
 // ─── Inspect infrastructure ──────────────────────────────────────────────────

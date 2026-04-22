@@ -266,5 +266,233 @@
         "running_other": "{{count}} in corso",
         "completed_one": "{{count}} completato",
         "completed_other": "{{count}} completati"
+    },
+    "launch": {
+        "badge": "Zero Effort",
+        "title": "Generazione guidata",
+        "subtitle": "{{name}} · Compila i 3 step e rivedi il brief prima di avviare.",
+        "project": "Il tuo progetto",
+        "steps": {
+            "1": { "title": "Descrizione", "subtitle": "Brand, tipo sito e obiettivo principale" },
+            "2": { "title": "Target & Dati", "subtitle": "Audience, contatti e info salienti" },
+            "3": { "title": "Stile visivo", "subtitle": "Attributi estetici, tono e CTA" }
+        },
+        "step1": {
+            "businessName": "Nome brand o azienda",
+            "businessNamePlaceholder": "es. Acme Studio",
+            "siteType": "Tipo sito",
+            "goal": "Descrizione e obiettivo principale",
+            "goalHint": "Descrivi liberamente il progetto. Puoi usare elenchi puntati (- elemento), grassetto (**testo**) o incollare da Word.",
+            "goalPlaceholder": "es. Acme Studio è un brand di accessori premium.\n- Obiettivo: aumentare le vendite online\n- Pubblico: appassionati tra 25-45 anni\n- Punto di forza: design e qualità",
+            "next": "Avanti"
+        },
+        "step2": {
+            "audience": "Audience e target",
+            "audienceHint": "Chi sono i destinatari? Descrivi età, interessi, bisogni, lingua.",
+            "audiencePlaceholder": "es. Appassionati tra 25-45 anni, italiani ed europei, amanti del design e della qualità",
+            "contacts": "Informazioni di contatto e dati salienti",
+            "contactsHint": "Email, telefono, indirizzo, social — dati che devono apparire nel sito.",
+            "add": "Aggiungi",
+            "noData": "Nessun dato aggiunto.",
+            "keyPlaceholder": "Email",
+            "back": "Indietro",
+            "next": "Avanti"
+        },
+        "step3": {
+            "visualAttributes": "Attributi visivi",
+            "visualHint": "Seleziona uno o più stili che caratterizzano il progetto.",
+            "tone": "Tono di voce",
+            "tonePlaceholder": "es. chiaro e moderno",
+            "cta": "CTA principale",
+            "ctaPlaceholder": "es. Acquista ora, Scopri di più",
+            "styleNotes": "Note stilistiche aggiuntive",
+            "styleNotesPlaceholder": "es. frame in alluminio, colori brand",
+            "back": "Indietro",
+            "generate": "Genera brief",
+            "generating": "Generazione brief..."
+        },
+        "step4": {
+            "title": "Step 4 — Revisione brief",
+            "subtitle": "Il brief è pronto. Modificalo se vuoi, poi avvia la sessione.",
+            "prepared": "Preparato con successo",
+            "briefLabel": "Brief generato — modificabile (Markdown)",
+            "backToDashboard": "Torna alla dashboard",
+            "continueInWorkspace": "Continua nel workspace"
+        },
+        "loadError": "Impossibile caricare il progetto.",
+        "submitError": "Impossibile preparare il flusso di lancio."
+    },
+    "config": {
+        "title": "Configurazione Progetto",
+        "loading": "Caricamento…",
+        "projectName": "Nome progetto",
+        "projectNamePlaceholder": "Nome progetto…",
+        "brief": "Brief di progetto",
+        "briefPlaceholder": "Descrivi il progetto e le sue caratteristiche principali…",
+        "briefGuide": "Guida al brief",
+        "styleNotes": "Note di stile",
+        "styleNotesPlaceholder": "Vincoli o preferenze di stile specifiche…",
+        "inheritUser": "Eredita preferenze utente (fallback)",
+        "presetActive": "Preset attivo — brief e tag pre-compilati.",
+        "media": {
+            "title": "Media di progetto",
+            "empty": "Nessun media in libreria.",
+            "emptyHint": "Carica immagini, PDF o link per costruire la libreria del progetto.",
+            "upload": "Carica file",
+            "uploading": "Caricamento…",
+            "addUrl": "Aggiungi URL",
+            "urlPlaceholder": "https://…",
+            "labelPlaceholder": "Etichetta (opzionale)",
+            "add": "Aggiungi",
+            "cancel": "Annulla",
+            "useInProject": "Usa nel progetto",
+            "excludeFromProject": "Escludi dal progetto",
+            "inUse": "in uso",
+            "use": "usa",
+            "deleteAsset": "Elimina asset",
+            "advancedOptions": "Opzioni avanzate",
+            "styleRole": "Ruolo stile…",
+            "descriptionPlaceholder": "Descrizione…",
+            "confirmDelete": "Eliminare \"{{name}}\"?",
+            "uploadError": "Errore durante il caricamento."
+        },
+        "tagCategories": {
+            "era": "Era / Movimento",
+            "visual": "Stile visivo",
+            "palette": "Palette",
+            "typography": "Tipografia",
+            "layout": "Layout",
+            "tone": "Tono",
+            "audience": "Audience / Target",
+            "feature": "Funzionalità richieste",
+            "sector": "Settore / Ambito",
+            "reference": "Riferimenti"
+        },
+        "cancel": "Annulla",
+        "save": "Salva",
+        "saving": "Salvataggio…"
+    },
+    "workspace": {
+        "selectionNone": "Nessuna selezione",
+        "notifications": {
+            "export": {
+                "label": "Export ZIP (con screenshot)",
+                "running": "Cattura screenshot + archivio in corso…",
+                "downloading": "Download ZIP…",
+                "done": "ZIP scaricato",
+                "sessionExpired": "Sessione scaduta",
+                "error": "Errore export"
+            },
+            "capture": {
+                "label": "Cattura screenshot {{format}}",
+                "running": "Rendering pagina in corso…",
+                "done": "File scaricato",
+                "sessionExpired": "Sessione scaduta",
+                "error": "Errore cattura"
+            },
+            "publish": {
+                "label": "Pubblicazione",
+                "running": "Pubblicazione in corso…",
+                "done": "Pubblicato!",
+                "doneVersioned": "Pubblicato! (v{{vn}} attiva)",
+                "sessionExpired": "Sessione scaduta",
+                "error": "Errore pubblicazione"
+            },
+            "media": {
+                "done": "Media applicato",
+                "doneSaved": "Media applicato e salvato",
+                "doneMessage": "{{name}} collegato all'elemento selezionato.",
+                "doneSavedMessage": "{{name}} collegato all'elemento selezionato e salvato come nuova versione.",
+                "error": "Impossibile caricare l'asset selezionato",
+                "errorLabel": "Errore media",
+                "notApplicable": "Seleziona un'immagine o un URL immagine valido.",
+                "notApplicableLabel": "Asset non applicabile",
+                "noActive": "Seleziona prima un'immagine o genera un nuovo asset.",
+                "noActiveLabel": "Nessuna media attiva"
+            },
+            "style": {
+                "done": "Stile applicato",
+                "doneSaved": "Stile applicato e salvato",
+                "doneMessage": "Fit, repeat, opacity e filter sono stati aggiornati nella preview.",
+                "doneSavedMessage": "Fit, repeat, opacity e filter sono stati aggiornati e salvati come nuova versione."
+            },
+            "imageSuggestion": {
+                "label": "Suggerimento immagine",
+                "running": "Sto analizzando il contesto della sezione…",
+                "done": "Suggerimento pronto",
+                "failed": "Suggerimento fallito",
+                "error": "Impossibile generare un suggerimento immagine"
+            },
+            "prompt": {
+                "updated": "Prompt aggiornato",
+                "updatedMessage": "Il suggerimento è stato copiato nel prompt principale.",
+                "missing": "Scrivi un prompt oppure usa prima il suggerimento immagine.",
+                "missingLabel": "Prompt mancante"
+            },
+            "imageGeneration": {
+                "label": "Generazione immagine",
+                "running": "Invio richiesta al provider…",
+                "started": "Generazione avviata",
+                "done": "Immagine pronta",
+                "doneSaved": "Immagine pronta e salvata",
+                "doneMessage": "{{name}} è stata aggiornata nella preview.",
+                "doneSavedMessage": "{{name}} ha sostituito il placeholder ed è stata salvata come nuova versione.",
+                "failed": "Generazione fallita",
+                "failedMessage": "{{error}} Il placeholder resta nella working view corrente.",
+                "error": "Errore durante la generazione dell'immagine",
+                "stillRunning": "Generazione ancora in corso",
+                "stillRunningMessage": "Il provider sta ancora completando il render. L'asset rimane in coda ma il flusso non è bloccato.",
+                "autoLabel": "Gen image AI",
+                "autoRunning": "Analizzo il contesto semantico della pagina…",
+                "autoBrief": "Brief pronto. Avvio la generazione automatica…",
+                "autoError": "Impossibile avviare la generazione automatica dell'immagine"
+            },
+            "conversation": {
+                "loadError": "Errore caricamento conversazione"
+            },
+            "snapshot": {
+                "savedLabel": "Versione salvata dall'editor",
+                "saved": "Snapshot attivato.",
+                "editSavedLabel": "Versione EDIT salvata",
+                "editSaved": "Modifiche manuali versionate.",
+                "activatedLabel": "Versione attivata",
+                "activated": "Snapshot selezionato come versione attiva.",
+                "newVersionLabel": "Nuova versione salvata",
+                "newVersionMessage": "Snapshot salvato e attivato dal backend."
+            },
+            "llm": {
+                "errorLabel": "Errore LLM",
+                "doneLabel": "Generazione completata",
+                "doneMessage": "Risposta pronta con {{provider}} · {{model}}",
+                "abortedLabel": "Generazione interrotta",
+                "aborted": "Elaborazione annullata dall'utente."
+            },
+            "focusPatch": {
+                "parseErrorLabel": "Errore di parsing focus patch",
+                "parseError": "Il modello ha prodotto JSON non interpretabile. Prova a cambiare modello e ripetere la richiesta.",
+                "parseResponseLabel": "Errore parsing risposta",
+                "parseResponseMessage": "Risposta LLM non interpretabile — cambia modello e riprova.",
+                "notAppliedLabel": "Focus patch non applicata",
+                "notApplied": "Elemento non trovato nella versione corrente. Riseleziona l'elemento nel preview e riprova.",
+                "appliedLabel": "Focus patch applicata",
+                "appliedMessage": "Elemento aggiornato — nuova versione attiva.",
+                "limitedLabel": "Inspect limitato",
+                "limited": "La selezione non era valida per la focus patch. Continuo con il contesto completo del progetto."
+            },
+            "promptOptimizer": {
+                "label": "Prompt optimization",
+                "running": "Analizzo e riscrivo il prompt nel flusso chat…",
+                "inputLabel": "Prompt originale",
+                "outputLabel": "Optimize prompt",
+                "done": "Prompt pronto in chat con {{provider}} · {{model}}",
+                "skipped": "Optimizer disattivato per questa configurazione prodotto.",
+                "aborted": "Ottimizzazione interrotta",
+                "abortedContent": "⏹ Ottimizzazione prompt interrotta dall'utente"
+            }
+        },
+        "editMediaFilters": {
+            "images": "Immagini",
+            "backgrounds": "Sfondi"
+        }
     }
 }

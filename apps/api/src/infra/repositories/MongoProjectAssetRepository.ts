@@ -161,6 +161,15 @@ export class MongoProjectAssetRepository implements ProjectAssetRepository {
         return docs.map(toEntity);
     }
 
+    async listByUser(userId: string): Promise<ProjectAsset[]> {
+        const col = await this.col();
+        const docs = await col
+            .find({ userId })
+            .sort({ createdAt: -1 })
+            .toArray();
+        return docs.map(toEntity);
+    }
+
     async findById(id: string, projectId: string, userId: string): Promise<ProjectAsset | null> {
         const col = await this.col();
         const doc = await col.findOne(buildAccessibleAssetFilter(projectId, userId, id));
@@ -193,6 +202,19 @@ export class MongoProjectAssetRepository implements ProjectAssetRepository {
 
     async summarizeGenerationByProject(projectId: string, userId: string): Promise<AssetGenerationUsageSummary> {
         return this.summarizeGeneration({ projectId, userId });
+    }
+
+    async summarizeGenerationCostsByUser(userId: string): Promise<Record<string, number>> {
+        const col = await this.col();
+        const rows = await col.aggregate<{ _id: string; totalCost: number }>([
+            { $match: { userId, generationMetadata: { $exists: true } } },
+            { $group: { _id: "$projectId", totalCost: { $sum: { $ifNull: ["$generationMetadata.cost.amount", 0] } } } },
+        ]).toArray();
+        const result: Record<string, number> = {};
+        for (const row of rows) {
+            result[row._id] = row.totalCost;
+        }
+        return result;
     }
 
     async listRecentGeneratedByProject(projectId: string, userId: string, limit = 8): Promise<ProjectAsset[]> {

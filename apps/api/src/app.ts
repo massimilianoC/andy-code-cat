@@ -19,6 +19,7 @@ import { createUserProfileRoutes } from "./presentation/http/routes/userProfileR
 import { createPresetRoutes } from "./presentation/http/routes/presetRoutes";
 import { errorHandler } from "./presentation/http/middlewares/errorHandler";
 import { createAdminRoutes } from "./presentation/http/routes/adminRoutes";
+import { createPipelineRoutes } from "./presentation/http/routes/pipelineRoutes";
 
 export function createApp() {
     const app = express();
@@ -65,6 +66,7 @@ export function createApp() {
     app.use("/v1", createProjectAssetRoutes());
     app.use("/v1", createExportRoutes());
     app.use("/v1", createGenerationWorkspaceRoutes());
+    app.use("/v1", createPipelineRoutes());
     app.use("/v1", createWysiwygRoutes());
     app.use("/v1", createExecutionLogRoutes());
 

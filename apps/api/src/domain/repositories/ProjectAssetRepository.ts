@@ -23,6 +23,9 @@ export interface ProjectAssetRepository {
 
     listByProject(projectId: string, userId: string, source?: AssetSource): Promise<ProjectAsset[]>;
 
+    /** All assets owned by the user across all projects (for the user media library). */
+    listByUser(userId: string): Promise<ProjectAsset[]>;
+
     findById(id: string, projectId: string, userId: string): Promise<ProjectAsset | null>;
 
     delete(id: string, projectId: string, userId: string): Promise<boolean>;
@@ -33,6 +36,9 @@ export interface ProjectAssetRepository {
     countByProject(projectId: string, userId: string): Promise<number>;
 
     summarizeGenerationByProject(projectId: string, userId: string): Promise<AssetGenerationUsageSummary>;
+
+    /** Returns a map of projectId -> total image generation cost (EUR) for all assets of a user. */
+    summarizeGenerationCostsByUser(userId: string): Promise<Record<string, number>>;
 
     listRecentGeneratedByProject(projectId: string, userId: string, limit?: number): Promise<ProjectAsset[]>;
 
