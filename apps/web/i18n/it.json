@@ -148,29 +148,45 @@
         "fabLabel": "Apri consigli e novità",
         "markRead": "Segna come letto",
         "items": {
-            "onboarding": {
+            "style_profile": {
                 "title": "Completa il profilo stile",
-                "body": "Seleziona i tuoi tag di stile nell'onboarding per personalizzare le generazioni AI."
+                "body": "Seleziona i tag di stile nell'onboarding per ottenere generazioni AI coerenti con la tua identità visiva."
             },
             "duplicate": {
-                "title": "Duplica e sperimenta",
-                "body": "Usa 'Duplica' dal menu di un progetto per conservare una copia prima di modificarlo."
+                "title": "Duplica prima di sperimentare",
+                "body": "Usa 'Duplica' dal menu progetto per conservare una copia sicura prima di grandi modifiche."
             },
-            "prompt": {
-                "title": "Copia il prompt iniziale",
-                "body": "Usa 'Copia prompt' per riutilizzare il sistema di istruzioni in nuovi progetti."
+            "prompt_reuse": {
+                "title": "Riutilizza i tuoi prompt migliori",
+                "body": "Usa 'Copia prompt' per trasferire il tuo sistema di istruzioni in un nuovo progetto senza riscriverlo."
+            },
+            "iterative": {
+                "title": "Descrivi le modifiche in modo naturale",
+                "body": "Dì all'AI cosa cambiare: 'Rendilo più minimal', 'Aggiungi una CTA', 'Usa colori più caldi'. Nessun codice necessario."
+            },
+            "workspace_isolation": {
+                "title": "Organizza i progetti per workspace",
+                "body": "Crea workspace separati per ogni cliente o brand per mantenere prompt e stili isolati."
             },
             "streaming": {
                 "title": "Streaming AI in tempo reale",
-                "body": "Le risposte AI ora appaiono progressivamente mentre vengono generate."
+                "body": "Le risposte appaiono progressivamente mentre vengono generate — niente più attesa per l'output completo."
             },
             "publish": {
-                "title": "Pubblica il tuo sito",
-                "body": "Ora puoi pubblicare il tuo progetto direttamente dall'editor con un click."
+                "title": "Pubblica il tuo sito con un click",
+                "body": "Progetto pronto? Premi 'Pubblica' nell'editor per renderlo live istantaneamente sul tuo sottodominio."
             },
-            "save": {
-                "title": "Scorciatoia: Salva snapshot",
-                "body": "Premi Ctrl+S nell'editor per salvare uno snapshot della versione corrente."
+            "model_choice": {
+                "title": "Scegli il modello AI giusto",
+                "body": "Modelli diversi si adattano a compiti diversi. Usa un modello veloce per iterare e uno più potente per la qualità finale."
+            },
+            "save_snapshot": {
+                "title": "Salva uno snapshot con Ctrl+S",
+                "body": "Premi Ctrl+S nell'editor per salvare uno snapshot a cui puoi tornare in qualsiasi momento."
+            },
+            "rollback": {
+                "title": "Torna a qualsiasi snapshot",
+                "body": "Apri il pannello cronologia per vedere tutti gli snapshot salvati e ripristinare qualsiasi versione precedente del progetto."
             }
         },
         "types": {
@@ -276,9 +292,18 @@
         "subtitle": "{{name}} · Compila i 3 step e rivedi il brief prima di avviare.",
         "project": "Il tuo progetto",
         "steps": {
-            "1": { "title": "Descrizione", "subtitle": "Brand, tipo sito e obiettivo principale" },
-            "2": { "title": "Target & Dati", "subtitle": "Audience, contatti e info salienti" },
-            "3": { "title": "Stile visivo", "subtitle": "Attributi estetici, tono e CTA" }
+            "1": {
+                "title": "Descrizione",
+                "subtitle": "Brand, tipo sito e obiettivo principale"
+            },
+            "2": {
+                "title": "Target & Dati",
+                "subtitle": "Audience, contatti e info salienti"
+            },
+            "3": {
+                "title": "Stile visivo",
+                "subtitle": "Attributi estetici, tono e CTA"
+            }
         },
         "step1": {
             "businessName": "Nome brand o azienda",

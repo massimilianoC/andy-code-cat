@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Bell, CheckCircle2, Loader2, X, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -93,6 +93,20 @@ export function NotificationPanel({ hideTrigger = false }: { hideTrigger?: boole
     const errorCount = orderedNotifications.filter((n) => n.status === "error").length;
     const hasAny = orderedNotifications.length > 0;
 
+    // Animate badge when a new notification is added
+    const [bumped, setBumped] = useState(false);
+    const prevCountRef = useRef(orderedNotifications.length);
+    useEffect(() => {
+        const curr = orderedNotifications.length;
+        if (curr > prevCountRef.current) {
+            setBumped(true);
+            const timer = setTimeout(() => setBumped(false), 450);
+            prevCountRef.current = curr;
+            return () => clearTimeout(timer);
+        }
+        prevCountRef.current = curr;
+    }, [orderedNotifications.length]);
+
     useEffect(() => {
         function onDown(e: MouseEvent) {
             if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
@@ -130,7 +144,13 @@ export function NotificationPanel({ hideTrigger = false }: { hideTrigger?: boole
                                 ? t("notifications.running", { count: runningCount })
                                 : t("notifications.completed", { count: doneCount || orderedNotifications.length })}
                         </span>
-                        <Badge variant={runningCount > 0 ? "accent" : "outline"} className="ml-1">
+                        <Badge
+                            variant={runningCount > 0 ? "accent" : "outline"}
+                            className={cn(
+                                "ml-1 transition-all duration-200",
+                                bumped && "scale-150 ring-2 ring-primary/60"
+                            )}
+                        >
                             {runningCount > 0 ? runningCount : orderedNotifications.length}
                         </Badge>
                     </Button>

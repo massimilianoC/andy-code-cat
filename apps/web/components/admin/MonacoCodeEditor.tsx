@@ -8,8 +8,9 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false 
 interface MonacoCodeEditorProps {
     language: "html" | "javascript" | "typescript" | "json" | "css" | "markdown" | "nginx";
     value: string;
-    onChange: (next: string) => void;
+    onChange?: (next: string) => void;
     height?: string;
+    readOnly?: boolean;
 }
 
 export function MonacoCodeEditor({
@@ -17,6 +18,7 @@ export function MonacoCodeEditor({
     value,
     onChange,
     height = "220px",
+    readOnly = false,
 }: MonacoCodeEditorProps) {
     const options = useMemo(() => ({
         minimap: { enabled: false },
@@ -35,7 +37,9 @@ export function MonacoCodeEditor({
         suggestOnTriggerCharacters: true,
         folding: true,
         smoothScrolling: true,
-    }), []);
+        readOnly,
+        domReadOnly: readOnly,
+    }), [readOnly]);
 
     return (
         <div className="overflow-hidden rounded-md border border-border bg-card">
@@ -44,7 +48,7 @@ export function MonacoCodeEditor({
                 language={language}
                 theme="vs-dark"
                 value={value}
-                onChange={(next) => onChange(next ?? "")}
+                onChange={(next) => onChange?.(next ?? "")}
                 options={options}
             />
         </div>

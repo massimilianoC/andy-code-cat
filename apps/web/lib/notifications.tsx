@@ -61,8 +61,6 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
             ...prev,
             { ...n, id, startedAt: Date.now() },
         ]);
-        // Auto-open panel when a process starts
-        setPanelOpen(true);
         return id;
     }, []);
 

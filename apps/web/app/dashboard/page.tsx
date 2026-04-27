@@ -18,7 +18,7 @@ import {
 import { getToken, clearSession, isPasswordChangeRequired, getRoles } from "../../lib/token-store";
 import { PasswordChangeDialog } from "../../components/PasswordChangeDialog";
 import ProjectCard from "../../components/ProjectCard";
-import { TipsChip } from "../../components/TipsPanel";
+import { TipsFab } from "../../components/TipsPanel";
 import GuideBanner from "../../components/GuideBanner";
 import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
@@ -446,13 +446,15 @@ export default function DashboardPage() {
 
             {/* Footer bar */}
             <footer className="fixed bottom-0 left-0 right-0 z-30 bg-card/90 backdrop-blur-sm border-t border-border h-12 flex items-center px-8 gap-4">
-                <TipsChip />
                 {projects.length > 0 && (
                     <span className="ml-auto text-xs text-muted-foreground">
                         {t("dashboard.footer.count_other", { count: projects.length })}
                     </span>
                 )}
             </footer>
+
+            {/* Tips FAB — rendered outside the footer to avoid backdrop-filter containment */}
+            <TipsFab />
 
             {/* Create project modal */}
             <Dialog open={createOpen} onOpenChange={(open) => {

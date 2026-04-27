@@ -148,29 +148,45 @@
         "fabLabel": "Open tips and news",
         "markRead": "Mark as read",
         "items": {
-            "onboarding": {
+            "style_profile": {
                 "title": "Complete your style profile",
-                "body": "Select your style tags in onboarding to personalize AI generations."
+                "body": "Select style tags in onboarding to get AI generations that match your visual identity."
             },
             "duplicate": {
-                "title": "Duplicate and experiment",
-                "body": "Use 'Duplicate' from the project menu to keep a copy before modifying it."
+                "title": "Duplicate before you experiment",
+                "body": "Use 'Duplicate' from the project menu to keep a safe copy before making big changes."
             },
-            "prompt": {
-                "title": "Copy the initial prompt",
-                "body": "Use 'Copy prompt' to reuse the instruction system in new projects."
+            "prompt_reuse": {
+                "title": "Reuse your best prompts",
+                "body": "Use 'Copy prompt' to transfer your instruction system to a new project without rewriting it."
+            },
+            "iterative": {
+                "title": "Describe changes naturally",
+                "body": "Just tell the AI what to change: 'Make it more minimal', 'Add a CTA', 'Use warmer colors'. No code needed."
+            },
+            "workspace_isolation": {
+                "title": "Organize projects by workspace",
+                "body": "Create separate workspaces for each client or brand to keep prompts and styles isolated."
             },
             "streaming": {
                 "title": "Real-time AI streaming",
-                "body": "AI responses now appear progressively as they are generated."
+                "body": "Responses now appear progressively as they are generated — no more waiting for the full output."
             },
             "publish": {
-                "title": "Publish your site",
-                "body": "You can now publish your project directly from the editor with one click."
+                "title": "Publish your site in one click",
+                "body": "Project ready? Hit 'Publish' in the editor to make it live instantly on your subdomain."
             },
-            "save": {
-                "title": "Shortcut: Save snapshot",
-                "body": "Press Ctrl+S in the editor to save a snapshot of the current version."
+            "model_choice": {
+                "title": "Choose the right AI model",
+                "body": "Different models suit different tasks. Use a faster model for quick iterations and a powerful one for final quality."
+            },
+            "save_snapshot": {
+                "title": "Save a snapshot with Ctrl+S",
+                "body": "Press Ctrl+S in the editor to save a snapshot you can return to at any time."
+            },
+            "rollback": {
+                "title": "Roll back to any snapshot",
+                "body": "Open the history panel to see all saved snapshots and restore any previous version of your project."
             }
         },
         "types": {
@@ -276,9 +292,18 @@
         "subtitle": "{{name}} · Complete 3 steps and review the brief before launching.",
         "project": "Your project",
         "steps": {
-            "1": { "title": "Description", "subtitle": "Brand, site type and main goal" },
-            "2": { "title": "Target & Data", "subtitle": "Audience, contacts and key info" },
-            "3": { "title": "Visual style", "subtitle": "Aesthetics, tone and CTA" }
+            "1": {
+                "title": "Description",
+                "subtitle": "Brand, site type and main goal"
+            },
+            "2": {
+                "title": "Target & Data",
+                "subtitle": "Audience, contacts and key info"
+            },
+            "3": {
+                "title": "Visual style",
+                "subtitle": "Aesthetics, tone and CTA"
+            }
         },
         "step1": {
             "businessName": "Brand or company name",

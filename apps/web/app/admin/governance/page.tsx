@@ -168,15 +168,100 @@ const LAYER_SOURCE_META: Record<LayerSource, { label: string; bg: string; color:
     editable: { label: "✏️ Configurable here", bg: "rgba(99,102,241,0.12)", color: "var(--accent-hover)", border: "1px solid rgba(99,102,241,0.3)" },
 };
 
-function LayerRow({ letter, name, source, description, children, isLast }: {
+/** Static representative content for hardcoded pipeline layers (shown read-only). */
+const HARDCODED_LAYER_CONTENT: Record<string, string> = {
+    A: `You are Andy Code Cat Builder, a specialised AI agent for generating production-ready HTML web pages.
+
+Platform constraints (hardcoded — cannot be overridden by any layer below):
+
+• Produce valid, complete HTML5 — never partial fragments.
+• Never insert placeholder text (lorem ipsum, [YOUR TEXT HERE], TBD, etc.).
+• Never include HTML comments in the rendered output.
+• All <img> elements must carry a descriptive alt attribute.
+• Output is a single self-contained document; inline styles are allowed, external CDN links are not unless the preset explicitly requires them.
+• Do not include <script> tags unless the project type requires interactivity.
+• The MANIFEST.json block must always be emitted in full at the end of the response.`,
+
+    "⚙": `<!-- Runtime-computed — injected at call time, not stored in governance -->
+
+Target output: complete HTML document within token budget.
+Max completion tokens: [resolved from plan limits at runtime]
+
+Guidelines applied:
+• Prioritise content density — reduce the number of sections rather than truncating sections.
+• The MANIFEST.json block must always be emitted in full; never truncate it.
+• If approaching the token limit, omit decorative sections before omitting structural ones.
+• Do not summarise or abbreviate section content to fit the budget — reduce scope instead.`,
+
+    "→": `<!-- Per-call metadata — ephemeral, injected last, never stored -->
+
+request_id:         [uuid generated per request]
+response_format:    structured_html_with_manifest
+strict_mode:        true
+pipeline_version:   [resolved at runtime]
+
+This layer is invisible to end users. It is used internally for request tracing and
+response-format enforcement. Its content changes on every call and is never persisted.`,
+};
+
+/** Descriptive info shown for dynamic (preset / per-project) layers when opened. */
+const DYNAMIC_LAYER_INFO: Record<string, string> = {
+    B: `Preset catalog layer — loaded dynamically at generation time.
+
+Content depends on the active project-type preset (e.g. "landing-page-standard", "portfolio-minimal").
+
+This layer defines:
+  • Output format (section order, semantic markup pattern)
+  • Required sections and their HTML structure
+  • Preset-level content supplements injected into the editorial brief
+
+Edit preset content from: Admin → Presets`,
+
+    C: `Per-project layer — populated at generation time from the project's style profile.
+
+Content includes:
+  • Brand voice and tone directives
+  • Visual identity tokens (colours, typography, spacing scale)
+  • Moodboard descriptions extracted during onboarding or profiling
+
+This layer is unique per project and cannot be configured globally.`,
+
+    D: `Per-project layer — built at generation time from the project brief and preset supplement.
+
+Content includes:
+  • The user's editorial brief (goals, audience, CTA, contact info, style attributes)
+  • Invisible preset-level editorial supplement injected by the preset catalog
+  • Tone and style preferences accumulated during the project session
+
+This layer combines the user-visible brief with a per-preset enrichment layer.`,
+
+    "B′": `Preset catalog layer — loaded dynamically at focused-edit time.
+
+Defines section-level focus rules and coherence constraints for the active preset:
+  • Which sections can be individually targeted by a focused edit
+  • Coherence guards preventing edits from breaking structural invariants
+  • Focus-scope hints passed to the model
+
+Content is managed in the preset catalog and varies per project type.`,
+};
+
+function LayerRow({ letter, name, source, description, children, isLast, initialOpen }: {
     letter: string;
     name: string;
     source: LayerSource;
     description: string;
     children?: ReactNode;
     isLast?: boolean;
+    /** Editable layers default to open so the editor is immediately visible. */
+    initialOpen?: boolean;
 }) {
+    const [isOpen, setIsOpen] = useState(initialOpen ?? false);
     const meta = LAYER_SOURCE_META[source];
+
+    const staticContent = HARDCODED_LAYER_CONTENT[letter];
+    const dynamicInfo = DYNAMIC_LAYER_INFO[letter];
+    const hasBody = children != null || staticContent != null || dynamicInfo != null;
+
     return (
         <div style={{ display: "flex", gap: "14px" }}>
             {/* Left: badge + vertical connector */}
@@ -191,9 +276,19 @@ function LayerRow({ letter, name, source, description, children, isLast }: {
                 </div>
                 {!isLast && <div style={{ width: "2px", flex: 1, minHeight: "20px", background: "var(--border)", marginTop: "2px" }} />}
             </div>
-            {/* Right: content */}
+
+            {/* Right: accordion */}
             <div style={{ flex: 1, minWidth: 0, paddingBottom: isLast ? 0 : "20px" }}>
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                {/* Header — always visible, click to toggle */}
+                <button
+                    type="button"
+                    onClick={() => setIsOpen((o) => !o)}
+                    style={{
+                        display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px",
+                        marginBottom: "4px", background: "none", border: "none", padding: 0,
+                        cursor: hasBody ? "pointer" : "default", textAlign: "left", width: "100%",
+                    }}
+                >
                     <span style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--text)" }}>{name}</span>
                     <span style={{
                         fontSize: "0.6875rem", fontWeight: 500, padding: "2px 7px", borderRadius: "4px",
@@ -201,11 +296,50 @@ function LayerRow({ letter, name, source, description, children, isLast }: {
                     }}>
                         {meta.label}
                     </span>
-                </div>
-                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: children ? "10px" : 0, lineHeight: 1.5 }}>
+                    {hasBody && (
+                        <span style={{ marginLeft: "auto", fontSize: "0.7rem", color: "var(--text-muted)", flexShrink: 0 }}>
+                            {isOpen ? "▾" : "▸"}
+                        </span>
+                    )}
+                </button>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: isOpen ? "10px" : 0, lineHeight: 1.5 }}>
                     {description}
                 </p>
-                {children}
+
+                {/* Accordion body */}
+                {isOpen && (
+                    <div style={{ marginTop: "4px" }}>
+                        {/* Editable layer: writable Monaco */}
+                        {children}
+
+                        {/* Hardcoded layer: read-only Monaco with static content */}
+                        {!children && staticContent != null && (
+                            <MonacoCodeEditor
+                                language="markdown"
+                                value={staticContent}
+                                readOnly
+                                height="160px"
+                            />
+                        )}
+
+                        {/* Dynamic (preset / per-project) layer: info block */}
+                        {!children && staticContent == null && dynamicInfo != null && (
+                            <div style={{
+                                padding: "10px 14px",
+                                borderRadius: "6px",
+                                background: "rgba(100,100,110,0.08)",
+                                border: "1px solid var(--border)",
+                                fontSize: "0.78rem",
+                                color: "var(--text-muted)",
+                                fontFamily: "JetBrains Mono, Fira Code, monospace",
+                                whiteSpace: "pre-wrap",
+                                lineHeight: 1.65,
+                            }}>
+                                {dynamicInfo}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -793,7 +927,7 @@ export default function AdminGovernancePage() {
                                 <LayerRow letter="D" name="Pre-Prompt Template" source="per-project"
                                     description="Project-level editorial brief plus an invisible preset-level supplement. The visible part is edited per-project; the supplement is injected by the preset catalog.">
                                 </LayerRow>
-                                <LayerRow letter="E" name="Governance Injection — Generation" source="editable"
+                                <LayerRow letter="E" name="Governance Injection — Generation" source="editable" initialOpen
                                     description="Platform governance rules injected after the project context. Editable below — applies to all generation calls for this product key. Falls back to the 'default' key if no product-specific override exists.">
                                     <MonacoCodeEditor
                                         language="markdown"
@@ -818,7 +952,7 @@ export default function AdminGovernancePage() {
                                 <LayerRow letter="B′" name="Preset Focus Schema" source="preset"
                                     description="Section-level focus rules and coherence constraints from the preset catalog. Governs which parts of the page a focused edit can target.">
                                 </LayerRow>
-                                <LayerRow letter="E′" name="Governance Injection — Focused Edit" source="editable" isLast
+                                <LayerRow letter="E′" name="Governance Injection — Focused Edit" source="editable" isLast initialOpen
                                     description="Platform governance overlay for targeted section edits. Editable below — applies to all focused-edit calls for this product key.">
                                     <MonacoCodeEditor
                                         language="markdown"
@@ -834,7 +968,7 @@ export default function AdminGovernancePage() {
                                         Review pipeline
                                     </p>
                                 </div>
-                                <LayerRow letter="E″" name="Governance Injection — Review" source="editable" isLast
+                                <LayerRow letter="E″" name="Governance Injection — Review" source="editable" isLast initialOpen
                                     description="Platform governance rules for the content review pass. Editable below — applies to all review calls for this product key.">
                                     <MonacoCodeEditor
                                         language="markdown"

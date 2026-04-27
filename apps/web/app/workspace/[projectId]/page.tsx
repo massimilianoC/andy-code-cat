@@ -62,7 +62,7 @@ import ProjectConfigPopup from "../../../components/ProjectConfigPopup";
 import MediaInspectorPanel from "../../../components/MediaInspectorPanel";
 import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
 import { MediaGrid, type MediaItem } from "@/components/media";
-import { Mic, Settings, Square } from "lucide-react";
+import { ChevronDown, Mic, Settings, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
@@ -823,8 +823,10 @@ export default function WorkspacePage() {
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const thinkingFlowRef = useRef<HTMLDivElement>(null);
+    const draftBoxRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const prevScrollTopRef = useRef(0);
     const [isUserScrolled, setIsUserScrolled] = useState(false);
 
     useEffect(() => {
@@ -934,7 +936,7 @@ export default function WorkspacePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoPromptPending, conversationLoading, selectedModel, sending, token]);
 
-
+    useEffect(() => {
         if (!selectedProvider) return;
         const provider = providersCatalog.find((p) => p.provider === selectedProvider);
         if (!provider) return;
@@ -987,14 +989,22 @@ export default function WorkspacePage() {
         }
     }, [previewTab, token, promptPreview, loadingPromptPreview, loadPromptPreview]);
 
-    // Track user scroll: if near bottom → auto-scroll active, else show "go to bottom" button
+    // Track user scroll direction: only set isUserScrolled = true when scrolling UP,
+    // reset to false when reaching the bottom. This prevents programmatic smooth-scroll
+    // from accidentally toggling isUserScrolled via intermediate scroll events.
     useEffect(() => {
         const el = chatContainerRef.current;
         if (!el) return;
         function onScroll() {
             if (!el) return;
             const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-            setIsUserScrolled(!atBottom);
+            if (atBottom) {
+                setIsUserScrolled(false);
+            } else if (el.scrollTop < prevScrollTopRef.current) {
+                // User intentionally scrolled up
+                setIsUserScrolled(true);
+            }
+            prevScrollTopRef.current = el.scrollTop;
         }
         el.addEventListener("scroll", onScroll, { passive: true });
         return () => el.removeEventListener("scroll", onScroll);
@@ -1017,6 +1027,11 @@ export default function WorkspacePage() {
         if (!thinkingFlowRef.current) return;
         thinkingFlowRef.current.scrollTop = thinkingFlowRef.current.scrollHeight;
     }, [sending, optimizingPrompt, thinkingText]);
+
+    useEffect(() => {
+        if (!draftBoxRef.current || !draftAnswer) return;
+        draftBoxRef.current.scrollTop = draftBoxRef.current.scrollHeight;
+    }, [draftAnswer]);
 
     const loadSnapshots = useCallback(
         async (t: string) => {
@@ -2910,7 +2925,7 @@ export default function WorkspacePage() {
                                 {thinkingText || (activeOperation === "prompt-optimizer" ? t("workspace.ui.stream.thinkingDefault") : t("workspace.ui.stream.thinkingOptimizer"))}
                             </div>
                             {draftAnswer && (
-                                <div className="workspace-draft-box">
+                                <div ref={draftBoxRef} className="workspace-draft-box">
                                     <pre className="workspace-draft-inner">{draftAnswer}</pre>
                                 </div>
                             )}
@@ -2945,7 +2960,7 @@ export default function WorkspacePage() {
                             aria-label={t("workspace.ui.scrollToBottom")}
                             title={t("workspace.ui.scrollToBottomTitle")}
                         >
-                            ↓
+                            <ChevronDown size={16} />
                         </button>
                     )}
                 </div>
