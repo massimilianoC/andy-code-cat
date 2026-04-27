@@ -75,3 +75,45 @@ Claude agents must also respect all architectural constraints already defined in
 - double sandbox enforcement
 - no hardcoded secrets
 - documentation updates when repository structure changes
+
+## Deployment and First-Install
+
+### New deployments — always use `install.sh`
+
+`install.sh` at the repo root is the single entry point for all new deployments.
+
+1. Open `install.sh` and edit the `CONFIGURATION` block at the top:
+   - Set `MODE="local"` or `MODE="domain"`
+   - Set `DOMAIN` and `CERTBOT_EMAIL` (domain mode only)
+   - Set at least one LLM API key (`SILICONFLOW_API_KEY` or `OPENROUTER_API_KEY`)
+2. Run: `bash install.sh`
+
+The script generates `.env.docker`, builds Docker images, starts all containers, and (in domain
+mode) obtains SSL certificates via certbot. It prints the URL at the end.
+
+Do NOT run `install.sh` on an existing deployment — it skips `.env.docker` regeneration if the
+file already exists, but will still rebuild and restart containers.
+
+Full guide: `docs/guides/LOCAL_DOCKER_START.md`
+
+### After install — complete the setup wizard
+
+After `install.sh` completes, the platform is uninitialized (no superadmin account exists).
+
+- **Local:** navigate to `http://localhost/install`
+- **Domain:** navigate to `https://app.DOMAIN/install`
+
+The wizard creates the first superadmin, seeds `PlatformConfig`, and locks permanently.
+The system is considered installed when `existsWithRole("superadmin")` returns true.
+
+Full spec: `docs/specs/FIRST_INSTALL_SETUP_SPEC.md`
+
+### What Claude agents must NOT do
+
+- Do not create superadmin accounts via seed scripts on a production or deploy stack.
+  The `/install` wizard is the only supported path.
+- Do not call `npm run seed` on a deploy stack without explicit operator instruction.
+  `seed.ts` is for dev stacks only (creates a test user + project).
+- Do not modify `.env.docker` after generation by `install.sh` without operator confirmation.
+- Do not run `docker compose up` (dev file) when the running stack is the deploy stack.
+  Use `--no-deps` with the correct compose file to update individual services.

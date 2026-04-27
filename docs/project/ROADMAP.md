@@ -15,6 +15,7 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 | Release | Status | Notes |
 |---|---|---|
 | R0 | ✅ Complete | Core AI loop, auth, WYSIWYG, export, publish, onboarding, i18n, preset catalog |
+| R0.5 | 🔲 Planned | First-install wizard (`/install`), guided server config, superadmin seed, emergency DB promotion docs |
 | R1 | ✅ Functionally delivered | Layered prompting, preset-aware generation, style propagation, provider/model selector, prompt optimization |
 | R2 | 🟡 In progress | Execution log infrastructure and prompt usage summaries exist; dashboarding is still incomplete |
 | R3 | 🟡 Started | Path publish is live and slug/subdomain foundations exist; custom domains and SSL are still pending |
@@ -43,6 +44,37 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 - [x] Prompt optimizer (inline enrichment)
 - [x] i18n foundation (IT/EN)
 - [x] Typed preset catalog (A4, slide, form, infographic...)
+
+---
+
+## R0.5 — First Install & Guided Setup Wizard
+
+**Status: 🔲 Planned — self-hosting readiness milestone.**
+
+The platform currently requires manual env-var configuration and a seed script to bootstrap a
+superadmin account. This is not usable by self-hosters and makes first deployment error-prone.
+
+See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.md) for the full spec.
+
+### Deliverables
+
+- [ ] `GET /v1/install` — detect installed/not-installed state
+- [ ] `POST /v1/install` — create first superadmin + seed `PlatformConfig` singleton
+- [ ] Install-state guard: redirect all routes to `/install` when not installed
+- [ ] Multi-step web wizard at `/install` (4 steps: credentials, server config, storage, review)
+- [ ] Parametric server config collected at wizard: public domain, app name, registration policy, email verification
+- [ ] Optional custom MinIO config (endpoint, bucket, credentials) — advanced step, collapsed by default
+- [ ] Permanent lock after first completion (idempotent: `existsWithRole("superadmin")` check)
+- [ ] Emergency manual promotion documented: `mongosh` commands in `FIRST_INSTALL_SETUP_SPEC.md`
+- [ ] i18n keys for all wizard copy (IT + EN)
+- [ ] Rate-limit on `/v1/install` (5 req/min/IP)
+
+### Why this release exists
+
+- Self-hosting requires a usable first-run experience — env-var-only setup is too fragile
+- The wizard is the natural entry point for the `appName`, `publicDomain`, and registration policy
+  that governance already models in `PlatformConfig` but currently seeds only via the seed script
+- The emergency DB promotion path (mongosh) is documented here for existing deployments and CI
 
 ---
 

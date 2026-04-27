@@ -54,6 +54,7 @@ Read in this order before making changes:
 | [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Testable steps per milestone |
 | [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Production hardening and deployment safety guidance |
 | [docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md](runbooks/BETA_LAUNCH_HARDENING_PLAN.md) | Beta-readiness checklist |
+| [install.sh](../install.sh) | Self-configuring one-file installer — local and domain modes, auto SSL via certbot |
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker workflow for dev and deploy-like stacks |
 | [docs/guides/AGENT_RELEASE_CHECKLIST.md](guides/AGENT_RELEASE_CHECKLIST.md) | Release and branch checklist for agents |
 | [docs/guides/GITFLOW_RELEASE_POLICY.md](guides/GITFLOW_RELEASE_POLICY.md) | Gitflow branch semantics and release policy |
@@ -100,6 +101,7 @@ Read in this order before making changes:
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
 | [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-model platform playbook |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin controls and platform governance |
+| [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](specs/FIRST_INSTALL_SETUP_SPEC.md) | First-install wizard, guided server config, superadmin seed, emergency DB promotion |
 | [docs/specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md](specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md) | Multi-domain deployment implementation plan — R3.1–R3.4, nginx vhost generation, SSL automation, domain admin API/UI |
 
 ---
@@ -109,6 +111,7 @@ Read in this order before making changes:
 | Document | Description |
 |---|---|
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Product-level prompt, injection, and runtime governance model |
+| [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](specs/FIRST_INSTALL_SETUP_SPEC.md) | First-install wizard and initial platform configuration |
 | [docs/governance/PLATFORM_GOVERNANCE_POLICY.md](governance/PLATFORM_GOVERNANCE_POLICY.md) | Governance ownership, approval flow, and audit expectations |
 
 > If you add, move, or retire documentation, update this index in the same change.

@@ -257,13 +257,37 @@ Always implement in testable increments:
 4. session creation with double sandbox.
 5. seed scripts for bootstrap users/projects.
 
-## Seed Requirements
+## First-Install Bootstrap
 
-Provide and maintain a seed script that:
+New deployments require a two-step bootstrap that agents must understand and respect.
 
-- creates a default owner user if missing.
-- creates at least one project for that user.
-- is idempotent.
+### Step 1 — Run `install.sh`
+
+`install.sh` (repo root) is the single entry point for all new deployments:
+
+- User edits the `CONFIGURATION` block at the top (MODE, DOMAIN, API keys).
+- Running `bash install.sh` generates `.env.docker`, builds Docker images, starts all
+  containers, and (in domain mode) obtains SSL certificates via certbot.
+- Do NOT run this script in an existing deployment — it skips `.env.docker` generation if
+  the file already exists but will rebuild and restart containers.
+
+### Step 2 — `/install` setup wizard
+
+After `install.sh` completes, the system is in an **uninitialized** state: no superadmin exists.
+
+- Navigate to `http://localhost/install` (local) or `https://app.DOMAIN/install` (domain).
+- The wizard creates the first superadmin account, seeds `PlatformConfig`, and locks permanently.
+- Detection: `existsWithRole("superadmin")` — if a superadmin exists, the system is installed.
+- `POST /v1/install` is public and idempotent: returns 409 after first completion.
+- Full spec: `docs/specs/FIRST_INSTALL_SETUP_SPEC.md`
+
+### What agents must NOT do
+
+- Do not create superadmin accounts via seed scripts on a production or deploy stack.
+  The wizard is the only supported path.
+- Do not call `npm run seed` on a deploy stack without explicit operator instruction.
+  `seed.ts` is for dev stacks only (creates a test user + project).
+- Do not modify `.env.docker` after generation by `install.sh` without operator confirmation.
 
 ## LLM Provider Configuration — Runtime Only, No Seed Required
 
