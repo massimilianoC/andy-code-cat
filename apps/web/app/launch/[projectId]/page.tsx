@@ -6,7 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import { launchZeroEffort, getZeroEffortConfig, type ZeroEffortLaunchInput, type ZeroEffortPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
-import { optimizePrompt, streamLlmChatPreview, type LlmChatStreamEvent } from "../../../lib/api/llm";
+import { optimizePrompt } from "../../../lib/api/llm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
-    ArrowRight,
     Check,
     ChevronRight,
     FileText,
@@ -26,7 +25,6 @@ import {
     Target,
     Trash2,
     Wand2,
-    Zap,
 } from "lucide-react";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -54,9 +52,7 @@ interface ExtendedForm {
 type GenerationPhase =
     | "review"       // show normalized brief, Avvia Generazione button
     | "optimizing"   // calling optimize API
-    | "optimized"    // show optimized prompt for review, Genera Contenuto button
-    | "generating"   // streaming HTML generation
-    | "done";        // complete, Apri in GodMode
+    | "optimized";   // show optimized prompt — redirect to GodMode to generate
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -425,9 +421,7 @@ function phaseLabel(phase: GenerationPhase): string {
     switch (phase) {
         case "review": return "Pronto per la generazione";
         case "optimizing": return "Ottimizzazione prompt...";
-        case "optimized": return "Prompt ottimizzato — pronto per generare";
-        case "generating": return "Generazione contenuto...";
-        case "done": return "Generazione completata!";
+        case "optimized": return "Prompt ottimizzato — continua in GodMode per generare";
     }
 }
 
@@ -438,7 +432,6 @@ export default function ZeroEffortLaunchPage() {
     const router = useRouter();
     const projectId = params?.projectId ?? "";
     const step4Ref = useRef<HTMLDivElement>(null);
-    const abortRef = useRef<AbortController | null>(null);
 
     const [token, setToken] = useState<string | null>(null);
     const [project, setProject] = useState<Project | null>(null);
@@ -458,8 +451,6 @@ export default function ZeroEffortLaunchPage() {
     const [genError, setGenError] = useState<string | null>(null);
     const [optimizedPrompt, setOptimizedPrompt] = useState("");
     const [editedOptimizedPrompt, setEditedOptimizedPrompt] = useState("");
-    const [genStreamTokens, setGenStreamTokens] = useState(0);
-    const [genDone, setGenDone] = useState(false);
 
     const [form, setForm] = useState<ExtendedForm>({
         businessName: "",
@@ -584,48 +575,11 @@ export default function ZeroEffortLaunchPage() {
         }
     }
 
-    async function handleGenerate() {
-        if (!token || !result) return;
-        setPhase("generating");
-        setGenError(null);
-        setGenStreamTokens(0);
-        setGenDone(false);
-
-        const ctrl = new AbortController();
-        abortRef.current = ctrl;
-
-        const cfg = pipelineConfig?.generate;
-
-        try {
-            await streamLlmChatPreview(
-                token,
-                projectId,
-                {
-                    message: editedOptimizedPrompt || optimizedPrompt,
-                    provider: cfg?.provider ?? "siliconflow",
-                    model: cfg?.model ?? "MiniMaxAI/MiniMax-M2.5",
-                    max_tokens: cfg?.maxCompletionTokens ?? 14000,
-                    pipelineRole: "coding",
-                },
-                (event: LlmChatStreamEvent) => {
-                    if (event.type === "thinking" || event.type === "answer") {
-                        setGenStreamTokens((n) => n + 1);
-                    } else if (event.type === "done") {
-                        setGenDone(true);
-                        setPhase("done");
-                    } else if (event.type === "error") {
-                        setGenError("Errore durante la generazione del contenuto.");
-                        setPhase("optimized");
-                    }
-                },
-                ctrl.signal,
-            );
-        } catch (err) {
-            if ((err as { name?: string }).name !== "AbortError") {
-                setGenError(err instanceof Error ? err.message : "Errore durante la generazione.");
-                setPhase("optimized");
-            }
-        }
+    function handleGoToGodMode() {
+        if (!result) return;
+        const finalPrompt = editedOptimizedPrompt || optimizedPrompt;
+        const url = `/workspace/${projectId}?conv=${result.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`;
+        router.push(url);
     }
 
     if (loading) {
@@ -783,16 +737,16 @@ export default function ZeroEffortLaunchPage() {
                 {result && (
                     <Card ref={step4Ref} className={cn(
                         "border-primary/40 transition-all",
-                        phase === "done" && "border-green-500/40",
+                        phase === "optimized" && "border-primary/60",
                     )}>
                         <CardHeader className="pb-3">
                             <div className="flex items-center gap-3">
                                 <div className={cn(
                                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                                    phase === "done" ? "bg-green-500/20 text-green-400" : "bg-primary/20 text-primary",
+                                    phase === "optimized" ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary",
                                 )}>
-                                    {phase === "done" ? <Check className="h-4 w-4" /> :
-                                     phase === "optimizing" || phase === "generating" ? <Loader2 className="h-4 w-4 animate-spin" /> :
+                                    {phase === "optimizing" ? <Loader2 className="h-4 w-4 animate-spin" /> :
+                                     phase === "optimized" ? <Check className="h-4 w-4" /> :
                                      <Sparkles className="h-4 w-4" />}
                                 </div>
                                 <div className="flex-1">
@@ -801,8 +755,8 @@ export default function ZeroEffortLaunchPage() {
                                         {phaseLabel(phase)}
                                     </CardDescription>
                                 </div>
-                                <Badge variant={phase === "done" ? "success" : "secondary"} className="ml-auto text-xs">
-                                    {phase === "done" ? "Completato" : `${pipelineConfig?.generate?.model ?? "MiniMax-M2.5"}`}
+                                <Badge variant={phase === "optimized" ? "success" : "secondary"} className="ml-auto text-xs">
+                                    {phase === "optimized" ? "Prompt pronto" : `${pipelineConfig?.generate?.model ?? "MiniMax-M2.5"}`}
                                 </Badge>
                             </div>
                         </CardHeader>
@@ -862,7 +816,7 @@ export default function ZeroEffortLaunchPage() {
                             )}
 
                             {/* ── Phase: optimized ── */}
-                            {(phase === "optimized" || phase === "generating") && (
+                            {phase === "optimized" && (
                                 <>
                                     <div className="space-y-1.5">
                                         <div className="flex items-center justify-between">
@@ -891,20 +845,10 @@ export default function ZeroEffortLaunchPage() {
                                                     fontSize: 13,
                                                     padding: { top: 12 },
                                                     scrollBeyondLastLine: false,
-                                                    readOnly: phase === "generating",
                                                 }}
                                             />
                                         </div>
                                     </div>
-
-                                    {phase === "generating" && (
-                                        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
-                                            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-                                            <p className="text-sm text-muted-foreground">
-                                                Generazione in corso — {genStreamTokens} token ricevuti...
-                                            </p>
-                                        </div>
-                                    )}
 
                                     {genError && (
                                         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -912,60 +856,26 @@ export default function ZeroEffortLaunchPage() {
                                         </div>
                                     )}
 
-                                    {phase === "optimized" && (
-                                        <div className="flex items-center justify-between pt-1">
-                                            <p className="text-xs text-muted-foreground">
-                                                {pipelineConfig?.generate
-                                                    ? `${pipelineConfig.generate.provider} · ${pipelineConfig.generate.model} · max ${pipelineConfig.generate.maxCompletionTokens} token`
-                                                    : "siliconflow · MiniMaxAI/MiniMax-M2.5 · max 14000 token"}
-                                            </p>
-                                            <Button onClick={handleGenerate} className="gap-2">
-                                                <Zap className="h-4 w-4" />
-                                                Genera Contenuto
-                                            </Button>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-
-                            {/* ── Phase: done ── */}
-                            {phase === "done" && (
-                                <>
-                                    <div className="rounded-md border border-green-500/30 bg-green-500/10 px-4 py-3">
+                                    <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3">
                                         <div className="flex items-start gap-3">
-                                            <Check className="mt-0.5 h-5 w-5 text-green-400 shrink-0" />
-                                            <div>
-                                                <p className="text-sm font-medium text-foreground">Contenuto generato con successo</p>
-                                                <p className="text-xs text-muted-foreground mt-0.5">
-                                                    Il sito è stato generato e salvato nella conversazione. Aprilo in GodMode per visualizzarlo e modificarlo.
-                                                </p>
-                                            </div>
+                                            <Sparkles className="mt-0.5 h-4 w-4 text-primary shrink-0" />
+                                            <p className="text-xs text-muted-foreground">
+                                                Il prompt è pronto. Clicca <strong className="text-foreground">Continua in GodMode</strong> per generare il sito con salvataggio completo dell&apos;artefatto, preview e strumenti di modifica.
+                                            </p>
                                         </div>
                                     </div>
 
-                                    <div className="space-y-1.5">
-                                        {result.suggestedNextActions.map((item) => (
-                                            <div key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
-                                                <ArrowRight className="mt-0.5 h-4 w-4 text-primary shrink-0" />
-                                                <span>{item}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
+                                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border">
                                         <Badge variant="outline" className="font-mono text-xs">
                                             Conv {result.conversationId.slice(0, 8)}
-                                        </Badge>
-                                        <Badge variant="outline" className="font-mono text-xs">
-                                            Job {result.jobId.slice(0, 8)}
                                         </Badge>
                                         <div className="ml-auto flex gap-2">
                                             <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")}>
                                                 Dashboard
                                             </Button>
-                                            <Button size="sm" onClick={() => router.push(`/workspace/${projectId}?conv=${result.conversationId}`)}>
-                                                <Rocket className="mr-1.5 h-3.5 w-3.5" />
-                                                Apri in GodMode
+                                            <Button size="sm" onClick={handleGoToGodMode} className="gap-2">
+                                                <Rocket className="h-3.5 w-3.5" />
+                                                Continua in GodMode
                                             </Button>
                                         </div>
                                     </div>

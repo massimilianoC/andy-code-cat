@@ -528,6 +528,12 @@ export default function WorkspacePage() {
 
     // ── WYSIWYG EDIT mode state ──────────────────────────────────────────────
     const [editMode, setEditMode] = useState(false);
+    // ── Zero Effort auto-send ─────────────────────────────────────────────────
+    // When redirected from the Zero Effort launch page, autoPrompt is passed as a
+    // search param. We pre-fill the prompt and auto-trigger generation once the
+    // conversation and providers are both ready.
+    const autoPromptFiredRef = useRef(false);
+    const [autoPromptPending, setAutoPromptPending] = useState(false);
     const [editSessionId, setEditSessionId] = useState<string | null>(null);
     const [isSavingEditVersion, setIsSavingEditVersion] = useState(false);
     const editAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -905,7 +911,30 @@ export default function WorkspacePage() {
             .catch(() => undefined);
     }, [token, loadProjectConversation, projectId]);
 
+    // ── Zero Effort auto-send: read param and pre-fill prompt ─────────────────
     useEffect(() => {
+        const rawAutoPrompt = searchParams?.get("autoPrompt");
+        if (!rawAutoPrompt) return;
+        const decoded = decodeURIComponent(rawAutoPrompt);
+        if (!decoded.trim()) return;
+        setPrompt(decoded);
+        setAutoPromptPending(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // run once on mount — searchParams is stable
+
+    // ── Zero Effort auto-send: fire when conversation + providers are ready ───
+    useEffect(() => {
+        if (!autoPromptPending) return;
+        if (autoPromptFiredRef.current) return;
+        if (conversationLoading || !selectedModel || sending || !token) return;
+        autoPromptFiredRef.current = true;
+        setAutoPromptPending(false);
+        // Trigger send with a fake FormEvent — handleSend will read the current prompt state.
+        void handleSend({ preventDefault: () => {} } as React.FormEvent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoPromptPending, conversationLoading, selectedModel, sending, token]);
+
+
         if (!selectedProvider) return;
         const provider = providersCatalog.find((p) => p.provider === selectedProvider);
         if (!provider) return;
