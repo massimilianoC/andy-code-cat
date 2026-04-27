@@ -100,6 +100,7 @@ Read in this order before making changes:
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
 | [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-model platform playbook |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin controls and platform governance |
+| [docs/specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md](specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md) | Multi-domain deployment implementation plan — R3.1–R3.4, nginx vhost generation, SSL automation, domain admin API/UI |
 
 ---
 

@@ -2,7 +2,7 @@
 
 Andy Code Cat is developed in iterative releases. Each release is a shippable, testable increment.
 
-_Last review: 2026-04-15_
+_Last review: 2026-04-27_
 
 ---
 
@@ -34,6 +34,11 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 - [x] Export to static HTML (ZIP download)
 - [x] Path-based publish (/p/{publishId})
 - [x] Per-session cost tracking (EUR, with USD→EUR conversion)
+- [x] Per-project cost aggregation — LLM prompt costs + image generation costs summed in project list API (commit 9c97dea)
+- [x] Project card published URL display — live deployment URL surfaced from API and shown as badge in dashboard (commit 9c97dea)
+- [x] Puppeteer thumbnail screenshots — background job renders active snapshot to JPEG, stored in MinIO/filesystem, streamed back with long-lived cache headers (immutable per snapshotId); ProjectCard displays JPEG → legacy HTML iframe → gradient fallback
+- [x] Zero Effort pipeline — `/v1/pipeline/launch` and `/v1/pipeline/config` endpoints for guided single-step site generation with normalized brief and pre-seeded workspace (commit eff9e9b)
+- [x] Zero Effort auto-send — frontend prompt pre-fill with auto-submit on workspace entry for frictionless launch (commit b4eb3f5)
 - [x] Onboarding wizard (style profiling, tag taxonomy)
 - [x] Prompt optimizer (inline enrichment)
 - [x] i18n foundation (IT/EN)
@@ -65,13 +70,14 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 
 ## R2 — Execution Logging & Observability
 
-**Status: 🟡 Partially implemented and now a near-term priority.**
+**Status: 🟡 Cost data foundation complete; dashboard UI still pending.**
 
 - [x] execution_logs collection (MongoDB TTL 90d)
 - [x] Admin/owner log query endpoint
 - [x] Prompt execution logging and usage summary endpoints
+- [x] Per-project cost aggregation API — LLM prompt costs + image generation costs summed and exposed in `GET /v1/projects` (foundation for cost dashboard)
 - [ ] Full per-operation log coverage for every export/publish/UI workflow
-- [ ] Dedicated cost dashboard per project
+- [ ] Dedicated cost dashboard UI per project (data is now fully available from the API)
 
 **Notes**
 
@@ -130,7 +136,7 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 
 ---
 
-## Product Direction Lock — 2026-04-15
+## Product Direction Lock — 2026-04-27
 
 The primary product direction is now explicitly locked on **project-type template models** and **optimized preprompting**.
 
@@ -159,10 +165,17 @@ The latest delivery wave is **already implemented**. The three immediate follow-
 
 ### Broader roadmap focus
 
-1. Complete R2 with a real project-level cost and log dashboard
+1. Complete R2 with a real project-level cost and log dashboard (data layer is now ready)
 2. Finish R3 domain automation (wildcard subdomain, SSL, custom domains)
 3. Re-open R4 only after the publishing pipeline is considered operationally solid
 4. Keep async project-generation orchestration in the documented backlog until R2/R3 are hardened
+
+### Consolidation fixes — 2026-04-27
+
+Targeted robustness pass on existing implementations (no new features):
+
+- `previewSnapshotRoutes.ts`: thumbnail re-render guard — `SnapshotThumbnailJob.schedule()` on activate endpoint now skips re-render when `thumbnailPath` is already set, preventing redundant Puppeteer jobs on every re-activate
+- `previewSnapshotRoutes.ts`: storage stream error propagation — thumbnail GET endpoint now forwards stream errors to Express `next()` to prevent hung HTTP responses on storage failures
 
 ---
 
