@@ -359,6 +359,12 @@ export function createPublishRoutes() {
         // avoiding a full re-download while still guaranteeing freshness on every republish.
         const stat = await fs.promises.stat(filePath);
         const etag = `"${stat.mtimeMs.toString(16)}-${stat.size.toString(16)}"`;
+
+        // Override helmet's restrictive default CSP before the 304 check so the permissive
+        // policy is sent on both 200 and 304 responses (304 headers update the browser cache).
+        // removeHeader first eliminates any existing CSP set by helmet, ensuring a single header.
+        res.removeHeader("Content-Security-Policy");
+        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
         res.setHeader("ETag", etag);
         res.setHeader("Last-Modified", stat.mtime.toUTCString());
         if (req.headers["if-none-match"] === etag) {
@@ -371,7 +377,6 @@ export function createPublishRoutes() {
         // instant freshness after a republish while still leveraging the browser cache.
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("X-Content-Type-Options", "nosniff");
-        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
         fs.createReadStream(filePath).pipe(res);
     });
 
@@ -424,6 +429,11 @@ export function createPublishRoutes() {
         // ETag + conditional GET for all assets
         const stat = await fs.promises.stat(filePath);
         const etag = `"${stat.mtimeMs.toString(16)}-${stat.size.toString(16)}"`;
+
+        // Same override pattern as the index.html handler: remove helmet's restrictive CSP
+        // first, then set the permissive one before the 304 check.
+        res.removeHeader("Content-Security-Policy");
+        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
         res.setHeader("ETag", etag);
         res.setHeader("Last-Modified", stat.mtime.toUTCString());
         if (req.headers["if-none-match"] === etag) {
@@ -441,7 +451,6 @@ export function createPublishRoutes() {
         res.setHeader("Content-Type", contentType);
         res.setHeader("Cache-Control", cacheControl);
         res.setHeader("X-Content-Type-Options", "nosniff");
-        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
         fs.createReadStream(filePath).pipe(res);
     });
 
