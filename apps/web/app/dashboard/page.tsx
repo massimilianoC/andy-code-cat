@@ -269,7 +269,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher className="mr-1" />
                     {canAccessSuperadmin ? (
-                        <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>Superadmin</Button>
+                        <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>{t("dashboard.superadmin")}</Button>
                     ) : null}
                     <Button
                         variant="outline"
@@ -281,7 +281,7 @@ export default function DashboardPage() {
                         }}
                     >
                         <Rocket className="h-3.5 w-3.5" />
-                        Zero Effort
+                        {t("dashboard.zeroEffort")}
                     </Button>
                     <Button
                         size="sm"
@@ -486,7 +486,7 @@ export default function DashboardPage() {
                                 {t("dashboard.modal.cancel")}
                             </Button>
                             <Button type="submit" variant="outline" disabled={creating} onClick={() => setCreateDestination("launch")}>
-                                {creating ? t("dashboard.modal.creating") : "Start Zero Effort"}
+                                {creating ? t("dashboard.modal.creating") : t("dashboard.modal.startZeroEffort")}
                             </Button>
                             <Button type="submit" disabled={creating} onClick={() => setCreateDestination("workspace")}>
                                 {creating ? t("dashboard.modal.creating") : t("dashboard.modal.create")}

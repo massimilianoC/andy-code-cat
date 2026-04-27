@@ -1442,9 +1442,9 @@ export default function WorkspacePage() {
                 status: "running",
                 message: placeholderApplied
                     ? (placeholderVersioned
-                        ? "Placeholder applicato e salvato come nuova versione. L'immagine finale avanzerà di nuovo la working view quando sarà pronta."
-                        : "Placeholder applicato nella working view. Se il salvataggio versione non è ancora disponibile, l'immagine finale verrà comunque registrata appena pronta.")
-                    : "Richiesta inviata correttamente. Se il placeholder non è subito disponibile, l'immagine finale verrà comunque applicata appena pronta.",
+                        ? t("workspace.notifications.imageGeneration.placeholderVersionedMsg")
+                        : t("workspace.notifications.imageGeneration.placeholderAppliedMsg"))
+                    : t("workspace.notifications.imageGeneration.sentMsg"),
             });
 
             void (async () => {
@@ -1880,17 +1880,17 @@ export default function WorkspacePage() {
         const looksLikeValidationOverflow = err.code === "VALIDATION_ERROR"
             || /request validation failed|campi della richiesta non sono validi/i.test(rawMessage);
         const message = looksLikeValidationOverflow
-            ? "Contesto troppo lungo o risposta troppo pesante per questa richiesta. Ho ridotto la memoria inviata: riprova con l'ultima azione."
+            ? t("workspace.llmErrors.contextTooLongMessage")
             : rawMessage;
         const title = err.code === "LLM_PROVIDER_API_KEY_MISSING"
-            ? "Configura la API key del provider"
+            ? t("workspace.llmErrors.configureApiKey")
             : looksLikeValidationOverflow
-                ? "Contesto troppo lungo"
-                : "Errore durante la chiamata al provider";
+                ? t("workspace.llmErrors.contextTooLong")
+                : t("workspace.llmErrors.providerCallError");
         const shouldOpenDialog = Boolean(err.code?.startsWith("LLM_") || looksLikeValidationOverflow);
 
         addNotification({
-            label: err.code === "LLM_PROVIDER_API_KEY_MISSING" ? "Provider non configurato" : "Errore LLM",
+            label: err.code === "LLM_PROVIDER_API_KEY_MISSING" ? t("workspace.llmErrors.providerNotConfigured") : t("workspace.llmErrors.generic"),
             status: "error",
             message,
         });
@@ -1906,7 +1906,7 @@ export default function WorkspacePage() {
             });
         }
 
-        return `Errore [${err.status}]: ${message}`;
+        return t("workspace.llmErrors.errorWithStatus", { status: err.status, message });
     }, [addNotification, currentProvider?.provider, selectedModel]);
 
         const previewResult = editorHtml || editorCss || editorJs
@@ -2005,11 +2005,11 @@ export default function WorkspacePage() {
         const streamStartedAt = Date.now();
         let streamErrorDurationMs: number | undefined;
         const notifId = addNotification({
-            label: inspectMode ? "Generazione AI con focus" : "Generazione AI",
+            label: inspectMode ? t("workspace.notifications.llm.labelFocus") : t("workspace.notifications.llm.label"),
             status: "running",
             message: inspectMode
-                ? "Sto elaborando la richiesta e aggiornando la preview…"
-                : "Sto elaborando la richiesta…",
+                ? t("workspace.notifications.llm.runningFocus")
+                : t("workspace.notifications.llm.running"),
         });
 
         try {
@@ -2100,10 +2100,10 @@ export default function WorkspacePage() {
 
             if (currentProvider?.requiresKey && !currentProvider.hasApiKeyConfigured) {
                 throw new ApiError(503, {
-                    error: `Il provider ${currentProvider.provider} richiede una API key che non e configurata.`,
+                    error: t("workspace.llmErrors.providerKeyMissing", { provider: currentProvider.provider }),
                     code: "LLM_PROVIDER_API_KEY_MISSING",
                     status: 503,
-                    userMessage: `Il provider ${currentProvider.provider} richiede una API key che non e configurata.`,
+                    userMessage: t("workspace.llmErrors.providerKeyMissing", { provider: currentProvider.provider }),
                     details: {
                         provider: currentProvider.provider,
                         model: selectedModel || undefined,
@@ -2177,7 +2177,7 @@ export default function WorkspacePage() {
                         try {
                             const saved = await addMessage(token, projectId, convId, {
                                 role: "assistant",
-                                content: "⏹ Elaborazione interrotta dall'utente",
+                                content: t("workspace.notifications.llm.abortedContent"),
                                 metadata: {
                                     model: interruptedMeta.model,
                                     provider: interruptedMeta.provider,
@@ -2731,7 +2731,7 @@ export default function WorkspacePage() {
         const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!RecognitionCtor) {
             setVoiceSupported(false);
-            setVoiceError("Dettatura disponibile solo in Chrome o Edge compatibili.");
+            setVoiceError(t("workspace.ui.voiceOnlyChrome"));
             return;
         }
 
@@ -2778,7 +2778,7 @@ export default function WorkspacePage() {
 
         recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
             if (event.error && event.error !== "aborted" && event.error !== "no-speech") {
-                setVoiceError(`Dettatura non disponibile: ${event.error}.`);
+                setVoiceError(t("workspace.ui.voiceUnavailable", { error: event.error }));
             }
             setVoiceListening(false);
         };
@@ -2790,7 +2790,7 @@ export default function WorkspacePage() {
         try {
             recognition.start();
         } catch {
-            setVoiceError("Microfono già in uso o permesso non concesso.");
+            setVoiceError(t("workspace.ui.voiceMicError"));
             setVoiceListening(false);
         }
     }, [prompt, voiceListening]);
@@ -2801,7 +2801,7 @@ export default function WorkspacePage() {
     }
 
     if (checkingAuth) {
-        return <div style={{ padding: "2rem", color: "var(--text-muted)" }}>Verifica sessione…</div>;
+        return <div style={{ padding: "2rem", color: "var(--text-muted)" }}>{t("workspace.ui.checkingSession")}</div>;
     }
 
     return (
@@ -2825,7 +2825,7 @@ export default function WorkspacePage() {
                         </span>
                         <button
                             onClick={() => setConfigOpen(true)}
-                            title="Configura progetto"
+                            title={t("workspace.ui.configureProject")}
                             style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "0.15rem", display: "flex", alignItems: "center", opacity: 0.7 }}
                         >
                             <Settings size={15} />
@@ -2833,7 +2833,7 @@ export default function WorkspacePage() {
                     </div>
                     <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                         <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                            Chat di Progetto
+                            {t("workspace.ui.chatTitle")}
                         </span>
                         <select
                             style={controlSelectStyle}
@@ -2842,7 +2842,7 @@ export default function WorkspacePage() {
                             disabled={providersCatalog.length === 0 || sending || optimizingPrompt}
                         >
                             {providersCatalog.length === 0 ? (
-                                <option value="">Provider</option>
+                                <option value="">{t("workspace.ui.providerPlaceholder")}</option>
                             ) : (
                                 providersCatalog.map((p) => (
                                     <option key={p.provider} value={p.provider}>
@@ -2877,13 +2877,13 @@ export default function WorkspacePage() {
                                 lineHeight: 1.45,
                             }}
                         >
-                            Il provider <strong>{currentProvider.provider}</strong> richiede una API key non configurata.
-                            {currentProvider.keyEnvironmentVariable ? ` Configura ${currentProvider.keyEnvironmentVariable} e riprova.` : " Configura la chiave del provider e riprova."}
+                            {t("workspace.ui.providerKeyWarning", { provider: currentProvider.provider })}
+                            {currentProvider.keyEnvironmentVariable ? t("workspace.ui.providerKeyWarningConfigure", { var: currentProvider.keyEnvironmentVariable }) : t("workspace.ui.providerKeyWarningConfigureGeneric")}
                         </div>
                     )}
                     {!currentProviderMissingKey && currentProvider && selectedModel && (
                         <p className="mt-2 text-xs text-muted-foreground">
-                            Optimize prompt usa <strong className="text-foreground">{selectedProvider} · {selectedModel.split("/").pop()}</strong>
+                            {t("workspace.ui.optimizePromptLabel", { provider: selectedProvider, model: selectedModel.split("/").pop() })}
                         </p>
                     )}
                 </div>
@@ -2892,7 +2892,7 @@ export default function WorkspacePage() {
                 <div className="workspace-chat-messages" ref={chatContainerRef} style={{ height: `${Math.round(chatVSplit)}%` }}>
                     {conversationLoading && (
                         <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", padding: "0.5rem" }}>
-                            Caricamento conversazione…
+                            {t("workspace.ui.loadingConversation")}
                         </p>
                     )}
                     {activeConv?.messages.map((msg) => (
@@ -2903,11 +2903,11 @@ export default function WorkspacePage() {
                         <div className="workspace-stream-box">
                             <div className="workspace-stream-title">
                                 {activeOperation === "prompt-optimizer"
-                                    ? (draftAnswer ? "Ottimizzazione prompt in corso..." : thinkingText ? "Analisi optimizer..." : "Connessione optimizer...")
-                                    : (draftAnswer ? "Risposta in corso..." : thinkingText ? "Ragionamento..." : "Connessione al provider...")}
+                                    ? (draftAnswer ? t("workspace.ui.stream.optimizing") : thinkingText ? t("workspace.ui.stream.analysingOptimizer") : t("workspace.ui.stream.connectingOptimizer"))
+                                    : (draftAnswer ? t("workspace.ui.stream.responding") : thinkingText ? t("workspace.ui.stream.reasoning") : t("workspace.ui.stream.connectingProvider"))}
                             </div>
                             <div ref={thinkingFlowRef} className="workspace-thinking-flow">
-                                {thinkingText || (activeOperation === "prompt-optimizer" ? "Sto elaborando il prompt nel flusso conversazionale..." : "In attesa del ragionamento stream...")}
+                                {thinkingText || (activeOperation === "prompt-optimizer" ? t("workspace.ui.stream.thinkingDefault") : t("workspace.ui.stream.thinkingOptimizer"))}
                             </div>
                             {draftAnswer && (
                                 <div className="workspace-draft-box">
@@ -2917,7 +2917,7 @@ export default function WorkspacePage() {
                             <div className="workspace-stream-footer">
                                 <div className="workspace-thinking-spinner">
                                     <span className="workspace-spinner-dot" />
-                                    {activeOperation === "prompt-optimizer" ? "ottimizzo il prompt..." : "sto pensando..."}
+                                    {activeOperation === "prompt-optimizer" ? t("workspace.ui.stream.spinnerOptimizer") : t("workspace.ui.stream.spinnerDefault")}
                                 </div>
                                 <div className="workspace-token-counter">
                                     {streamUsageTokens
@@ -2930,7 +2930,7 @@ export default function WorkspacePage() {
 
                     {!activeConv && (
                         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "0.4rem 0.2rem" }}>
-                            Apri una conversazione o invia un nuovo prompt.
+                            {t("workspace.ui.emptyConversation")}
                         </p>
                     )}
                     {error && <div className="status error">{error}</div>}
@@ -2942,8 +2942,8 @@ export default function WorkspacePage() {
                                 setIsUserScrolled(false);
                                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
                             }}
-                            aria-label="Torna in fondo alla chat"
-                            title="Torna in fondo"
+                            aria-label={t("workspace.ui.scrollToBottom")}
+                            title={t("workspace.ui.scrollToBottomTitle")}
                         >
                             ↓
                         </button>
@@ -2954,7 +2954,7 @@ export default function WorkspacePage() {
                     onMouseDown={() => setIsDraggingVChat(true)}
                     role="separator"
                     aria-orientation="horizontal"
-                    aria-label="Resize chat input"
+                    aria-label={t("workspace.ui.resizeChat")}
                 />
                 <form onSubmit={(e) => void handleSend(e)} className="workspace-input-form">
                     <div className="flex items-start gap-2">
@@ -2971,9 +2971,9 @@ export default function WorkspacePage() {
                             }}
                             placeholder={inspectMode && selectedElement
                                 ? (mediaMode === "background"
-                                    ? "Descrivi qui la modifica focus patch per il background selezionato..."
-                                    : "Descrivi qui la modifica focus patch per l'elemento selezionato...")
-                                : "Scrivi cosa vuoi realizzare..."}
+                                    ? t("workspace.ui.placeholderFocusPatchBackground")
+                                    : t("workspace.ui.placeholderFocusPatch"))
+                                : t("workspace.ui.placeholderDefault")}
                             rows={3}
                             disabled={sending || optimizingPrompt}
                         />
@@ -2983,8 +2983,8 @@ export default function WorkspacePage() {
                             size="icon"
                             onClick={handleToggleVoiceInput}
                             disabled={!voiceSupported || sending || conversationLoading || optimizingPrompt}
-                            title={voiceListening ? "Ferma la dettatura" : "Detta il prompt con il microfono"}
-                            aria-label={voiceListening ? "Ferma dettatura" : "Avvia dettatura"}
+                            title={voiceListening ? t("workspace.ui.voiceListeningTitle") : t("workspace.ui.voiceStartTitle")}
+                            aria-label={voiceListening ? t("workspace.ui.voiceListeningLabel") : t("workspace.ui.voiceStartLabel")}
                             className="shrink-0"
                         >
                             {voiceListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -2992,7 +2992,7 @@ export default function WorkspacePage() {
                     </div>
                     {(voiceSupported || voiceError) && (
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{voiceListening ? "🎙️ Ascolto in corso…" : "Chrome: dettatura vocale pronta"}</span>
+                            <span>{voiceListening ? t("workspace.ui.voiceListening") : t("workspace.ui.voiceReady")}</span>
                             {voiceError && <span className="text-destructive">{voiceError}</span>}
                         </div>
                     )}
@@ -3000,7 +3000,7 @@ export default function WorkspacePage() {
                     {(inspectMode && selectedElement) && (
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.76rem", color: "var(--accent-text, #818cf8)", padding: "0.2rem 0" }}>
                             <span style={{ opacity: 0.7 }}>◎</span>
-                            <span>Elemento: <strong>{selectedElement.selector}</strong>
+                            <span>{t("workspace.ui.inspectElementLabel")}<strong>{selectedElement.selector}</strong>
                                 {selectedElement.tag !== selectedElement.selector.replace(/^#.+|^\..+/, "") && (
                                     <span style={{ color: "var(--text-muted)", marginLeft: "0.3rem" }}>&lt;{selectedElement.tag}&gt;</span>
                                 )}
@@ -3011,25 +3011,25 @@ export default function WorkspacePage() {
                                 onClick={async () => {
                                     await copyTextToClipboard(JSON.stringify(selectedElement, null, 2));
                                 }}
-                                title="Copia JSON metadati elemento selezionato"
-                            >Copia JSON</button>
+                                title={t("workspace.ui.copyJsonTitle")}
+                            >{t("workspace.ui.copyJson")}</button>
                             <button
                                 type="button"
                                 style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.9rem", lineHeight: 1 }}
                                 onClick={clearSelectedElement}
-                                title="Rimuovi selezione elemento"
+                                title={t("workspace.ui.removeElementSelection")}
                             >×</button>
                         </div>
                     )}
                     {(!inspectMode || !selectedElement) && codeEditorSelection && previewTab !== "preview" && (
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.76rem", color: "var(--accent-text, #818cf8)", padding: "0.2rem 0" }}>
                             <span style={{ opacity: 0.7 }}>📝</span>
-                            <span>{codeEditorSelection.language.toUpperCase()} righe {codeEditorSelection.startLine}–{codeEditorSelection.endLine}</span>
+                            <span>{t("workspace.ui.codeSelectionLines", { lang: codeEditorSelection.language.toUpperCase(), start: codeEditorSelection.startLine, end: codeEditorSelection.endLine })}</span>
                             <button
                                 type="button"
                                 style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.9rem", lineHeight: 1 }}
                                 onClick={() => setCodeEditorSelection(null)}
-                                title="Rimuovi selezione codice"
+                                title={t("workspace.ui.removeCodeSelection")}
                             >×</button>
                         </div>
                     )}
@@ -3042,21 +3042,21 @@ export default function WorkspacePage() {
                             color: "var(--text-muted)",
                             background: "rgba(99,102,241,0.06)",
                         }}>
-                            Clicca un elemento nella preview per selezionarlo. Per le immagini puoi cliccare direttamente la foto; con Shift o Alt selezioni il contenitore più ampio.
+                            {t("workspace.ui.inspectHint")}
                         </div>
                     )}
                     {token && editMode && selectedElementSource === "edit-media" && selectedElement && previewTab === "preview" && (
                         <div className="mt-2 space-y-3 rounded-lg border border-border bg-card/60 p-3">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-foreground">Image tools in EDIT</p>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-foreground">{t("workspace.ui.imageToolsInEditTitle")}</p>
                                     <p className="truncate text-[11px] text-muted-foreground">{selectedElement.selector}</p>
                                     <p className="mt-1 text-[11px] text-muted-foreground">
-                                        In EDIT, text keeps priority. Click directly on the image area to target the media underneath.
+                                        {t("workspace.ui.imageToolsInEditHint")}
                                     </p>
                                 </div>
                                 <Button type="button" variant="ghost" size="sm" onClick={clearSelectedElement}>
-                                    Chiudi
+                                    {t("workspace.ui.closeButton")}
                                 </Button>
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -3070,7 +3070,7 @@ export default function WorkspacePage() {
                                     }}
                                     disabled={generatingMedia || suggestingMedia}
                                 >
-                                    {(generatingMedia || suggestingMedia) ? "Elaborazione…" : "Gen image AI"}
+                                    {(generatingMedia || suggestingMedia) ? t("workspace.ui.generatingMedia") : t("workspace.ui.genImageAI")}
                                 </Button>
                                 <Button
                                     type="button"
@@ -3092,9 +3092,9 @@ export default function WorkspacePage() {
                     >
                         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
                             <DialogHeader>
-                                <DialogTitle>Image AI tools</DialogTitle>
+                                <DialogTitle>{t("workspace.ui.imageAiToolsTitle")}</DialogTitle>
                                 <DialogDescription>
-                                    Manual generation and advanced image settings are separated from the chat and available only inside EDIT mode.
+                                    {t("workspace.ui.imageAiToolsDesc")}
                                 </DialogDescription>
                             </DialogHeader>
                             {token && editMode && selectedElementSource === "edit-media" && selectedElement && previewTab === "preview" && (
@@ -3105,8 +3105,8 @@ export default function WorkspacePage() {
                                     assets={projectAssets}
                                     loadingAssets={loadingProjectAssets}
                                     chatPromptPlaceholder={mediaMode === "background"
-                                        ? "Use an optional manual prompt or ask for a semantic suggestion for this background…"
-                                        : "Use an optional manual prompt or ask for a semantic suggestion for this image…"}
+                                        ? t("workspace.ui.mediaPlaceholderBackground")
+                                        : t("workspace.ui.mediaPlaceholderImage")}
                                     assetScope={assetScope}
                                     onAssetScopeChange={setAssetScope}
                                     mediaMode={mediaMode}
@@ -3159,17 +3159,17 @@ export default function WorkspacePage() {
                                 variant="secondary"
                                 onClick={() => void handleOptimizePrompt()}
                                 disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt || currentProviderMissingKey}
-                                title={selectedModel ? `Usa ${selectedProvider} · ${selectedModel}` : "Usa il provider/modello attivo della chat"}
+                                title={selectedModel ? t("workspace.ui.useProviderModel", { provider: selectedProvider, model: selectedModel }) : t("workspace.ui.useActiveProviderModel")}
                             >
                                 {optimizingPrompt
-                                    ? "Optimizing..."
+                                    ? t("workspace.ui.optimizingPrompt")
                                     : selectedModel
-                                        ? `Optimize · ${selectedModel.split("/").pop()}`
-                                        : "Optimize prompt"}
+                                        ? t("workspace.ui.optimizeWith", { model: selectedModel.split("/").pop() })
+                                        : t("workspace.ui.optimizePrompt")}
                             </Button>
                             {promptRestoreValue && (
                                 <Button type="button" variant="outline" onClick={handleRestoreOptimizedPrompt} disabled={sending || optimizingPrompt}>
-                                    Restore original
+                                    {t("workspace.ui.restoreOriginal")}
                                 </Button>
                             )}
                             {(sending || optimizingPrompt) && (
@@ -3178,12 +3178,12 @@ export default function WorkspacePage() {
                                     className="secondary"
                                     onClick={handleStop}
                                     style={{ color: "var(--error, #f87171)", borderColor: "var(--error, #f87171)" }}
-                                    title="Interrompi la generazione in corso"
+                                    title={t("workspace.ui.stopGeneration")}
                                 >
                                     ⏹ Stop
                                 </button>
                             )}
-                            <button type="submit" disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt}>{sending ? "Invio..." : "Invia"}</button>
+                            <button type="submit" disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt}>{sending ? t("workspace.ui.sending") : t("workspace.ui.send")}</button>
                         </div>
                     </div>
                 </form>
@@ -3195,7 +3195,7 @@ export default function WorkspacePage() {
                 onMouseDown={() => setIsDragging(true)}
                 role="separator"
                 aria-orientation="vertical"
-                aria-label="Resize panels"
+                aria-label={t("workspace.ui.resizePanels")}
             />
 
             <section className="workspace-preview-panel">
@@ -3228,7 +3228,7 @@ export default function WorkspacePage() {
                                 disabled={exportState === "loading"}
                                 onClick={handleExportLayer1}
                                 style={{ fontSize: "0.72rem", padding: "0.18rem 0.5rem" }}
-                                title={exportState === "error" ? (exportError ?? "Errore export") : "Esporta HTML/CSS/JS come ZIP"}
+                                title={exportState === "error" ? (exportError ?? t("workspace.ui.exportError")) : t("workspace.ui.exportTitle")}
                             >
                                 {exportState === "loading" ? "⏳" : "⬇ ZIP"}
                             </button>
@@ -3241,7 +3241,7 @@ export default function WorkspacePage() {
                                     disabled={captureState === "loading"}
                                     onClick={() => setCaptureDropdownOpen((v) => !v)}
                                     style={{ fontSize: "0.72rem", padding: "0.18rem 0.5rem" }}
-                                    title="Cattura screenshot JPG o PDF della preview"
+                                    title={t("workspace.ui.captureTitle")}
                                 >
                                     {captureState === "loading" ? "⏳" : captureState === "error" ? "⚠" : "📷"}
                                 </button>
@@ -3270,9 +3270,9 @@ export default function WorkspacePage() {
                                 disabled={publishState === "loading"}
                                 onClick={handlePublish}
                                 style={{ fontSize: "0.72rem", padding: "0.18rem 0.5rem" }}
-                                title={publishDeployment ? "Aggiorna pubblicazione live" : "Pubblica con link condivisibile"}
+                                title={publishDeployment ? t("workspace.ui.publishUpdateTitle") : t("workspace.ui.publishTitle")}
                             >
-                                {publishState === "loading" ? "⏳" : publishState === "error" ? "⚠ Errore" : publishDeployment ? "🔄 Aggiorna" : "🌐 Pubblica"}
+                                {publishState === "loading" ? "⏳" : publishState === "error" ? t("workspace.ui.publishStateError") : publishDeployment ? t("workspace.ui.publishStateUpdate") : t("workspace.ui.publishStatePublish")}
                             </button>
                         )}
                         {/* Version history — inline in header, right of action buttons */}
@@ -3371,7 +3371,7 @@ export default function WorkspacePage() {
                         className="secondary"
                         data-active={previewTab === "prompt" ? "true" : "false"}
                         onClick={() => setPreviewTab("prompt")}
-                        title="Visualizza il system prompt composto passato all'LLM (sola lettura)"
+                        title={t("workspace.ui.promptTabTitle")}
                     >
                         🔍 PROMPT
                     </button>
@@ -3395,10 +3395,10 @@ export default function WorkspacePage() {
                                 }}
                                 style={{ marginLeft: "auto", fontSize: "0.74rem", padding: "0.2rem 0.6rem", opacity: hasPreviewArtifacts ? 1 : 0.5, cursor: hasPreviewArtifacts ? "pointer" : "not-allowed" }}
                                 title={hasPreviewArtifacts
-                                    ? (inspectMode ? "Disattiva Inspect" : "Attiva Inspect: seleziona un elemento e usa solo il flow focus patch in chat")
-                                    : "Inspect disponibile solo quando la preview contiene codice generato"}
+                                    ? (inspectMode ? t("workspace.ui.inspectOffTitle") : t("workspace.ui.inspectOnTitle"))
+                                    : t("workspace.ui.inspectNoArtifacts")}
                             >
-                                {inspectMode ? "◎ Inspect ON" : "◎ Inspect"}
+                                {inspectMode ? t("workspace.ui.inspectOn") : t("workspace.ui.inspectOff")}
                             </button>
                             {/* EDIT Light toggle — only when there are artifacts */}
                             {artifacts && !inspectMode && (
@@ -3408,9 +3408,9 @@ export default function WorkspacePage() {
                                     data-active={editMode ? "true" : "false"}
                                     onClick={() => void handleToggleEditMode()}
                                     style={{ fontSize: "0.74rem", padding: "0.2rem 0.6rem" }}
-                                    title={editMode ? "Disattiva EDIT Light" : "Attiva EDIT Light: clicca il testo per modificarlo o un'immagine per aprire gli strumenti AI"}
+                                    title={editMode ? t("workspace.ui.editOffTitle") : t("workspace.ui.editOnTitle")}
                                 >
-                                    {editMode ? "✎ EDIT ON" : "✎ EDIT"}
+                                    {editMode ? t("workspace.ui.editOn") : t("workspace.ui.editOff")}
                                 </button>
                             )}
                             {/* Save as version button — only when EDIT Light is active */}
@@ -3421,9 +3421,9 @@ export default function WorkspacePage() {
                                     disabled={isSavingEditVersion}
                                     onClick={handleTriggerEditSave}
                                     style={{ fontSize: "0.74rem", padding: "0.2rem 0.7rem" }}
-                                    title="Salva le modifiche EDIT come nuova versione dell'artefatto"
+                                    title={t("workspace.ui.saveEditTitle")}
                                 >
-                                    {isSavingEditVersion ? "⏳ Salvataggio…" : "💾 Salva EDIT"}
+                                    {isSavingEditVersion ? t("workspace.ui.saveEditSaving") : t("workspace.ui.saveEdit")}
                                 </button>
                             )}
                         </>
@@ -3494,7 +3494,7 @@ export default function WorkspacePage() {
                                     fontSize: "0.72rem",
                                 }}
                             >
-                                {publishCopied ? "✓ Copiato" : "📋 Copia link"}
+                                {publishCopied ? t("workspace.ui.copied") : t("workspace.ui.copyLink")}
                             </button>
                             {/* Slug edit toggle */}
                             <button
@@ -3515,7 +3515,7 @@ export default function WorkspacePage() {
                                     opacity: 0.75,
                                 }}
                             >
-                                {publishDeployment.customSlug ? "✏ Slug" : "🔗 Imposta slug"}
+                                {publishDeployment.customSlug ? t("workspace.ui.editSlug") : t("workspace.ui.setSlug")}
                             </button>
                             <button
                                 type="button"
@@ -3531,12 +3531,12 @@ export default function WorkspacePage() {
                                     fontSize: "0.72rem",
                                 }}
                             >
-                                Rimuovi
+                                {t("workspace.ui.unpublish")}
                             </button>
                             {isPublishStale && (
                                 <>
                                     <span style={{ color: "#f59e0b", fontSize: "0.72rem", display: "flex", alignItems: "center", gap: "0.2rem" }}>
-                                        ⚠ online v{publishedVersionNumber ?? "?"}, attiva v{activeVersionNumber ?? "?"}
+                                        {t("workspace.ui.staleVersion", { published: publishedVersionNumber ?? "?", current: activeVersionNumber ?? "?" })}
                                     </span>
                                     <button
                                         type="button"
@@ -3552,7 +3552,7 @@ export default function WorkspacePage() {
                                             fontSize: "0.72rem",
                                         }}
                                     >
-                                        Aggiorna
+                                        {t("workspace.ui.updatePublish")}
                                     </button>
                                 </>
                             )}
@@ -3565,7 +3565,7 @@ export default function WorkspacePage() {
                                     type="text"
                                     value={slugInput}
                                     onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                                    placeholder="es. mia-pizzeria"
+                                    placeholder={t("workspace.ui.slugPlaceholder")}
                                     maxLength={30}
                                     style={{
                                         background: "var(--surface)",
@@ -3587,10 +3587,10 @@ export default function WorkspacePage() {
                                         : "#6b7280",
                                     minWidth: "4.5rem",
                                 }}>
-                                    {slugCheckState === "checking" ? "⏳ Verifica…"
-                                        : slugCheckState === "available" ? "✓ Disponibile"
-                                        : slugCheckState === "taken" ? "✗ Già in uso"
-                                        : slugCheckState === "invalid" ? "⚠ Formato non valido"
+                                    {slugCheckState === "checking" ? t("workspace.ui.slugChecking")
+                                        : slugCheckState === "available" ? t("workspace.ui.slugAvailable")
+                                        : slugCheckState === "taken" ? t("workspace.ui.slugTaken")
+                                        : slugCheckState === "invalid" ? t("workspace.ui.slugInvalid")
                                         : ""}
                                 </span>
                                 <button
@@ -3608,7 +3608,7 @@ export default function WorkspacePage() {
                                         opacity: slugSaving || (!!slugInput.trim() && slugCheckState !== "available") ? 0.45 : 1,
                                     }}
                                 >
-                                    {slugSaving ? "⏳" : "Salva"}
+                                    {slugSaving ? t("workspace.ui.slugSaving") : t("workspace.ui.slugSave")}
                                 </button>
                                 {publishDeployment.customSlug && (
                                     <button
@@ -3633,7 +3633,7 @@ export default function WorkspacePage() {
                                             fontSize: "0.72rem",
                                         }}
                                     >
-                                        Rimuovi slug
+                                        {t("workspace.ui.slugRemove")}
                                     </button>
                                 )}
                                 <button
@@ -3648,7 +3648,7 @@ export default function WorkspacePage() {
                                         padding: "0.15rem 0.3rem",
                                     }}
                                 >
-                                    Annulla
+                                    {t("workspace.ui.slugCancel")}
                                 </button>
                             </div>
                         )}
@@ -3663,9 +3663,9 @@ export default function WorkspacePage() {
                     {!artifacts && (
                         <div style={emptyStateStyle}>
                             <div style={{ fontSize: "2.2rem", marginBottom: "0.75rem" }}>⬡</div>
-                            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.4rem" }}>Nessun codice generato</h2>
+                            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.4rem" }}>{t("workspace.ui.noCodeTitle")}</h2>
                             <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", maxWidth: 480, textAlign: "center" }}>
-                                Il centro mostra solo artifacts HTML/CSS/JS generati dal backend. Invia un prompt per popolare la preview.
+                                {t("workspace.ui.noCodeHint")}
                             </p>
                         </div>
                     )}
@@ -3742,7 +3742,7 @@ export default function WorkspacePage() {
                                             flexShrink: 0,
                                         }}
                                     />
-                                    Aggiornamento preview…
+                                    {t("workspace.ui.previewRefreshing")}
                                 </span>
                             </div>
                         )}
@@ -3803,7 +3803,7 @@ export default function WorkspacePage() {
                                         type="button"
                                         onClick={() => iframeRef.current?.contentWindow?.postMessage({ type: "pf-edit-scan-media" }, "*")}
                                         className="bg-transparent border-none cursor-pointer text-muted-foreground text-[0.7rem] px-1 hover:text-foreground transition-colors"
-                                        title="Rescan immagini dalla preview"
+                                        title={t("workspace.ui.rescanImages")}
                                     >↻</button>
                                 }
                                 className="w-[160px] min-w-[160px]"
@@ -3879,10 +3879,10 @@ export default function WorkspacePage() {
                                 }}
                             >
                                 <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
-                                    System prompt composto passato all&apos;LLM — sola lettura
+                                    {t("workspace.ui.promptPanelDesc")}
                                     {promptPreview && (
                                         <span style={{ color: "var(--accent, #7dd3fc)", marginLeft: "0.75rem" }}>
-                                            ~{promptPreview.tokenEstimate} token · preset: {promptPreview.presetId ?? "nessuno"}
+                                            {t("workspace.ui.promptPanelTokensPreset", { tokens: promptPreview.tokenEstimate, preset: promptPreview.presetId ?? t("workspace.ui.promptPanelNone") })}
                                         </span>
                                     )}
                                 </span>
@@ -3902,7 +3902,7 @@ export default function WorkspacePage() {
                                         fontWeight: 600,
                                     }}
                                 >
-                                    {loadingPromptPreview ? "Caricamento…" : "↻ Ricarica"}
+                                    {loadingPromptPreview ? t("workspace.ui.promptPanelLoading") : t("workspace.ui.promptPanelReload")}
                                 </button>
                             </div>
                             {/* Layer panels */}
@@ -3915,51 +3915,51 @@ export default function WorkspacePage() {
                             >
                                 {!promptPreview && !loadingPromptPreview && (
                                     <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
-                                        Il prompt verrà caricato automaticamente. Se non appare, clicca ↻ Ricarica.
+                                        {t("workspace.ui.promptPanelHint")}
                                     </p>
                                 )}
                                 {loadingPromptPreview && (
-                                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>Caricamento…</p>
+                                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.ui.promptPanelLoading")}</p>
                                 )}
                                 {promptPreview && (
                                     <>
                                         <PromptLayerBlock
-                                            label="LAYER A — Vincoli base"
-                                            badge="sempre attivo"
+                                            label={t("workspace.ui.layers.layerA")}
+                                            badge={t("workspace.ui.layers.layerABadge")}
                                             badgeColor="#7dd3fc"
-                                            source="Costante del sistema"
+                                            source={t("workspace.ui.layers.layerASource")}
                                             content={promptPreview.layers.a_baseConstraints}
                                         />
                                         <PromptLayerBlock
-                                            label="LAYER B — Modulo preset"
-                                            badge={promptPreview.presetId ? `preset: ${promptPreview.presetId}` : "nessun preset"}
+                                            label={t("workspace.ui.layers.layerB")}
+                                            badge={promptPreview.presetId ? t("workspace.ui.layers.layerBBadge", { presetId: promptPreview.presetId }) : t("workspace.ui.layers.layerBBadgeNone")}
                                             badgeColor={promptPreview.layers.b_presetModule ? "#a3e635" : "#6b7280"}
-                                            source="Configurazione progetto (⚙ rotella)"
-                                            content={promptPreview.layers.b_presetModule || "(vuoto — nessun preset assegnato al progetto)"}
+                                            source={t("workspace.ui.layers.layerBSource")}
+                                            content={promptPreview.layers.b_presetModule || t("workspace.ui.layers.layerBEmpty")}
                                             empty={!promptPreview.layers.b_presetModule}
                                         />
                                         <PromptLayerBlock
-                                            label="LAYER C — Contesto stile"
-                                            badge={promptPreview.layers.c_styleContext ? "moodboard + profilo utente" : "vuoto"}
+                                            label={t("workspace.ui.layers.layerC")}
+                                            badge={promptPreview.layers.c_styleContext ? t("workspace.ui.layers.layerCBadge") : t("workspace.ui.layers.layerCBadgeEmpty")}
                                             badgeColor={promptPreview.layers.c_styleContext ? "#fb923c" : "#6b7280"}
-                                            source="Profilo utente (profilazione iniziale) + Moodboard progetto (⚙ rotella)"
-                                            content={promptPreview.layers.c_styleContext || "(vuoto — nessun dato di profilazione utente o moodboard configurato)"}
+                                            source={t("workspace.ui.layers.layerCSource")}
+                                            content={promptPreview.layers.c_styleContext || t("workspace.ui.layers.layerCEmpty")}
                                             empty={!promptPreview.layers.c_styleContext}
                                         />
                                         <PromptLayerBlock
-                                            label="LAYER D — Template personalizzato"
-                                            badge="dormiente"
+                                            label={t("workspace.ui.layers.layerD")}
+                                            badge={t("workspace.ui.layers.layerDBadge")}
                                             badgeColor="#6b7280"
-                                            source="Configurazione avanzata progetto (non attiva)"
-                                            content={promptPreview.layers.d_prePromptTemplate || "(vuoto — nessun template personalizzato configurato)"}
+                                            source={t("workspace.ui.layers.layerDSource")}
+                                            content={promptPreview.layers.d_prePromptTemplate || t("workspace.ui.layers.layerDEmpty")}
                                             empty={!promptPreview.layers.d_prePromptTemplate}
                                         />
                                         {promptPreview.layers.budgetPolicy && (
                                             <PromptLayerBlock
-                                                label="POLICY — Budget output"
-                                                badge="sistema"
+                                                label={t("workspace.ui.layers.policy")}
+                                                badge={t("workspace.ui.layers.policyBadge")}
                                                 badgeColor="#8b5cf6"
-                                                source="Configurazione automatica token/output"
+                                                source={t("workspace.ui.layers.policySource")}
                                                 content={promptPreview.layers.budgetPolicy}
                                             />
                                         )}
@@ -4143,7 +4143,7 @@ function CodeEditorPanel({
     isSaving?: boolean;
 }) {
     const [fontSize, setFontSize] = useState(13);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { t } = useTranslation();
     const editorRef = useRef<any>(null);
 
     const handleFormat = useCallback(() => {
@@ -4179,20 +4179,20 @@ function CodeEditorPanel({
                     type="button"
                     style={toolbarBtnStyle}
                     onClick={handleFormat}
-                    title="Formatta / Beautify (equivale a Alt+Shift+F)"
+                    title={t("workspace.ui.codeEditor.beautifyTitle")}
                 >
                     ✦ Beautify
                 </button>
                 <span style={{ color: "var(--border)", fontSize: "0.72rem", userSelect: "none" }}>│</span>
                 <span style={{ color: "var(--text-muted)", fontSize: "0.68rem", userSelect: "none" }}>
-                    Ctrl+scroll = zoom · Alt+Shift+F = format
+                    {t("workspace.ui.codeEditor.shortcuts")}
                 </span>
                 {onSave && (
                     <button
                         type="button"
                         disabled={isSaving}
                         onClick={onSave}
-                        title="Salva le modifiche come nuova versione preview (attiva)"
+                        title={t("workspace.ui.codeEditor.saveVersionTitle")}
                         style={{
                             ...toolbarBtnStyle,
                             background: isSaving ? undefined : "rgba(125,211,252,0.08)",
@@ -4202,16 +4202,16 @@ function CodeEditorPanel({
                             fontWeight: 700,
                         }}
                     >
-                        {isSaving ? "Salvataggio…" : "💾 Salva versione"}
+                        {isSaving ? t("workspace.ui.codeEditor.saving") : t("workspace.ui.codeEditor.saveVersion")}
                     </button>
                 )}
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                    <span style={{ color: "var(--text-muted)", fontSize: "0.68rem", userSelect: "none" }}>Font</span>
+                    <span style={{ color: "var(--text-muted)", fontSize: "0.68rem", userSelect: "none" }}>{t("workspace.ui.codeEditor.font")}</span>
                     <button
                         type="button"
                         style={toolbarBtnStyle}
                         onClick={() => setFontSize((s) => Math.max(10, s - 1))}
-                        title="Riduci dimensione carattere"
+                        title={t("workspace.ui.codeEditor.fontDecrease")}
                     >
                         A−
                     </button>
@@ -4230,7 +4230,7 @@ function CodeEditorPanel({
                         type="button"
                         style={toolbarBtnStyle}
                         onClick={() => setFontSize((s) => Math.min(28, s + 1))}
-                        title="Aumenta dimensione carattere"
+                        title={t("workspace.ui.codeEditor.fontIncrease")}
                     >
                         A+
                     </button>
@@ -4351,6 +4351,7 @@ function formatDuration(ms: number | undefined): string {
 }
 
 function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto | undefined; variant?: "message" | "global" }) {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
     const containerRef = useRef<HTMLDivElement>(null);
@@ -4381,7 +4382,7 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
     const prePromptChars = systemMsg?.content?.length ?? 0;
     const msgsSentCount = trace?.messagesSentToLlm?.length ?? 0;
 
-    const tooltipTitle = variant === "global" ? "Dettagli ultima richiesta" : "Dettagli richiesta";
+    const tooltipTitle = variant === "global" ? t("workspace.ui.reqMeta.detailsGlobal") : t("workspace.ui.reqMeta.details");
 
     // Compact label shown in the badge
     const badgeLabel = (() => {
@@ -4413,12 +4414,12 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                     {operation && (
                         <>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Flusso</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.flow")}</span>
                                 <span className="req-meta-value">{operation.label ?? operation.kind}</span>
                             </div>
                             {operation.target && (
                                 <div className="req-meta-section">
-                                    <span className="req-meta-label">Target</span>
+                                    <span className="req-meta-label">{t("workspace.ui.reqMeta.target")}</span>
                                     <span className="req-meta-value">{operation.target}</span>
                                 </div>
                             )}
@@ -4428,16 +4429,16 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
 
                     {/* Provider / Model */}
                     <div className="req-meta-section">
-                        <span className="req-meta-label">Provider</span>
+                        <span className="req-meta-label">{t("workspace.ui.reqMeta.provider")}</span>
                         <span className="req-meta-value">{m.provider ?? "—"}</span>
                     </div>
                     <div className="req-meta-section">
-                        <span className="req-meta-label">Modello</span>
+                        <span className="req-meta-label">{t("workspace.ui.reqMeta.model")}</span>
                         <span className="req-meta-value">{m.model ?? "—"}</span>
                     </div>
                     {m.finishReason && (
                         <div className="req-meta-section">
-                            <span className="req-meta-label">Finish reason</span>
+                            <span className="req-meta-label">{t("workspace.ui.reqMeta.finishReason")}</span>
                             <span className="req-meta-value">{m.finishReason}</span>
                         </div>
                     )}
@@ -4447,15 +4448,15 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Prompt tokens</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.promptTokens")}</span>
                                 <span className="req-meta-value">{usage.promptTokens.toLocaleString()}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Completion tokens</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.completionTokens")}</span>
                                 <span className="req-meta-value">{usage.completionTokens.toLocaleString()}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Totale tokens</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.totalTokens")}</span>
                                 <span className="req-meta-value" style={{ fontWeight: 600 }}>{usage.totalTokens.toLocaleString()}</span>
                             </div>
                         </>
@@ -4466,16 +4467,16 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Preprompt (system)</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.prepromptSystem")}</span>
                                 <span className="req-meta-value">~{prePromptTokensEst.toLocaleString()} tok ({prePromptChars.toLocaleString()} chars)</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Messaggi inviati a LLM</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.msgsSent")}</span>
                                 <span className="req-meta-value">{msgsSentCount}</span>
                             </div>
                             {trace.promptConfigId && (
                                 <div className="req-meta-section">
-                                    <span className="req-meta-label">Prompt config ID</span>
+                                    <span className="req-meta-label">{t("workspace.ui.reqMeta.promptConfigId")}</span>
                                     <span className="req-meta-value" style={{ fontSize: "0.6rem", wordBreak: "break-all" }}>{trace.promptConfigId}</span>
                                 </div>
                             )}
@@ -4487,7 +4488,7 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Tempo esecuzione</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.execTime")}</span>
                                 <span className="req-meta-value">{formatDuration(m.executionTimeMs)} ({m.executionTimeMs.toLocaleString()}ms)</span>
                             </div>
                         </>
@@ -4498,28 +4499,28 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Costo totale</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.totalCost")}</span>
                                 <span className="req-meta-value" style={{ fontWeight: 600 }}>{formatCostEur(cost.amount) || "€0"}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">  Token cost</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.tokenCost")}</span>
                                 <span className="req-meta-value">{formatCostEur(cost.breakdown.tokenCost) || "€0"}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">  Image cost</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.imageCost")}</span>
                                 <span className="req-meta-value">{formatCostEur(cost.breakdown.imageCost) || "€0"}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">  Video cost</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.videoCost")}</span>
                                 <span className="req-meta-value">{formatCostEur(cost.breakdown.videoCost) || "€0"}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">€/1k tok</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.eurPerKTok")}</span>
                                 <span className="req-meta-value">€{cost.unitRates.textEurPer1kTokens.toFixed(4)}</span>
                             </div>
                             {cost.providerCostUsd != null && (
                                 <div className="req-meta-section">
-                                    <span className="req-meta-label">Provider USD</span>
+                                    <span className="req-meta-label">{t("workspace.ui.reqMeta.providerUsd")}</span>
                                     <span className="req-meta-value">${cost.providerCostUsd.toFixed(6)}</span>
                                 </div>
                             )}
@@ -4531,8 +4532,8 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Structured parse</span>
-                                <span className="req-meta-value">{m.structuredParseValid ? "✓ valido" : "✗ fallito"}</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.structuredParse")}</span>
+                                <span className="req-meta-value">{m.structuredParseValid ? t("workspace.ui.reqMeta.parseValid") : t("workspace.ui.reqMeta.parseFailed")}</span>
                             </div>
                         </>
                     )}
@@ -4543,7 +4544,8 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
 }
 
 function MessageBubble({ message }: { message: MessageDto }) {
-    const [copyLabel, setCopyLabel] = useState("Copia");
+    const { t } = useTranslation();
+    const [copyLabel, setCopyLabel] = useState(() => t("workspace.ui.messageBubble.copy"));
     const isUser = message.role === "user";
     const isError = message.role === "error";
     const operation = message.metadata?.operation;
@@ -4572,15 +4574,15 @@ function MessageBubble({ message }: { message: MessageDto }) {
                     onClick={async () => {
                         try {
                             await copyTextToClipboard(message.content);
-                            setCopyLabel("Copiato");
-                            window.setTimeout(() => setCopyLabel("Copia"), 1200);
+                            setCopyLabel(t("workspace.ui.messageBubble.copied"));
+                            window.setTimeout(() => setCopyLabel(t("workspace.ui.messageBubble.copy")), 1200);
                         } catch {
-                            setCopyLabel("Errore");
-                            window.setTimeout(() => setCopyLabel("Copia"), 1200);
+                            setCopyLabel(t("workspace.ui.messageBubble.copyError"));
+                            window.setTimeout(() => setCopyLabel(t("workspace.ui.messageBubble.copy")), 1200);
                         }
                     }}
-                    title="Copia messaggio"
-                    aria-label="Copia messaggio"
+                    title={t("workspace.ui.messageBubble.copyTitle")}
+                    aria-label={t("workspace.ui.messageBubble.copyTitle")}
                 >
                     {copyLabel}
                 </button>
@@ -4618,7 +4620,7 @@ function MessageBubble({ message }: { message: MessageDto }) {
                         )}
                         {chatStructured.nextActions.length > 0 && (
                             <div style={{ marginTop: "0.5rem" }}>
-                                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.2rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>Prossimi passi</div>
+                                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.2rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>{t("workspace.ui.messageBubble.nextSteps")}</div>
                                 <ol style={{ margin: 0, paddingLeft: "1.2rem" }}>
                                     {chatStructured.nextActions.map((a, i) => <li key={i} style={{ marginBottom: "0.18rem" }}>{a}</li>)}
                                 </ol>
