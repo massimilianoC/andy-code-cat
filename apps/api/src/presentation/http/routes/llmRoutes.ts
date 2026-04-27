@@ -470,7 +470,9 @@ export function createLlmRoutes(): Router {
             ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
             : null;
 
-        const governanceTemplates = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates;
+        const governanceTemplates =
+            (project?.presetId ? platformConfig?.governanceByProduct?.[project.presetId]?.promptTemplates : undefined)
+            ?? platformConfig?.governanceByProduct?.["default"]?.promptTemplates;
         const governanceSystemPrompt = governanceTemplates?.generationSystem || undefined;
         const governanceFocusedBasePrompt = governanceTemplates?.focusedEditSystem || undefined;
 
