@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import {
@@ -104,7 +104,7 @@ const TABS: { id: GovernanceTab; label: string }[] = [
     { id: "html", label: "HTML Injection" },
     { id: "scripts", label: "JS Injection" },
     { id: "styles", label: "CSS Injection" },
-    { id: "prompts", label: "Prompt Templates" },
+    { id: "prompts", label: "Prompt Pipeline" },
     { id: "runtime", label: "Runtime" },
 ];
 
@@ -153,6 +153,194 @@ function LocaleStringInputs({
                     />
                 </div>
             ))}
+        </div>
+    );
+}
+
+// ── Prompt pipeline layer helpers ────────────────────────────────────────────
+
+type LayerSource = "hardcoded" | "preset" | "per-project" | "editable";
+
+const LAYER_SOURCE_META: Record<LayerSource, { label: string; bg: string; color: string; border: string }> = {
+    hardcoded: { label: "🔒 Hardcoded", bg: "rgba(100,100,110,0.15)", color: "var(--text-muted)", border: "1px solid rgba(100,100,110,0.25)" },
+    preset: { label: "📦 Preset catalog", bg: "rgba(59,130,246,0.1)", color: "#93c5fd", border: "1px solid rgba(59,130,246,0.25)" },
+    "per-project": { label: "🗂️ Per-project", bg: "rgba(245,158,11,0.1)", color: "#fcd34d", border: "1px solid rgba(245,158,11,0.25)" },
+    editable: { label: "✏️ Configurable here", bg: "rgba(99,102,241,0.12)", color: "var(--accent-hover)", border: "1px solid rgba(99,102,241,0.3)" },
+};
+
+/** Static representative content for hardcoded pipeline layers (shown read-only). */
+const HARDCODED_LAYER_CONTENT: Record<string, string> = {
+    A: `You are Andy Code Cat Builder, a specialised AI agent for generating production-ready HTML web pages.
+
+Platform constraints (hardcoded — cannot be overridden by any layer below):
+
+• Produce valid, complete HTML5 — never partial fragments.
+• Never insert placeholder text (lorem ipsum, [YOUR TEXT HERE], TBD, etc.).
+• Never include HTML comments in the rendered output.
+• All <img> elements must carry a descriptive alt attribute.
+• Output is a single self-contained document; inline styles are allowed, external CDN links are not unless the preset explicitly requires them.
+• Do not include <script> tags unless the project type requires interactivity.
+• The MANIFEST.json block must always be emitted in full at the end of the response.`,
+
+    "⚙": `<!-- Runtime-computed — injected at call time, not stored in governance -->
+
+Target output: complete HTML document within token budget.
+Max completion tokens: [resolved from plan limits at runtime]
+
+Guidelines applied:
+• Prioritise content density — reduce the number of sections rather than truncating sections.
+• The MANIFEST.json block must always be emitted in full; never truncate it.
+• If approaching the token limit, omit decorative sections before omitting structural ones.
+• Do not summarise or abbreviate section content to fit the budget — reduce scope instead.`,
+
+    "→": `<!-- Per-call metadata — ephemeral, injected last, never stored -->
+
+request_id:         [uuid generated per request]
+response_format:    structured_html_with_manifest
+strict_mode:        true
+pipeline_version:   [resolved at runtime]
+
+This layer is invisible to end users. It is used internally for request tracing and
+response-format enforcement. Its content changes on every call and is never persisted.`,
+};
+
+/** Descriptive info shown for dynamic (preset / per-project) layers when opened. */
+const DYNAMIC_LAYER_INFO: Record<string, string> = {
+    B: `Preset catalog layer — loaded dynamically at generation time.
+
+Content depends on the active project-type preset (e.g. "landing-page-standard", "portfolio-minimal").
+
+This layer defines:
+  • Output format (section order, semantic markup pattern)
+  • Required sections and their HTML structure
+  • Preset-level content supplements injected into the editorial brief
+
+Edit preset content from: Admin → Presets`,
+
+    C: `Per-project layer — populated at generation time from the project's style profile.
+
+Content includes:
+  • Brand voice and tone directives
+  • Visual identity tokens (colours, typography, spacing scale)
+  • Moodboard descriptions extracted during onboarding or profiling
+
+This layer is unique per project and cannot be configured globally.`,
+
+    D: `Per-project layer — built at generation time from the project brief and preset supplement.
+
+Content includes:
+  • The user's editorial brief (goals, audience, CTA, contact info, style attributes)
+  • Invisible preset-level editorial supplement injected by the preset catalog
+  • Tone and style preferences accumulated during the project session
+
+This layer combines the user-visible brief with a per-preset enrichment layer.`,
+
+    "B′": `Preset catalog layer — loaded dynamically at focused-edit time.
+
+Defines section-level focus rules and coherence constraints for the active preset:
+  • Which sections can be individually targeted by a focused edit
+  • Coherence guards preventing edits from breaking structural invariants
+  • Focus-scope hints passed to the model
+
+Content is managed in the preset catalog and varies per project type.`,
+};
+
+function LayerRow({ letter, name, source, description, children, isLast, initialOpen }: {
+    letter: string;
+    name: string;
+    source: LayerSource;
+    description: string;
+    children?: ReactNode;
+    isLast?: boolean;
+    /** Editable layers default to open so the editor is immediately visible. */
+    initialOpen?: boolean;
+}) {
+    const [isOpen, setIsOpen] = useState(initialOpen ?? false);
+    const meta = LAYER_SOURCE_META[source];
+
+    const staticContent = HARDCODED_LAYER_CONTENT[letter];
+    const dynamicInfo = DYNAMIC_LAYER_INFO[letter];
+    const hasBody = children != null || staticContent != null || dynamicInfo != null;
+
+    return (
+        <div style={{ display: "flex", gap: "14px" }}>
+            {/* Left: badge + vertical connector */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, width: "34px" }}>
+                <div style={{
+                    width: "34px", height: "34px", borderRadius: "50%",
+                    background: meta.bg, border: meta.border, color: meta.color,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontWeight: 700, fontSize: "0.75rem", fontFamily: "monospace", flexShrink: 0,
+                }}>
+                    {letter}
+                </div>
+                {!isLast && <div style={{ width: "2px", flex: 1, minHeight: "20px", background: "var(--border)", marginTop: "2px" }} />}
+            </div>
+
+            {/* Right: accordion */}
+            <div style={{ flex: 1, minWidth: 0, paddingBottom: isLast ? 0 : "20px" }}>
+                {/* Header — always visible, click to toggle */}
+                <button
+                    type="button"
+                    onClick={() => setIsOpen((o) => !o)}
+                    style={{
+                        display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px",
+                        marginBottom: "4px", background: "none", border: "none", padding: 0,
+                        cursor: hasBody ? "pointer" : "default", textAlign: "left", width: "100%",
+                    }}
+                >
+                    <span style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--text)" }}>{name}</span>
+                    <span style={{
+                        fontSize: "0.6875rem", fontWeight: 500, padding: "2px 7px", borderRadius: "4px",
+                        background: meta.bg, color: meta.color, border: meta.border, whiteSpace: "nowrap",
+                    }}>
+                        {meta.label}
+                    </span>
+                    {hasBody && (
+                        <span style={{ marginLeft: "auto", fontSize: "0.7rem", color: "var(--text-muted)", flexShrink: 0 }}>
+                            {isOpen ? "▾" : "▸"}
+                        </span>
+                    )}
+                </button>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: isOpen ? "10px" : 0, lineHeight: 1.5 }}>
+                    {description}
+                </p>
+
+                {/* Accordion body */}
+                {isOpen && (
+                    <div style={{ marginTop: "4px" }}>
+                        {/* Editable layer: writable Monaco */}
+                        {children}
+
+                        {/* Hardcoded layer: read-only Monaco with static content */}
+                        {!children && staticContent != null && (
+                            <MonacoCodeEditor
+                                language="markdown"
+                                value={staticContent}
+                                readOnly
+                                height="160px"
+                            />
+                        )}
+
+                        {/* Dynamic (preset / per-project) layer: info block */}
+                        {!children && staticContent == null && dynamicInfo != null && (
+                            <div style={{
+                                padding: "10px 14px",
+                                borderRadius: "6px",
+                                background: "rgba(100,100,110,0.08)",
+                                border: "1px solid var(--border)",
+                                fontSize: "0.78rem",
+                                color: "var(--text-muted)",
+                                fontFamily: "JetBrains Mono, Fira Code, monospace",
+                                whiteSpace: "pre-wrap",
+                                lineHeight: 1.65,
+                            }}>
+                                {dynamicInfo}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
@@ -701,54 +889,115 @@ export default function AdminGovernancePage() {
                     </>
                 )}
 
-                {/* ── Prompt Templates ───────────────────────────────────────── */}
+                {/* ── Prompt Pipeline ────────────────────────────────────────── */}
                 {activeTab === "prompts" && (
                     <>
                         <Card>
                             <CardHeader>
-                                <CardTitle className="text-base">Prompt Templates</CardTitle>
+                                <CardTitle className="text-base">Prompt Pipeline</CardTitle>
                                 <CardDescription className="text-xs">
-                                    Centralised instruction blocks injected into the system prompts for each
-                                    pipeline stage. Write in Markdown; keep instructions clear and concise.
+                                    All prompt layers applied in sequence for each pipeline. Hardcoded and
+                                    per-project layers are shown for reference only. Layers marked
+                                    "Configurable here" are backed by MongoDB and editable below.
                                 </CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-5">
-                                <div className="space-y-1">
-                                    <Label>Generation system prompt</Label>
-                                    <p className="text-xs text-muted-foreground">Appended to the generation pipeline system message.</p>
+                            <CardContent>
+                                {/* Legend */}
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "24px", padding: "10px 14px", borderRadius: "8px", background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+                                    {(["hardcoded", "preset", "per-project", "editable"] as LayerSource[]).map((src) => (
+                                        <span key={src} style={{ fontSize: "0.6875rem", fontWeight: 500, padding: "2px 8px", borderRadius: "4px", background: LAYER_SOURCE_META[src].bg, color: LAYER_SOURCE_META[src].color, border: LAYER_SOURCE_META[src].border }}>
+                                            {LAYER_SOURCE_META[src].label}
+                                        </span>
+                                    ))}
+                                </div>
+
+                                {/* ── Generation Pipeline ── */}
+                                <p style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "16px" }}>
+                                    Generation pipeline
+                                </p>
+                                <LayerRow letter="A" name="Base Constraints" source="hardcoded"
+                                    description="Platform-level safety and coherence rules: valid HTML5, no placeholder text, no commentary blocks. Always applied first; cannot be overridden.">
+                                </LayerRow>
+                                <LayerRow letter="B" name="Preset / Output Module" source="preset"
+                                    description="Output format, section structure, and semantic layout defined by the selected project-type preset. Loaded from the preset catalog.">
+                                </LayerRow>
+                                <LayerRow letter="C" name="Style Context" source="per-project"
+                                    description="Brand voice, visual identity, colour palette, and moodboard extracted from the active project profile. Set per-project by the user.">
+                                </LayerRow>
+                                <LayerRow letter="D" name="Pre-Prompt Template" source="per-project"
+                                    description="Project-level editorial brief plus an invisible preset-level supplement. The visible part is edited per-project; the supplement is injected by the preset catalog.">
+                                </LayerRow>
+                                <LayerRow letter="E" name="Governance Injection — Generation" source="editable" initialOpen
+                                    description="Platform governance rules injected after the project context. Editable below — applies to all generation calls for this product key. Falls back to the 'default' key if no product-specific override exists.">
                                     <MonacoCodeEditor
                                         language="markdown"
+                                        height="200px"
                                         value={governance.promptTemplates.generationSystem}
                                         onChange={(v) => setPrompt("generationSystem", v)}
                                     />
+                                </LayerRow>
+                                <LayerRow letter="⚙" name="Budget Policy" source="hardcoded"
+                                    description="Token budget directives and output-length guidance. Computed from environment limits and project plan at call time; not configurable.">
+                                </LayerRow>
+                                <LayerRow letter="→" name="Request Override" source="hardcoded" isLast
+                                    description="Ephemeral per-call metadata (request ID, response-format hint). Injected last at call time; not stored or configurable.">
+                                </LayerRow>
+
+                                {/* ── Focused Edit Pipeline ── */}
+                                <div style={{ marginTop: "8px", marginBottom: "16px", borderTop: "1px solid var(--border)", paddingTop: "20px" }}>
+                                    <p style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                                        Focused edit pipeline
+                                    </p>
                                 </div>
-                                <div className="space-y-1">
-                                    <Label>Focused edit system prompt</Label>
-                                    <p className="text-xs text-muted-foreground">Appended to the focused-edit pipeline system message.</p>
+                                <LayerRow letter="B′" name="Preset Focus Schema" source="preset"
+                                    description="Section-level focus rules and coherence constraints from the preset catalog. Governs which parts of the page a focused edit can target.">
+                                </LayerRow>
+                                <LayerRow letter="E′" name="Governance Injection — Focused Edit" source="editable" isLast initialOpen
+                                    description="Platform governance overlay for targeted section edits. Editable below — applies to all focused-edit calls for this product key.">
                                     <MonacoCodeEditor
                                         language="markdown"
+                                        height="180px"
                                         value={governance.promptTemplates.focusedEditSystem}
                                         onChange={(v) => setPrompt("focusedEditSystem", v)}
                                     />
+                                </LayerRow>
+
+                                {/* ── Review Pipeline ── */}
+                                <div style={{ marginTop: "8px", marginBottom: "16px", borderTop: "1px solid var(--border)", paddingTop: "20px" }}>
+                                    <p style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                                        Review pipeline
+                                    </p>
                                 </div>
-                                <div className="space-y-1">
-                                    <Label>Review system prompt</Label>
-                                    <p className="text-xs text-muted-foreground">Appended to the review pipeline system message.</p>
+                                <LayerRow letter="E″" name="Governance Injection — Review" source="editable" isLast initialOpen
+                                    description="Platform governance rules for the content review pass. Editable below — applies to all review calls for this product key.">
                                     <MonacoCodeEditor
                                         language="markdown"
+                                        height="180px"
                                         value={governance.promptTemplates.reviewSystem}
                                         onChange={(v) => setPrompt("reviewSystem", v)}
                                     />
-                                </div>
+                                </LayerRow>
+                            </CardContent>
+                        </Card>
 
+                        {/* AI Helper Tasks */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">AI Helper Tasks</CardTitle>
+                                <CardDescription className="text-xs">
+                                    Internal AI tasks (prompt optimisation, template drafting) run on lightweight
+                                    models separate from the main generation pipeline. Configure provider, model,
+                                    temperature, and system templates here.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-5">
                                 <PromptTaskSettingsCard
                                     title="Optimized preprompting"
-                                    description="Controls the rewriting layer that strengthens the user brief before generation, aligned with the active project-type template model rather than raw technical output constraints."
+                                    description="Controls the rewriting layer that strengthens the user brief before generation, aligned with the active project-type template model."
                                     helperText="Default fallback: SiliconFlow + MiniMax M2.5"
                                     value={governance.promptTaskSettings?.[DEFAULT_PROMPT_TASK_KEY] ?? PROMPT_TASK_DEFAULTS[DEFAULT_PROMPT_TASK_KEY]}
                                     onFieldChange={(key, value) => setPromptTaskField(DEFAULT_PROMPT_TASK_KEY, key, value)}
                                 />
-
                                 <PromptTaskSettingsCard
                                     title="AI template drafter"
                                     description="Reusable service task for superadmin-side creation and refinement of project-type template models from short natural-language instructions."

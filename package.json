@@ -33,6 +33,17 @@
     "storage:migrate": "npm run build -w apps/api && node apps/api/dist/scripts/migrate-assets-to-storage.js",
     "local:minio:up": "docker compose -f docker-compose.deploy.yml up -d --no-deps minio",
     "local:minio:logs": "docker compose -f docker-compose.deploy.yml logs -f --tail=100 minio",
+    "_comment_droplet": "--- DROPLET / PRODUCTION (docker-compose.droplet.yml) — remote deploy on docker-2 ---",
+    "droplet:deploy": "bash .deploy/deploy/deploy-to-droplet.sh",
+    "droplet:deploy:nocache": "bash .deploy/deploy/deploy-to-droplet.sh --no-cache",
+    "droplet:restart:api": "bash .deploy/deploy/deploy-to-droplet.sh --env-only",
+    "droplet:build": "ssh docker-2 'cd /opt/docker/projects/pageforge && docker compose -f docker-compose.droplet.yml --env-file .env.droplet build api web'",
+    "droplet:up": "ssh docker-2 'cd /opt/docker/projects/pageforge && docker compose -f docker-compose.droplet.yml --env-file .env.droplet up -d --no-deps api web nginx'",
+    "droplet:logs": "ssh docker-2 'cd /opt/docker/projects/pageforge && docker compose -f docker-compose.droplet.yml --env-file .env.droplet logs -f --tail=100'",
+    "droplet:logs:api": "ssh docker-2 'cd /opt/docker/projects/pageforge && docker compose -f docker-compose.droplet.yml --env-file .env.droplet logs -f --tail=200 api'",
+    "droplet:ps": "ssh docker-2 'docker ps --format \"{{.Names}}: {{.Status}}\"'",
+    "droplet:seed": "bash .deploy/deploy/seed-droplet.sh",
+    "droplet:minio:init": "bash scripts/minio-init.sh",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces",
     "seed": "npm run seed -w apps/api",
@@ -42,7 +53,8 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1"
+    "@playwright/test": "^1.59.1",
+    "esbuild": "^0.28.0"
   },
   "optionalDependencies": {
     "@esbuild/win32-x64": "^0.28.0"

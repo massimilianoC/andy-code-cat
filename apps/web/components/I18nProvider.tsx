@@ -6,12 +6,20 @@ import i18n from "@/lib/i18n";
 
 /**
  * Wraps the app with the i18next provider.
- * The i18n singleton is initialised once (in lib/i18n.ts) with browser language
- * detection → localStorage fallback → "it" as default.
+ * i18n is initialised with lng:"it" so server and client render identically
+ * (avoiding hydration mismatch). After mount we apply the stored preference.
  */
 export function I18nProvider({ children }: { children: ReactNode }) {
-    // Keep <html lang="..."> in sync with the active language
     useEffect(() => {
+        // Apply stored language after hydration completes
+        const stored = localStorage.getItem("andy_lang");
+        const target = stored ?? navigator.language?.split("-")[0] ?? "it";
+        const lang = ["it", "en"].includes(target) ? target : "it";
+        if (i18n.language !== lang) {
+            i18n.changeLanguage(lang);
+        }
+
+        // Keep <html lang="..."> in sync with the active language
         const update = () => {
             document.documentElement.lang = i18n.language?.split("-")[0] ?? "it";
         };

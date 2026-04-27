@@ -213,7 +213,7 @@ export function createPreviewSnapshotRoutes(): Router {
                 // ── end execution log ─────────────────────────────────────────
 
                 // ── Background thumbnail job (fire-and-forget) ────────────────
-                if (snapshot.artifacts.html) {
+                if (snapshot.artifacts.html && !snapshot.thumbnailPath) {
                     SnapshotThumbnailJob.schedule(
                         req.sandbox!.projectId,
                         snapshot.id,
@@ -318,6 +318,7 @@ export function createPreviewSnapshotRoutes(): Router {
                 res.setHeader("Content-Type", "image/jpeg");
                 // Immutable per snapshotId — safe to cache for 1 year
                 res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+                stream.on("error", next);
                 stream.pipe(res);
             } catch (error) {
                 next(error);

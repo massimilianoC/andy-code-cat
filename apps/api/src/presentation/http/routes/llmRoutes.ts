@@ -421,7 +421,7 @@ export function createLlmRoutes(): Router {
                     provider: input.providerKey,
                     role: existing?.role ?? "dialogue",
                     capabilities,
-                    isDefault: existing?.isDefault ?? index === 0,
+                    isDefault: existing?.isDefault ?? (index === 0 && !input.fallbackModels.some((m) => m.isDefault)),
                     isFallback: existing?.isFallback ?? index !== 0,
                     isActive: existing?.isActive ?? true,
                     displayName: existing?.displayName,
@@ -470,7 +470,9 @@ export function createLlmRoutes(): Router {
             ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
             : null;
 
-        const governanceTemplates = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates;
+        const governanceTemplates =
+            (project?.presetId ? platformConfig?.governanceByProduct?.[project.presetId]?.promptTemplates : undefined)
+            ?? platformConfig?.governanceByProduct?.["default"]?.promptTemplates;
         const governanceSystemPrompt = governanceTemplates?.generationSystem || undefined;
         const governanceFocusedBasePrompt = governanceTemplates?.focusedEditSystem || undefined;
 
@@ -579,11 +581,19 @@ export function createLlmRoutes(): Router {
                 })
             );
 
+            // Derive activeProvider from the resolved model list: prefer the provider
+            // that owns a dialogue model explicitly marked isDefault, then fall back
+            // to the env-configured default so the value is never empty.
+            const activeProvider =
+                providers.find((p) => p.models.some((m) => m.isDefault && m.role === "dialogue"))?.provider
+                ?? providers.find((p) => p.models.some((m) => m.isDefault))?.provider
+                ?? env.LLM_DEFAULT_PROVIDER;
+
             res.json({
                 ...catalog,
                 providers,
                 byokEnabled: true,
-                activeProvider: env.LLM_DEFAULT_PROVIDER,
+                activeProvider,
                 hasProviderApiKeyConfigured: Object.keys(env.providerApiKeys).length > 0,
             });
         } catch (error) {

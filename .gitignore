@@ -25,6 +25,7 @@ yarn-error.log*
 
 # ─── Private infrastructure (server IPs, SSH keys, live deploy runbooks) ─────
 docker-compose.droplet.yml
+docker-compose.override.yml
 scripts/deploy-to-droplet.sh
 scripts/seed-droplet.sh
 nginx/sites-enabled/

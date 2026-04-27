@@ -536,8 +536,8 @@ a.link:hover {
     font-size: 0.82rem;
     font-weight: 700;
     color: var(--text-muted);
-    background: var(--surface-2, rgba(255,255,255,0.06));
-    border: 1px solid var(--border-subtle, rgba(255,255,255,0.12));
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
     border-radius: 0.35rem;
     padding: 0.15rem 0.6rem;
     font-variant-numeric: tabular-nums;
@@ -619,7 +619,7 @@ a.link:hover {
     height: 6px;
     flex-shrink: 0;
     cursor: row-resize;
-    background: linear-gradient(90deg, rgba(71,85,105,0.10), rgba(71,85,105,0.20), rgba(71,85,105,0.10));
+    background: linear-gradient(90deg, rgba(71, 85, 105, 0.10), rgba(71, 85, 105, 0.20), rgba(71, 85, 105, 0.10));
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
     transition: background 0.15s;
@@ -627,7 +627,7 @@ a.link:hover {
 
 .workspace-chat-vresizer:hover,
 .workspace-chat-vresizer:active {
-    background: linear-gradient(90deg, rgba(71,85,105,0.22), rgba(71,85,105,0.40), rgba(71,85,105,0.22));
+    background: linear-gradient(90deg, rgba(71, 85, 105, 0.22), rgba(71, 85, 105, 0.40), rgba(71, 85, 105, 0.22));
 }
 
 .workspace-conv-list {
@@ -660,6 +660,7 @@ a.link:hover {
     padding: 0.35rem;
     background: rgba(15, 17, 23, 0.82);
     overscroll-behavior: contain;
+    overflow-anchor: none;
     position: relative;
 }
 

@@ -51,78 +51,135 @@ Start from [AGENTS.md](AGENTS.md) and [docs/INDEX.md](docs/INDEX.md) for the ful
 
 ---
 
-## Quick Start
+## Quick Start — Self-Hosted Deployment
 
 ### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine with Compose v2
-- Node.js 20+ for local package scripts
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine + Compose v2
+- `openssl` (pre-installed on Linux/macOS; available via Git Bash on Windows)
+- At least one LLM API key — [SiliconFlow](https://siliconflow.cn/account/api-keys) (recommended, affordable) or [OpenRouter](https://openrouter.ai/keys)
 
-### 1. Clone the repository
+### Step 1 — Clone and configure
 
 ```bash
 git clone https://github.com/massimilianoC/andy-code-cat.git
 cd andy-code-cat
 ```
 
-### 2. Configure the environment
+Open `install.sh` and edit the **CONFIGURATION block at the top** (lines 29–43).
+Nothing else needs to be changed.
+
+**Local testing** — edit these two lines:
 
 ```bash
-cp .env.example .env.docker
-
-# Then set at least one provider key, for example:
-# SILICONFLOW_API_KEY=...
-# OPEN_ROUTER_API_KEY=...
+MODE="local"
+SILICONFLOW_API_KEY="sk-..."      # or OPENROUTER_API_KEY
 ```
 
-### 3. Build and start the stack
+**Public domain with HTTPS** — edit all four lines:
 
 ```bash
-npm run local:build:nocache
-npm run local:up
+MODE="domain"
+DOMAIN="yourdomain.com"           # app.yourdomain.com  api.yourdomain.com
+CERTBOT_EMAIL="admin@yourdomain.com"
+SILICONFLOW_API_KEY="sk-..."
 ```
 
-### 4. Open the application
+> **Domain mode prerequisite:** before running the script, create two DNS A records pointing to your server:
+> `@` → `<server-IP>` and `*` → `<server-IP>`. Wait for propagation (~5 min).
 
-| Service | URL |
-| --- | --- |
-| Web UI | [http://localhost](http://localhost) |
-| API health | [http://localhost:4000/health](http://localhost:4000/health) |
-
-### 5. Seed initial data
+### Step 2 — Run the installer
 
 ```bash
-npm run seed
+bash install.sh
 ```
+
+The script generates secrets, builds Docker images, starts all containers, and (in domain mode)
+obtains SSL certificates automatically via Let's Encrypt. It prints the URL at the end.
+
+### Step 3 — Complete the setup wizard
+
+Open the URL printed by the installer (e.g. `http://localhost/install`) and follow the
+4-step wizard to:
+
+1. Create the first superadmin account
+2. Set the public domain and registration policy
+3. (Optional) Configure custom MinIO storage
+4. Review and confirm — the wizard locks permanently after this step
+
+After the wizard completes, log in at `/login`.
 
 ---
 
-## Common Development Commands
+## AI-Assisted Deployment
+
+You can delegate the entire deployment to a coding agent (Claude, Cursor, Copilot, etc.).
+Paste one of the prompts below into the agent chat.
+
+### Prompt — local deployment
+
+```
+I want to deploy Andy Code Cat locally using Docker.
+
+1. Open `install.sh` and set MODE="local" and SILICONFLOW_API_KEY="<my-key>".
+2. Run `bash install.sh` and confirm it completes without errors.
+3. Open http://localhost/install and tell me when the setup wizard is ready.
+
+My SiliconFlow API key: <paste key here>
+```
+
+### Prompt — domain deployment (on a Linux VPS)
+
+```
+I want to deploy Andy Code Cat on this server with HTTPS.
+
+1. Open `install.sh` and configure:
+   - MODE="domain"
+   - DOMAIN="<my-domain>"
+   - CERTBOT_EMAIL="<my-email>"
+   - SILICONFLOW_API_KEY="<my-key>"
+2. Confirm that DNS A records for @ and * point to this server's public IP.
+3. Run `bash install.sh` and confirm certificates are issued.
+4. Open https://app.<my-domain>/install and tell me when the setup wizard is ready.
+
+Domain: <my-domain>
+Server IP: <IP>
+SiliconFlow key: <paste key>
+```
+
+For more details see [docs/guides/LOCAL_DOCKER_START.md](docs/guides/LOCAL_DOCKER_START.md)
+and [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](docs/specs/FIRST_INSTALL_SETUP_SPEC.md).
+
+---
+
+## Development Commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm run local:dev:up` | Start the hot-reload development stack |
-| `npm run local:dev:down` | Stop the hot-reload stack |
+| `docker compose up -d` | Start the hot-reload dev stack (bind-mounted source) |
+| `docker compose down` | Stop the dev stack |
 | `npm run local:logs` | Tail all service logs |
 | `npm run local:logs:api` | Tail API logs only |
 | `npm run local:restart:api` | Restart the API without a full rebuild |
-| `npm run local:down` | Stop the stack |
+
+See [docs/guides/LOCAL_DOCKER_START.md](docs/guides/LOCAL_DOCKER_START.md) for the full dev workflow,
+safe rebuild commands, and emergency mongosh promotion steps.
 
 ---
 
-## Environment Reference
+## Minimum Configuration Reference
 
-Copy `.env.example` to `.env.docker` for local development.
-Use `.env.deploy.example` as the sanitized reference for deploy-like environments.
+`install.sh` generates `.env.docker` automatically. The minimum required settings are:
 
-| Variable | Description |
-| --- | --- |
-| SILICONFLOW_API_KEY | SiliconFlow API key |
-| OPEN_ROUTER_API_KEY | OpenRouter API key |
-| JWT_ACCESS_SECRET | JWT signing secret |
-| MONGODB_URI | MongoDB connection string |
-| LLM_DEFAULT_PROVIDER | Default LLM provider |
-| PUBLIC_DOMAIN | Base domain for publication |
+| Variable | Required | Description |
+| --- | --- | --- |
+| `SILICONFLOW_API_KEY` | One of the two | SiliconFlow LLM API key |
+| `OPEN_ROUTER_API_KEY` | One of the two | OpenRouter LLM API key |
+| `DOMAIN` | Domain mode only | Base domain (e.g. `example.com`) |
+| `CERTBOT_EMAIL` | Domain mode only | Email for Let's Encrypt |
+
+All other secrets (JWT, export token) are generated automatically by the installer.
+Full variable reference: [`.env.deploy.example`](.env.deploy.example).
 
 ---
 

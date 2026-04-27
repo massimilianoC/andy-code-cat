@@ -2,7 +2,7 @@
 
 Andy Code Cat is developed in iterative releases. Each release is a shippable, testable increment.
 
-_Last review: 2026-04-15_
+_Last review: 2026-04-27_
 
 ---
 
@@ -15,6 +15,7 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 | Release | Status | Notes |
 |---|---|---|
 | R0 | ✅ Complete | Core AI loop, auth, WYSIWYG, export, publish, onboarding, i18n, preset catalog |
+| R0.5 | 🔲 Planned | First-install wizard (`/install`), guided server config, superadmin seed, emergency DB promotion docs |
 | R1 | ✅ Functionally delivered | Layered prompting, preset-aware generation, style propagation, provider/model selector, prompt optimization |
 | R2 | 🟡 In progress | Execution log infrastructure and prompt usage summaries exist; dashboarding is still incomplete |
 | R3 | 🟡 Started | Path publish is live and slug/subdomain foundations exist; custom domains and SSL are still pending |
@@ -34,10 +35,46 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 - [x] Export to static HTML (ZIP download)
 - [x] Path-based publish (/p/{publishId})
 - [x] Per-session cost tracking (EUR, with USD→EUR conversion)
+- [x] Per-project cost aggregation — LLM prompt costs + image generation costs summed in project list API (commit 9c97dea)
+- [x] Project card published URL display — live deployment URL surfaced from API and shown as badge in dashboard (commit 9c97dea)
+- [x] Puppeteer thumbnail screenshots — background job renders active snapshot to JPEG, stored in MinIO/filesystem, streamed back with long-lived cache headers (immutable per snapshotId); ProjectCard displays JPEG → legacy HTML iframe → gradient fallback
+- [x] Zero Effort pipeline — `/v1/pipeline/launch` and `/v1/pipeline/config` endpoints for guided single-step site generation with normalized brief and pre-seeded workspace (commit eff9e9b)
+- [x] Zero Effort auto-send — frontend prompt pre-fill with auto-submit on workspace entry for frictionless launch (commit b4eb3f5)
 - [x] Onboarding wizard (style profiling, tag taxonomy)
 - [x] Prompt optimizer (inline enrichment)
 - [x] i18n foundation (IT/EN)
 - [x] Typed preset catalog (A4, slide, form, infographic...)
+
+---
+
+## R0.5 — First Install & Guided Setup Wizard
+
+**Status: 🔲 Planned — self-hosting readiness milestone.**
+
+The platform currently requires manual env-var configuration and a seed script to bootstrap a
+superadmin account. This is not usable by self-hosters and makes first deployment error-prone.
+
+See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.md) for the full spec.
+
+### Deliverables
+
+- [ ] `GET /v1/install` — detect installed/not-installed state
+- [ ] `POST /v1/install` — create first superadmin + seed `PlatformConfig` singleton
+- [ ] Install-state guard: redirect all routes to `/install` when not installed
+- [ ] Multi-step web wizard at `/install` (4 steps: credentials, server config, storage, review)
+- [ ] Parametric server config collected at wizard: public domain, app name, registration policy, email verification
+- [ ] Optional custom MinIO config (endpoint, bucket, credentials) — advanced step, collapsed by default
+- [ ] Permanent lock after first completion (idempotent: `existsWithRole("superadmin")` check)
+- [ ] Emergency manual promotion documented: `mongosh` commands in `FIRST_INSTALL_SETUP_SPEC.md`
+- [ ] i18n keys for all wizard copy (IT + EN)
+- [ ] Rate-limit on `/v1/install` (5 req/min/IP)
+
+### Why this release exists
+
+- Self-hosting requires a usable first-run experience — env-var-only setup is too fragile
+- The wizard is the natural entry point for the `appName`, `publicDomain`, and registration policy
+  that governance already models in `PlatformConfig` but currently seeds only via the seed script
+- The emergency DB promotion path (mongosh) is documented here for existing deployments and CI
 
 ---
 
@@ -65,13 +102,14 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 
 ## R2 — Execution Logging & Observability
 
-**Status: 🟡 Partially implemented and now a near-term priority.**
+**Status: 🟡 Cost data foundation complete; dashboard UI still pending.**
 
 - [x] execution_logs collection (MongoDB TTL 90d)
 - [x] Admin/owner log query endpoint
 - [x] Prompt execution logging and usage summary endpoints
+- [x] Per-project cost aggregation API — LLM prompt costs + image generation costs summed and exposed in `GET /v1/projects` (foundation for cost dashboard)
 - [ ] Full per-operation log coverage for every export/publish/UI workflow
-- [ ] Dedicated cost dashboard per project
+- [ ] Dedicated cost dashboard UI per project (data is now fully available from the API)
 
 **Notes**
 
@@ -130,7 +168,7 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 
 ---
 
-## Product Direction Lock — 2026-04-15
+## Product Direction Lock — 2026-04-27
 
 The primary product direction is now explicitly locked on **project-type template models** and **optimized preprompting**.
 
@@ -159,10 +197,17 @@ The latest delivery wave is **already implemented**. The three immediate follow-
 
 ### Broader roadmap focus
 
-1. Complete R2 with a real project-level cost and log dashboard
+1. Complete R2 with a real project-level cost and log dashboard (data layer is now ready)
 2. Finish R3 domain automation (wildcard subdomain, SSL, custom domains)
 3. Re-open R4 only after the publishing pipeline is considered operationally solid
 4. Keep async project-generation orchestration in the documented backlog until R2/R3 are hardened
+
+### Consolidation fixes — 2026-04-27
+
+Targeted robustness pass on existing implementations (no new features):
+
+- `previewSnapshotRoutes.ts`: thumbnail re-render guard — `SnapshotThumbnailJob.schedule()` on activate endpoint now skips re-render when `thumbnailPath` is already set, preventing redundant Puppeteer jobs on every re-activate
+- `previewSnapshotRoutes.ts`: storage stream error propagation — thumbnail GET endpoint now forwards stream errors to Express `next()` to prevent hung HTTP responses on storage failures
 
 ---
 

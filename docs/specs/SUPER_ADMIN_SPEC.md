@@ -202,10 +202,19 @@ application.  It is not linked from the user-facing navigation and is invisible 
 
 ---
 
-## Seed
+## Seed & First-Install Wizard
+
+> **Preferred path:** Use the guided web installer at `/install` on first deployment.
+> See [FIRST_INSTALL_SETUP_SPEC.md](FIRST_INSTALL_SETUP_SPEC.md) for the full spec.
+
+The installer creates the first superadmin interactively, collects server configuration, and
+seeds the `PlatformConfig` singleton in a single guided flow. It is permanently disabled after
+the first superadmin account exists.
+
+### Env-var seed (legacy / CI)
 
 The `apps/api/src/scripts/seed.ts` script creates a superadmin account if it does not already
-exist.  Credentials are read from environment variables:
+exist. Credentials are read from environment variables:
 
 | Variable | Default |
 |---|---|
@@ -214,6 +223,12 @@ exist.  Credentials are read from environment variables:
 
 If `SUPERADMIN_PASSWORD` is not set, the seed script logs a warning and skips superadmin creation
 (the regular seed user is created regardless).
+
+### Emergency manual promotion (mongosh)
+
+If neither the wizard nor the seed script is usable, a user can be promoted directly from
+`mongosh`. See [FIRST_INSTALL_SETUP_SPEC.md § Manual DB Promotion](FIRST_INSTALL_SETUP_SPEC.md#manual-db-promotion-emergency--dev)
+for the exact commands.
 
 ---
 
@@ -300,6 +315,7 @@ This extension is specified in `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` a
 
 ## Related Documents
 
+- [First Install & Guided Setup Wizard](FIRST_INSTALL_SETUP_SPEC.md)
 - [Architecture overview](../architecture/BOOTSTRAP_ARCHITECTURE.md)
 - [Security baseline](../security/SECURITY_BASELINE.md)
 - [Testable steps runbook](../runbooks/TESTABLE_STEPS.md)
