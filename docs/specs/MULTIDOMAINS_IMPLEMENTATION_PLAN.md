@@ -15,9 +15,9 @@ andy-code-cat platform. The goal is to allow a single deployed cluster to serve 
 across multiple apex domains, each with its own wildcard SSL certificate, while users are
 transparently associated with the domain they registered through.
 
-The plan is designed around **maximum backward compatibility**: the existing `sitowebinun.click`
-deployment continues to work without any data migration. A second domain (`andycode.cat`) is wired
-in as the first multi-domain test, configured outside version control.
+The plan is designed around **maximum backward compatibility**: the existing default deployment
+domain continues to work without any data migration. A second domain is wired in as the first
+multi-domain test, configured outside version control (see §11.4 for the env-var template).
 
 ---
 
@@ -35,7 +35,7 @@ in as the first multi-domain test, configured outside version control.
 10. [Admin UI — Domains Tab](#10-admin-ui--domains-tab)
 11. [Infrastructure Changes](#11-infrastructure-changes)
 12. [Sub-milestone Breakdown](#12-sub-milestone-breakdown)
-13. [Test Configuration — andycode.cat](#13-test-configuration--andycodecat)
+13. [First-time Domain Setup (Example)](#13-first-time-domain-setup-example)
 14. [Dummy Domain Examples](#14-dummy-domain-examples)
 15. [Security Notes](#15-security-notes)
 
@@ -60,18 +60,18 @@ in as the first multi-domain test, configured outside version control.
 ┌──────────────────────────────────────────────────────────┐
 │                     nginx (dynamic)                       │
 │                                                           │
-│  app.sitowebinun.click ──────────────────► web:8081      │
-│  api.sitowebinun.click ──────────────────► api:4000      │
-│  *.sitowebinun.click   ──────────────────► static files  │
+│  app.primary-domain.com ─────────────────► web:8081      │
+│  api.primary-domain.com ─────────────────► api:4000      │
+│  *.primary-domain.com   ─────────────────► static files  │
 │                                                           │
-│  app.andycode.cat      ──────────────────► web:8081      │ ← NEW
-│  api.andycode.cat      ──────────────────► api:4000      │ ← NEW
-│  *.andycode.cat        ──────────────────► static files  │ ← NEW
+│  app.second-domain.com  ─────────────────► web:8081      │ ← NEW
+│  api.second-domain.com  ─────────────────► api:4000      │ ← NEW
+│  *.second-domain.com    ─────────────────► static files  │ ← NEW
 └──────────────────────────────────────────────────────────┘
          │
          │  /data/nginx-sites/  (writable — not tracked in git)
-         │        sitowebinun.click.conf   (generated)
-         │        andycode.cat.conf        (generated)
+         │        primary-domain.com.conf   (generated)
+         │        second-domain.com.conf    (generated)
          │
          ▼
 ┌────────────────────────────────────────────────────────────┐
@@ -106,20 +106,20 @@ Only the nginx server blocks and SSL certs differ per domain.
 
 ### 3.1 Backward compatibility guarantee
 
-The current production domain `sitowebinun.click` is converted into the **first seeded `Domain`
-document** at first boot. No existing user record, project, or deployment record changes at this
-step — the domain fields on those models are nullable and default to this seed domain when absent.
+The current production domain is converted into the **first seeded `Domain` document** at first
+boot. No existing user record, project, or deployment record changes at this step — the domain
+fields on those models are nullable and default to this seed domain when absent.
 
 ```
 Phase 0 (before implementation):
   User: { email: "alice@example.com" }                    ← no domain field
-  Deployment: { slug: "abc123", url: "https://abc123.sitowebinun.click" }
+  Deployment: { slug: "abc123", url: "https://abc123.primary-domain.com" }
 
 Phase 1 (after implementation, seed run):
-  Domain: { id: "dom_001", apex: "sitowebinun.click", isDefault: true }
+  Domain: { id: "dom_001", apex: "primary-domain.com", isDefault: true }
   User: { email: "alice@example.com", assignedDomainId: null }
     → null resolves to isDefault domain at read time
-  Deployment: { slug: "abc123", url: "https://abc123.sitowebinun.click", domainId: null }
+  Deployment: { slug: "abc123", url: "https://abc123.primary-domain.com", domainId: null }
     → null resolves to isDefault domain at read time
 ```
 
@@ -151,8 +151,8 @@ interface Domain {
   id: string;             // "dom_" + nanoid(8), e.g. "dom_g5hk2p1a"
 
   // DNS identity
-  apex: string;           // e.g. "sitowebinun.click" or "acme.com"
-  label: string;          // human display name, e.g. "Sito Web in un Click"
+  apex: string;           // e.g. "acme-builder.com"
+  label: string;          // human display name, e.g. "Acme Web Builder"
 
   // Lifecycle
   isActive: boolean;      // false = suspended (returns 503 on all subdomains)
@@ -160,23 +160,23 @@ interface Domain {
 
   // nginx config
   nginx: {
-    appSubdomain: string;       // e.g. "app"  → app.sitowebinun.click
-    apiSubdomain: string;       // e.g. "api"  → api.sitowebinun.click
-    confPath: string;           // absolute path inside container: /data/nginx-sites/sitowebinun.click.conf
+    appSubdomain: string;       // e.g. "app"  → app.acme-builder.com
+    apiSubdomain: string;       // e.g. "api"  → api.acme-builder.com
+    confPath: string;           // absolute path inside container: /data/nginx-sites/acme-builder.com.conf
     confChecksum: string;       // sha256 of last written conf (idempotency check)
     lastReloadAt: Date | null;
   };
 
   // SSL certificates
   ssl: {
-    appCertPath: string;        // /etc/letsencrypt/live/app.sitowebinun.click/fullchain.pem
+    appCertPath: string;        // /etc/letsencrypt/live/app.acme-builder.com/fullchain.pem
     appCertExpires: Date;
-    wildcardCertPath: string;   // /etc/letsencrypt/live/sitowebinun.click/fullchain.pem
+    wildcardCertPath: string;   // /etc/letsencrypt/live/acme-builder.com/fullchain.pem
     wildcardCertExpires: Date;
     lastRenewalAt: Date | null;
     renewalMethod: 'http01' | 'dns01';
     dnsProviderKey: string;     // reference to env var name (never stored value)
-                                // e.g. "HOSTINGER_API_KEY_SITOWEB" — key name only
+                                // e.g. "DNS_PROVIDER_API_KEY_ACME" — key name only
   };
 
   // Stats (denormalized counters, updated on user/deployment writes)
@@ -223,9 +223,9 @@ Two new optional fields (non-breaking, default `null`):
 
 ```typescript
 // added to existing SiteDeployment interface:
-domainId: string | null;    // null = sitowebinun.click (isDefault)
+domainId: string | null;    // null = falls back to isDefault domain
 publishUrl: string;         // canonical public URL including domain
-                            // e.g. "https://abc123.acme.com"
+                            // e.g. "https://abc123.acme-builder.com"
 ```
 
 > **Note:** The existing `url` field remains present for backward compatibility. New code should
@@ -238,7 +238,7 @@ publishUrl: string;         // canonical public URL including domain
 ### 5.1 Template (`nginx-templates/vhost.conf.njk`)
 
 One Nunjucks template generates the entire conf for a single domain. It replaces the current
-static `andy-code-cat.conf`.
+static per-domain `.conf` file.
 
 ```nginx
 # =============================================================================
@@ -398,10 +398,10 @@ server {
 ```
 
 > **`safeApex`** is `apex` with `.` replaced by `_`, used in nginx upstream names.
-> Example: `sitowebinun.click` → `sitowebinun_click`.
+> Example: `acme-builder.com` → `acme-builder_com`.
 >
 > **`apexEscaped`** is `apex` with `.` escaped as `\.` for nginx regex server_name.
-> Example: `sitowebinun.click` → `sitowebinun\.click`.
+> Example: `acme-builder.com` → `acme-builder\.com`.
 
 ### 5.2 NginxController (infrastructure layer)
 
@@ -442,17 +442,13 @@ Redis `SET NX` key) to prevent concurrent writes on the same file.
 
 ### 5.3 Volume change in docker-compose.droplet.yml
 
-The static `./nginx/sites-enabled` mount (read-only) is replaced by a writable runtime directory:
+The static `./nginx/sites-enabled` mount (read-only) is kept; a new writable runtime directory is
+added for generated per-domain confs:
 
 ```yaml
-# BEFORE:
-volumes:
-  - ./nginx/sites-enabled:/etc/nginx/sites-enabled:ro
-
-# AFTER:
-volumes:
-  - ./nginx/sites-enabled:/etc/nginx/sites-enabled:ro   ← kept for local.conf / fallback
-  - ./data/nginx-sites:/etc/nginx/conf.d                ← NEW: generated domain confs
+# nginx service — volumes:
+- ./nginx/sites-enabled:/etc/nginx/sites-enabled:ro   ← kept for static confs / fallback
+- ./data/nginx-sites:/etc/nginx/conf.d                ← NEW: generated domain confs
 ```
 
 > `./nginx/sites-enabled` is kept for the static `nginx.conf` include directives and the
@@ -518,19 +514,27 @@ query.
 
 ### 6.3 First-time cert acquisition
 
-Manual step documented in the deploy runbook, not automated in R3.1. The superadmin creates a new
-`Domain` doc via the API, then SSH into the droplet and runs:
+Manual step documented in the private deploy runbook, not automated in R3.1. The superadmin creates
+a new `Domain` doc via the API, then SSH into the server and runs (generic template — replace
+`yourdomain.com` and provider plugin with actual values):
 
 ```bash
 # App + api cert (HTTP-01) — nginx must be running and port 80 reachable
 certbot certonly --nginx \
-  -d app.andycode.cat \
-  -d api.andycode.cat
+  -d app.yourdomain.com \
+  -d api.yourdomain.com \
+  --non-interactive \
+  --agree-tos \
+  --email admin@yourdomain.com
 
-# Wildcard cert (DNS-01) — requires DNS API credentials
-certbot certonly --dns-hostinger \
-  -d "*.andycode.cat" \
-  --dns-hostinger-credentials /root/.secrets/hostinger.ini
+# Wildcard cert (DNS-01) — requires DNS provider API credentials
+certbot certonly \
+  --dns-<provider> \
+  --dns-<provider>-credentials /root/.secrets/<provider>.ini \
+  -d "*.yourdomain.com" \
+  --non-interactive \
+  --agree-tos \
+  --email admin@yourdomain.com
 ```
 
 After issuance, the superadmin updates the `Domain` doc cert paths and expiry dates via `PATCH
@@ -627,8 +631,8 @@ async execute(dto: AssignUserToDomainDTO, actorId: string): Promise<void> {
 ```
 
 > **No file movement.** The slug folder `/data/www/{slug}/` stays in place.
-> The nginx wildcard `*.sitowebinun.click` already matched `slug.sitowebinun.click`;
-> the new wildcard `*.andycode.cat` will match `slug.andycode.cat`.
+> The nginx wildcard `*.primary-domain.com` already matched `slug.primary-domain.com`;
+> the new wildcard `*.second-domain.com` will match `slug.second-domain.com`.
 > Both confs serve files from the same `/data/www/` volume.
 
 ### 8.2 Edge case: hardcoded absolute URLs in generated HTML
@@ -661,21 +665,21 @@ All routes require `requireSuperAdmin` middleware.
 
 ```typescript
 interface CreateDomainDTO {
-  apex: string;               // "acme.com"
+  apex: string;               // "acme-builder.com"
   label: string;              // "Acme Web Builder"
   nginx: {
     appSubdomain: string;     // "app"
     apiSubdomain: string;     // "api"
   };
   ssl: {
-    appCertPath: string;      // "/etc/letsencrypt/live/app.acme.com/fullchain.pem"
-    appKeyPath: string;       // "/etc/letsencrypt/live/app.acme.com/privkey.pem"
+    appCertPath: string;      // "/etc/letsencrypt/live/app.acme-builder.com/fullchain.pem"
+    appKeyPath: string;       // "/etc/letsencrypt/live/app.acme-builder.com/privkey.pem"
     appCertExpires: string;   // ISO date
-    wildcardCertPath: string; // "/etc/letsencrypt/live/acme.com/fullchain.pem"
-    wildcardKeyPath: string;  // "/etc/letsencrypt/live/acme.com/privkey.pem"
+    wildcardCertPath: string; // "/etc/letsencrypt/live/acme-builder.com/fullchain.pem"
+    wildcardKeyPath: string;  // "/etc/letsencrypt/live/acme-builder.com/privkey.pem"
     wildcardCertExpires: string;
     renewalMethod: 'http01' | 'dns01';
-    dnsProviderKey: string;   // env var name, e.g. "HOSTINGER_API_KEY_ACME"
+    dnsProviderKey: string;   // env var name, e.g. "DNS_PROVIDER_API_KEY_ACME"
   };
 }
 ```
@@ -745,8 +749,8 @@ warning count if > 0.
 ```
 /data/
   nginx-sites/          ← NEW: writable, gitignored, generated conf files
-    sitowebinun.click.conf
-    andycode.cat.conf
+    primary-domain.com.conf   (example — actual names match SEED_DOMAIN_* env vars)
+    second-domain.com.conf
   www/                  ← unchanged: published site static files
   certs/                ← unchanged: Let's Encrypt certs
 ```
@@ -770,6 +774,8 @@ This is separate from `include /etc/nginx/sites-enabled/*.conf;` which covers st
 
 ### 11.3 docker-compose.droplet.yml changes summary
 
+> `docker-compose.droplet.yml` is gitignored — changes are not published to the public repo.
+
 ```yaml
 api:
   volumes:
@@ -787,35 +793,42 @@ nginx:
 
 ### 11.4 Environment variables (non-committed)
 
-`.env.droplet` additions for the `andycode.cat` test domain:
+The following keys are added to `.env.droplet` (gitignored — never committed). The format below is
+a **template with dummy values** illustrating the expected structure.
+
+See `.env.droplet.example` for the committed template with placeholder values only.
 
 ```dotenv
 # Multi-domain: seed domains at first boot
-# Format: comma-separated JSON or individual keys per domain index
+# Format: individual keys per domain index (1 = default domain, 2+ = additional domains)
 
-SEED_DOMAIN_1_APEX=sitowebinun.click
-SEED_DOMAIN_1_LABEL=Sito Web in un Click
+SEED_DOMAIN_1_APEX=primary-domain.com
+SEED_DOMAIN_1_LABEL=Primary Web Builder
 SEED_DOMAIN_1_IS_DEFAULT=true
-SEED_DOMAIN_1_APP_CERT=/etc/letsencrypt/live/app.sitowebinun.click/fullchain.pem
-SEED_DOMAIN_1_APP_KEY=/etc/letsencrypt/live/app.sitowebinun.click/privkey.pem
-SEED_DOMAIN_1_APP_CERT_EXPIRES=2026-07-08
-SEED_DOMAIN_1_WILDCARD_CERT=/etc/letsencrypt/live/sitowebinun.click/fullchain.pem
-SEED_DOMAIN_1_WILDCARD_KEY=/etc/letsencrypt/live/sitowebinun.click/privkey.pem
-SEED_DOMAIN_1_WILDCARD_CERT_EXPIRES=2026-07-08
+SEED_DOMAIN_1_APP_CERT=/etc/letsencrypt/live/app.primary-domain.com/fullchain.pem
+SEED_DOMAIN_1_APP_KEY=/etc/letsencrypt/live/app.primary-domain.com/privkey.pem
+SEED_DOMAIN_1_APP_CERT_EXPIRES=YYYY-MM-DD
+SEED_DOMAIN_1_WILDCARD_CERT=/etc/letsencrypt/live/primary-domain.com/fullchain.pem
+SEED_DOMAIN_1_WILDCARD_KEY=/etc/letsencrypt/live/primary-domain.com/privkey.pem
+SEED_DOMAIN_1_WILDCARD_CERT_EXPIRES=YYYY-MM-DD
 SEED_DOMAIN_1_RENEWAL_METHOD=dns01
-SEED_DOMAIN_1_DNS_PROVIDER_KEY=HOSTINGER_API_KEY_SITOWEB
+SEED_DOMAIN_1_DNS_PROVIDER_KEY=DNS_PROVIDER_API_KEY_PRIMARY
 
-SEED_DOMAIN_2_APEX=andycode.cat
-SEED_DOMAIN_2_LABEL=Andy Code Cat
+SEED_DOMAIN_2_APEX=second-domain.com
+SEED_DOMAIN_2_LABEL=Second Domain
 SEED_DOMAIN_2_IS_DEFAULT=false
-SEED_DOMAIN_2_APP_CERT=/etc/letsencrypt/live/app.andycode.cat/fullchain.pem
-SEED_DOMAIN_2_APP_KEY=/etc/letsencrypt/live/app.andycode.cat/privkey.pem
-SEED_DOMAIN_2_APP_CERT_EXPIRES=2026-07-08
-SEED_DOMAIN_2_WILDCARD_CERT=/etc/letsencrypt/live/andycode.cat/fullchain.pem
-SEED_DOMAIN_2_WILDCARD_KEY=/etc/letsencrypt/live/andycode.cat/privkey.pem
-SEED_DOMAIN_2_WILDCARD_CERT_EXPIRES=2026-07-08
+SEED_DOMAIN_2_APP_CERT=/etc/letsencrypt/live/app.second-domain.com/fullchain.pem
+SEED_DOMAIN_2_APP_KEY=/etc/letsencrypt/live/app.second-domain.com/privkey.pem
+SEED_DOMAIN_2_APP_CERT_EXPIRES=YYYY-MM-DD
+SEED_DOMAIN_2_WILDCARD_CERT=/etc/letsencrypt/live/second-domain.com/fullchain.pem
+SEED_DOMAIN_2_WILDCARD_KEY=/etc/letsencrypt/live/second-domain.com/privkey.pem
+SEED_DOMAIN_2_WILDCARD_CERT_EXPIRES=YYYY-MM-DD
 SEED_DOMAIN_2_RENEWAL_METHOD=dns01
-SEED_DOMAIN_2_DNS_PROVIDER_KEY=HOSTINGER_API_KEY_ANDYCAT
+SEED_DOMAIN_2_DNS_PROVIDER_KEY=DNS_PROVIDER_API_KEY_SECOND
+
+# Actual DNS provider API key values (never committed):
+DNS_PROVIDER_API_KEY_PRIMARY=<redacted>
+DNS_PROVIDER_API_KEY_SECOND=<redacted>
 ```
 
 These keys are read by the boot seed script (`apps/api/src/scripts/seed.ts`) which upserts `Domain`
@@ -839,18 +852,18 @@ Tasks:
 - [ ] Change `docker-compose.droplet.yml`: add writable `data/nginx-sites` volume to nginx + api
 - [ ] Update `nginx/nginx.conf` to include `conf.d/*.conf`
 - [ ] Write boot seed script that upserts `Domain` docs from `SEED_DOMAIN_*` env vars
-- [ ] Generate `sitowebinun.click.conf` from template on first boot, verify nginx reloads cleanly
+- [ ] Generate default domain `.conf` from template on first boot, verify nginx reloads cleanly
 - [ ] Add `/data/nginx-sites/` to `.gitignore`
 - [ ] Add `.env.droplet.example` entries for `SEED_DOMAIN_*` keys
 
 **Acceptance:** On `npm run droplet:up`, both old static conf and new generated conf coexist; nginx
-serves `app.sitowebinun.click` correctly.
+serves the default domain's `app.*` subdomain correctly.
 
 ---
 
 ### R3.2 — Admin API + second domain test
 
-**Goal:** Superadmin can manage domains via API. `andycode.cat` added and serving published sites.
+**Goal:** Superadmin can manage domains via API. Second domain added and serving published sites.
 
 Tasks:
 - [ ] Implement `/v1/admin/domains` CRUD routes + controllers
@@ -858,13 +871,13 @@ Tasks:
 - [ ] Implement `PATCH /v1/admin/users/:userId/domain` route
 - [ ] Update `RegisterUserUseCase` to capture `registrationDomainId` from `Host` header
 - [ ] Update `DeployWorker` to write `domainId` + `publishUrl` using `user.assignedDomainId`
-- [ ] Obtain `andycode.cat` SSL certificates on the droplet (manual, see §6.3)
-- [ ] Add `andycode.cat` domain via admin API or seed script
+- [ ] Obtain SSL certificates for the second domain on the server (manual, see §6.3)
+- [ ] Add second domain via admin API or seed script
 - [ ] End-to-end test: register user → user auto-assigned to domain → publish site → site
-  accessible at `{slug}.andycode.cat`
+  accessible at `{slug}.second-domain.com`
 
-**Acceptance:** A user registered through `app.andycode.cat` has `assignedDomainId` pointing to
-`andycode.cat`, and their published site is accessible at `{slug}.andycode.cat`.
+**Acceptance:** A user registered through `app.second-domain.com` has `assignedDomainId` pointing to
+that domain, and their published site is accessible at `{slug}.second-domain.com`.
 
 ---
 
@@ -895,68 +908,73 @@ Tasks:
 
 ---
 
-## 13. Test Configuration — andycode.cat
+## 13. First-time Domain Setup (Example)
 
-This section describes how to wire `andycode.cat` as the second domain for production deploy
-testing. All values below belong in `.env.droplet` (never committed to git).
+This section describes the general steps to wire a new domain after R3.1 infrastructure is in
+place. **All production domain names, server IPs, and credentials belong in `.env.droplet`
+(gitignored) and in the private deploy runbook — not here.**
 
-### 13.1 Pre-requisites on the droplet
+### 13.1 Pre-requisites on the server
 
-1. DNS: add `A` records pointing `app.andycode.cat`, `api.andycode.cat`, and `*.andycode.cat`
-   to the droplet's IP.
-2. Port 80 accessible for HTTP-01 challenge (already open for `sitowebinun.click`).
-3. Hostinger DNS API credentials configured for DNS-01 wildcard challenge.
+1. DNS: add `A` records pointing `app.yourdomain.com`, `api.yourdomain.com`, and `*.yourdomain.com`
+   to the server IP.
+2. Port 80 accessible for HTTP-01 challenge.
+3. DNS provider API credentials configured if using DNS-01 for the wildcard cert.
 
-### 13.2 Certificate acquisition (SSH into droplet)
+### 13.2 Certificate acquisition (SSH into server)
+
+Replace `yourdomain.com`, `admin@yourdomain.com`, and `<provider>` with real values stored
+locally in your private deploy runbook.
 
 ```bash
 # 1. App + API cert (HTTP-01)
 certbot certonly --nginx \
-  -d app.andycode.cat \
-  -d api.andycode.cat \
+  -d app.yourdomain.com \
+  -d api.yourdomain.com \
   --non-interactive \
   --agree-tos \
-  --email admin@andycode.cat
+  --email admin@yourdomain.com
 
-# 2. Wildcard cert (DNS-01 via Hostinger plugin)
+# 2. Wildcard cert (DNS-01 via provider plugin)
 certbot certonly \
-  --dns-hostinger \
-  --dns-hostinger-credentials /root/.secrets/hostinger-andycat.ini \
-  -d "*.andycode.cat" \
+  --dns-<provider> \
+  --dns-<provider>-credentials /root/.secrets/<provider>.ini \
+  -d "*.yourdomain.com" \
   --non-interactive \
   --agree-tos \
-  --email admin@andycode.cat
+  --email admin@yourdomain.com
 ```
 
-### 13.3 .env.droplet additions (template)
+### 13.3 .env.droplet addition (template)
+
+Add the following block to `.env.droplet` with real values:
 
 ```dotenv
-# === andycode.cat second domain (R3 test) ===
-SEED_DOMAIN_2_APEX=andycode.cat
-SEED_DOMAIN_2_LABEL=Andy Code Cat
-SEED_DOMAIN_2_IS_DEFAULT=false
-SEED_DOMAIN_2_APP_CERT=/etc/letsencrypt/live/app.andycode.cat/fullchain.pem
-SEED_DOMAIN_2_APP_KEY=/etc/letsencrypt/live/app.andycode.cat/privkey.pem
-SEED_DOMAIN_2_APP_CERT_EXPIRES=2026-07-08
-SEED_DOMAIN_2_WILDCARD_CERT=/etc/letsencrypt/live/andycode.cat/fullchain.pem
-SEED_DOMAIN_2_WILDCARD_KEY=/etc/letsencrypt/live/andycode.cat/privkey.pem
-SEED_DOMAIN_2_WILDCARD_CERT_EXPIRES=2026-07-08
-SEED_DOMAIN_2_RENEWAL_METHOD=dns01
-SEED_DOMAIN_2_DNS_PROVIDER_KEY=HOSTINGER_API_KEY_ANDYCAT
-HOSTINGER_API_KEY_ANDYCAT=<your-hostinger-api-key-for-andycode.cat>
+SEED_DOMAIN_N_APEX=yourdomain.com
+SEED_DOMAIN_N_LABEL=<Human label>
+SEED_DOMAIN_N_IS_DEFAULT=false
+SEED_DOMAIN_N_APP_CERT=/etc/letsencrypt/live/app.yourdomain.com/fullchain.pem
+SEED_DOMAIN_N_APP_KEY=/etc/letsencrypt/live/app.yourdomain.com/privkey.pem
+SEED_DOMAIN_N_APP_CERT_EXPIRES=YYYY-MM-DD
+SEED_DOMAIN_N_WILDCARD_CERT=/etc/letsencrypt/live/yourdomain.com/fullchain.pem
+SEED_DOMAIN_N_WILDCARD_KEY=/etc/letsencrypt/live/yourdomain.com/privkey.pem
+SEED_DOMAIN_N_WILDCARD_CERT_EXPIRES=YYYY-MM-DD
+SEED_DOMAIN_N_RENEWAL_METHOD=dns01
+SEED_DOMAIN_N_DNS_PROVIDER_KEY=DNS_PROVIDER_API_KEY_<DOMAIN>
+DNS_PROVIDER_API_KEY_<DOMAIN>=<redacted>
 ```
 
 ### 13.4 Verification checklist
 
 ```
-[ ] curl -I https://app.andycode.cat           → 200, served by Next.js
-[ ] curl -I https://api.andycode.cat/v1/health → 200, served by Express
-[ ] curl -I https://abc123.andycode.cat        → 200 or 404 (slug present or absent)
-[ ] curl -I https://abc123.sitowebinun.click   → still 200 (existing domain unaffected)
-[ ] openssl s_client -connect app.andycode.cat:443 -servername app.andycode.cat
-    → verify: issuer is Let's Encrypt, CN = app.andycode.cat
-[ ] openssl s_client -connect abc123.andycode.cat:443 -servername abc123.andycode.cat
-    → verify: wildcard cert, SAN includes *.andycode.cat
+[ ] curl -I https://app.yourdomain.com           → 200, served by Next.js
+[ ] curl -I https://api.yourdomain.com/v1/health → 200, served by Express
+[ ] curl -I https://abc123.yourdomain.com        → 200 or 404 (slug present or absent)
+[ ] existing default domain still returns 200    → backward compatibility confirmed
+[ ] openssl s_client -connect app.yourdomain.com:443 -servername app.yourdomain.com
+    → verify: issuer is Let's Encrypt, CN = app.yourdomain.com
+[ ] openssl s_client -connect abc123.yourdomain.com:443 -servername abc123.yourdomain.com
+    → verify: wildcard cert, SAN includes *.yourdomain.com
 ```
 
 ---
@@ -970,8 +988,8 @@ in the code, tests, and local fixtures.
 
 | ID | apex | label | isDefault | Use in |
 |---|---|---|---|---|
-| `dom_default` | `sitowebinun.click` | Sito Web in un Click | `true` | seed / production |
-| `dom_andycat` | `andycode.cat` | Andy Code Cat | `false` | R3 deploy test |
+| `dom_primary` | `primary-domain.com` | Primary Web Builder | `true` | seed (replace with real default in .env.droplet) |
+| `dom_second` | `second-domain.com` | Second Domain | `false` | second-domain test (replace with real apex in .env.droplet) |
 | `dom_acme` | `acme-builder.com` | Acme Web Builder | `false` | unit tests |
 | `dom_agency` | `partner-agency.dev` | Partner Agency | `false` | integration tests |
 | `dom_example` | `example-sites.io` | Example Sites | `false` | e2e fixtures |
@@ -1000,7 +1018,7 @@ server {
 }
 ```
 
-### 14.3 Registration flow — example.io
+### 14.3 Registration flow — example-sites.io
 
 1. User opens `https://app.example-sites.io` and clicks "Sign up".
 2. Browser sends `POST /v1/auth/register` with `Host: app.example-sites.io`.
@@ -1040,9 +1058,9 @@ Result:
 
 Auth cookies must be scoped to the exact subdomain:
 ```
-Set-Cookie: access_token=...; Domain=app.sitowebinun.click; SameSite=Strict; Secure; HttpOnly
+Set-Cookie: access_token=...; Domain=app.yourdomain.com; SameSite=Strict; Secure; HttpOnly
 ```
-This prevents the auth cookie from being sent to `{slug}.sitowebinun.click` (published user sites).
+This prevents the auth cookie from being sent to `{slug}.yourdomain.com` (published user sites).
 Verify current `Set-Cookie` headers before R3.1 ships.
 
 ### 15.2 nginx -t before every reload
