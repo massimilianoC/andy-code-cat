@@ -588,6 +588,7 @@
             "optimizeWith": "Optimize · {{model}}",
             "optimizePrompt": "Optimize prompt",
             "restoreOriginal": "Ripristina originale",
+            "clearPrompt": "Cancella",
             "stopGeneration": "Interrompi la generazione in corso",
             "sending": "Invio...",
             "send": "Invia",
