@@ -130,9 +130,12 @@ function postProcess(artifacts: { html: string; css: string; js: string }): Proc
     const { html: htmlNoJs, extracted: extractedJs } = extractInlineJs(html);
     html = htmlNoJs;
 
-    // Merge: artifact CSS/JS come first (they are "intentional" from LLM), then extracted
-    css = joinUniqueBlocks(css, extractedCss);
-    js = joinUniqueBlocks(js, extractedJs);
+    // If the dedicated field is already populated it is the canonical source —
+    // the LLM also embeds the same content inline in HTML for iframe preview,
+    // so merging would produce duplicate declarations. Fall back to extracted
+    // content only when the dedicated field is empty.
+    css = css.trim() ? css.trim() : joinUniqueBlocks(extractedCss);
+    js = js.trim() ? js.trim() : joinUniqueBlocks(extractedJs);
 
     // Ensure separated file references exist in HTML
     if (css.trim()) html = ensureLinkTag(html);
