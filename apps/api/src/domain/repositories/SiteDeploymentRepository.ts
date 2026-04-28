@@ -28,6 +28,7 @@ export interface SiteDeploymentRepository {
     ): Promise<SiteDeployment | null>;
     updateCustomSlug(id: string, customSlug: string | null): Promise<SiteDeployment | null>;
     deleteById(id: string): Promise<boolean>;
+    findActivesByUserId(userId: string): Promise<SiteDeployment[]>;
     isPublishIdTaken(publishId: string): Promise<boolean>;
     isCustomSlugTaken(slug: string, excludeDeploymentId?: string): Promise<boolean>;
     // ── Admin ops ─────────────────────────────────────────────────────────────

@@ -15,25 +15,30 @@ export class GetLlmCatalog {
     ) { }
 
     async execute(): Promise<{ source: "env" | "mongo"; providers: LlmProviderCatalog[] }> {
-        if (this.source === "env") {
+        const fallbackProviders = [
+            buildDefaultSiliconFlowCatalog(this.siliconFlowBaseUrl),
+            buildDefaultLmStudioCatalog(this.lmStudioBaseUrl),
+            buildDefaultOpenRouterCatalog(this.openRouterBaseUrl, this.hasOpenRouterApiKey),
+        ];
+
+        if (!this.repository) {
             return {
                 source: "env",
-                providers: [
-                    buildDefaultSiliconFlowCatalog(this.siliconFlowBaseUrl),
-                    buildDefaultLmStudioCatalog(this.lmStudioBaseUrl),
-                    buildDefaultOpenRouterCatalog(this.openRouterBaseUrl, this.hasOpenRouterApiKey),
-                ]
+                providers: fallbackProviders,
             };
         }
 
-        if (!this.repository) {
-            throw new Error("LLM catalog repository is required when source is mongo");
+        const mongoProviders = await this.repository.listActiveProviders().catch(() => []);
+        if (mongoProviders.length > 0) {
+            return {
+                source: "mongo",
+                providers: mongoProviders,
+            };
         }
 
-        const providers = await this.repository.listActiveProviders();
         return {
-            source: "mongo",
-            providers
+            source: "env",
+            providers: fallbackProviders,
         };
     }
 }

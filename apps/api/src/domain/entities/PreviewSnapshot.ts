@@ -14,6 +14,10 @@ export interface PreviewSnapshotFocusContext {
         tag: string;
         classes: string[];
         textSnippet?: string;
+        currentSrc?: string;
+        currentAlt?: string;
+        backgroundImageUrl?: string;
+        mediaMode?: "foreground" | "background" | "none";
     };
     codeSelection?: {
         language: "html" | "css" | "js";
@@ -53,6 +57,11 @@ export interface PreviewSnapshot {
     artifacts: PreviewSnapshotArtifacts;
     focusContext?: PreviewSnapshotFocusContext;
     metadata?: PreviewSnapshotMetadata;
+    /**
+     * Stored path / key for the background-generated Puppeteer JPEG thumbnail.
+     * Absent until the async job completes. Use the thumbnail API endpoint to serve it.
+     */
+    thumbnailPath?: string;
     createdAt: Date;
     activatedAt?: Date;
 }

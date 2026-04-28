@@ -13,6 +13,8 @@
         "migrate:db": "tsx src/scripts/migrate-db-rename.ts",
         "sf:probe": "tsx src/scripts/sf-probe.ts",
         "sf:billing": "tsx src/scripts/sf-billing-import.ts",
+        "storage:probe": "npm run build && node dist/scripts/storage-probe.js",
+        "storage:migrate": "npm run build && node dist/scripts/migrate-assets-to-storage.js",
         "lint": "echo 'lint not configured yet'",
         "test": "echo 'test pipeline will be added in phase 2'"
     },
@@ -29,6 +31,7 @@
         "jsonrepair": "^3.13.3",
         "jsonwebtoken": "^9.0.2",
         "mongodb": "^6.7.0",
+        "minio": "^8.0.6",
         "morgan": "^1.10.0",
         "multer": "^2.1.1",
         "puppeteer": "^24.40.0",

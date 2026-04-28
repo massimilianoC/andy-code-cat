@@ -1,10 +1,20 @@
 # Andy Code Cat — Prompt Optimizer: Specifiche Dettagliate
 
-> **Versione:** 1.0.0 — 2026-04-09  
+> **Versione:** 1.1.0 — 2026-04-15  
 > **Autore:** architettura di prodotto  
 > **Scope:** UX interattiva e architettura backend per il servizio "Ottimizza Prompt"  
 > **Dipendenze architetturali:** LLM Catalog (✅), UserStyleProfile (✅), ProjectMoodboard (✅), Asset Manager (✅)  
 > **Milestone:** R0 — in `docs/DEVELOPMENT_PLAN.md`
+>
+> **Note:** the authoritative English implementation plan for the reusable internal prompting platform is in `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md`.
+>
+> **Decision lock — 2026-04-15:**
+>
+> - project type must be resolved from the active project preset/catalog
+> - prompt rewriting must preserve intent while enriching domain and content direction
+> - tone should stay modern, fresh, vivid, professional, and coherent with user preferences
+> - superadmin must control provider, model, and template for this layer
+> - default fallback is SiliconFlow + MiniMaxAI/MiniMax-M2.5
 
 ---
 

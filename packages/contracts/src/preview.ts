@@ -2,9 +2,9 @@ import { z } from "zod";
 import { llmFocusContextSchema } from "./llm";
 
 export const previewArtifactsSchema = z.object({
-    html: z.string().max(200000),
-    css: z.string().max(100000),
-    js: z.string().max(100000),
+    html: z.string().max(10000000),
+    css: z.string().max(500000),
+    js: z.string().max(500000),
 });
 
 export const previewSnapshotMetadataSchema = z.object({

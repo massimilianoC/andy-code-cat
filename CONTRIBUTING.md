@@ -31,7 +31,17 @@ Open an issue using the **Feature Request** template or start a **Discussion**. 
 
 ## Branching Model (Gitflow)
 
-This project follows a simplified **Gitflow** model. Understanding it before you open a PR will save you a lot of back-and-forth.
+This project follows full **Gitflow** with a repository release version based on date. Understanding it before you open a PR will save you a lot of back-and-forth.
+
+### Canonical release version
+
+The publication version is stored in the root `RELEASE_VERSION` file.
+
+- Format: `YYYY.MM.DD.N`
+- Example: `2026.04.12.6`
+- Release branch example: `release/2026.04.12.6`
+
+`package.json` versions remain SemVer-compatible for Node.js tooling and are not the canonical repository release number.
 
 ### Permanent branches
 
@@ -42,7 +52,7 @@ This project follows a simplified **Gitflow** model. Understanding it before you
 
 ### Temporary branches
 
-Always branch off `develop` (unless it is a hotfix — see below):
+Always branch off `develop` unless it is a `hotfix/*`:
 
 | Prefix | When to use | Example |
 |---|---|---|
@@ -51,20 +61,42 @@ Always branch off `develop` (unless it is a hotfix — see below):
 | `docs/<topic>` | Documentation only | `docs/openrouter-guide` |
 | `chore/<topic>` | Tooling, deps, config | `chore/bump-dependencies` |
 | `refactor/<scope>` | Code restructuring, no behaviour change | `refactor/session-use-case` |
+| `release/<version>` | Release stabilization branch, created from `develop` | `release/2026.04.12.6` |
 | `hotfix/<name>` | Critical production bug — branches off `main`, merges into both `main` AND `develop` | `hotfix/broken-publish` |
 
 ### Flow at a glance
 
 ```
-main  ←── hotfix/<name>  (base: main → merges back into main + develop)
+main    ←── release/<version>  (base: develop → merge to main → back-merge to develop)
   ↑
+  └───── hotfix/<name>         (base: main → merge to main → back-merge to develop)
+
 develop ←── feat/<name>
-             fix/<name>
-             docs/<name>
-             chore/<name>
+           fix/<name>
+           docs/<name>
+           chore/<name>
+           refactor/<name>
 ```
 
 > **Golden rule:** never commit directly to `main` or `develop`. Every change enters through a Pull Request.
+
+### Release flow
+
+1. Update `RELEASE_VERSION` to the target value, for example `2026.04.12.6`.
+2. Run `npm run release:version:validate`.
+3. Create `release/<RELEASE_VERSION>` from `develop`.
+4. Stabilize the branch. Only fixes, docs, release notes, and final configuration alignment are allowed.
+5. Merge the release branch into `main`.
+6. Tag `main` with the same version string.
+7. Merge the same release branch back into `develop`.
+
+### Hotfix flow
+
+1. Create `hotfix/<name>` from `main`.
+2. Apply the minimal production fix.
+3. Merge to `main`.
+4. If published, increment `RELEASE_VERSION` and tag the new release.
+5. Merge the same hotfix back into `develop`.
 
 ---
 
@@ -118,6 +150,11 @@ git checkout -b feat/my-feature upstream/develop
 - Fill in the PR template.
 - PRs with failing checks will not be merged.
 - Request a review; at least one approval is required before merging.
+
+For `release/*` and `hotfix/*` branches:
+
+- open the first PR against `main`
+- after merge, open or complete the back-merge into `develop`
 
 ---
 
@@ -193,6 +230,14 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 - Write in the **imperative mood**: "add export pipeline", not "added" or "adding".
 - Reference issues in the footer: `Closes #42` or `Refs #17`.
 - Do **not** rewrite history on shared branches (`develop`, `main`) — no `git push --force`.
+
+Useful local commands:
+
+```bash
+npm run release:version
+npm run release:version:validate
+npm run gitflow:guard
+```
 
 **Examples:**
 

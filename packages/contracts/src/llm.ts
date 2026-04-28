@@ -1,5 +1,35 @@
 import { z } from "zod";
 
+const optionalTrimmedString = (max: number) =>
+    z.preprocess(
+        (value) => {
+            if (typeof value === "string") {
+                return value.trim().slice(0, max);
+            }
+            return value == null ? undefined : value;
+        },
+        z.string().max(max).optional(),
+    );
+
+const requiredTrimmedString = (max: number) =>
+    z.preprocess(
+        (value) => (typeof value === "string" ? value.trim().slice(0, max) : value),
+        z.string().min(1).max(max),
+    );
+
+const sanitizedStringArray = (maxItems: number, maxItemLength: number) =>
+    z.preprocess(
+        (value) =>
+            Array.isArray(value)
+                ? value
+                    .filter((item): item is string => typeof item === "string")
+                    .map((item) => item.trim().slice(0, maxItemLength))
+                    .filter(Boolean)
+                    .slice(0, maxItems)
+                : value,
+        z.array(z.string().max(maxItemLength)).max(maxItems),
+    );
+
 export const llmHistoryMessageSchema = z.object({
     role: z.enum(["user", "assistant"]),
     content: z.string().max(50000), // backend truncates at LLM_HISTORY_MESSAGE_MAX_CHARS (default 2000)
@@ -8,22 +38,26 @@ export const llmHistoryMessageSchema = z.object({
 export const llmFocusContextSchema = z.object({
     mode: z.enum(["project", "preview-element", "code-selection"]),
     targetType: z.enum(["html", "css", "js", "component", "section"]),
-    userIntent: z.string().max(500).optional(),
+    userIntent: optionalTrimmedString(500),
     selectedElement: z.object({
-        stableNodeId: z.string().min(1).max(120),
-        selector: z.string().min(1).max(300),
-        tag: z.string().min(1).max(64),
-        classes: z.array(z.string().max(100)).max(30),
-        textSnippet: z.string().max(500).optional(),
+        stableNodeId: requiredTrimmedString(120),
+        selector: requiredTrimmedString(300),
+        tag: requiredTrimmedString(64),
+        classes: sanitizedStringArray(30, 100).optional().transform((value) => value ?? []),
+        textSnippet: optionalTrimmedString(500),
         /** outerHTML of the element as serialized by the browser DOM — used as anchor hint.
          *  Silently truncated to 8000 chars server-side — never rejected. */
-        outerHtml: z.string().max(200000).transform(s => s.length > 8000 ? s.slice(0, 8000) : s).optional(),
+        outerHtml: optionalTrimmedString(8000),
+        currentSrc: optionalTrimmedString(1500),
+        currentAlt: optionalTrimmedString(300),
+        backgroundImageUrl: optionalTrimmedString(1500),
+        mediaMode: z.enum(["foreground", "background", "none"]).optional(),
     }).optional(),
     codeSelection: z.object({
         language: z.enum(["html", "css", "js"]),
         startLine: z.number().int().min(1),
         endLine: z.number().int().min(1),
-        selectedText: z.string().max(4000).optional(),
+        selectedText: optionalTrimmedString(4000),
     }).optional(),
 });
 
@@ -51,11 +85,12 @@ export const llmChatPreviewSchema = z.object({
     systemPrompt: z.string().max(4000).optional(),
     history: z.array(llmHistoryMessageSchema).max(100).optional(),
     currentArtifacts: z.object({
-        html: z.string().max(50000).optional(),
+        html: z.string().max(80000).optional(),
         css: z.string().max(20000).optional(),
         js: z.string().max(20000).optional(),
     }).optional(),
     focusContext: llmFocusContextSchema.optional(),
+    conversationId: z.string().min(1).max(120).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({
@@ -64,8 +99,18 @@ export const llmPromptConfigSchema = z.object({
     prePromptTemplate: z.string().min(10).max(50000),
 });
 
+export const optimizePromptSchema = z.object({
+    rawPrompt: z.string().min(1).max(20000),
+    assetIds: z.array(z.string().min(1).max(120)).max(12).optional(),
+    conversationId: z.string().min(1).max(120).optional(),
+    sessionId: z.string().min(1).max(120).optional(),
+    provider: z.string().min(1).max(80).optional(),
+    model: z.string().min(1).max(200).optional(),
+});
+
 export type LlmChatPreviewInput = z.infer<typeof llmChatPreviewSchema>;
 export type LlmPromptConfigInput = z.infer<typeof llmPromptConfigSchema>;
+export type OptimizePromptInput = z.infer<typeof optimizePromptSchema>;
 
 export interface LlmStructuredArtifacts {
     html: string;
@@ -130,6 +175,13 @@ export interface LlmFocusContext {
         textSnippet?: string;
         /** outerHTML of the element as serialized by the browser DOM — used as anchor hint */
         outerHtml?: string;
+        currentSrc?: string;
+        currentAlt?: string;
+        backgroundImageUrl?: string;
+        mediaMode?: "foreground" | "background" | "none";
+        originalWidth?: number;
+        originalHeight?: number;
+        aspectRatio?: number;
     };
     codeSelection?: {
         language: "html" | "css" | "js";
@@ -149,6 +201,44 @@ export interface LlmPromptConfigDto {
     updatedAt: string;
 }
 
+export interface OptimizePromptResult {
+    taskKey: string;
+    optimizedPrompt: string;
+    provider: string;
+    model: string;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    costEstimate?: {
+        currency: "EUR";
+        amount: number;
+        breakdown: {
+            tokenCost: number;
+            imageCost: number;
+            videoCost: number;
+        };
+        unitRates: {
+            textEurPer1kTokens: number;
+            imageEurPerAsset: number;
+            videoEurPerAsset: number;
+        };
+        providerCostUsd?: number;
+    };
+    durationMs: number;
+    skipped?: boolean;
+    rawResponse?: string;
+    finishReason?: string;
+    promptingTrace?: LlmPromptingTrace;
+}
+
+export interface PromptUsageSummaryResult {
+    totalCost: number;
+    totalTokens: number;
+    runs: number;
+}
+
 export interface LlmChatPreviewResult {
     reply: string;
     rawResponse?: string;
@@ -157,6 +247,8 @@ export interface LlmChatPreviewResult {
     structured?: LlmStructuredResponse;
     /** true when a focused-mode patch was successfully applied; false/undefined when merge failed or mode was not focused. */
     focusPatchApplied?: boolean;
+    /** true when focused-mode was active but the LLM response could not be parsed at all (malformed JSON). */
+    focusPatchParseError?: boolean;
     provider: string;
     model: string;
     finishReason?: string;

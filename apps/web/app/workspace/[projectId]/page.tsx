@@ -1,11 +1,13 @@
 "use client";
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import dynamic from "next/dynamic";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
     getOrCreateProjectConversation,
+    getConversation,
     addMessage,
     llmChatPreview,
     streamLlmChatPreview,
@@ -14,6 +16,8 @@ import {
     getLlmPromptConfig,
     getLlmPromptPreview,
     setLlmPromptConfig,
+    streamOptimizePrompt,
+    getPromptUsageSummary,
     type LlmPromptPreviewDto,
     listPreviewSnapshots,
     createPreviewSnapshot,
@@ -41,13 +45,31 @@ import {
     unpublishProject,
     checkSlugAvailability,
     updateDeploymentSlug,
+    listProjectAssets,
+    getProjectAiAnalytics,
+    generateProjectImage,
+    suggestProjectImageIdea,
+    downloadProjectAssetDataUrl,
     type SiteDeploymentDto,
+    type ProjectAssetDto,
+    type AiUsageAnalyticsDto,
+    type SuggestProjectImageIdeaResult,
 } from "../../../lib/api";
 import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
 import { saveThumbnail, savePromptExcerpt, incrementSnapCount } from "../../../lib/thumbnail";
 import ProjectConfigPopup from "../../../components/ProjectConfigPopup";
-import { Settings } from "lucide-react";
+import MediaInspectorPanel from "../../../components/MediaInspectorPanel";
+import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
+import { MediaGrid, type MediaItem } from "@/components/media";
+import { ChevronDown, Mic, Settings, Square } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
+import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
+import type { PreviewViewport } from "../../../components/workspace/PreviewViewportSelector";
+import { SnapshotHistoryPanel } from "../../../components/workspace/SnapshotHistoryPanel";
+import { PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT } from "./iframe-scripts";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
     ssr: false,
@@ -56,6 +78,43 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 
 
 const SPLIT_COOKIE = "andy-code-cat_workspace_split";
+const CHAT_VSPLIT_COOKIE = "andy-code-cat_chat_vsplit";
+
+type BrowserSpeechRecognitionResult = {
+    isFinal: boolean;
+    0: { transcript: string };
+};
+
+type BrowserSpeechRecognitionEvent = Event & {
+    resultIndex: number;
+    results: ArrayLike<BrowserSpeechRecognitionResult>;
+};
+
+type BrowserSpeechRecognitionErrorEvent = Event & {
+    error?: string;
+};
+
+type BrowserSpeechRecognition = {
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    onstart: (() => void) | null;
+    onend: (() => void) | null;
+    onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
+    onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+    start: () => void;
+    stop: () => void;
+    abort: () => void;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+declare global {
+    interface Window {
+        SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+        webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    }
+}
 
 function getCookie(name: string): string | null {
     if (typeof document === "undefined") return null;
@@ -106,6 +165,61 @@ function tierBadge(tier: ModelItem["priceTier"]): string {
     if (tier === "€€€")  return "€€€ ";
     if (tier === "€€€€") return "€€€€ ";
     return "";
+}
+
+function getStringDetail(details: unknown, key: string): string | undefined {
+    if (!details || typeof details !== "object") return undefined;
+    const value = (details as Record<string, unknown>)[key];
+    return typeof value === "string" ? value : undefined;
+}
+
+function appendPromptSegment(base: string, addition: string): string {
+    const normalizedAddition = addition.trim();
+    if (!normalizedAddition) return base;
+    if (!base.trim()) return normalizedAddition;
+    const needsSpace = !/[\s\n]$/.test(base);
+    return `${base}${needsSpace ? " " : ""}${normalizedAddition}`;
+}
+
+const PROJECT_ASSET_DOWNLOAD_PATH_RE = /\/v1\/projects\/([^/]+)\/assets\/([^/]+)\/download(?:$|\?)/i;
+
+function parseProtectedAssetDownloadUrl(rawSrc: string): { projectId: string; assetId: string } | null {
+    const trimmed = String(rawSrc ?? "").trim();
+    if (!trimmed || typeof window === "undefined") return null;
+
+    try {
+        const url = new URL(trimmed, window.location.origin);
+        const match = url.pathname.match(PROJECT_ASSET_DOWNLOAD_PATH_RE);
+        if (!match?.[1] || !match?.[2]) return null;
+        return {
+            projectId: decodeURIComponent(match[1]),
+            assetId: decodeURIComponent(match[2]),
+        };
+    } catch {
+        return null;
+    }
+}
+
+function sanitizeMediaElementPayload(element: SelectedFocusElement) {
+    const safeUrl = (value?: string) => {
+        const trimmed = value?.trim();
+        if (!trimmed || trimmed.startsWith("data:")) return undefined;
+        return trimmed.length > 1500 ? trimmed.slice(0, 1500) : trimmed;
+    };
+
+    return {
+        stableNodeId: element.stableNodeId,
+        selector: element.selector,
+        tag: element.tag,
+        textSnippet: clipFocusValue(element.textSnippet, 500),
+        currentSrc: safeUrl(element.currentSrc),
+        currentAlt: clipFocusValue(element.currentAlt, 300),
+        backgroundImageUrl: safeUrl(element.backgroundImageUrl),
+        mediaMode: element.mediaMode,
+        originalWidth: element.originalWidth,
+        originalHeight: element.originalHeight,
+        aspectRatio: element.aspectRatio,
+    };
 }
 
 /**
@@ -166,9 +280,101 @@ function groupedModelOptions(models: ModelItem[]): React.ReactNode {
 }
 // ── End model dropdown helpers ───────────────────────────────────────────────
 
+type SelectedFocusElement = NonNullable<LlmFocusContext["selectedElement"]>;
+
+const MAX_FOCUS_SELECTOR_LEN = 240;
+const MAX_FOCUS_NODE_ID_LEN = 120;
+const MAX_FOCUS_TEXT_LEN = 160;
+const MAX_FOCUS_OUTER_HTML_LEN = 8000;
+const MAX_FOCUS_CLASSES = 8;
+const INVALID_FOCUS_TAGS = new Set(["html", "body", "head", "script", "style", "link", "meta"]);
+
+function clipFocusValue(value: string | undefined, max: number): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+}
+
+function sanitizeSelectedElementForFocus(
+    element: LlmFocusContext["selectedElement"] | null | undefined,
+): SelectedFocusElement | null {
+    if (!element) return null;
+
+    const tag = clipFocusValue(element.tag?.toLowerCase(), 64);
+    if (!tag || INVALID_FOCUS_TAGS.has(tag)) {
+        return null;
+    }
+
+    const stableNodeId = clipFocusValue(element.stableNodeId, MAX_FOCUS_NODE_ID_LEN);
+    const selector = clipFocusValue(element.selector, MAX_FOCUS_SELECTOR_LEN);
+    if (!stableNodeId || !selector) {
+        return null;
+    }
+
+    const classes = Array.isArray(element.classes)
+        ? element.classes
+            .map((item) => clipFocusValue(item, 60))
+            .filter((item): item is string => Boolean(item))
+            .slice(0, MAX_FOCUS_CLASSES)
+        : [];
+
+    const textSnippet = clipFocusValue(element.textSnippet, MAX_FOCUS_TEXT_LEN);
+    const outerHtml = clipFocusValue(element.outerHtml, MAX_FOCUS_OUTER_HTML_LEN);
+    const currentSrc = clipFocusValue(element.currentSrc, 1500);
+    const currentAlt = clipFocusValue(element.currentAlt, 300);
+    const backgroundImageUrl = clipFocusValue(element.backgroundImageUrl, 1500);
+    const mediaMode = element.mediaMode === "foreground" || element.mediaMode === "background"
+        ? element.mediaMode
+        : ((currentSrc || backgroundImageUrl) ? "none" : undefined);
+    const originalWidth = typeof element.originalWidth === "number" && Number.isFinite(element.originalWidth) && element.originalWidth > 0
+        ? Math.round(element.originalWidth)
+        : undefined;
+    const originalHeight = typeof element.originalHeight === "number" && Number.isFinite(element.originalHeight) && element.originalHeight > 0
+        ? Math.round(element.originalHeight)
+        : undefined;
+    const aspectRatio = typeof element.aspectRatio === "number" && Number.isFinite(element.aspectRatio) && element.aspectRatio > 0
+        ? Math.round(element.aspectRatio * 1000) / 1000
+        : (originalWidth && originalHeight ? Math.round((originalWidth / originalHeight) * 1000) / 1000 : undefined);
+
+    if (outerHtml && /^<(html|body)\b/i.test(outerHtml)) {
+        return null;
+    }
+
+    return {
+        stableNodeId,
+        selector,
+        tag,
+        classes,
+        ...(textSnippet ? { textSnippet } : {}),
+        ...(outerHtml ? { outerHtml } : {}),
+        ...(currentSrc ? { currentSrc } : {}),
+        ...(currentAlt ? { currentAlt } : {}),
+        ...(backgroundImageUrl ? { backgroundImageUrl } : {}),
+        ...(mediaMode ? { mediaMode } : {}),
+        ...(originalWidth ? { originalWidth } : {}),
+        ...(originalHeight ? { originalHeight } : {}),
+        ...(aspectRatio ? { aspectRatio } : {}),
+    };
+}
+
+function isFocusContextValidationError(error: unknown): boolean {
+    if (!(error instanceof ApiError) || error.status !== 400) {
+        return false;
+    }
+
+    const details = error.details as
+        | { fieldErrors?: { focusContext?: unknown } }
+        | undefined;
+
+    return Array.isArray(details?.fieldErrors?.focusContext) && details.fieldErrors.focusContext.length > 0;
+}
+
 export default function WorkspacePage() {
+    const { t } = useTranslation();
     const router = useRouter();
     const params = useParams();
+    const searchParams = useSearchParams();
     const projectId = Array.isArray(params.projectId) ? params.projectId[0] : params.projectId;
 
     const { add: addNotification, update: updateNotification } = useNotifications();
@@ -186,8 +392,13 @@ export default function WorkspacePage() {
     const [presetCatalog, setPresetCatalog] = useState<ProjectPreset[]>([]);
 
     const [prompt, setPrompt] = useState("");
+    const [optimizingPrompt, setOptimizingPrompt] = useState(false);
+    const [activeOperation, setActiveOperation] = useState<"chat" | "prompt-optimizer" | null>(null);
+    const [promptRestoreValue, setPromptRestoreValue] = useState<string | null>(null);
+    const [promptOpsSummary, setPromptOpsSummary] = useState({ totalCost: 0, totalTokens: 0, runs: 0 });
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [llmErrorDialog, setLlmErrorDialog] = useState<LlmProviderErrorDialogState | null>(null);
     const [promptConfigVersion, setPromptConfigVersion] = useState<string>("v1");
     // Chat defaults are driven by the backend (GET /llm/prompt-config).
     // Clients must never hardcode these values — always use what the backend returns.
@@ -210,9 +421,35 @@ export default function WorkspacePage() {
     const [providersCatalog, setProvidersCatalog] = useState<LlmProviderCatalogDto[]>([]);
     const [selectedProvider, setSelectedProvider] = useState<string>("");
     const [selectedModel, setSelectedModel] = useState<string>("");
+    const imageModelOptions = React.useMemo(() => {
+        const imageProviders = providersCatalog.filter((provider) =>
+            provider.models.some((model) => model.isActive && model.capabilities.includes("image_generation")),
+        );
+
+        return imageProviders.flatMap((provider) => provider.models
+            .filter((model) => model.isActive && model.capabilities.includes("image_generation"))
+            .map((model) => ({
+                id: model.id,
+                label: `${model.displayName ?? model.id}${model.priceTier ? ` · ${model.priceTier}` : ""}`,
+                provider: provider.provider,
+                providerLabel: provider.provider,
+            })));
+    }, [providersCatalog]);
+    const presetRecommendationAppliedRef = useRef<string | null>(null);
+    const [voiceSupported, setVoiceSupported] = useState(false);
+    const [voiceListening, setVoiceListening] = useState(false);
+    const [voiceError, setVoiceError] = useState<string | null>(null);
 
     const [leftWidth, setLeftWidth] = useState(40);
+    const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+    const speechBasePromptRef = useRef("");
+    const speechCommittedTranscriptRef = useRef("");
     const [isDragging, setIsDragging] = useState(false);
+    const [chatVSplit, setChatVSplit] = useState(65);
+    const chatVSplitRef = useRef<number>(65);
+    const chatBodyRef = useRef<HTMLDivElement>(null);
+    const [isDraggingVChat, setIsDraggingVChat] = useState(false);
+    const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("desktop");
     const [previewTab, setPreviewTab] = useState<"preview" | "html" | "css" | "js" | "prompt">("preview");
     const [promptTemplate, setPromptTemplate] = useState("");
     const [promptEnabled, setPromptEnabled] = useState(true);
@@ -222,17 +459,81 @@ export default function WorkspacePage() {
     const [previewSnapshots, setPreviewSnapshots] = useState<PreviewSnapshot[]>([]);
     const [selectedBackendSnapshotId, setSelectedBackendSnapshotId] = useState<string | null>(null);
     const [loadingSnapshots, setLoadingSnapshots] = useState(false);
+    const selectedBackendSnapshotIdRef = useRef<string | null>(null);
     const [editorHtml, setEditorHtml] = useState("");
     const [editorCss, setEditorCss] = useState("");
     const [editorJs, setEditorJs] = useState("");
-    const [editorSelectionLabel, setEditorSelectionLabel] = useState<string>("Nessuna selezione");
+    const editorHtmlRef = useRef("");
+    const editorCssRef = useRef("");
+    const editorJsRef = useRef("");
+    const [editorSelectionLabel, setEditorSelectionLabel] = useState<string>("");
     const [inspectMode, setInspectMode] = useState(false);
     const [selectedElement, setSelectedElement] = useState<LlmFocusContext["selectedElement"] | null>(null);
+    const [selectedElementSource, setSelectedElementSource] = useState<"inspect" | "edit-media" | null>(null);
+    const [mediaToolsOpen, setMediaToolsOpen] = useState(false);
+    const [mediaInspectorSection, setMediaInspectorSection] = useState<"gen-image" | "gallery">("gen-image");
+    // EDIT-mode media asset list scanned from the live preview iframe
+    const [editMediaList, setEditMediaList] = useState<MediaItem[]>([]);
+    const [projectAssets, setProjectAssets] = useState<ProjectAssetDto[]>([]);
+    const [loadingProjectAssets, setLoadingProjectAssets] = useState(false);
+    const [assetScope, setAssetScope] = useState<"project" | "user">("project");
+    const [mediaMode, setMediaMode] = useState<"foreground" | "background">("foreground");
+    const [backgroundFit, setBackgroundFit] = useState<"cover" | "contain" | "auto">("cover");
+    const [backgroundRepeat, setBackgroundRepeat] = useState<"no-repeat" | "repeat" | "repeat-x" | "repeat-y">("no-repeat");
+    const [mediaOpacity, setMediaOpacity] = useState(1);
+    const [mediaFilter, setMediaFilter] = useState("none");
+    const [generatingMedia, setGeneratingMedia] = useState(false);
+    const [suggestingMedia, setSuggestingMedia] = useState(false);
+    const [mediaSuggestion, setMediaSuggestion] = useState<SuggestProjectImageIdeaResult | null>(null);
+    const [selectedImageModel, setSelectedImageModel] = useState("");
+    const [selectedImageSize, setSelectedImageSize] = useState("1024x1024");
+    const [selectedImageSteps, setSelectedImageSteps] = useState(4);
+    const [projectAiAnalytics, setProjectAiAnalytics] = useState<AiUsageAnalyticsDto | null>(null);
+    const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
     const [codeEditorSelection, setCodeEditorSelection] = useState<LlmFocusContext["codeSelection"] | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    const assetPreviewUrlCacheRef = useRef<Map<string, string>>(new Map());
+    const resolveSidebarMediaSrc = useCallback(async (rawSrc: string): Promise<string> => {
+        const trimmed = String(rawSrc ?? "").trim();
+        if (!trimmed) return "";
+        if (/^(data|blob):/i.test(trimmed)) return trimmed;
+        if (!token) return trimmed;
+
+        const parsed = parseProtectedAssetDownloadUrl(trimmed);
+        if (!parsed) return trimmed;
+
+        const cacheKey = `${parsed.projectId}:${parsed.assetId}`;
+        const cached = assetPreviewUrlCacheRef.current.get(cacheKey);
+        if (cached) return cached;
+
+        try {
+            const dataUrl = await downloadProjectAssetDataUrl(token, parsed.projectId, parsed.assetId);
+            if (dataUrl) {
+                assetPreviewUrlCacheRef.current.set(cacheKey, dataUrl);
+                return dataUrl;
+            }
+        } catch {
+            // Fall back to the original URL; the thumbnail component will handle any load failure gracefully.
+        }
+
+        return trimmed;
+    }, [token]);
+    const hasPreviewArtifacts = Boolean(editorHtml || editorCss || editorJs);
+    const clearSelectedElement = useCallback(() => {
+        setSelectedElement(null);
+        setSelectedElementSource(null);
+        setMediaSuggestion(null);
+        setMediaToolsOpen(false);
+    }, []);
 
     // ── WYSIWYG EDIT mode state ──────────────────────────────────────────────
     const [editMode, setEditMode] = useState(false);
+    // ── Zero Effort auto-send ─────────────────────────────────────────────────
+    // When redirected from the Zero Effort launch page, autoPrompt is passed as a
+    // search param. We pre-fill the prompt and auto-trigger generation once the
+    // conversation and providers are both ready.
+    const autoPromptFiredRef = useRef(false);
+    const [autoPromptPending, setAutoPromptPending] = useState(false);
     const [editSessionId, setEditSessionId] = useState<string | null>(null);
     const [isSavingEditVersion, setIsSavingEditVersion] = useState(false);
     const editAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -267,9 +568,9 @@ export default function WorkspacePage() {
         setExportState("loading");
         setExportError(null);
         const notifId = addNotification({
-            label: "Export ZIP (con screenshot)",
+            label: t("workspace.notifications.export.label"),
             status: "running",
-            message: "Cattura screenshot + archivio in corso…",
+            message: t("workspace.notifications.export.running"),
         });
         try {
             // 1. Create the export record on the server
@@ -277,7 +578,7 @@ export default function WorkspacePage() {
             const res = await requestLayer1Export(token, projectId, snapshotId);
 
             // 2. Download the ZIP blob using the Bearer token (no JWT-in-URL fragility)
-            updateNotification(notifId, { message: "Download ZIP…" });
+            updateNotification(notifId, { message: t("workspace.notifications.export.downloading") });
             const blob = await downloadExportBlob(token, res.id);
 
             // 3. Trigger browser download
@@ -291,16 +592,16 @@ export default function WorkspacePage() {
             URL.revokeObjectURL(objectUrl);
 
             setExportState("idle");
-            updateNotification(notifId, { status: "done", message: "ZIP scaricato" });
+            updateNotification(notifId, { status: "done", message: t("workspace.notifications.export.done") });
         } catch (err) {
             // 401 from the blob download = sessione scaduta — mostra la modal
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
                 setExportState("idle");
-                updateNotification(notifId, { status: "error", message: "Sessione scaduta" });
+                updateNotification(notifId, { status: "error", message: t("workspace.notifications.export.sessionExpired") });
                 return;
             }
-            const msg = err instanceof Error ? err.message : "Errore export";
+            const msg = err instanceof Error ? err.message : t("workspace.notifications.export.error");
             setExportError(msg);
             setExportState("error");
             updateNotification(notifId, { status: "error", message: msg });
@@ -323,9 +624,9 @@ export default function WorkspacePage() {
         setCaptureState("loading");
         setCaptureDropdownOpen(false);
         const notifId = addNotification({
-            label: `Cattura screenshot ${format.toUpperCase()}`,
+        label: t("workspace.notifications.capture.label", { format: format.toUpperCase() }),
             status: "running",
-            message: "Rendering pagina in corso…",
+            message: t("workspace.notifications.capture.running"),
         });
         try {
             // Calls the backend Puppeteer endpoint:
@@ -342,15 +643,15 @@ export default function WorkspacePage() {
             URL.revokeObjectURL(objectUrl);
 
             setCaptureState("idle");
-            updateNotification(notifId, { status: "done", message: "File scaricato" });
+            updateNotification(notifId, { status: "done", message: t("workspace.notifications.capture.done") });
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
                 setCaptureState("idle");
-                updateNotification(notifId, { status: "error", message: "Sessione scaduta" });
+                updateNotification(notifId, { status: "error", message: t("workspace.notifications.capture.sessionExpired") });
                 return;
             }
-            const msg = err instanceof Error ? err.message : "Errore cattura";
+            const msg = err instanceof Error ? err.message : t("workspace.notifications.capture.error");
             console.error("[snapshot-capture]", err);
             setCaptureState("error");
             updateNotification(notifId, { status: "error", message: msg });
@@ -365,6 +666,13 @@ export default function WorkspacePage() {
         getPublishStatus(token, projectId)
             .then((d) => setPublishDeployment(d))
             .catch(() => setPublishDeployment(null));
+    }, [token, projectId]);
+
+    useEffect(() => {
+        if (!token) return;
+        getPromptUsageSummary(token, projectId)
+            .then((summary) => setPromptOpsSummary(summary))
+            .catch(() => setPromptOpsSummary({ totalCost: 0, totalTokens: 0, runs: 0 }));
     }, [token, projectId]);
 
     // Debounced slug availability check
@@ -394,9 +702,9 @@ export default function WorkspacePage() {
         setPublishState("loading");
         const activeId = previewSnapshots.find((s) => s.isActive)?.id ?? null;
         const notifId = addNotification({
-            label: "Pubblicazione",
+            label: t("workspace.notifications.publish.label"),
             status: "running",
-            message: "Pubblicazione in corso…",
+            message: t("workspace.notifications.publish.running"),
         });
         try {
             // Never pass selectedBackendSnapshotId here — the user may have browsed to an
@@ -414,17 +722,17 @@ export default function WorkspacePage() {
             })();
             updateNotification(notifId, {
                 status: "done",
-                message: vn ? `Pubblicato! (v${vn} attiva)` : "Pubblicato!",
+                message: vn ? t("workspace.notifications.publish.doneVersioned", { vn }) : t("workspace.notifications.publish.done"),
             });
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
                 setPublishState("idle");
-                updateNotification(notifId, { status: "error", message: "Sessione scaduta" });
+                updateNotification(notifId, { status: "error", message: t("workspace.notifications.publish.sessionExpired") });
                 return;
             }
             setPublishState("error");
-            const msg = err instanceof Error ? err.message : "Errore pubblicazione";
+            const msg = err instanceof Error ? err.message : t("workspace.notifications.publish.error");
             updateNotification(notifId, { status: "error", message: msg });
             window.setTimeout(() => setPublishState("idle"), 3000);
         }
@@ -515,8 +823,10 @@ export default function WorkspacePage() {
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const thinkingFlowRef = useRef<HTMLDivElement>(null);
+    const draftBoxRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const prevScrollTopRef = useRef(0);
     const [isUserScrolled, setIsUserScrolled] = useState(false);
 
     useEffect(() => {
@@ -541,22 +851,29 @@ export default function WorkspacePage() {
         if (savedSplit >= 25 && savedSplit <= 60) {
             setLeftWidth(savedSplit);
         }
+        const savedVSplit = Number(getCookie(CHAT_VSPLIT_COOKIE));
+        if (savedVSplit >= 30 && savedVSplit <= 85) {
+            setChatVSplit(savedVSplit);
+        }
     }, [router]);
 
     const loadProjectConversation = useCallback(
-        async (t: string) => {
+        async (authToken: string) => {
             setConversationLoading(true);
             try {
-                const res = await getOrCreateProjectConversation(t, projectId);
+                const convParam = searchParams?.get("conv");
+                const res = convParam
+                    ? await getConversation(authToken, projectId, convParam)
+                    : await getOrCreateProjectConversation(authToken, projectId);
                 setActiveConv(res.conversation);
                 setActiveConvId(res.conversation.id);
             } catch (err) {
-                setError(err instanceof ApiError ? String(err.message) : "Errore caricamento conversazione");
+                setError(err instanceof ApiError ? String(err.message) : t("workspace.notifications.conversation.loadError"));
             } finally {
                 setConversationLoading(false);
             }
         },
-        [projectId]
+        [projectId, searchParams, t]
     );
 
     useEffect(() => {
@@ -596,6 +913,29 @@ export default function WorkspacePage() {
             .catch(() => undefined);
     }, [token, loadProjectConversation, projectId]);
 
+    // ── Zero Effort auto-send: read param and pre-fill prompt ─────────────────
+    useEffect(() => {
+        const rawAutoPrompt = searchParams?.get("autoPrompt");
+        if (!rawAutoPrompt) return;
+        const decoded = decodeURIComponent(rawAutoPrompt);
+        if (!decoded.trim()) return;
+        setPrompt(decoded);
+        setAutoPromptPending(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // run once on mount — searchParams is stable
+
+    // ── Zero Effort auto-send: fire when conversation + providers are ready ───
+    useEffect(() => {
+        if (!autoPromptPending) return;
+        if (autoPromptFiredRef.current) return;
+        if (conversationLoading || !selectedModel || sending || !token) return;
+        autoPromptFiredRef.current = true;
+        setAutoPromptPending(false);
+        // Trigger send with a fake FormEvent — handleSend will read the current prompt state.
+        void handleSend({ preventDefault: () => {} } as React.FormEvent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoPromptPending, conversationLoading, selectedModel, sending, token]);
+
     useEffect(() => {
         if (!selectedProvider) return;
         const provider = providersCatalog.find((p) => p.provider === selectedProvider);
@@ -611,6 +951,37 @@ export default function WorkspacePage() {
         setSelectedModel(nextModel?.id ?? "");
     }, [selectedProvider, selectedModel, providersCatalog]);
 
+    useEffect(() => {
+        if (imageModelOptions.length === 0) {
+            setSelectedImageModel("");
+            return;
+        }
+        if (imageModelOptions.some((model) => model.id === selectedImageModel)) {
+            return;
+        }
+        const siliconFlowFast = imageModelOptions.find((m) => m.provider === "siliconflow" && /schnell|turbo|fast/i.test(m.id));
+        const anyFast = imageModelOptions.find((m) => /schnell|turbo|fast/i.test(m.id));
+        const nextModel = siliconFlowFast ?? anyFast ?? imageModelOptions[0];
+        setSelectedImageModel(nextModel?.id ?? "");
+    }, [imageModelOptions, selectedImageModel]);
+
+    useEffect(() => {
+        if (!projectPresetId || presetRecommendationAppliedRef.current === projectPresetId) return;
+        if (presetCatalog.length === 0 || providersCatalog.length === 0) return;
+
+        const preset = presetCatalog.find((entry) => entry.id === projectPresetId);
+        const recommendation = preset?.recommendedModel;
+        if (!recommendation?.provider || !recommendation.modelId) return;
+
+        const provider = providersCatalog.find((entry) => entry.provider === recommendation.provider);
+        const model = provider?.models.find((entry) => entry.isActive && entry.id === recommendation.modelId);
+        if (!provider || !model) return;
+
+        setSelectedProvider(provider.provider);
+        setSelectedModel(model.id);
+        presetRecommendationAppliedRef.current = projectPresetId;
+    }, [projectPresetId, presetCatalog, providersCatalog]);
+
     // Auto-load prompt preview when user opens the prompt tab
     useEffect(() => {
         if (previewTab === "prompt" && token && !promptPreview && !loadingPromptPreview) {
@@ -618,14 +989,22 @@ export default function WorkspacePage() {
         }
     }, [previewTab, token, promptPreview, loadingPromptPreview, loadPromptPreview]);
 
-    // Track user scroll: if near bottom → auto-scroll active, else show "go to bottom" button
+    // Track user scroll direction: only set isUserScrolled = true when scrolling UP,
+    // reset to false when reaching the bottom. This prevents programmatic smooth-scroll
+    // from accidentally toggling isUserScrolled via intermediate scroll events.
     useEffect(() => {
         const el = chatContainerRef.current;
         if (!el) return;
         function onScroll() {
             if (!el) return;
             const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-            setIsUserScrolled(!atBottom);
+            if (atBottom) {
+                setIsUserScrolled(false);
+            } else if (el.scrollTop < prevScrollTopRef.current) {
+                // User intentionally scrolled up
+                setIsUserScrolled(true);
+            }
+            prevScrollTopRef.current = el.scrollTop;
         }
         el.addEventListener("scroll", onScroll, { passive: true });
         return () => el.removeEventListener("scroll", onScroll);
@@ -638,16 +1017,21 @@ export default function WorkspacePage() {
     }, [activeConv?.messages, isUserScrolled]);
 
     useEffect(() => {
-        if (sending && !isUserScrolled) {
+        if ((sending || optimizingPrompt) && !isUserScrolled) {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
         }
-    }, [sending, thinkingText, draftAnswer, isUserScrolled]);
+    }, [sending, optimizingPrompt, thinkingText, draftAnswer, isUserScrolled]);
 
     useEffect(() => {
-        if (!sending) return;
+        if (!sending && !optimizingPrompt) return;
         if (!thinkingFlowRef.current) return;
         thinkingFlowRef.current.scrollTop = thinkingFlowRef.current.scrollHeight;
-    }, [sending, thinkingText]);
+    }, [sending, optimizingPrompt, thinkingText]);
+
+    useEffect(() => {
+        if (!draftBoxRef.current || !draftAnswer) return;
+        draftBoxRef.current.scrollTop = draftBoxRef.current.scrollHeight;
+    }, [draftAnswer]);
 
     const loadSnapshots = useCallback(
         async (t: string) => {
@@ -674,6 +1058,14 @@ export default function WorkspacePage() {
     );
 
     useEffect(() => {
+        selectedBackendSnapshotIdRef.current = selectedBackendSnapshotId;
+    }, [selectedBackendSnapshotId]);
+
+    useEffect(() => { editorHtmlRef.current = editorHtml; }, [editorHtml]);
+    useEffect(() => { editorCssRef.current = editorCss; }, [editorCss]);
+    useEffect(() => { editorJsRef.current = editorJs; }, [editorJs]);
+
+    useEffect(() => {
         if (!token) {
             setPreviewSnapshots([]);
             setSelectedBackendSnapshotId(null);
@@ -681,6 +1073,517 @@ export default function WorkspacePage() {
         }
         void loadSnapshots(token);
     }, [token, loadSnapshots]);
+
+    const loadProjectAssets = useCallback(async (activeToken?: string) => {
+        const resolvedToken = activeToken ?? token;
+        if (!resolvedToken) return;
+        setLoadingProjectAssets(true);
+        try {
+            const res = await listProjectAssets(resolvedToken, projectId);
+            setProjectAssets(res.assets);
+        } catch {
+            setProjectAssets([]);
+        } finally {
+            setLoadingProjectAssets(false);
+        }
+    }, [token, projectId]);
+
+    const loadProjectAiUsage = useCallback(async (activeToken?: string) => {
+        const resolvedToken = activeToken ?? token;
+        if (!resolvedToken) return;
+        setLoadingAiAnalytics(true);
+        try {
+            const analytics = await getProjectAiAnalytics(resolvedToken, projectId);
+            setProjectAiAnalytics(analytics);
+        } catch {
+            setProjectAiAnalytics(null);
+        } finally {
+            setLoadingAiAnalytics(false);
+        }
+    }, [token, projectId]);
+
+    useEffect(() => {
+        if (!token) return;
+        void loadProjectAssets(token);
+        void loadProjectAiUsage(token);
+    }, [token, loadProjectAssets, loadProjectAiUsage]);
+
+    useEffect(() => {
+        if (!selectedElement) return;
+        if (selectedElement.mediaMode === "background") {
+            setMediaMode("background");
+        } else if (selectedElement.mediaMode === "foreground" || selectedElement.tag === "img") {
+            setMediaMode("foreground");
+        }
+    }, [selectedElement]);
+
+    useEffect(() => {
+        setMediaSuggestion(null);
+    }, [selectedElement?.stableNodeId, mediaMode]);
+
+    useEffect(() => {
+        if (!selectedElement?.aspectRatio) return;
+        if (selectedElement.aspectRatio >= 1.45) {
+            setSelectedImageSize("1280x720");
+            return;
+        }
+        if (selectedElement.aspectRatio <= 0.8) {
+            setSelectedImageSize("720x1280");
+            return;
+        }
+        setSelectedImageSize("1024x1024");
+    }, [selectedElement?.aspectRatio]);
+
+    const applyMediaToPreview = useCallback((url: string): string => {
+        if (!selectedElement) return "";
+
+        iframeRef.current?.contentWindow?.postMessage({
+            type: "pf-apply-media",
+            selector: selectedElement.selector,
+            mode: mediaMode,
+            url,
+            fit: backgroundFit,
+            repeat: backgroundRepeat,
+            opacity: mediaOpacity,
+            filter: mediaFilter,
+            alt: selectedElement.currentAlt ?? "",
+            preserveWidth: selectedElement.originalWidth,
+            preserveHeight: selectedElement.originalHeight,
+            aspectRatio: selectedElement.aspectRatio,
+        }, "*");
+
+        const currentHtml = editorHtmlRef.current;
+        let nextHtml = currentHtml;
+
+        if (currentHtml.trim()) {
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(currentHtml, "text/html");
+                const target = doc.querySelector(selectedElement.selector);
+                if (target) {
+                    if (mediaMode === "background") {
+                        const targetEl = target as HTMLElement;
+                        targetEl.style.backgroundImage = `url("${url}")`;
+                        targetEl.style.backgroundPosition = "center center";
+                        targetEl.style.backgroundSize = backgroundFit;
+                        targetEl.style.backgroundRepeat = backgroundRepeat;
+                        targetEl.style.opacity = String(mediaOpacity);
+                        targetEl.style.filter = mediaFilter;
+                    } else {
+                        const img = target.tagName.toLowerCase() === "img"
+                            ? target as HTMLImageElement
+                            : target.querySelector("img");
+                        if (img) {
+                            img.setAttribute("src", url);
+                            if (selectedElement.currentAlt) img.setAttribute("alt", selectedElement.currentAlt);
+                            const imgEl = img as HTMLImageElement & HTMLElement;
+                            imgEl.style.opacity = String(mediaOpacity);
+                            imgEl.style.filter = mediaFilter;
+                            imgEl.style.objectFit = backgroundFit === "auto" ? "cover" : backgroundFit;
+                            imgEl.style.maxWidth = imgEl.style.maxWidth || "100%";
+                            imgEl.style.display = imgEl.style.display || "block";
+                            if (!img.getAttribute("width") && !imgEl.style.width && selectedElement.originalWidth) {
+                                imgEl.style.width = `${selectedElement.originalWidth}px`;
+                            }
+                            if (!img.getAttribute("height") && !imgEl.style.height && selectedElement.originalHeight) {
+                                imgEl.style.height = `${selectedElement.originalHeight}px`;
+                            }
+                            if (selectedElement.aspectRatio && !imgEl.style.aspectRatio) {
+                                imgEl.style.aspectRatio = String(selectedElement.aspectRatio);
+                            }
+                        }
+                    }
+
+                    nextHtml = /<!doctype/i.test(currentHtml)
+                        ? `<!doctype html>${doc.documentElement.outerHTML}`
+                        : doc.body.innerHTML;
+                }
+            } catch {
+                nextHtml = currentHtml;
+            }
+        }
+
+        if (nextHtml !== currentHtml) {
+            setEditorHtml(nextHtml);
+        }
+
+        setSelectedElement((prev) => prev ? {
+            ...prev,
+            currentSrc: mediaMode === "foreground" ? url : prev.currentSrc,
+            backgroundImageUrl: mediaMode === "background" ? url : prev.backgroundImageUrl,
+            mediaMode,
+        } : prev);
+
+        return nextHtml;
+    }, [selectedElement, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter]);
+
+    const persistWorkspaceSnapshot = useCallback(async (
+        snapshotId: string,
+        artifacts: { html: string; css: string; js: string },
+        options?: { promptExcerpt?: string; refreshList?: boolean; setSelected?: boolean },
+    ) => {
+        saveThumbnail(projectId, artifacts);
+        if (options?.promptExcerpt) {
+            savePromptExcerpt(projectId, options.promptExcerpt);
+        }
+        incrementSnapCount(projectId);
+
+        // Fetch the snapshot list BEFORE setting state so we can batch ALL
+        // state updates into ONE synchronous React render.  If the list fetch
+        // and the selectedId update land in different batches, React may fire
+        // an intermediate render where artifactsKey already points to the new
+        // snapshot but editorHtml still holds stale content — the iframe
+        // remounts with blank/stale srcDoc.  (Same pattern used by the
+        // streaming flow at the handleSend level.)
+        let freshSnapshots: typeof previewSnapshots | null = null;
+        if (token && options?.refreshList !== false) {
+            try {
+                const res = await listPreviewSnapshots(token, projectId);
+                freshSnapshots = res.snapshots;
+            } catch { /* silent — snapshot list is supplementary */ }
+        }
+
+        // --- single batched render from here ---
+        if (freshSnapshots) {
+            setPreviewSnapshots(freshSnapshots);
+        }
+        if (options?.setSelected !== false) {
+            setSelectedBackendSnapshotId(snapshotId);
+            // Pre-populate editor state in the same render so the iframe
+            // remounts with correct content, not a stale/blank doc.
+            setEditorHtml(artifacts.html);
+            setEditorCss(artifacts.css);
+            setEditorJs(artifacts.js);
+        }
+    }, [projectId, token]);
+
+    const saveMediaVersion = useCallback(async (
+        html: string,
+        finishReason: string,
+        options?: { promptExcerpt?: string; refreshList?: boolean; setSelected?: boolean },
+    ): Promise<boolean> => {
+        if (!token || !html.trim()) return false;
+
+        try {
+            let conversationId = activeConvId;
+            if (!conversationId) {
+                const response = await getOrCreateProjectConversation(token, projectId);
+                setActiveConv(response.conversation);
+                setActiveConvId(response.conversation.id);
+                conversationId = response.conversation.id;
+            }
+
+            if (!conversationId) return false;
+
+            const result = await createPreviewSnapshot(token, projectId, {
+                conversationId,
+                parentSnapshotId: selectedBackendSnapshotIdRef.current ?? undefined,
+                artifacts: { html, css: editorCssRef.current, js: editorJsRef.current },
+                metadata: { finishReason },
+                activate: true,
+            });
+            await persistWorkspaceSnapshot(result.snapshot.id, { html, css: editorCssRef.current, js: editorJsRef.current }, options);
+            return true;
+        } catch {
+            return false;
+        }
+    }, [token, activeConvId, projectId, persistWorkspaceSnapshot]);
+
+    const handleApplyAsset = useCallback(async (asset: ProjectAssetDto) => {
+        if (!token || !selectedElement) return;
+
+        try {
+            const resolvedUrl = asset.source === "url_reference"
+                ? (asset.externalUrl ?? "")
+                : asset.mimeType.startsWith("image/")
+                    ? await downloadProjectAssetDataUrl(token, projectId, asset.id)
+                    : "";
+
+            if (!resolvedUrl) {
+                addNotification({
+                    label: t("workspace.notifications.media.notApplicableLabel"),
+                    status: "error",
+                    message: t("workspace.notifications.media.notApplicable"),
+                });
+                return;
+            }
+
+            const updatedHtml = applyMediaToPreview(resolvedUrl);
+            const versioned = await saveMediaVersion(updatedHtml || editorHtmlRef.current, "media-apply");
+            setConfigOpen(false);
+            addNotification({
+            label: versioned ? t("workspace.notifications.media.doneSaved") : t("workspace.notifications.media.done"),
+                status: "done",
+                message: versioned
+                    ? t("workspace.notifications.media.doneSavedMessage", { name: asset.label ?? asset.originalName })
+                    : t("workspace.notifications.media.doneMessage", { name: asset.label ?? asset.originalName }),
+            });
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : t("workspace.notifications.media.error");
+            addNotification({ label: t("workspace.notifications.media.errorLabel"), status: "error", message });
+        }
+    }, [token, selectedElement, projectId, addNotification, applyMediaToPreview, saveMediaVersion]);
+
+    const handleApplyCurrentStyles = useCallback(async () => {
+        if (!selectedElement) return;
+        const currentUrl = mediaMode === "background"
+            ? (selectedElement.backgroundImageUrl || selectedElement.currentSrc)
+            : (selectedElement.currentSrc || selectedElement.backgroundImageUrl);
+
+        if (!currentUrl) {
+            addNotification({
+                label: t("workspace.notifications.media.noActiveLabel"),
+                status: "error",
+                message: t("workspace.notifications.media.noActive"),
+            });
+            return;
+        }
+
+        const updatedHtml = applyMediaToPreview(currentUrl);
+        const versioned = await saveMediaVersion(updatedHtml || editorHtmlRef.current, "media-style-update");
+        addNotification({
+            label: versioned ? t("workspace.notifications.style.doneSaved") : t("workspace.notifications.style.done"),
+            status: "done",
+            message: versioned
+                ? t("workspace.notifications.style.doneSavedMessage")
+                : t("workspace.notifications.style.doneMessage"),
+        });
+    }, [selectedElement, mediaMode, addNotification, applyMediaToPreview, saveMediaVersion]);
+
+    const handleSuggestMedia = useCallback(async () => {
+        if (!token || !selectedElement) return;
+
+        setSuggestingMedia(true);
+        const notifId = addNotification({
+            label: t("workspace.notifications.imageSuggestion.label"),
+            status: "running",
+            message: t("workspace.notifications.imageSuggestion.running"),
+        });
+
+        try {
+            const result = await suggestProjectImageIdea(token, projectId, {
+                prompt: prompt.trim().slice(0, 2000) || undefined,
+                targetMode: mediaMode,
+                selectedElement: sanitizeMediaElementPayload(selectedElement),
+            });
+
+            setMediaSuggestion(result);
+            updateNotification(notifId, {
+                label: t("workspace.notifications.imageSuggestion.done"),
+                status: "done",
+                message: result.suggestion,
+            });
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : t("workspace.notifications.imageSuggestion.error");
+            updateNotification(notifId, { label: t("workspace.notifications.imageSuggestion.failed"), status: "error", message });
+        } finally {
+            setSuggestingMedia(false);
+        }
+    }, [token, selectedElement, prompt, projectId, mediaMode, addNotification, updateNotification]);
+
+    const handleUseSuggestedMediaPrompt = useCallback(() => {
+        if (!mediaSuggestion?.suggestedPrompt) return;
+        setPrompt(mediaSuggestion.suggestedPrompt);
+        addNotification({
+            label: t("workspace.notifications.prompt.updated"),
+            status: "done",
+            message: t("workspace.notifications.prompt.updatedMessage"),
+        });
+    }, [mediaSuggestion, addNotification]);
+
+    const runMediaGeneration = useCallback(async (
+        generationPromptRaw: string,
+        options?: { label?: string; initialMessage?: string; notificationId?: string },
+    ): Promise<boolean> => {
+        const generationPrompt = generationPromptRaw.trim().slice(0, 2000);
+        if (!token || !selectedElement) return false;
+        if (!generationPrompt) {
+            const message = t("workspace.notifications.prompt.missing");
+            if (options?.notificationId) {
+                updateNotification(options.notificationId, { label: t("workspace.notifications.prompt.missingLabel"), status: "error", message });
+            } else {
+                addNotification({ label: t("workspace.notifications.prompt.missingLabel"), status: "error", message });
+            }
+            return false;
+        }
+
+        setGeneratingMedia(true);
+        const notifId = options?.notificationId ?? addNotification({
+            label: options?.label ?? t("workspace.notifications.imageGeneration.label"),
+            status: "running",
+            message: options?.initialMessage ?? t("workspace.notifications.imageGeneration.running"),
+        });
+
+        try {
+            const result = await generateProjectImage(token, projectId, {
+                prompt: generationPrompt,
+                fileNameHint: `${selectedElement.tag || "media"}-${Date.now()}`,
+                scope: assetScope,
+                provider: imageModelOptions.find((m) => m.id === selectedImageModel)?.provider || "siliconflow",
+                model: selectedImageModel || undefined,
+                imageSize: selectedImageSize,
+                numInferenceSteps: selectedImageSteps,
+                targetMode: mediaMode,
+                selectedElement: sanitizeMediaElementPayload(selectedElement),
+                mediaConfig: {
+                    fit: backgroundFit,
+                    repeat: backgroundRepeat,
+                    opacity: mediaOpacity,
+                    filter: mediaFilter,
+                },
+            });
+
+            setProjectAssets((prev) => [result.asset, ...prev.filter((entry) => entry.id !== result.asset.id)]);
+            void loadProjectAiUsage(token);
+
+            let placeholderApplied = false;
+            let placeholderVersioned = false;
+            try {
+                const placeholderUrl = await downloadProjectAssetDataUrl(token, projectId, result.asset.id);
+                const placeholderHtml = applyMediaToPreview(placeholderUrl);
+                placeholderApplied = true;
+                placeholderVersioned = await saveMediaVersion(
+                    placeholderHtml || editorHtmlRef.current,
+                    "image-generation-placeholder",
+                    { promptExcerpt: generationPrompt, setSelected: false },
+                );
+            } catch {
+                placeholderApplied = false;
+                placeholderVersioned = false;
+            }
+
+            updateNotification(notifId, {
+                label: t("workspace.notifications.imageGeneration.started"),
+                status: "running",
+                message: placeholderApplied
+                    ? (placeholderVersioned
+                        ? t("workspace.notifications.imageGeneration.placeholderVersionedMsg")
+                        : t("workspace.notifications.imageGeneration.placeholderAppliedMsg"))
+                    : t("workspace.notifications.imageGeneration.sentMsg"),
+            });
+
+            void (async () => {
+                const startedAt = Date.now();
+                const maxWaitMs = 45_000;
+                const pollIntervalMs = 2_000;
+
+                try {
+                    while (Date.now() - startedAt < maxWaitMs) {
+                        await new Promise((resolve) => window.setTimeout(resolve, pollIntervalMs));
+
+                        let trackedAsset: ProjectAssetDto | undefined;
+                        try {
+                            const refreshed = await listProjectAssets(token, projectId);
+                            setProjectAssets(refreshed.assets);
+                            void loadProjectAiUsage(token);
+                            trackedAsset = refreshed.assets.find((entry) => entry.id === result.asset.id);
+                        } catch {
+                            continue;
+                        }
+
+                        if (!trackedAsset) {
+                            continue;
+                        }
+
+                        if (trackedAsset.generationStatus === "failed") {
+                            updateNotification(notifId, {
+                                label: t("workspace.notifications.imageGeneration.failed"),
+                                status: "error",
+                                message: t("workspace.notifications.imageGeneration.failedMessage", { error: trackedAsset.generationMetadata?.errorMessage ?? "" }),
+                            });
+                            return;
+                        }
+
+                        if (trackedAsset.generationStatus === "ready" && trackedAsset.mimeType.startsWith("image/")) {
+                            const finalUrl = await downloadProjectAssetDataUrl(token, projectId, trackedAsset.id);
+                            const finalHtml = applyMediaToPreview(finalUrl);
+                            const finalVersioned = await saveMediaVersion(
+                                finalHtml || editorHtmlRef.current,
+                                "image-generation-ready",
+                                { promptExcerpt: generationPrompt },
+                            );
+                            updateNotification(notifId, {
+                                label: finalVersioned ? t("workspace.notifications.imageGeneration.doneSaved") : t("workspace.notifications.imageGeneration.done"),
+                                status: "done",
+                                message: finalVersioned
+                                    ? t("workspace.notifications.imageGeneration.doneSavedMessage", { name: trackedAsset.label ?? trackedAsset.originalName })
+                                    : t("workspace.notifications.imageGeneration.doneMessage", { name: trackedAsset.label ?? trackedAsset.originalName }),
+                            });
+                            return;
+                        }
+                    }
+
+                    updateNotification(notifId, {
+                        label: t("workspace.notifications.imageGeneration.stillRunning"),
+                        status: "running",
+                        message: t("workspace.notifications.imageGeneration.stillRunningMessage"),
+                    });
+                    void loadProjectAssets(token);
+                    void loadProjectAiUsage(token);
+                } catch {
+                    void loadProjectAssets(token);
+                    void loadProjectAiUsage(token);
+                }
+            })();
+
+            return true;
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : t("workspace.notifications.imageGeneration.error");
+            updateNotification(notifId, { label: t("workspace.notifications.imageGeneration.failed"), status: "error", message });
+            return false;
+        } finally {
+            setGeneratingMedia(false);
+        }
+    }, [token, selectedElement, projectId, assetScope, selectedImageModel, selectedImageSize, selectedImageSteps, mediaMode, backgroundFit, backgroundRepeat, mediaOpacity, mediaFilter, imageModelOptions, updateNotification, addNotification, loadProjectAiUsage, applyMediaToPreview, saveMediaVersion, loadProjectAssets]);
+
+    const handleGenerateMedia = useCallback(async () => {
+        const generationPrompt = (prompt.trim() || mediaSuggestion?.suggestedPrompt?.trim() || "").trim().slice(0, 2000);
+        await runMediaGeneration(generationPrompt, { label: t("workspace.notifications.imageGeneration.label") });
+    }, [prompt, mediaSuggestion, runMediaGeneration]);
+
+    const handleQuickGenerateMedia = useCallback(async () => {
+        if (!token || !selectedElement) return;
+
+        setSuggestingMedia(true);
+        const notifId = addNotification({
+            label: t("workspace.notifications.imageGeneration.autoLabel"),
+            status: "running",
+            message: t("workspace.notifications.imageGeneration.autoRunning"),
+        });
+
+        try {
+            const suggestionResult = await suggestProjectImageIdea(token, projectId, {
+                prompt: prompt.trim().slice(0, 2000) || undefined,
+                targetMode: mediaMode,
+                selectedElement: sanitizeMediaElementPayload(selectedElement),
+            });
+
+            setMediaSuggestion(suggestionResult);
+
+            const autoPrompt = (
+                suggestionResult.suggestedPrompt?.trim()
+                || suggestionResult.suggestion?.trim()
+                || "Refresh or improve the selected image while preserving the page style."
+            ).slice(0, 2000);
+
+            updateNotification(notifId, {
+                label: t("workspace.notifications.imageGeneration.autoLabel"),
+                status: "running",
+                message: t("workspace.notifications.imageGeneration.autoBrief"),
+            });
+
+            await runMediaGeneration(autoPrompt, {
+                label: t("workspace.notifications.imageGeneration.autoLabel"),
+                initialMessage: t("workspace.notifications.imageGeneration.autoBrief"),
+                notificationId: notifId,
+            });
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : t("workspace.notifications.imageGeneration.autoError");
+            updateNotification(notifId, { label: t("workspace.notifications.imageGeneration.autoLabel"), status: "error", message });
+        } finally {
+            setSuggestingMedia(false);
+        }
+    }, [token, selectedElement, addNotification, projectId, prompt, mediaMode, updateNotification, runMediaGeneration]);
 
     const [isSavingEditorSnapshot, setIsSavingEditorSnapshot] = useState(false);
 
@@ -698,7 +1601,7 @@ export default function WorkspacePage() {
             incrementSnapCount(projectId);
             await loadSnapshots(token);
             setSelectedBackendSnapshotId(result.snapshot.id);
-            addNotification({ label: "Versione salvata dall'editor", status: "done", message: "Snapshot attivato." });
+            addNotification({ label: t("workspace.notifications.snapshot.savedLabel"), status: "done", message: t("workspace.notifications.snapshot.saved") });
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
@@ -713,7 +1616,19 @@ export default function WorkspacePage() {
         function onMessage(event: MessageEvent) {
             if (!event.data || typeof event.data !== "object") return;
             if (event.data.type === "pf-select") {
-                setSelectedElement(event.data.element as LlmFocusContext["selectedElement"]);
+                const safeElement = sanitizeSelectedElementForFocus(event.data.element as LlmFocusContext["selectedElement"]);
+                setSelectedElement(safeElement);
+                setSelectedElementSource(safeElement ? "inspect" : null);
+                setMediaToolsOpen(false);
+                return;
+            }
+            if (event.data.type === "pf-edit-img-click") {
+                const safeElement = sanitizeSelectedElementForFocus((event.data.element ?? event.data) as LlmFocusContext["selectedElement"]);
+                setSelectedElement(safeElement);
+                setSelectedElementSource(safeElement ? "edit-media" : null);
+                if (!safeElement) {
+                    setMediaToolsOpen(false);
+                }
                 return;
             }
             if (event.data.type === "pf-edit-save") {
@@ -722,10 +1637,40 @@ export default function WorkspacePage() {
                 pendingEditHtmlRef.current = html;
                 void handleCommitEditVersionRef.current(html);
             }
+            if (event.data.type === "pf-edit-media-list") {
+                // Map iframe-scanned items to the reusable MediaItem shape.
+                // Protected project asset URLs are resolved with auth; generated data URLs must stay intact.
+                const raw: Array<{ selector: string; stableNodeId: string; tag: string; src: string; alt: string; mediaMode: string; w: number; h: number }> =
+                    Array.isArray(event.data.items) ? event.data.items : [];
+
+                void (async () => {
+                    const items = await Promise.all(
+                        raw.map(async (r) => ({
+                            id: r.stableNodeId || r.selector,
+                            src: await resolveSidebarMediaSrc(r.src),
+                            alt: r.alt,
+                            label: r.tag,
+                            mediaType: r.mediaMode === "background" ? "background" as const : "image" as const,
+                            width: r.w,
+                            height: r.h,
+                            meta: { selector: r.selector, stableNodeId: r.stableNodeId },
+                        })),
+                    );
+
+                    setEditMediaList(items);
+                })();
+            }
         }
         window.addEventListener("message", onMessage);
         return () => window.removeEventListener("message", onMessage);
-    }, []);
+    }, [resolveSidebarMediaSrc]);
+
+    useEffect(() => {
+        if (!hasPreviewArtifacts && inspectMode) {
+            setInspectMode(false);
+            clearSelectedElement();
+        }
+    }, [clearSelectedElement, hasPreviewArtifacts, inspectMode]);
 
     // Propagate inspect mode toggles to the iframe via postMessage
     useEffect(() => {
@@ -757,8 +1702,13 @@ export default function WorkspacePage() {
                 clearTimeout(editAutosaveTimerRef.current);
                 editAutosaveTimerRef.current = null;
             }
+            clearSelectedElement();
+            setEditMediaList([]);
             return;
         }
+
+        setInspectMode(false);
+        clearSelectedElement();
 
         // Turning ON — ensure a backend session exists
         try {
@@ -778,7 +1728,7 @@ export default function WorkspacePage() {
             }
             // Non-blocking: EDIT Light still works without a backend session (degraded mode)
         }
-    }, [token, activeConvId, editMode, selectedBackendSnapshotId, projectId, editorHtml, editorCss, editorJs]);
+    }, [token, activeConvId, editMode, selectedBackendSnapshotId, projectId, editorHtml, editorCss, editorJs, clearSelectedElement]);
 
     /**
      * Trigger the iframe to serialize the current edited DOM, then receive it
@@ -824,7 +1774,7 @@ export default function WorkspacePage() {
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
             }
-            addNotification({ label: "Versione EDIT salvata", status: "done", message: "Modifiche manuali versionate." });
+            addNotification({ label: t("workspace.notifications.snapshot.editSavedLabel"), status: "done", message: t("workspace.notifications.snapshot.editSaved") });
             setEditMode(false);
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
@@ -888,15 +1838,15 @@ export default function WorkspacePage() {
         setEditorHtml(artifacts?.html ?? "");
         setEditorCss(artifacts?.css ?? "");
         setEditorJs(artifacts?.js ?? "");
-        setEditorSelectionLabel("Nessuna selezione");
+        setEditorSelectionLabel("");
         setCodeEditorSelection(null);
         // Clear the selected element when the active snapshot changes.
         // data-pf-id values are snapshot-version-specific: if the snapshot HTML was
         // rebuilt or a focused patch replaced the root element, the element gets a new
         // ID. Keeping the old outerHtml (with the stale ID) would make Strategy 0 fail
         // on the next focused-edit turn because the ID is no longer present in the base.
-        setSelectedElement(null);
-    }, [artifactsKey, artifacts?.html, artifacts?.css, artifacts?.js]);
+        clearSelectedElement();
+    }, [artifactsKey, artifacts?.html, artifacts?.css, artifacts?.js, clearSelectedElement]);
 
     // Watchdog: if the iframe key changes but onLoad never fires within 4 s
     // (browser bug, blank srcDoc race), bump previewForceKey to force a new mount.
@@ -914,6 +1864,7 @@ export default function WorkspacePage() {
     const liveGeneratedTokens = Math.max(0, Math.round((thinkingText.length + draftAnswer.length) / 4));
     const liveTotalTokens = streamPromptTokens + liveGeneratedTokens;
     const currentProvider = providersCatalog.find((p) => p.provider === selectedProvider) ?? null;
+    const currentProviderMissingKey = Boolean(currentProvider?.requiresKey && !currentProvider.hasApiKeyConfigured);
     const currentProviderModels = (() => {
         const models = (currentProvider?.models ?? []).filter((m) => m.isActive);
         const byId = new Map<string, typeof models[number]>();
@@ -924,6 +1875,54 @@ export default function WorkspacePage() {
         }
         return [...byId.values()];
     })();
+
+    const presentLlmError = useCallback((err: unknown): string => {
+        const fallbackMessage = err instanceof Error ? err.message : String(err);
+
+        if (!(err instanceof ApiError)) {
+            addNotification({
+                label: t("workspace.notifications.llm.errorLabel"),
+                status: "error",
+                message: fallbackMessage,
+            });
+            return fallbackMessage;
+        }
+
+        const provider = getStringDetail(err.details, "provider") ?? currentProvider?.provider ?? undefined;
+        const model = getStringDetail(err.details, "model") ?? (selectedModel || undefined);
+        const keyEnvironmentVariable = getStringDetail(err.details, "keyEnvironmentVariable");
+        const rawMessage = err.userMessage ?? err.message;
+        const looksLikeValidationOverflow = err.code === "VALIDATION_ERROR"
+            || /request validation failed|campi della richiesta non sono validi/i.test(rawMessage);
+        const message = looksLikeValidationOverflow
+            ? t("workspace.llmErrors.contextTooLongMessage")
+            : rawMessage;
+        const title = err.code === "LLM_PROVIDER_API_KEY_MISSING"
+            ? t("workspace.llmErrors.configureApiKey")
+            : looksLikeValidationOverflow
+                ? t("workspace.llmErrors.contextTooLong")
+                : t("workspace.llmErrors.providerCallError");
+        const shouldOpenDialog = Boolean(err.code?.startsWith("LLM_") || looksLikeValidationOverflow);
+
+        addNotification({
+            label: err.code === "LLM_PROVIDER_API_KEY_MISSING" ? t("workspace.llmErrors.providerNotConfigured") : t("workspace.llmErrors.generic"),
+            status: "error",
+            message,
+        });
+
+        if (shouldOpenDialog) {
+            setLlmErrorDialog({
+                title,
+                message,
+                code: err.code,
+                provider,
+                model,
+                keyEnvironmentVariable,
+            });
+        }
+
+        return t("workspace.llmErrors.errorWithStatus", { status: err.status, message });
+    }, [addNotification, currentProvider?.provider, selectedModel]);
 
         const previewResult = editorHtml || editorCss || editorJs
         ? buildPreviewDoc(
@@ -970,6 +1969,34 @@ export default function WorkspacePage() {
         };
     }, [isDragging, leftWidth]);
 
+    useEffect(() => {
+        if (!isDraggingVChat) return;
+        function onMove(e: MouseEvent) {
+            const body = chatBodyRef.current;
+            if (!body) return;
+            const rect = body.getBoundingClientRect();
+            const pct = Math.min(85, Math.max(30, ((e.clientY - rect.top) / rect.height) * 100));
+            setChatVSplit(pct);
+            chatVSplitRef.current = pct;
+        }
+        function onUp() {
+            setIsDraggingVChat(false);
+            setCookie(CHAT_VSPLIT_COOKIE, String(Math.round(chatVSplitRef.current)));
+        }
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+        return () => {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+        };
+    }, [isDraggingVChat]);
+
+    useEffect(() => {
+        if (llmErrorDialog?.code === "LLM_PROVIDER_API_KEY_MISSING" && !currentProviderMissingKey) {
+            setLlmErrorDialog(null);
+        }
+    }, [currentProviderMissingKey, llmErrorDialog?.code]);
+
     async function handleSend(e: React.FormEvent) {
         e.preventDefault();
         const content = prompt.trim();
@@ -977,6 +2004,7 @@ export default function WorkspacePage() {
 
         setPrompt("");
         setSending(true);
+        setActiveOperation("chat");
         setError(null);
         setThinkingText("");
         setDraftAnswer("");
@@ -991,6 +2019,13 @@ export default function WorkspacePage() {
         let trackedUserMessageId: string | null = null;
         const streamStartedAt = Date.now();
         let streamErrorDurationMs: number | undefined;
+        const notifId = addNotification({
+            label: inspectMode ? t("workspace.notifications.llm.labelFocus") : t("workspace.notifications.llm.label"),
+            status: "running",
+            message: inspectMode
+                ? t("workspace.notifications.llm.runningFocus")
+                : t("workspace.notifications.llm.running"),
+        });
 
         try {
             const convId = activeConvId;
@@ -1013,39 +2048,60 @@ export default function WorkspacePage() {
                 throw new Error("Conversation ID not available");
             }
 
-            // Build conversation history sent to the backend.
-            // Assistant messages store the raw LLM JSON blob (with full HTML) in content —
-            // sending that as history overflows the schema limit and is useless to the model.
-            // Use chatStructured.summary instead; fall back to truncated raw content.
+            // Build a compact conversation history for the backend.
+            // Long conversations and full artifact payloads can push the request over the
+            // provider/validation budget, so we always keep only a small, recent memory window.
+            const historyMaxMessages = Math.max(2, Math.min(chatDefaults.historyMaxMessages ?? 8, inspectMode ? 6 : 8));
+            const historyMessageMaxChars = Math.max(300, Math.min(chatDefaults.historyMessageMaxChars ?? 1200, inspectMode ? 900 : 1200));
             const history = (activeConv?.messages ?? [])
                 .filter((m): m is MessageDto & { role: "user" | "assistant" } =>
                     m.role === "user" || m.role === "assistant"
                 )
+                .slice(-historyMaxMessages)
                 .map((m) => {
                     if (m.role === "assistant") {
                         const s = m.metadata?.chatStructured;
                         const compact = s
                             ? [s.summary, ...(s.bullets ?? [])].filter(Boolean).join(" | ")
-                            : m.content.slice(0, 2000);
-                        return { role: "assistant" as const, content: compact };
+                            : m.content;
+                        return { role: "assistant" as const, content: compact.trim().slice(0, historyMessageMaxChars) };
                     }
-                    return { role: "user" as const, content: m.content };
-                });
+                    return { role: "user" as const, content: m.content.trim().slice(0, historyMessageMaxChars) };
+                })
+                .filter((m) => m.content.length > 0);
 
-            const currentArtifacts =
+            const currentArtifactsSource =
                 editorHtml || editorCss || editorJs
                     ? { html: editorHtml, css: editorCss, js: editorJs }
                     : activeBaselineSnapshot?.artifacts ?? latestAssistant?.metadata?.generatedArtifacts;
+            // In focused edit mode the server needs the full HTML for section extraction
+            // and patch merging (data-pf-id lookup). Use Zod schema max (80K/20K/20K)
+            // for focus; server-side buildMessagesWithHistory truncates for the LLM prompt.
+            // 80K accommodates base HTML + data-pf-id overhead + GrapesJS inflation.
+            const isFocusedRequest = inspectMode && !!selectedElement;
+            const htmlLimit = isFocusedRequest ? 80000 : 20000;
+            const cssLimit = isFocusedRequest ? 20000 : 10000;
+            const jsLimit = isFocusedRequest ? 20000 : 10000;
+            const currentArtifacts = currentArtifactsSource
+                ? {
+                    html: (currentArtifactsSource.html ?? "").slice(0, htmlLimit),
+                    css: (currentArtifactsSource.css ?? "").slice(0, cssLimit),
+                    js: (currentArtifactsSource.js ?? "").slice(0, jsLimit),
+                }
+                : undefined;
 
             // Build focusContext from active inspect selection or code editor selection
             const focusContext: LlmFocusContext | undefined = (() => {
-                if (inspectMode && selectedElement) {
-                    return {
-                        mode: "preview-element" as const,
-                        targetType: getElementTargetType(selectedElement.tag),
-                        userIntent: content,
-                        selectedElement,
-                    };
+                if (inspectMode) {
+                    const safeSelectedElement = sanitizeSelectedElementForFocus(selectedElement);
+                    if (safeSelectedElement) {
+                        return {
+                            mode: "preview-element" as const,
+                            targetType: getElementTargetType(safeSelectedElement.tag, safeSelectedElement.mediaMode),
+                            userIntent: content,
+                            selectedElement: safeSelectedElement,
+                        };
+                    }
                 }
                 if (codeEditorSelection && previewTab !== "preview") {
                     return {
@@ -1056,6 +2112,20 @@ export default function WorkspacePage() {
                 }
                 return undefined;
             })();
+
+            if (currentProvider?.requiresKey && !currentProvider.hasApiKeyConfigured) {
+                throw new ApiError(503, {
+                    error: t("workspace.llmErrors.providerKeyMissing", { provider: currentProvider.provider }),
+                    code: "LLM_PROVIDER_API_KEY_MISSING",
+                    status: 503,
+                    userMessage: t("workspace.llmErrors.providerKeyMissing", { provider: currentProvider.provider }),
+                    details: {
+                        provider: currentProvider.provider,
+                        model: selectedModel || undefined,
+                        keyEnvironmentVariable: currentProvider.keyEnvironmentVariable,
+                    },
+                });
+            }
 
             let llm: Awaited<ReturnType<typeof llmChatPreview>>;
             let interruptedMeta: Extract<LlmChatStreamEvent, { type: "interrupted" }> | null = null;
@@ -1099,7 +2169,7 @@ export default function WorkspacePage() {
 
                         if (event.type === "error") {
                             streamErrorDurationMs = event.durationMs;
-                            throw new Error(event.message);
+                            throw new ApiError(event.error?.status ?? 502, event.error ?? { error: event.message });
                         }
 
                         if (event.type === "interrupted") {
@@ -1122,7 +2192,7 @@ export default function WorkspacePage() {
                         try {
                             const saved = await addMessage(token, projectId, convId, {
                                 role: "assistant",
-                                content: "⏹ Elaborazione interrotta dall'utente",
+                                content: t("workspace.notifications.llm.abortedContent"),
                                 metadata: {
                                     model: interruptedMeta.model,
                                     provider: interruptedMeta.provider,
@@ -1139,10 +2209,26 @@ export default function WorkspacePage() {
                             // non-blocking — UI will still clear the stream state
                         }
                     }
+                    updateNotification(notifId, {
+                        label: t("workspace.notifications.llm.abortedLabel"),
+                        status: "error",
+                        message: t("workspace.notifications.llm.aborted"),
+                    });
                     setThinkingText("");
                     setDraftAnswer("");
                     return;
                 }
+                const retryWithoutFocusContext = Boolean(focusContext && isFocusContextValidationError(streamErr));
+
+                if (retryWithoutFocusContext) {
+                    clearSelectedElement();
+                    addNotification({
+                        label: t("workspace.notifications.focusPatch.limitedLabel"),
+                        status: "error",
+                        message: t("workspace.notifications.focusPatch.limited"),
+                    });
+                }
+
                 llm = await llmChatPreview(token, projectId, {
                     message: content,
                     provider: selectedProvider || undefined,
@@ -1152,13 +2238,17 @@ export default function WorkspacePage() {
                     temperature: chatDefaults.temperature,
                     history,
                     currentArtifacts,
-                    focusContext,
+                    focusContext: retryWithoutFocusContext ? undefined : focusContext,
                 });
             }
 
+            const assistantContent = (llm.reply?.trim()
+                || llm.structured?.chat?.summary?.trim()
+                || "Risposta AI generata senza testo visibile.").slice(0, 50000);
+
             const assistantSaved = await addMessage(token, projectId, convId, {
                 role: "assistant",
-                content: llm.reply,
+                content: assistantContent,
                 metadata: {
                     model: llm.model,
                     provider: llm.provider,
@@ -1175,8 +2265,25 @@ export default function WorkspacePage() {
             });
 
             setActiveConv((prev) =>
-                prev ? { ...prev, messages: [...prev.messages, assistantSaved.message] } : prev
+                prev
+                    ? {
+                        ...prev,
+                        totalTokens: prev.totalTokens + (llm.usage?.totalTokens ?? 0),
+                        totalCost: (prev.totalCost ?? 0) + (llm.costEstimate?.amount ?? 0),
+                        messages: [...prev.messages, assistantSaved.message],
+                    }
+                    : prev
             );
+
+            // Keep promptOpsSummary in sync so the workspace header total cost
+            // reflects chat costs immediately (backend now writes chat to PromptExecutionLog).
+            setPromptOpsSummary((prev) => ({
+                totalCost: prev.totalCost + (llm.costEstimate?.amount ?? 0),
+                totalTokens: prev.totalTokens + (llm.usage?.totalTokens ?? 0),
+                runs: prev.runs + 1,
+            }));
+
+            let previewVersionSaved = false;
 
             // Persist preview snapshot to DB — only when html is non-empty.
             // In focused-patch mode the LLM returns artifacts:{html:"",…}; the server
@@ -1235,28 +2342,37 @@ export default function WorkspacePage() {
                     } catch { /* silent — snapshot list is supplementary */ }
 
                     // --- single batched render from here ---
+                    // Use snapshot artifacts (which have data-pf-id injected by the server)
+                    // instead of the raw LLM response so the iframe DOM and the next
+                    // request's currentArtifacts include stable IDs for focused editing.
+                    const snapArt = snap.snapshot.artifacts;
                     setPreviewSnapshots(freshSnapshots);
                     setSelectedBackendSnapshotId(snap.snapshot.id);
-                    setEditorHtml(llm.structured.artifacts.html ?? "");
-                    setEditorCss(llm.structured.artifacts.css ?? "");
-                    setEditorJs(llm.structured.artifacts.js ?? "");
+                    setEditorHtml(snapArt?.html ?? llm.structured.artifacts.html ?? "");
+                    setEditorCss(snapArt?.css ?? llm.structured.artifacts.css ?? "");
+                    setEditorJs(snapArt?.js ?? llm.structured.artifacts.js ?? "");
                     // Spinner cleared by iframe onLoad; fallback timeout in case user is on another tab
                     setPreviewRefreshing(true);
                     setPreviewPending(true);
                     setTimeout(() => {
                         setPreviewRefreshing(false);
                     }, 3000);
-                    // Notify: new snapshot version saved
-                    addNotification({
-                        label: llm.focusPatchApplied ? "Focus patch applicata" : "Nuova versione salvata",
-                        status: "done",
-                        message: llm.focusPatchApplied
-                            ? "Elemento aggiornato — nuova versione attiva."
-                            : "Snapshot salvato e attivato dal backend.",
-                    });
+                    previewVersionSaved = true;
                 } catch {
                     // non-blocking — UI works without snapshot persistence
                 }
+            }
+
+            // When focused-mode JSON parsing failed entirely, notify the user
+            // and suggest switching model — the page was left untouched.
+            if (llm.focusPatchParseError && focusContext?.mode === "preview-element") {
+                clearSelectedElement();
+                setEditorSelectionLabel("");
+                addNotification({
+                    label: t("workspace.notifications.focusPatch.parseErrorLabel"),
+                    status: "error",
+                    message: t("workspace.notifications.focusPatch.parseError"),
+                });
             }
 
             // Inform the user when a focused-patch merge failed on the server.
@@ -1265,12 +2381,12 @@ export default function WorkspacePage() {
             // text-matching fallbacks also failed.  The selection is cleared so the
             // next focused-edit starts fresh with a valid anchor.
             if (llm.focusPatchApplied === false && focusContext?.mode === "preview-element") {
-                setSelectedElement(null);
-                setEditorSelectionLabel("Nessuna selezione");
+                clearSelectedElement();
+                setEditorSelectionLabel("");
                 addNotification({
-                    label: "Focus patch non applicata",
+                    label: t("workspace.notifications.focusPatch.notAppliedLabel"),
                     status: "error",
-                    message: "Elemento non trovato nella versione corrente. Riseleziona l'elemento nel preview e riprova.",
+                    message: t("workspace.notifications.focusPatch.notApplied"),
                 });
             }
 
@@ -1293,11 +2409,34 @@ export default function WorkspacePage() {
                 });
             }
 
+            updateNotification(notifId, {
+                label: llm.focusPatchParseError
+                    ? t("workspace.notifications.focusPatch.parseResponseLabel")
+                    : llm.focusPatchApplied
+                        ? t("workspace.notifications.focusPatch.appliedLabel")
+                        : previewVersionSaved
+                            ? t("workspace.notifications.snapshot.newVersionLabel")
+                            : t("workspace.notifications.llm.doneLabel"),
+                status: llm.focusPatchParseError ? "error" : "done",
+                message: llm.focusPatchParseError
+                    ? t("workspace.notifications.focusPatch.parseResponseMessage")
+                    : llm.focusPatchApplied
+                        ? t("workspace.notifications.focusPatch.appliedMessage")
+                        : previewVersionSaved
+                            ? t("workspace.notifications.snapshot.newVersionMessage")
+                            : t("workspace.notifications.llm.doneMessage", { provider: llm.provider, model: llm.model }),
+            });
+
             setThinkingText("");
             setDraftAnswer("");
         } catch (err) {
-            const msg = err instanceof ApiError ? `Errore [${err.status}]: ${err.message}` : String(err);
+            const msg = presentLlmError(err);
             setError(msg);
+            updateNotification(notifId, {
+                label: t("workspace.notifications.llm.abortedLabel"),
+                status: "error",
+                message: msg,
+            });
 
             if (token && trackedConversationId) {
                 try {
@@ -1331,19 +2470,363 @@ export default function WorkspacePage() {
         } finally {
             abortControllerRef.current = null;
             setSending(false);
+            setActiveOperation(null);
         }
     }
 
+    async function handleOptimizePrompt() {
+        if (!token || !prompt.trim() || optimizingPrompt || conversationLoading) return;
+
+        const original = prompt.trim();
+        let trackedConversationId: string | null = activeConvId;
+        let trackedUserMessageId: string | null = null;
+        const notifId = addNotification({
+            label: t("workspace.notifications.promptOptimizer.label"),
+            status: "running",
+            message: t("workspace.notifications.promptOptimizer.running"),
+        });
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+
+        setOptimizingPrompt(true);
+        setActiveOperation("prompt-optimizer");
+        setError(null);
+        setThinkingText("");
+        setDraftAnswer("");
+        setIsUserScrolled(false);
+        setStreamPromptTokens(Math.max(1, Math.round(original.length / 4)));
+        setStreamUsageTokens(null);
+
+        try {
+            const convId = activeConvId;
+            if (!convId) {
+                throw new Error("Conversation not loaded yet");
+            }
+
+            const userSaved = await addMessage(token, projectId, convId, {
+                role: "user",
+                content: original,
+                metadata: {
+                    operation: {
+                        kind: "prompt_optimizer_request",
+                        mode: "operational",
+                        target: "input",
+                        label: t("workspace.notifications.promptOptimizer.inputLabel"),
+                        suppressArtifacts: true,
+                    },
+                },
+            });
+            trackedConversationId = convId;
+            trackedUserMessageId = userSaved.message.id;
+            setActiveConv((prev) =>
+                prev ? { ...prev, messages: [...prev.messages, userSaved.message] } : prev
+            );
+
+            let finalResult: {
+                optimizedPrompt: string;
+                provider: string;
+                model: string;
+                usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+                costEstimate?: {
+                    currency: "EUR";
+                    amount: number;
+                    breakdown: { tokenCost: number; imageCost: number; videoCost: number };
+                    unitRates: { textEurPer1kTokens: number; imageEurPerAsset: number; videoEurPerAsset: number };
+                    providerCostUsd?: number;
+                };
+                durationMs: number;
+                skipped?: boolean;
+                rawResponse?: string;
+                finishReason?: string;
+                promptingTrace?: {
+                    originalUserMessage: string;
+                    effectiveSystemPrompt: string;
+                    messagesSentToLlm: Array<{ role: "system" | "user"; content: string }>;
+                };
+            } | null = null;
+
+            await streamOptimizePrompt(
+                token,
+                projectId,
+                {
+                    rawPrompt: original,
+                    conversationId: convId,
+                    provider: selectedProvider || undefined,
+                    model: selectedModel || undefined,
+                },
+                (event) => {
+                    if (event.type === "thinking") {
+                        setThinkingText((prev) => prev + event.content);
+                        return;
+                    }
+
+                    if (event.type === "answer") {
+                        setDraftAnswer((prev) => `${prev}${event.content}`);
+                        return;
+                    }
+
+                    if (event.type === "done") {
+                        finalResult = event.result;
+                        if (event.result.usage) {
+                            setStreamUsageTokens(event.result.usage);
+                        }
+                        return;
+                    }
+
+                    if (event.type === "error") {
+                        throw new ApiError(event.error?.status ?? 502, event.error ?? { error: event.message });
+                    }
+                },
+                abortController.signal
+            );
+
+            if (!finalResult) {
+                throw new Error("Optimizer stream ended without final payload");
+            }
+
+            const result = finalResult;
+            setPromptRestoreValue(original);
+            setPrompt(result.optimizedPrompt);
+            setPromptOpsSummary((prev) => ({
+                totalCost: prev.totalCost + (result.costEstimate?.amount ?? 0),
+                totalTokens: prev.totalTokens + (result.usage?.totalTokens ?? 0),
+                runs: prev.runs + (result.skipped ? 0 : 1),
+            }));
+
+            const assistantSaved = await addMessage(token, projectId, convId, {
+                role: "assistant",
+                content: (result.optimizedPrompt?.trim() || "Prompt ottimizzato pronto.").slice(0, 50000),
+                metadata: {
+                    model: result.model,
+                    provider: result.provider,
+                    executionTimeMs: result.durationMs,
+                    finishReason: result.finishReason,
+                    rawResponse: result.rawResponse,
+                    promptingTrace: result.promptingTrace as MessageDto["metadata"]["promptingTrace"],
+                    tokenUsage: result.usage,
+                    costEstimate: result.costEstimate,
+                    operation: {
+                        kind: "prompt_optimizer",
+                        mode: "operational",
+                        target: "input",
+                        label: t("workspace.notifications.promptOptimizer.outputLabel"),
+                        suppressArtifacts: true,
+                    },
+                },
+            });
+
+            setActiveConv((prev) =>
+                prev
+                    ? {
+                        ...prev,
+                        totalTokens: prev.totalTokens + (result.usage?.totalTokens ?? 0),
+                        totalCost: (prev.totalCost ?? 0) + (result.costEstimate?.amount ?? 0),
+                        messages: [...prev.messages, assistantSaved.message],
+                    }
+                    : prev
+            );
+
+            if (trackedUserMessageId) {
+                await logBackgroundTask(token, projectId, convId, trackedUserMessageId, {
+                    type: "prompt_optimizer",
+                    pipelineProfile: "optimizer-stream",
+                    input: { prompt: original },
+                    output: {
+                        provider: result.provider,
+                        model: result.model,
+                        durationMs: result.durationMs,
+                        target: "input",
+                        optimizedPrompt: result.optimizedPrompt,
+                    },
+                    tokenUsage: result.usage,
+                    costEstimate: result.costEstimate,
+                    status: "completed",
+                });
+            }
+
+            updateNotification(notifId, {
+                status: "done",
+                message: result.skipped
+                    ? t("workspace.notifications.promptOptimizer.skipped")
+                    : t("workspace.notifications.promptOptimizer.done", { provider: result.provider, model: result.model }),
+            });
+        } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") {
+                updateNotification(notifId, { label: t("workspace.notifications.promptOptimizer.label"), status: "error", message: t("workspace.notifications.promptOptimizer.aborted") });
+                if (token && trackedConversationId) {
+                    try {
+                        const interruptedSaved = await addMessage(token, projectId, trackedConversationId, {
+                            role: "assistant",
+                            content: t("workspace.notifications.promptOptimizer.abortedContent"),
+                            metadata: {
+                                operation: {
+                                    kind: "prompt_optimizer",
+                                    mode: "operational",
+                                    target: "input",
+                                    label: t("workspace.notifications.promptOptimizer.outputLabel"),
+                                    suppressArtifacts: true,
+                                },
+                            },
+                        });
+                        setActiveConv((prev) =>
+                            prev ? { ...prev, messages: [...prev.messages, interruptedSaved.message] } : prev
+                        );
+                    } catch {
+                        // non-blocking
+                    }
+                }
+                return;
+            }
+
+            const msg = err instanceof ApiError ? presentLlmError(err) : err instanceof Error ? err.message : "Prompt optimization failed";
+            setError(msg);
+
+            if (token && trackedConversationId) {
+                try {
+                    const errorSaved = await addMessage(token, projectId, trackedConversationId, {
+                        role: "error",
+                        content: `Optimize prompt: ${msg}`,
+                    });
+                    setActiveConv((prev) =>
+                        prev ? { ...prev, messages: [...prev.messages, errorSaved.message] } : prev
+                    );
+                } catch {
+                    // keep initial error only
+                }
+            }
+
+            if (token && trackedConversationId && trackedUserMessageId) {
+                try {
+                    await logBackgroundTask(token, projectId, trackedConversationId, trackedUserMessageId, {
+                        type: "prompt_optimizer",
+                        pipelineProfile: "optimizer-stream",
+                        input: { prompt: original },
+                        error: msg,
+                        status: "failed",
+                    });
+                } catch {
+                    // non-blocking
+                }
+            }
+
+            updateNotification(notifId, { label: t("workspace.notifications.promptOptimizer.label"), status: "error", message: msg });
+        } finally {
+            abortControllerRef.current = null;
+            setThinkingText("");
+            setDraftAnswer("");
+            setOptimizingPrompt(false);
+            setActiveOperation(null);
+        }
+    }
+
+    function handleRestoreOptimizedPrompt() {
+        if (!promptRestoreValue) return;
+        setPrompt(promptRestoreValue);
+        setPromptRestoreValue(null);
+    }
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        setVoiceSupported(Boolean(window.SpeechRecognition || window.webkitSpeechRecognition));
+
+        return () => {
+            speechRecognitionRef.current?.abort();
+            speechRecognitionRef.current = null;
+        };
+    }, []);
+
+    const handleToggleVoiceInput = useCallback(() => {
+        if (voiceListening) {
+            speechRecognitionRef.current?.stop();
+            return;
+        }
+
+        if (typeof window === "undefined") return;
+
+        const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!RecognitionCtor) {
+            setVoiceSupported(false);
+            setVoiceError(t("workspace.ui.voiceOnlyChrome"));
+            return;
+        }
+
+        const recognition = speechRecognitionRef.current ?? new RecognitionCtor();
+        speechRecognitionRef.current = recognition;
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = document.documentElement.lang?.trim() || navigator.languages?.[0] || navigator.language || "it-IT";
+
+        recognition.onstart = () => {
+            speechBasePromptRef.current = prompt;
+            speechCommittedTranscriptRef.current = "";
+            setVoiceListening(true);
+            setVoiceError(null);
+        };
+
+        recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
+            let finalTranscript = "";
+            let interimTranscript = "";
+
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                const transcript = event.results[i]?.[0]?.transcript ?? "";
+                if (event.results[i]?.isFinal) {
+                    finalTranscript += transcript;
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+
+            if (finalTranscript) {
+                speechCommittedTranscriptRef.current = appendPromptSegment(
+                    speechCommittedTranscriptRef.current,
+                    finalTranscript
+                );
+            }
+
+            const liveTranscript = appendPromptSegment(
+                speechCommittedTranscriptRef.current,
+                interimTranscript
+            );
+
+            setPrompt(appendPromptSegment(speechBasePromptRef.current, liveTranscript));
+        };
+
+        recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
+            if (event.error && event.error !== "aborted" && event.error !== "no-speech") {
+                setVoiceError(t("workspace.ui.voiceUnavailable", { error: event.error }));
+            }
+            setVoiceListening(false);
+        };
+
+        recognition.onend = () => {
+            setVoiceListening(false);
+        };
+
+        try {
+            recognition.start();
+        } catch {
+            setVoiceError(t("workspace.ui.voiceMicError"));
+            setVoiceListening(false);
+        }
+    }, [prompt, voiceListening]);
+
     function handleStop() {
+        speechRecognitionRef.current?.stop();
         abortControllerRef.current?.abort();
     }
 
     if (checkingAuth) {
-        return <div style={{ padding: "2rem", color: "var(--text-muted)" }}>Verifica sessione…</div>;
+        return <div style={{ padding: "2rem", color: "var(--text-muted)" }}>{t("workspace.ui.checkingSession")}</div>;
     }
 
     return (
-        <>
+        <div className="workspace-outer">
+        <WorkspaceHeader
+            projectName={projectName}
+            totalCostEur={promptOpsSummary.totalCost + (projectAiAnalytics?.totals.imageCost ?? 0)}
+            onConfigOpen={() => setConfigOpen(true)}
+            onDashboard={() => router.push("/dashboard")}
+        />
         <div
             className="workspace-shell workspace-shell-resizable"
             style={{ gridTemplateColumns: `${leftWidth}% 8px minmax(0, 1fr)` }}
@@ -1357,7 +2840,7 @@ export default function WorkspacePage() {
                         </span>
                         <button
                             onClick={() => setConfigOpen(true)}
-                            title="Configura progetto"
+                            title={t("workspace.ui.configureProject")}
                             style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "0.15rem", display: "flex", alignItems: "center", opacity: 0.7 }}
                         >
                             <Settings size={15} />
@@ -1365,33 +2848,16 @@ export default function WorkspacePage() {
                     </div>
                     <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                         <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                            Chat di Progetto
+                            {t("workspace.ui.chatTitle")}
                         </span>
-                        {(() => {
-                            const projectCost = activeConv?.totalCost ?? 0;
-                            const label = formatCostEur(projectCost);
-                            return label ? (
-                                <span style={{
-                                    fontSize: "0.68rem",
-                                    background: "var(--surface-2, rgba(255,255,255,0.07))",
-                                    border: "1px solid var(--border-subtle, rgba(255,255,255,0.14))",
-                                    borderRadius: "0.3rem",
-                                    padding: "0.05rem 0.4rem",
-                                    color: "var(--text-muted)",
-                                    fontVariantNumeric: "tabular-nums",
-                                }} title="Costo stimato totale progetto (policy EUR)">
-                                    tot ~{label}
-                                </span>
-                            ) : null;
-                        })()}
                         <select
                             style={controlSelectStyle}
                             value={selectedProvider}
                             onChange={(e) => setSelectedProvider(e.target.value)}
-                            disabled={providersCatalog.length === 0 || sending}
+                            disabled={providersCatalog.length === 0 || sending || optimizingPrompt}
                         >
                             {providersCatalog.length === 0 ? (
-                                <option value="">Provider</option>
+                                <option value="">{t("workspace.ui.providerPlaceholder")}</option>
                             ) : (
                                 providersCatalog.map((p) => (
                                     <option key={p.provider} value={p.provider}>
@@ -1404,7 +2870,7 @@ export default function WorkspacePage() {
                             style={controlSelectStyle}
                             value={selectedModel}
                             onChange={(e) => setSelectedModel(e.target.value)}
-                            disabled={!currentProvider || currentProviderModels.length === 0 || sending}
+                            disabled={!currentProvider || currentProviderModels.length === 0 || sending || optimizingPrompt}
                         >
                             {currentProviderModels.length === 0 ? (
                                 <option value="">Model</option>
@@ -1413,35 +2879,60 @@ export default function WorkspacePage() {
                             )}
                         </select>
                     </div>
+                    {currentProviderMissingKey && currentProvider && (
+                        <div
+                            style={{
+                                marginTop: "0.6rem",
+                                border: "1px solid rgba(239, 68, 68, 0.35)",
+                                background: "rgba(239, 68, 68, 0.08)",
+                                color: "#fca5a5",
+                                borderRadius: "0.5rem",
+                                padding: "0.65rem 0.75rem",
+                                fontSize: "0.78rem",
+                                lineHeight: 1.45,
+                            }}
+                        >
+                            {t("workspace.ui.providerKeyWarning", { provider: currentProvider.provider })}
+                            {currentProvider.keyEnvironmentVariable ? t("workspace.ui.providerKeyWarningConfigure", { var: currentProvider.keyEnvironmentVariable }) : t("workspace.ui.providerKeyWarningConfigureGeneric")}
+                        </div>
+                    )}
+                    {!currentProviderMissingKey && currentProvider && selectedModel && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                            {t("workspace.ui.optimizePromptLabel", { provider: selectedProvider, model: selectedModel.split("/").pop() })}
+                        </p>
+                    )}
                 </div>
 
-                <div className="workspace-chat-messages" ref={chatContainerRef}>
+                <div ref={chatBodyRef} className="workspace-chat-body">
+                <div className="workspace-chat-messages" ref={chatContainerRef} style={{ height: `${Math.round(chatVSplit)}%` }}>
                     {conversationLoading && (
                         <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", padding: "0.5rem" }}>
-                            Caricamento conversazione…
+                            {t("workspace.ui.loadingConversation")}
                         </p>
                     )}
                     {activeConv?.messages.map((msg) => (
                         <MessageBubble key={msg.id} message={msg} />
                     ))}
 
-                    {sending && (
+                    {(sending || optimizingPrompt) && (
                         <div className="workspace-stream-box">
                             <div className="workspace-stream-title">
-                                {draftAnswer ? "Risposta in corso..." : thinkingText ? "Ragionamento..." : "Connessione al provider..."}
+                                {activeOperation === "prompt-optimizer"
+                                    ? (draftAnswer ? t("workspace.ui.stream.optimizing") : thinkingText ? t("workspace.ui.stream.analysingOptimizer") : t("workspace.ui.stream.connectingOptimizer"))
+                                    : (draftAnswer ? t("workspace.ui.stream.responding") : thinkingText ? t("workspace.ui.stream.reasoning") : t("workspace.ui.stream.connectingProvider"))}
                             </div>
                             <div ref={thinkingFlowRef} className="workspace-thinking-flow">
-                                {thinkingText || "In attesa del ragionamento stream..."}
+                                {thinkingText || (activeOperation === "prompt-optimizer" ? t("workspace.ui.stream.thinkingDefault") : t("workspace.ui.stream.thinkingOptimizer"))}
                             </div>
                             {draftAnswer && (
-                                <div className="workspace-draft-box">
+                                <div ref={draftBoxRef} className="workspace-draft-box">
                                     <pre className="workspace-draft-inner">{draftAnswer}</pre>
                                 </div>
                             )}
                             <div className="workspace-stream-footer">
                                 <div className="workspace-thinking-spinner">
                                     <span className="workspace-spinner-dot" />
-                                    sto pensando...
+                                    {activeOperation === "prompt-optimizer" ? t("workspace.ui.stream.spinnerOptimizer") : t("workspace.ui.stream.spinnerDefault")}
                                 </div>
                                 <div className="workspace-token-counter">
                                     {streamUsageTokens
@@ -1454,7 +2945,7 @@ export default function WorkspacePage() {
 
                     {!activeConv && (
                         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "0.4rem 0.2rem" }}>
-                            Apri una conversazione o invia un nuovo prompt.
+                            {t("workspace.ui.emptyConversation")}
                         </p>
                     )}
                     {error && <div className="status error">{error}</div>}
@@ -1466,34 +2957,65 @@ export default function WorkspacePage() {
                                 setIsUserScrolled(false);
                                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
                             }}
-                            aria-label="Torna in fondo alla chat"
-                            title="Torna in fondo"
+                            aria-label={t("workspace.ui.scrollToBottom")}
+                            title={t("workspace.ui.scrollToBottomTitle")}
                         >
-                            ↓
+                            <ChevronDown size={16} />
                         </button>
                     )}
                 </div>
-
+                <div
+                    className="workspace-chat-vresizer"
+                    onMouseDown={() => setIsDraggingVChat(true)}
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label={t("workspace.ui.resizeChat")}
+                />
                 <form onSubmit={(e) => void handleSend(e)} className="workspace-input-form">
-                    <textarea
-                        style={textareaStyle}
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                void handleSend(e as unknown as React.FormEvent);
-                            }
-                        }}
-                        placeholder="Scrivi cosa vuoi realizzare..."
-                        rows={3}
-                        disabled={sending}
-                    />
+                    <div className="flex items-start gap-2">
+                        <textarea
+                            style={textareaStyle}
+                            className={inspectMode && selectedElement ? "placeholder:italic" : undefined}
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    void handleSend(e as unknown as React.FormEvent);
+                                }
+                            }}
+                            placeholder={inspectMode && selectedElement
+                                ? (mediaMode === "background"
+                                    ? t("workspace.ui.placeholderFocusPatchBackground")
+                                    : t("workspace.ui.placeholderFocusPatch"))
+                                : t("workspace.ui.placeholderDefault")}
+                            rows={3}
+                            disabled={sending || optimizingPrompt}
+                        />
+                        <Button
+                            type="button"
+                            variant={voiceListening ? "destructive" : "outline"}
+                            size="icon"
+                            onClick={handleToggleVoiceInput}
+                            disabled={!voiceSupported || sending || conversationLoading || optimizingPrompt}
+                            title={voiceListening ? t("workspace.ui.voiceListeningTitle") : t("workspace.ui.voiceStartTitle")}
+                            aria-label={voiceListening ? t("workspace.ui.voiceListeningLabel") : t("workspace.ui.voiceStartLabel")}
+                            className="shrink-0"
+                        >
+                            {voiceListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                        </Button>
+                    </div>
+                    {(voiceSupported || voiceError) && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{voiceListening ? t("workspace.ui.voiceListening") : t("workspace.ui.voiceReady")}</span>
+                            {voiceError && <span className="text-destructive">{voiceError}</span>}
+                        </div>
+                    )}
                     {/* Focus context indicator */}
                     {(inspectMode && selectedElement) && (
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.76rem", color: "var(--accent-text, #818cf8)", padding: "0.2rem 0" }}>
                             <span style={{ opacity: 0.7 }}>◎</span>
-                            <span>Elemento: <strong>{selectedElement.selector}</strong>
+                            <span>{t("workspace.ui.inspectElementLabel")}<strong>{selectedElement.selector}</strong>
                                 {selectedElement.tag !== selectedElement.selector.replace(/^#.+|^\..+/, "") && (
                                     <span style={{ color: "var(--text-muted)", marginLeft: "0.3rem" }}>&lt;{selectedElement.tag}&gt;</span>
                                 )}
@@ -1504,49 +3026,183 @@ export default function WorkspacePage() {
                                 onClick={async () => {
                                     await copyTextToClipboard(JSON.stringify(selectedElement, null, 2));
                                 }}
-                                title="Copia JSON metadati elemento selezionato"
-                            >Copia JSON</button>
+                                title={t("workspace.ui.copyJsonTitle")}
+                            >{t("workspace.ui.copyJson")}</button>
                             <button
                                 type="button"
                                 style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.9rem", lineHeight: 1 }}
-                                onClick={() => setSelectedElement(null)}
-                                title="Rimuovi selezione elemento"
+                                onClick={clearSelectedElement}
+                                title={t("workspace.ui.removeElementSelection")}
                             >×</button>
                         </div>
                     )}
                     {(!inspectMode || !selectedElement) && codeEditorSelection && previewTab !== "preview" && (
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.76rem", color: "var(--accent-text, #818cf8)", padding: "0.2rem 0" }}>
                             <span style={{ opacity: 0.7 }}>📝</span>
-                            <span>{codeEditorSelection.language.toUpperCase()} righe {codeEditorSelection.startLine}–{codeEditorSelection.endLine}</span>
+                            <span>{t("workspace.ui.codeSelectionLines", { lang: codeEditorSelection.language.toUpperCase(), start: codeEditorSelection.startLine, end: codeEditorSelection.endLine })}</span>
                             <button
                                 type="button"
                                 style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.9rem", lineHeight: 1 }}
                                 onClick={() => setCodeEditorSelection(null)}
-                                title="Rimuovi selezione codice"
+                                title={t("workspace.ui.removeCodeSelection")}
                             >×</button>
                         </div>
                     )}
-                    <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                        <div className="row" style={{ gap: "0.5rem", alignItems: "center" }}>
-                            <button className="secondary" type="button" onClick={() => router.push("/dashboard")}>← Dashboard</button>
-                            <RequestMetaInfo message={latestAssistant} variant="global" />
+                    {token && inspectMode && !selectedElement && previewTab === "preview" && hasPreviewArtifacts && (
+                        <div style={{
+                            border: "1px dashed var(--border)",
+                            borderRadius: "var(--radius)",
+                            padding: "0.65rem 0.8rem",
+                            fontSize: "0.78rem",
+                            color: "var(--text-muted)",
+                            background: "rgba(99,102,241,0.06)",
+                        }}>
+                            {t("workspace.ui.inspectHint")}
                         </div>
-                        <div className="row" style={{ gap: "0.5rem" }}>
-                            {sending && (
+                    )}
+                    {token && editMode && selectedElementSource === "edit-media" && selectedElement && previewTab === "preview" && (
+                        <div className="mt-2 space-y-3 rounded-lg border border-border bg-card/60 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-foreground">{t("workspace.ui.imageToolsInEditTitle")}</p>
+                                    <p className="truncate text-[11px] text-muted-foreground">{selectedElement.selector}</p>
+                                    <p className="mt-1 text-[11px] text-muted-foreground">
+                                        {t("workspace.ui.imageToolsInEditHint")}
+                                    </p>
+                                </div>
+                                <Button type="button" variant="ghost" size="sm" onClick={clearSelectedElement}>
+                                    {t("workspace.ui.closeButton")}
+                                </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => {
+                                        setMediaInspectorSection("gen-image");
+                                        setMediaToolsOpen(true);
+                                        void handleSuggestMedia();
+                                    }}
+                                    disabled={generatingMedia || suggestingMedia}
+                                >
+                                    {(generatingMedia || suggestingMedia) ? t("workspace.ui.generatingMedia") : t("workspace.ui.genImageAI")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setMediaInspectorSection("gallery");
+                                        setMediaToolsOpen(true);
+                                    }}
+                                >
+                                    Image Gallery
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                    <Dialog
+                        open={Boolean(mediaToolsOpen && token && editMode && selectedElementSource === "edit-media" && selectedElement && previewTab === "preview")}
+                        onOpenChange={setMediaToolsOpen}
+                    >
+                        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+                            <DialogHeader>
+                                <DialogTitle>{t("workspace.ui.imageAiToolsTitle")}</DialogTitle>
+                                <DialogDescription>
+                                    {t("workspace.ui.imageAiToolsDesc")}
+                                </DialogDescription>
+                            </DialogHeader>
+                            {token && editMode && selectedElementSource === "edit-media" && selectedElement && previewTab === "preview" && (
+                                <MediaInspectorPanel
+                                    token={token}
+                                    projectId={projectId}
+                                    selectedElement={selectedElement}
+                                    assets={projectAssets}
+                                    loadingAssets={loadingProjectAssets}
+                                    chatPromptPlaceholder={mediaMode === "background"
+                                        ? t("workspace.ui.mediaPlaceholderBackground")
+                                        : t("workspace.ui.mediaPlaceholderImage")}
+                                    assetScope={assetScope}
+                                    onAssetScopeChange={setAssetScope}
+                                    mediaMode={mediaMode}
+                                    onMediaModeChange={setMediaMode}
+                                    backgroundFit={backgroundFit}
+                                    onBackgroundFitChange={setBackgroundFit}
+                                    backgroundRepeat={backgroundRepeat}
+                                    onBackgroundRepeatChange={setBackgroundRepeat}
+                                    mediaOpacity={mediaOpacity}
+                                    onMediaOpacityChange={setMediaOpacity}
+                                    mediaFilter={mediaFilter}
+                                    onMediaFilterChange={setMediaFilter}
+                                    generating={generatingMedia}
+                                    suggesting={suggestingMedia}
+                                    suggestion={mediaSuggestion}
+                                    imageModelOptions={imageModelOptions}
+                                    selectedImageModel={selectedImageModel}
+                                    onImageModelChange={setSelectedImageModel}
+                                    imageSize={selectedImageSize}
+                                    onImageSizeChange={setSelectedImageSize}
+                                    imageSteps={selectedImageSteps}
+                                    onImageStepsChange={setSelectedImageSteps}
+                                    aiAnalytics={projectAiAnalytics}
+                                    loadingAiAnalytics={loadingAiAnalytics}
+                                    initialSection={mediaInspectorSection}
+                                    onGenerateWithPrompt={(p) => {
+                                        setPrompt(p);
+                                        void runMediaGeneration(p.slice(0, 2000), { label: t("workspace.notifications.imageGeneration.label") });
+                                        setMediaToolsOpen(false);
+                                    }}
+                                    onOpenGallery={() => setConfigOpen(true)}
+                                    onApplyAsset={(asset) => void handleApplyAsset(asset)}
+                                    onApplyCurrentStyles={handleApplyCurrentStyles}
+                                />
+                            )}
+                        </DialogContent>
+                    </Dialog>
+                    <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                        <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                            <RequestMetaInfo message={latestAssistant} variant="global" />
+                            {promptOpsSummary.runs > 0 && (
+                                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                    optimizer: {promptOpsSummary.runs} run{promptOpsSummary.runs === 1 ? "" : "s"} · {formatCostEur(promptOpsSummary.totalCost) || "€0"}
+                                </span>
+                            )}
+                        </div>
+                        <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => void handleOptimizePrompt()}
+                                disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt || currentProviderMissingKey}
+                                title={selectedModel ? t("workspace.ui.useProviderModel", { provider: selectedProvider, model: selectedModel }) : t("workspace.ui.useActiveProviderModel")}
+                            >
+                                {optimizingPrompt
+                                    ? t("workspace.ui.optimizingPrompt")
+                                    : selectedModel
+                                        ? t("workspace.ui.optimizeWith", { model: selectedModel.split("/").pop() })
+                                        : t("workspace.ui.optimizePrompt")}
+                            </Button>
+                            {promptRestoreValue && (
+                                <Button type="button" variant="outline" onClick={handleRestoreOptimizedPrompt} disabled={sending || optimizingPrompt}>
+                                    {t("workspace.ui.restoreOriginal")}
+                                </Button>
+                            )}
+                            {(sending || optimizingPrompt) && (
                                 <button
                                     type="button"
                                     className="secondary"
                                     onClick={handleStop}
                                     style={{ color: "var(--error, #f87171)", borderColor: "var(--error, #f87171)" }}
-                                    title="Interrompi la generazione in corso"
+                                    title={t("workspace.ui.stopGeneration")}
                                 >
                                     ⏹ Stop
                                 </button>
                             )}
-                            <button type="submit" disabled={!prompt.trim() || sending || conversationLoading}>{sending ? "Invio..." : "Invia"}</button>
+                            <button type="submit" disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt}>{sending ? t("workspace.ui.sending") : t("workspace.ui.send")}</button>
                         </div>
                     </div>
                 </form>
+                </div>{/* /workspace-chat-body */}
             </aside>
 
             <div
@@ -1554,13 +3210,13 @@ export default function WorkspacePage() {
                 onMouseDown={() => setIsDragging(true)}
                 role="separator"
                 aria-orientation="vertical"
-                aria-label="Resize panels"
+                aria-label={t("workspace.ui.resizePanels")}
             />
 
             <section className="workspace-preview-panel">
                 <div className="workspace-preview-header">
-                    <span style={{ fontWeight: 700 }}>{activeConv ? activeConv.title : "Preview"}</span>
-                    <div className="row" style={{ gap: "0.4rem" }}>
+                    {/* LEFT: version/quality badges */}
+                    <div className="row" style={{ gap: "0.4rem", flexWrap: "wrap", alignItems: "center", flex: 1, minWidth: 0 }}>
                         <span className="badge purple">format {promptConfigVersion}</span>
                         {(selectedBackendSnapshot?.metadata?.provider ?? latestAssistant?.metadata?.provider) && (
                             <span className="badge purple">
@@ -1578,31 +3234,71 @@ export default function WorkspacePage() {
                             </span>
                         )}
                     </div>
-                </div>
-
-                <div className="workspace-preview-tabs" style={{ gap: "0.5rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                    <div className="row" style={{ gap: "0.4rem", flexWrap: "wrap", marginLeft: "auto" }}>
+                    {/* RIGHT: export/capture/publish action buttons */}
+                    <div className="row" style={{ gap: "0.3rem", alignItems: "center", flexShrink: 0, flexWrap: "wrap" }}>
+                        {artifacts && (
+                            <button
+                                type="button"
+                                className="secondary"
+                                disabled={exportState === "loading"}
+                                onClick={handleExportLayer1}
+                                style={{ fontSize: "0.72rem", padding: "0.18rem 0.5rem" }}
+                                title={exportState === "error" ? (exportError ?? t("workspace.ui.exportError")) : t("workspace.ui.exportTitle")}
+                            >
+                                {exportState === "loading" ? "⏳" : "⬇ ZIP"}
+                            </button>
+                        )}
+                        {artifacts && (
+                            <div ref={captureDropdownRef} style={{ position: "relative" }}>
+                                <button
+                                    type="button"
+                                    className="secondary"
+                                    disabled={captureState === "loading"}
+                                    onClick={() => setCaptureDropdownOpen((v) => !v)}
+                                    style={{ fontSize: "0.72rem", padding: "0.18rem 0.5rem" }}
+                                    title={t("workspace.ui.captureTitle")}
+                                >
+                                    {captureState === "loading" ? "⏳" : captureState === "error" ? "⚠" : "📷"}
+                                </button>
+                                {captureDropdownOpen && (
+                                    <div style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 300, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", boxShadow: "0 8px 24px rgba(0,0,0,0.28)", minWidth: 130, overflow: "hidden" }}>
+                                        {(["jpg", "pdf"] as const).map((fmt) => (
+                                            <button
+                                                key={fmt}
+                                                type="button"
+                                                onClick={() => void handleCaptureSnapshot(fmt)}
+                                                style={{ display: "block", width: "100%", background: "transparent", border: "none", borderBottom: fmt === "jpg" ? "1px solid var(--border)" : "none", color: "var(--text)", padding: "0.5rem 0.8rem", textAlign: "left", cursor: "pointer", fontSize: "0.8rem" }}
+                                                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+                                                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                                            >
+                                                {fmt === "jpg" ? "🖼 JPG" : "📄 PDF"}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {artifacts && (
+                            <button
+                                type="button"
+                                className="secondary"
+                                disabled={publishState === "loading"}
+                                onClick={handlePublish}
+                                style={{ fontSize: "0.72rem", padding: "0.18rem 0.5rem" }}
+                                title={publishDeployment ? t("workspace.ui.publishUpdateTitle") : t("workspace.ui.publishTitle")}
+                            >
+                                {publishState === "loading" ? "⏳" : publishState === "error" ? t("workspace.ui.publishStateError") : publishDeployment ? t("workspace.ui.publishStateUpdate") : t("workspace.ui.publishStatePublish")}
+                            </button>
+                        )}
+                        {/* Version history — inline in header, right of action buttons */}
                         {(previewSnapshots.length > 0 || loadingSnapshots) && (
-                            <SnapshotHistoryPanel
-                                snapshots={previewSnapshots}
-                                selectedId={selectedBackendSnapshotId}
-                                loading={loadingSnapshots}
-                                onSelect={(id) => {
-                                    // Batch: pre-populate editor state in the same render so the
-                                    // iframe remounts with correct content, not a stale/blank doc.
-                                    const snap = previewSnapshots.find((s) => s.id === id);
-                                    if (snap?.artifacts) {
-                                        setEditorHtml(snap.artifacts.html ?? "");
-                                        setEditorCss(snap.artifacts.css ?? "");
-                                        setEditorJs(snap.artifacts.js ?? "");
-                                    }
-                                    setSelectedBackendSnapshotId(id);
-                                    setPreviewRefreshing(true);
-                                }}
-                                onActivate={async (id) => {
-                                    if (!token) return;
-                                    try {
-                                        await activatePreviewSnapshot(token, projectId, id);
+                            <>
+                                <div style={{ width: "1px", height: "18px", background: "var(--border)", margin: "0 0.1rem", flexShrink: 0 }} />
+                                <SnapshotHistoryPanel
+                                    snapshots={previewSnapshots}
+                                    selectedId={selectedBackendSnapshotId}
+                                    loading={loadingSnapshots}
+                                    onSelect={(id) => {
                                         const snap = previewSnapshots.find((s) => s.id === id);
                                         if (snap?.artifacts) {
                                             setEditorHtml(snap.artifacts.html ?? "");
@@ -1611,28 +3307,42 @@ export default function WorkspacePage() {
                                         }
                                         setSelectedBackendSnapshotId(id);
                                         setPreviewRefreshing(true);
+                                    }}
+                                    onActivate={async (id) => {
+                                        if (!token) return;
+                                        try {
+                                            await activatePreviewSnapshot(token, projectId, id);
+                                            const snap = previewSnapshots.find((s) => s.id === id);
+                                            if (snap?.artifacts) {
+                                                setEditorHtml(snap.artifacts.html ?? "");
+                                                setEditorCss(snap.artifacts.css ?? "");
+                                                setEditorJs(snap.artifacts.js ?? "");
+                                            }
+                                            setSelectedBackendSnapshotId(id);
+                                            setPreviewRefreshing(true);
+                                            await loadSnapshots(token);
+                                            addNotification({ label: t("workspace.notifications.snapshot.activatedLabel"), status: "done", message: t("workspace.notifications.snapshot.activated") });
+                                        } catch { /* silent */ }
+                                    }}
+                                    onDelete={async (id) => {
+                                        if (!token) return;
+                                        await deletePreviewSnapshot(token, projectId, id);
                                         await loadSnapshots(token);
-                                        addNotification({ label: "Versione attivata", status: "done", message: "Snapshot selezionato come versione attiva." });
-                                    } catch { /* silent */ }
-                                }}
-                                onDelete={async (id) => {
-                                    if (!token) return;
-                                    await deletePreviewSnapshot(token, projectId, id);
-                                    await loadSnapshots(token);
-                                }}
-                                onRecover={() => {
-                                    const active = previewSnapshots.find((s) => s.isActive) ?? previewSnapshots[0];
-                                    if (active) {
-                                        if (active.artifacts) {
-                                            setEditorHtml(active.artifacts.html ?? "");
-                                            setEditorCss(active.artifacts.css ?? "");
-                                            setEditorJs(active.artifacts.js ?? "");
+                                    }}
+                                    onRecover={() => {
+                                        const active = previewSnapshots.find((s) => s.isActive) ?? previewSnapshots[0];
+                                        if (active) {
+                                            if (active.artifacts) {
+                                                setEditorHtml(active.artifacts.html ?? "");
+                                                setEditorCss(active.artifacts.css ?? "");
+                                                setEditorJs(active.artifacts.js ?? "");
+                                            }
+                                            setSelectedBackendSnapshotId(active.id);
+                                            setPreviewRefreshing(true);
                                         }
-                                        setSelectedBackendSnapshotId(active.id);
-                                        setPreviewRefreshing(true);
-                                    }
-                                }}
-                            />
+                                    }}
+                                />
+                            </>
                         )}
                     </div>
                 </div>
@@ -1660,8 +3370,8 @@ export default function WorkspacePage() {
                                         width: 7,
                                         height: 7,
                                         borderRadius: "50%",
-                                        background: "#22d3ee",
-                                        boxShadow: "0 0 5px #22d3ee",
+                                        background: "#7dd3fc",
+                                        boxShadow: "0 0 5px #7dd3fc",
                                         animation: "pf-pulse 1.2s ease-in-out infinite",
                                         display: "block",
                                     }}
@@ -1676,7 +3386,7 @@ export default function WorkspacePage() {
                         className="secondary"
                         data-active={previewTab === "prompt" ? "true" : "false"}
                         onClick={() => setPreviewTab("prompt")}
-                        title="Visualizza il system prompt composto passato all'LLM (sola lettura)"
+                        title={t("workspace.ui.promptTabTitle")}
                     >
                         🔍 PROMPT
                     </button>
@@ -1689,17 +3399,21 @@ export default function WorkspacePage() {
                                 type="button"
                                 className="secondary"
                                 data-active={inspectMode ? "true" : "false"}
+                                disabled={!hasPreviewArtifacts}
                                 onClick={() => {
+                                    if (!hasPreviewArtifacts) return;
                                     const next = !inspectMode;
                                     setInspectMode(next);
-                                    if (!next) setSelectedElement(null);
+                                    clearSelectedElement();
                                     // Disable EDIT mode when Inspect is activated
                                     if (next && editMode) setEditMode(false);
                                 }}
-                                style={{ marginLeft: "auto", fontSize: "0.74rem", padding: "0.2rem 0.6rem" }}
-                                title={inspectMode ? "Disattiva Inspect" : "Attiva Inspect: clicca elementi nella preview per selezionarli"}
+                                style={{ marginLeft: "auto", fontSize: "0.74rem", padding: "0.2rem 0.6rem", opacity: hasPreviewArtifacts ? 1 : 0.5, cursor: hasPreviewArtifacts ? "pointer" : "not-allowed" }}
+                                title={hasPreviewArtifacts
+                                    ? (inspectMode ? t("workspace.ui.inspectOffTitle") : t("workspace.ui.inspectOnTitle"))
+                                    : t("workspace.ui.inspectNoArtifacts")}
                             >
-                                {inspectMode ? "◎ Inspect ON" : "◎ Inspect"}
+                                {inspectMode ? t("workspace.ui.inspectOn") : t("workspace.ui.inspectOff")}
                             </button>
                             {/* EDIT Light toggle — only when there are artifacts */}
                             {artifacts && !inspectMode && (
@@ -1709,9 +3423,9 @@ export default function WorkspacePage() {
                                     data-active={editMode ? "true" : "false"}
                                     onClick={() => void handleToggleEditMode()}
                                     style={{ fontSize: "0.74rem", padding: "0.2rem 0.6rem" }}
-                                    title={editMode ? "Disattiva EDIT Light" : "Attiva EDIT Light: clicca testo o immagini per modificarli direttamente"}
+                                    title={editMode ? t("workspace.ui.editOffTitle") : t("workspace.ui.editOnTitle")}
                                 >
-                                    {editMode ? "✎ EDIT ON" : "✎ EDIT"}
+                                    {editMode ? t("workspace.ui.editOn") : t("workspace.ui.editOff")}
                                 </button>
                             )}
                             {/* Save as version button — only when EDIT Light is active */}
@@ -1722,9 +3436,9 @@ export default function WorkspacePage() {
                                     disabled={isSavingEditVersion}
                                     onClick={handleTriggerEditSave}
                                     style={{ fontSize: "0.74rem", padding: "0.2rem 0.7rem" }}
-                                    title="Salva le modifiche EDIT come nuova versione dell'artefatto"
+                                    title={t("workspace.ui.saveEditTitle")}
                                 >
-                                    {isSavingEditVersion ? "⏳ Salvataggio…" : "💾 Salva EDIT"}
+                                    {isSavingEditVersion ? t("workspace.ui.saveEditSaving") : t("workspace.ui.saveEdit")}
                                 </button>
                             )}
                         </>
@@ -1732,103 +3446,10 @@ export default function WorkspacePage() {
 
                     {previewTab !== "preview" && (
                         <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: "0.75rem" }}>
-                            {editorSelectionLabel}
+                            {editorSelectionLabel || t("workspace.selectionNone")}
                         </span>
                     )}
 
-                    {/* Export ZIP button — always visible when artifacts exist */}
-                    {artifacts && (
-                        <button
-                            type="button"
-                            className="secondary"
-                            disabled={exportState === "loading"}
-                            onClick={handleExportLayer1}
-                            style={{ fontSize: "0.74rem", padding: "0.2rem 0.6rem", marginLeft: "0.5rem" }}
-                            title={exportState === "error" ? (exportError ?? "Errore export") : "Esporta HTML/CSS/JS come ZIP"}
-                        >
-                            {exportState === "loading" ? "⏳ Export…" : "⬇ Esporta ZIP"}
-                        </button>
-                    )}
-
-                    {/* Camera snapshot button — JPG / PDF capture of the live preview */}
-                    {artifacts && (
-                        <div ref={captureDropdownRef} style={{ position: "relative", marginLeft: "0.3rem" }}>
-                            <button
-                                type="button"
-                                className="secondary"
-                                disabled={captureState === "loading"}
-                                onClick={() => setCaptureDropdownOpen((v) => !v)}
-                                style={{ fontSize: "0.74rem", padding: "0.2rem 0.6rem" }}
-                                title="Cattura screenshot JPG o PDF della preview"
-                            >
-                                {captureState === "loading"
-                                    ? "⏳ Cattura…"
-                                    : captureState === "error"
-                                    ? "⚠ Errore"
-                                    : "📷 Cattura"}
-                            </button>
-                            {captureDropdownOpen && (
-                                <div
-                                    style={{
-                                        position: "absolute",
-                                        top: "calc(100% + 4px)",
-                                        right: 0,
-                                        zIndex: 300,
-                                        background: "var(--surface)",
-                                        border: "1px solid var(--border)",
-                                        borderRadius: "var(--radius)",
-                                        boxShadow: "0 8px 24px rgba(0,0,0,0.28)",
-                                        minWidth: 150,
-                                        overflow: "hidden",
-                                    }}
-                                >
-                                    {(["jpg", "pdf"] as const).map((fmt) => (
-                                        <button
-                                            key={fmt}
-                                            type="button"
-                                            onClick={() => void handleCaptureSnapshot(fmt)}
-                                            style={{
-                                                display: "block",
-                                                width: "100%",
-                                                background: "transparent",
-                                                border: "none",
-                                                borderBottom: fmt === "jpg" ? "1px solid var(--border)" : "none",
-                                                color: "var(--text)",
-                                                padding: "0.55rem 0.9rem",
-                                                textAlign: "left",
-                                                cursor: "pointer",
-                                                fontSize: "0.82rem",
-                                            }}
-                                            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
-                                            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                                        >
-                                            {fmt === "jpg" ? "🖼 Download JPG" : "📄 Download PDF"}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Publish button */}
-                    {artifacts && (
-                        <button
-                            type="button"
-                            className="secondary"
-                            disabled={publishState === "loading"}
-                            onClick={handlePublish}
-                            style={{ fontSize: "0.74rem", padding: "0.2rem 0.6rem", marginLeft: "0.3rem" }}
-                            title={publishDeployment ? "Aggiorna pubblicazione live" : "Pubblica con link condivisibile"}
-                        >
-                            {publishState === "loading"
-                                ? "⏳ Pubblica…"
-                                : publishState === "error"
-                                ? "⚠ Errore"
-                                : publishDeployment
-                                ? "🔄 Aggiorna"
-                                : "🌐 Pubblica"}
-                        </button>
-                    )}
                 </div>
 
                 {/* Published banner — shown when a live deployment exists */}
@@ -1839,10 +3460,10 @@ export default function WorkspacePage() {
                             flexDirection: "column",
                             gap: "0.25rem",
                             padding: "0.3rem 0.7rem",
-                            background: isPublishStale ? "rgba(245,158,11,0.07)" : "rgba(34,211,238,0.08)",
-                            borderBottom: isPublishStale ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(34,211,238,0.20)",
+                            background: isPublishStale ? "rgba(245,158,11,0.07)" : "rgba(125,211,252,0.08)",
+                            borderBottom: isPublishStale ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(125,211,252,0.20)",
                             fontSize: "0.78rem",
-                            color: "#22d3ee",
+                            color: "#7dd3fc",
                         }}
                     >
                         {/* Row 1: live badge + links + actions */}
@@ -1859,7 +3480,7 @@ export default function WorkspacePage() {
                                     href={publishDeployment.subdomainUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    style={{ color: "#22d3ee", textDecoration: "underline" }}
+                                    style={{ color: "#7dd3fc", textDecoration: "underline" }}
                                 >
                                     {publishDeployment.customSlug
                                         ? publishDeployment.customSlug
@@ -1871,7 +3492,7 @@ export default function WorkspacePage() {
                                 href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/p/${publishDeployment.publishId}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style={{ color: "#22d3ee", textDecoration: "underline", opacity: publishDeployment.subdomainUrl ? 0.6 : 1 }}
+                                style={{ color: "#7dd3fc", textDecoration: "underline", opacity: publishDeployment.subdomainUrl ? 0.6 : 1 }}
                             >
                                 /p/{publishDeployment.publishId}
                             </a>
@@ -1880,15 +3501,15 @@ export default function WorkspacePage() {
                                 onClick={handleCopyPublishLink}
                                 style={{
                                     background: "transparent",
-                                    border: "1px solid rgba(34,211,238,0.30)",
-                                    color: "#22d3ee",
+                                    border: "1px solid rgba(125,211,252,0.30)",
+                                    color: "#7dd3fc",
                                     borderRadius: "var(--radius)",
                                     padding: "0.15rem 0.5rem",
                                     cursor: "pointer",
                                     fontSize: "0.72rem",
                                 }}
                             >
-                                {publishCopied ? "✓ Copiato" : "📋 Copia link"}
+                                {publishCopied ? t("workspace.ui.copied") : t("workspace.ui.copyLink")}
                             </button>
                             {/* Slug edit toggle */}
                             <button
@@ -1900,8 +3521,8 @@ export default function WorkspacePage() {
                                 }}
                                 style={{
                                     background: "transparent",
-                                    border: "1px solid rgba(34,211,238,0.25)",
-                                    color: "#22d3ee",
+                                    border: "1px solid rgba(125,211,252,0.25)",
+                                    color: "#7dd3fc",
                                     borderRadius: "var(--radius)",
                                     padding: "0.15rem 0.5rem",
                                     cursor: "pointer",
@@ -1909,7 +3530,7 @@ export default function WorkspacePage() {
                                     opacity: 0.75,
                                 }}
                             >
-                                {publishDeployment.customSlug ? "✏ Slug" : "🔗 Imposta slug"}
+                                {publishDeployment.customSlug ? t("workspace.ui.editSlug") : t("workspace.ui.setSlug")}
                             </button>
                             <button
                                 type="button"
@@ -1925,12 +3546,12 @@ export default function WorkspacePage() {
                                     fontSize: "0.72rem",
                                 }}
                             >
-                                Rimuovi
+                                {t("workspace.ui.unpublish")}
                             </button>
                             {isPublishStale && (
                                 <>
                                     <span style={{ color: "#f59e0b", fontSize: "0.72rem", display: "flex", alignItems: "center", gap: "0.2rem" }}>
-                                        ⚠ online v{publishedVersionNumber ?? "?"}, attiva v{activeVersionNumber ?? "?"}
+                                        {t("workspace.ui.staleVersion", { published: publishedVersionNumber ?? "?", current: activeVersionNumber ?? "?" })}
                                     </span>
                                     <button
                                         type="button"
@@ -1946,7 +3567,7 @@ export default function WorkspacePage() {
                                             fontSize: "0.72rem",
                                         }}
                                     >
-                                        Aggiorna
+                                        {t("workspace.ui.updatePublish")}
                                     </button>
                                 </>
                             )}
@@ -1959,11 +3580,11 @@ export default function WorkspacePage() {
                                     type="text"
                                     value={slugInput}
                                     onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                                    placeholder="es. mia-pizzeria"
+                                    placeholder={t("workspace.ui.slugPlaceholder")}
                                     maxLength={30}
                                     style={{
                                         background: "var(--surface)",
-                                        border: "1px solid rgba(34,211,238,0.35)",
+                                        border: "1px solid rgba(125,211,252,0.35)",
                                         borderRadius: "var(--radius)",
                                         color: "var(--text)",
                                         fontSize: "0.78rem",
@@ -1981,10 +3602,10 @@ export default function WorkspacePage() {
                                         : "#6b7280",
                                     minWidth: "4.5rem",
                                 }}>
-                                    {slugCheckState === "checking" ? "⏳ Verifica…"
-                                        : slugCheckState === "available" ? "✓ Disponibile"
-                                        : slugCheckState === "taken" ? "✗ Già in uso"
-                                        : slugCheckState === "invalid" ? "⚠ Formato non valido"
+                                    {slugCheckState === "checking" ? t("workspace.ui.slugChecking")
+                                        : slugCheckState === "available" ? t("workspace.ui.slugAvailable")
+                                        : slugCheckState === "taken" ? t("workspace.ui.slugTaken")
+                                        : slugCheckState === "invalid" ? t("workspace.ui.slugInvalid")
                                         : ""}
                                 </span>
                                 <button
@@ -2002,7 +3623,7 @@ export default function WorkspacePage() {
                                         opacity: slugSaving || (!!slugInput.trim() && slugCheckState !== "available") ? 0.45 : 1,
                                     }}
                                 >
-                                    {slugSaving ? "⏳" : "Salva"}
+                                    {slugSaving ? t("workspace.ui.slugSaving") : t("workspace.ui.slugSave")}
                                 </button>
                                 {publishDeployment.customSlug && (
                                     <button
@@ -2027,7 +3648,7 @@ export default function WorkspacePage() {
                                             fontSize: "0.72rem",
                                         }}
                                     >
-                                        Rimuovi slug
+                                        {t("workspace.ui.slugRemove")}
                                     </button>
                                 )}
                                 <button
@@ -2042,26 +3663,58 @@ export default function WorkspacePage() {
                                         padding: "0.15rem 0.3rem",
                                     }}
                                 >
-                                    Annulla
+                                    {t("workspace.ui.slugCancel")}
                                 </button>
                             </div>
                         )}
                     </div>
                 )}
 
+                {previewTab === "preview" && hasPreviewArtifacts && (
+                    <PreviewViewportSelector value={previewViewport} onChange={setPreviewViewport} />
+                )}
+
                 <div className="workspace-preview-canvas">
                     {!artifacts && (
                         <div style={emptyStateStyle}>
                             <div style={{ fontSize: "2.2rem", marginBottom: "0.75rem" }}>⬡</div>
-                            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.4rem" }}>Nessun codice generato</h2>
+                            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.4rem" }}>{t("workspace.ui.noCodeTitle")}</h2>
                             <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", maxWidth: 480, textAlign: "center" }}>
-                                Il centro mostra solo artifacts HTML/CSS/JS generati dal backend. Invia un prompt per popolare la preview.
+                                {t("workspace.ui.noCodeHint")}
                             </p>
                         </div>
                     )}
 
                     {artifacts && previewTab === "preview" && (
-                        <>
+                        <div style={{ display: "flex", flex: 1, minHeight: 0, gap: 0, position: "relative" }}>
+                        {/* Main preview area with optional viewport width+height constraint */}
+                        <div style={{
+                            flex: 1,
+                            minWidth: 0,
+                            minHeight: 0,
+                            position: "relative",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            // for constrained viewports scroll vertically
+                            overflowY: viewportDimensions(previewViewport) ? "auto" : "hidden",
+                            padding: viewportDimensions(previewViewport) ? "16px 0 24px" : 0,
+                        }}>
+                        {/* Viewport-constrained inner frame */}
+                        <div style={{
+                            width: viewportDimensions(previewViewport)?.w ?? "100%",
+                            height: viewportDimensions(previewViewport)?.h,
+                            maxWidth: "100%",
+                            flex: viewportDimensions(previewViewport) ? "none" : 1,
+                            minHeight: viewportDimensions(previewViewport) ? undefined : 0,
+                            position: "relative",
+                            display: "flex",
+                            flexDirection: "column",
+                            transition: "width 0.2s ease, height 0.2s ease",
+                            boxShadow: viewportDimensions(previewViewport) ? "0 8px 40px rgba(0,0,0,0.55), 0 0 0 1px var(--border)" : undefined,
+                            borderRadius: viewportDimensions(previewViewport) ? "var(--radius)" : undefined,
+                            overflow: viewportDimensions(previewViewport) ? "hidden" : undefined,
+                        }}>
                         {previewRefreshing && (
                             <div
                                 style={{
@@ -2086,7 +3739,7 @@ export default function WorkspacePage() {
                                         border: "1px solid var(--border)",
                                         borderRadius: "var(--radius)",
                                         padding: "0.45rem 1rem",
-                                        color: "#22d3ee",
+                                        color: "#7dd3fc",
                                         fontSize: "0.82rem",
                                         fontWeight: 600,
                                         boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
@@ -2096,7 +3749,7 @@ export default function WorkspacePage() {
                                         style={{
                                             width: 14,
                                             height: 14,
-                                            border: "2px solid #22d3ee",
+                                            border: "2px solid #7dd3fc",
                                             borderTopColor: "transparent",
                                             borderRadius: "50%",
                                             animation: "pf-spin 0.7s linear infinite",
@@ -2104,7 +3757,7 @@ export default function WorkspacePage() {
                                             flexShrink: 0,
                                         }}
                                     />
-                                    Aggiornamento preview…
+                                    {t("workspace.ui.previewRefreshing")}
                                 </span>
                             </div>
                         )}
@@ -2134,7 +3787,44 @@ export default function WorkspacePage() {
                                 }
                             }}
                         />
-                        </>
+                        </div>{/* /viewport-frame */}
+                        </div>{/* /main-preview-area */}
+                        {/* EDIT media sidebar — reusable MediaGrid */}
+                        {editMode && editMediaList.length > 0 && (
+                            <MediaGrid
+                                items={editMediaList}
+                                selectedId={
+                                    selectedElement?.selector
+                                        ? editMediaList.find((m) => m.meta?.selector === selectedElement.selector)?.id ?? null
+                                        : null
+                                }
+                                onSelect={(item) => {
+                                    const selector = item.meta?.selector as string | undefined;
+                                    const pfId = item.meta?.stableNodeId as string | undefined;
+                                    iframeRef.current?.contentWindow?.postMessage({
+                                        type: "pf-edit-scroll-to",
+                                        selector: selector || "",
+                                        pfId: pfId?.startsWith("pf:") ? pfId.slice(3) : undefined,
+                                    }, "*");
+                                }}
+                                title="🖼 Assets"
+                                columns={1}
+                                filters={[
+                                    { key: "img", label: t("workspace.editMediaFilters.images"), match: (i) => i.mediaType === "image" },
+                                    { key: "bg", label: t("workspace.editMediaFilters.backgrounds"), match: (i) => i.mediaType === "background" },
+                                ]}
+                                headerActions={
+                                    <button
+                                        type="button"
+                                        onClick={() => iframeRef.current?.contentWindow?.postMessage({ type: "pf-edit-scan-media" }, "*")}
+                                        className="bg-transparent border-none cursor-pointer text-muted-foreground text-[0.7rem] px-1 hover:text-foreground transition-colors"
+                                        title={t("workspace.ui.rescanImages")}
+                                    >↻</button>
+                                }
+                                className="w-[160px] min-w-[160px]"
+                            />
+                        )}
+                        </div>
                     )}
 
                     {artifacts && previewTab === "html" && (
@@ -2204,10 +3894,10 @@ export default function WorkspacePage() {
                                 }}
                             >
                                 <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
-                                    System prompt composto passato all&apos;LLM — sola lettura
+                                    {t("workspace.ui.promptPanelDesc")}
                                     {promptPreview && (
-                                        <span style={{ color: "var(--accent, #22d3ee)", marginLeft: "0.75rem" }}>
-                                            ~{promptPreview.tokenEstimate} token · preset: {promptPreview.presetId ?? "nessuno"}
+                                        <span style={{ color: "var(--accent, #7dd3fc)", marginLeft: "0.75rem" }}>
+                                            {t("workspace.ui.promptPanelTokensPreset", { tokens: promptPreview.tokenEstimate, preset: promptPreview.presetId ?? t("workspace.ui.promptPanelNone") })}
                                         </span>
                                     )}
                                 </span>
@@ -2220,14 +3910,14 @@ export default function WorkspacePage() {
                                         fontSize: "0.78rem",
                                         padding: "0.25rem 0.75rem",
                                         background: "transparent",
-                                        color: "var(--accent, #22d3ee)",
-                                        border: "1px solid var(--accent, #22d3ee)",
+                                        color: "var(--accent, #7dd3fc)",
+                                        border: "1px solid var(--accent, #7dd3fc)",
                                         borderRadius: "var(--radius)",
                                         cursor: loadingPromptPreview ? "wait" : "pointer",
                                         fontWeight: 600,
                                     }}
                                 >
-                                    {loadingPromptPreview ? "Caricamento…" : "↻ Ricarica"}
+                                    {loadingPromptPreview ? t("workspace.ui.promptPanelLoading") : t("workspace.ui.promptPanelReload")}
                                 </button>
                             </div>
                             {/* Layer panels */}
@@ -2240,51 +3930,51 @@ export default function WorkspacePage() {
                             >
                                 {!promptPreview && !loadingPromptPreview && (
                                     <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
-                                        Il prompt verrà caricato automaticamente. Se non appare, clicca ↻ Ricarica.
+                                        {t("workspace.ui.promptPanelHint")}
                                     </p>
                                 )}
                                 {loadingPromptPreview && (
-                                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>Caricamento…</p>
+                                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.ui.promptPanelLoading")}</p>
                                 )}
                                 {promptPreview && (
                                     <>
                                         <PromptLayerBlock
-                                            label="LAYER A — Vincoli base"
-                                            badge="sempre attivo"
-                                            badgeColor="#22d3ee"
-                                            source="Costante del sistema"
+                                            label={t("workspace.ui.layers.layerA")}
+                                            badge={t("workspace.ui.layers.layerABadge")}
+                                            badgeColor="#7dd3fc"
+                                            source={t("workspace.ui.layers.layerASource")}
                                             content={promptPreview.layers.a_baseConstraints}
                                         />
                                         <PromptLayerBlock
-                                            label="LAYER B — Modulo preset"
-                                            badge={promptPreview.presetId ? `preset: ${promptPreview.presetId}` : "nessun preset"}
+                                            label={t("workspace.ui.layers.layerB")}
+                                            badge={promptPreview.presetId ? t("workspace.ui.layers.layerBBadge", { presetId: promptPreview.presetId }) : t("workspace.ui.layers.layerBBadgeNone")}
                                             badgeColor={promptPreview.layers.b_presetModule ? "#a3e635" : "#6b7280"}
-                                            source="Configurazione progetto (⚙ rotella)"
-                                            content={promptPreview.layers.b_presetModule || "(vuoto — nessun preset assegnato al progetto)"}
+                                            source={t("workspace.ui.layers.layerBSource")}
+                                            content={promptPreview.layers.b_presetModule || t("workspace.ui.layers.layerBEmpty")}
                                             empty={!promptPreview.layers.b_presetModule}
                                         />
                                         <PromptLayerBlock
-                                            label="LAYER C — Contesto stile"
-                                            badge={promptPreview.layers.c_styleContext ? "moodboard + profilo utente" : "vuoto"}
+                                            label={t("workspace.ui.layers.layerC")}
+                                            badge={promptPreview.layers.c_styleContext ? t("workspace.ui.layers.layerCBadge") : t("workspace.ui.layers.layerCBadgeEmpty")}
                                             badgeColor={promptPreview.layers.c_styleContext ? "#fb923c" : "#6b7280"}
-                                            source="Profilo utente (profilazione iniziale) + Moodboard progetto (⚙ rotella)"
-                                            content={promptPreview.layers.c_styleContext || "(vuoto — nessun dato di profilazione utente o moodboard configurato)"}
+                                            source={t("workspace.ui.layers.layerCSource")}
+                                            content={promptPreview.layers.c_styleContext || t("workspace.ui.layers.layerCEmpty")}
                                             empty={!promptPreview.layers.c_styleContext}
                                         />
                                         <PromptLayerBlock
-                                            label="LAYER D — Template personalizzato"
-                                            badge="dormiente"
+                                            label={t("workspace.ui.layers.layerD")}
+                                            badge={t("workspace.ui.layers.layerDBadge")}
                                             badgeColor="#6b7280"
-                                            source="Configurazione avanzata progetto (non attiva)"
-                                            content={promptPreview.layers.d_prePromptTemplate || "(vuoto — nessun template personalizzato configurato)"}
+                                            source={t("workspace.ui.layers.layerDSource")}
+                                            content={promptPreview.layers.d_prePromptTemplate || t("workspace.ui.layers.layerDEmpty")}
                                             empty={!promptPreview.layers.d_prePromptTemplate}
                                         />
                                         {promptPreview.layers.budgetPolicy && (
                                             <PromptLayerBlock
-                                                label="POLICY — Budget output"
-                                                badge="sistema"
+                                                label={t("workspace.ui.layers.policy")}
+                                                badge={t("workspace.ui.layers.policyBadge")}
                                                 badgeColor="#8b5cf6"
-                                                source="Configurazione automatica token/output"
+                                                source={t("workspace.ui.layers.policySource")}
                                                 content={promptPreview.layers.budgetPolicy}
                                             />
                                         )}
@@ -2300,507 +3990,41 @@ export default function WorkspacePage() {
         <ProjectConfigPopup
             projectId={projectId}
             open={configOpen}
-            onClose={() => setConfigOpen(false)}
+            onClose={() => {
+                setConfigOpen(false);
+                void loadProjectAssets();
+            }}
             initialProjectName={projectName}
             onRename={(name: string) => setProjectName(name)}
             presetLabel={presetCatalog.find(p => p.id === projectPresetId)?.labelIt}
             briefGuideQuestions={presetCatalog.find(p => p.id === projectPresetId)?.briefGuideQuestions}
+            presetRecommendedModelLabel={presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.label ?? presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.modelId}
+            onAssetPick={(asset) => void handleApplyAsset(asset)}
         />
-        </>
-    );
-}
-
-// ─── Snapshot History Panel ───────────────────────────────────────────────────
-
-function SnapshotHistoryPanel({
-    snapshots,
-    selectedId,
-    loading,
-    onSelect,
-    onActivate,
-    onDelete,
-    onRecover,
-}: {
-    snapshots: PreviewSnapshot[];
-    selectedId: string | null;
-    loading: boolean;
-    onSelect: (id: string) => void;
-    onActivate: (id: string) => Promise<void>;
-    onDelete: (id: string) => Promise<void>;
-    onRecover: () => void;
-}) {
-    const [open, setOpen] = useState(false);
-    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-    const [deleting, setDeleting] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
-
-    // Close on outside click
-    useEffect(() => {
-        function onDown(e: MouseEvent) {
-            if (ref.current && !ref.current.contains(e.target as Node)) {
-                setOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", onDown);
-        return () => document.removeEventListener("mousedown", onDown);
-    }, []);
-
-    const activeSnapshot = snapshots.find((s) => s.isActive) ?? snapshots[0] ?? null;
-    const selectedSnapshot = snapshots.find((s) => s.id === selectedId) ?? activeSnapshot;
-    const selectedIndex = snapshots.findIndex((s) => s.id === selectedSnapshot?.id);
-    const selectedVersionNumber = selectedIndex === -1 ? snapshots.length : snapshots.length - selectedIndex;
-    const isViewingOld = selectedSnapshot?.id !== activeSnapshot?.id;
-
-    return (
-        <div ref={ref} style={{ position: "relative", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            {/* Trigger */}
-            <button
-                type="button"
-                className="secondary"
-                onClick={() => setOpen((v) => !v)}
-                style={{ fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.2rem 0.55rem" }}
-            >
-                {loading ? (
-                    <span style={{ color: "var(--text-muted)" }}>…</span>
-                ) : (
-                    <>
-                        <span style={{ fontWeight: 700 }}>v{selectedVersionNumber}</span>
-                        {selectedSnapshot?.metadata?.model && (
-                            <span style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>
-                                {selectedSnapshot.metadata.model.split("/").pop()}
-                            </span>
-                        )}
-                        <span style={{ color: "var(--text-muted)" }}>▾</span>
-                    </>
-                )}
-            </button>
-
-            {/* Recupera button (visible when viewing a non-active snapshot) */}
-            {isViewingOld && (
-                <button
-                    type="button"
-                    className="secondary"
-                    onClick={onRecover}
-                    style={{ fontSize: "0.72rem", padding: "0.2rem 0.5rem", color: "var(--accent-text)" }}
-                    title="Torna alla versione attiva"
-                >
-                    Recupera
-                </button>
-            )}
-
-            {/* Dropdown panel */}
-            {open && (
-                <div
-                    style={{
-                        position: "absolute",
-                        top: "calc(100% + 4px)",
-                        right: 0,
-                        zIndex: 200,
-                        background: "var(--surface)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--radius)",
-                        boxShadow: "0 8px 32px rgba(0,0,0,0.28)",
-                        minWidth: 340,
-                        maxHeight: 420,
-                        overflowY: "auto",
-                    }}
-                >
-                    <div
-                        style={{
-                            padding: "0.55rem 0.85rem 0.35rem",
-                            fontSize: "0.68rem",
-                            fontWeight: 700,
-                            color: "var(--text-muted)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.07em",
-                            borderBottom: "1px solid var(--border)",
-                        }}
-                    >
-                        Cronologia Preview · {snapshots.length} versioni
-                    </div>
-
-                    {snapshots.map((snap, i) => {
-                        const vn = snapshots.length - i;
-                        const isSel = snap.id === selectedId;
-                        const isAct = snap.isActive;
-                        const time = new Date(snap.createdAt).toLocaleTimeString("it-IT", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
-                        });
-                        const tokens = snap.metadata?.tokenUsage?.totalTokens;
-                        const model = snap.metadata?.model?.split("/").pop() ?? snap.metadata?.model;
-                        const isEmpty = !snap.artifacts?.html;
-
-                        return (
-                            <div
-                                key={snap.id}
-                                onClick={() => {
-                                    onSelect(snap.id);
-                                    setOpen(false);
-                                    if (!snap.isActive) void onActivate(snap.id);
-                                }}
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "0.6rem",
-                                    padding: "0.6rem 0.85rem",
-                                    cursor: "pointer",
-                                    background: isSel ? "var(--surface-2)" : "transparent",
-                                    borderBottom: i < snapshots.length - 1 ? "1px solid var(--border-subtle, var(--border))" : "none",
-                                    transition: "background 0.1s",
-                                }}
-                                onMouseEnter={(e) => {
-                                    if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "var(--surface-2)";
-                                }}
-                                onMouseLeave={(e) => {
-                                    if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "transparent";
-                                }}
-                            >
-                                {/* Version number */}
-                                <span
-                                    style={{
-                                        fontSize: "0.82rem",
-                                        fontWeight: 800,
-                                        color: isAct ? "#22c55e" : "var(--text-muted)",
-                                        minWidth: 30,
-                                        fontVariantNumeric: "tabular-nums",
-                                    }}
-                                >
-                                    v{vn}
-                                </span>
-
-                                {/* Meta */}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", flexWrap: "wrap" }}>
-                                        {snap.metadata?.finishReason === "manual-save" ? (
-                                            <span className="badge" style={{ fontSize: "0.65rem", background: "rgba(34,211,238,0.15)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.3)" }}>✏ manuale</span>
-                                        ) : snap.metadata?.finishReason === "wysiwyg-edit-light" ? (
-                                            <span className="badge" style={{ fontSize: "0.65rem", background: "rgba(250,204,21,0.15)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)" }}>✎ EDIT</span>
-                                        ) : snap.metadata?.finishReason === "wysiwyg-grapesjs" ? (
-                                            <span className="badge" style={{ fontSize: "0.65rem", background: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}>⊕ GJS</span>
-                                        ) : (
-                                            model && <span className="badge purple" style={{ fontSize: "0.65rem" }}>{model}</span>
-                                        )}
-                                        {snap.metadata?.provider && snap.metadata.finishReason !== "manual-save" && snap.metadata.finishReason !== "wysiwyg-edit-light" && snap.metadata.finishReason !== "wysiwyg-grapesjs" && (
-                                            <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                                                {snap.metadata.provider}
-                                            </span>
-                                        )}
-                                        {isAct && (
-                                            <span className="badge green" style={{ fontSize: "0.65rem" }}>attiva</span>
-                                        )}
-                                        {isEmpty && (
-                                            <span className="badge" style={{ fontSize: "0.65rem", background: "rgba(239,68,68,0.15)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }} title="HTML vuoto – versione corrotta">⚠ vuota</span>
-                                        )}
-                                    </div>
-                                    <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "0.15rem", display: "flex", gap: "0.5rem" }}>
-                                        <span>{time}</span>
-                                        {tokens && <span>{tokens.toLocaleString()} tok</span>}
-                                        {snap.metadata?.durationMs && (
-                                            <span>{(snap.metadata.durationMs / 1000).toFixed(1)}s</span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Delete button (only on non-active snapshots) */}
-                                {!isAct && (
-                                    <button
-                                        type="button"
-                                        className="secondary"
-                                        style={{
-                                            fontSize: "0.72rem",
-                                            padding: "0.15rem 0.35rem",
-                                            flexShrink: 0,
-                                            color: "var(--danger, #ef4444)",
-                                            lineHeight: 1,
-                                        }}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setConfirmDeleteId(snap.id);
-                                        }}
-                                        title="Elimina questa versione"
-                                    >
-                                        ✕
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* Delete confirmation modal */}
-            {confirmDeleteId && (() => {
-                const snapIdx = snapshots.findIndex((s) => s.id === confirmDeleteId);
-                const versionLabel = snapIdx === -1 ? "?" : String(snapshots.length - snapIdx);
-                return (
-                    <div
-                        style={{
-                            position: "fixed",
-                            inset: 0,
-                            zIndex: 9999,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            background: "rgba(0,0,0,0.5)",
-                        }}
-                        onClick={() => { if (!deleting) setConfirmDeleteId(null); }}
-                    >
-                        <div
-                            style={{
-                                background: "var(--surface)",
-                                border: "1px solid var(--border)",
-                                borderRadius: "var(--radius, 8px)",
-                                padding: "1.5rem",
-                                maxWidth: 360,
-                                width: "90%",
-                                boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <h4 style={{ margin: "0 0 0.6rem", fontSize: "0.95rem", fontWeight: 700 }}>
-                                Elimina versione v{versionLabel}?
-                            </h4>
-                            <p style={{ margin: "0 0 1.2rem", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                                Questa azione è irreversibile. La versione verrà eliminata definitivamente.
-                            </p>
-                            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                                <button
-                                    type="button"
-                                    className="secondary"
-                                    style={{ fontSize: "0.78rem", padding: "0.3rem 0.8rem" }}
-                                    onClick={() => setConfirmDeleteId(null)}
-                                    disabled={deleting}
-                                >
-                                    Annulla
-                                </button>
-                                <button
-                                    type="button"
-                                    style={{
-                                        fontSize: "0.78rem",
-                                        padding: "0.3rem 0.8rem",
-                                        background: "var(--danger, #ef4444)",
-                                        color: "#fff",
-                                        border: "none",
-                                        borderRadius: "var(--radius, 6px)",
-                                        cursor: deleting ? "wait" : "pointer",
-                                        opacity: deleting ? 0.6 : 1,
-                                    }}
-                                    disabled={deleting}
-                                    onClick={async () => {
-                                        setDeleting(true);
-                                        try {
-                                            await onDelete(confirmDeleteId);
-                                        } catch { /* silent */ }
-                                        setDeleting(false);
-                                        setConfirmDeleteId(null);
-                                    }}
-                                >
-                                    {deleting ? "Eliminazione…" : "Elimina"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            })()}
+        <LlmProviderErrorDialog
+            open={Boolean(llmErrorDialog)}
+            error={llmErrorDialog}
+            onOpenChange={(open) => {
+                if (!open) setLlmErrorDialog(null);
+            }}
+        />
         </div>
     );
 }
 
-// ─── Inspect infrastructure ──────────────────────────────────────────────────
+// ─── SnapshotHistoryPanel → see apps/web/components/workspace/SnapshotHistoryPanel.tsx ───
 
-// Minified script injected into every preview iframe.
-// Stays idle until it receives a { type: 'pf-inspect', on: true } postMessage.
-const PF_INSPECT_SCRIPT =
-    "<script data-pf-injected>(function(){var hl=null,sl=null,sty=document.createElement('style');sty.id='__pf_i';" +
-    "(document.head||document.body).appendChild(sty);" +
-    "var pfTb=function(){return document.getElementById('__pf_tb');};" +
-    "function inTb(el){var t=pfTb();return t&&t.contains(el);}" +
-    "function nodeId(el){var p=[],c=el;while(c&&c.parentElement&&c!==document.body){" +
-    "var par=c.parentElement,idx=Array.prototype.indexOf.call(par.children,c);" +
-    "p.unshift(c.tagName.toLowerCase()+':'+idx);c=par;}return 'body>'+p.join('>');" +
-    "}function mkdata(el){var cls=Array.prototype.slice.call(el.classList);" +
-    "var txt=(el.textContent||'').trim().slice(0,100);" +
-    "var oh=el.outerHTML||'';oh=oh.replace(/ data-pf-[hse](=\"\")?/g,'');oh=oh.replace(/ style=\"\"/g,'');oh=oh.replace(/ (aos-init|aos-animate)/g,'');if(oh.length>12000)oh=oh.slice(0,12000);" +
-    "return{stableNodeId:nodeId(el),selector:el.id?'#'+el.id:el.tagName.toLowerCase()+(cls.length?'.'+cls.join('.'):'')," +
-    "tag:el.tagName.toLowerCase(),classes:cls,textSnippet:txt||undefined,outerHtml:oh||undefined};}" +
-    "function over(e){if(inTb(e.target))return;if(hl&&hl!==e.target)hl.removeAttribute('data-pf-h');hl=e.target;if(hl)hl.setAttribute('data-pf-h','');}" +
-    "function clk(e){if(inTb(e.target))return;e.preventDefault();e.stopPropagation();if(sl)sl.removeAttribute('data-pf-s');sl=e.target;" +
-    "if(sl)sl.setAttribute('data-pf-s','');try{window.parent.postMessage({type:'pf-select',element:mkdata(e.target)},'*');}catch(x){}}" +
-    "function on(){sty.textContent='[data-pf-h]{outline:2px solid rgba(99,102,241,.6)!important;cursor:crosshair!important}" +
-    "[data-pf-s]{outline:2px solid #6366f1!important;outline-offset:2px!important}';" +
-    "document.addEventListener('mouseover',over);document.addEventListener('click',clk,true);}" +
-    "function off(){sty.textContent='';document.removeEventListener('mouseover',over);" +
-    "document.removeEventListener('click',clk,true);" +
-    "if(hl){hl.removeAttribute('data-pf-h');hl=null;}if(sl){sl.removeAttribute('data-pf-s');sl=null;}}" +
-    "window.addEventListener('message',function(e){if(e.data&&e.data.type==='pf-inspect'){if(e.data.on)on();else off();}});" +
-    "})();<" + "/script>";
+// ─── Inspect infrastructure: PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT → see ./iframe-scripts.ts ───
 
-/**
- * EDIT Light script — injected alongside PF_INSPECT_SCRIPT when editMode is active.
- *
- * Text elements become contentEditable on click (with a dashed teal outline).
- * Images respond to click by sending pf-edit-img-click to the parent.
- * A floating toolbar appears on text selection with formatting tools (Canva-style).
- *
- * Messages received from parent:
- *   { type: 'pf-edit', on: bool }         — arm / disarm the script
- *   { type: 'pf-edit-trigger-save' }       — serialise DOM, send pf-edit-save to parent
- *   { type: 'pf-edit-set-img-src', selector, newSrc } — update an img src
- */
-const PF_EDIT_SCRIPT = `<script data-pf-injected>(function(){
-var editOn=false,eds=new Set();
-var TEXT_TAGS=['P','H1','H2','H3','H4','H5','H6','SPAN','LI','TD','TH','BUTTON','A','LABEL','STRONG','EM','B','I','U','BLOCKQUOTE','FIGCAPTION','CAPTION','DT','DD'];
 
-/* ── Toolbar UI — Canva-style floating bar ── */
-var tb=document.createElement('div');
-tb.id='__pf_tb';
-tb.style.cssText='position:fixed;z-index:999999;display:none;align-items:center;gap:2px;padding:4px 6px;'+
-  'background:#1e1e2e;border:1px solid #383850;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,.45);'+
-  'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;user-select:none;';
-var BTNS=[
-  {cmd:'bold',      icon:'B',  tip:'Grassetto',s:'font-weight:800'},
-  {cmd:'italic',    icon:'I',  tip:'Corsivo',  s:'font-style:italic'},
-  {cmd:'underline', icon:'U',  tip:'Sottolineato',s:'text-decoration:underline'},
-  {cmd:'strikethrough',icon:'S',tip:'Barrato',s:'text-decoration:line-through'},
-  {sep:true},
-  {cmd:'formatBlock',arg:'H1',icon:'H1',tip:'Titolo 1',s:'font-weight:700;font-size:13px'},
-  {cmd:'formatBlock',arg:'H2',icon:'H2',tip:'Titolo 2',s:'font-weight:700;font-size:12px'},
-  {cmd:'formatBlock',arg:'H3',icon:'H3',tip:'Titolo 3',s:'font-weight:600;font-size:11px'},
-  {cmd:'formatBlock',arg:'P', icon:'¶', tip:'Paragrafo'},
-  {sep:true},
-  {cmd:'justifyLeft',  icon:'\u2261',tip:'Allinea a sinistra'},
-  {cmd:'justifyCenter',icon:'\u2263',tip:'Centra'},
-  {cmd:'justifyRight', icon:'\u2262',tip:'Allinea a destra'},
-  {sep:true},
-  {cmd:'insertUnorderedList',icon:'\u2022',tip:'Elenco puntato'},
-  {cmd:'insertOrderedList', icon:'1.',tip:'Elenco numerato'},
-  {sep:true},
-  {cmd:'createLink',icon:'\uD83D\uDD17',tip:'Inserisci link'},
-  {cmd:'removeFormat',icon:'\u2718',tip:'Rimuovi formattazione'}
-];
-BTNS.forEach(function(b){
-  if(b.sep){
-    var sp=document.createElement('span');
-    sp.style.cssText='width:1px;height:18px;background:#484860;margin:0 3px;flex-shrink:0;';
-    tb.appendChild(sp);return;
-  }
-  var btn=document.createElement('button');
-  btn.type='button';
-  btn.title=b.tip||'';
-  btn.textContent=b.icon;
-  btn.style.cssText='all:unset;display:inline-flex;align-items:center;justify-content:center;'+
-    'width:28px;height:28px;border-radius:6px;color:#cdd6f4;cursor:pointer;font-size:12px;'+
-    'transition:background .12s;'+(b.s||'');
-  btn.addEventListener('mouseenter',function(){this.style.background='#45475a';});
-  btn.addEventListener('mouseleave',function(){this.style.background='transparent';});
-  btn.addEventListener('mousedown',function(ev){
-    ev.preventDefault();ev.stopPropagation();
-    var c=b.cmd;
-    if(c==='createLink'){
-      var url=prompt('URL del link:','https://');
-      if(url)document.execCommand('createLink',false,url);
-    }else if(c==='formatBlock'){
-      document.execCommand('formatBlock',false,'<'+b.arg+'>');
-    }else{
-      document.execCommand(c,false,null);
-    }
-    updateActive();
-  });
-  btn.__pfCmd=b.cmd;
-  btn.__pfArg=b.arg||null;
-  tb.appendChild(btn);
-});
-document.body.appendChild(tb);
 
-function updateActive(){
-  var btns=tb.querySelectorAll('button');
-  btns.forEach(function(btn){
-    var c=btn.__pfCmd;if(!c)return;
-    var on=false;
-    try{
-      if(c==='bold'||c==='italic'||c==='underline'||c==='strikethrough'||
-         c==='insertUnorderedList'||c==='insertOrderedList'||
-         c==='justifyLeft'||c==='justifyCenter'||c==='justifyRight'){
-        on=document.queryCommandState(c);
-      }else if(c==='formatBlock'&&btn.__pfArg){
-        var v=document.queryCommandValue('formatBlock')||'';
-        on=v.toLowerCase()===btn.__pfArg.toLowerCase();
-      }
-    }catch(x){}
-    btn.style.background=on?'#585b70':'transparent';
-    btn.style.color=on?'#cba6f7':'#cdd6f4';
-  });
-}
-
-var tbVisible=false;
-var activeEditEl=null;
-function showTb(anchorRect){
-  if(!anchorRect){
-    var sel=window.getSelection();
-    if(sel&&!sel.isCollapsed&&sel.rangeCount){
-      anchorRect=sel.getRangeAt(0).getBoundingClientRect();
-    }else if(activeEditEl){
-      anchorRect=activeEditEl.getBoundingClientRect();
-    }
-  }
-  if(!anchorRect||!anchorRect.width){hideTb();return;}
-  tb.style.display='flex';
-  tbVisible=true;
-  var tbW=tb.offsetWidth,tbH=tb.offsetHeight;
-  var x=anchorRect.left+(anchorRect.width-tbW)/2;
-  var y=anchorRect.bottom+8;
-  if(x<4)x=4; if(x+tbW>window.innerWidth-4)x=window.innerWidth-tbW-4;
-  if(y+tbH>window.innerHeight-4)y=anchorRect.top-tbH-8;
-  tb.style.left=x+'px';tb.style.top=y+'px';
-  updateActive();
-}
-function hideTb(){tb.style.display='none';tbVisible=false;activeEditEl=null;}
-
-/* ── Core edit logic ── */
-function enableEl(el){if(el.__pfE)return;el.__pfE=true;el.contentEditable='true';
-  el.style.outline='2px dashed rgba(34,211,238,0.6)';el.style.outlineOffset='1px';eds.add(el);}
-function disableAll(){eds.forEach(function(el){el.contentEditable='false';
-  el.style.outline='';el.style.outlineOffset='';el.__pfE=false;});eds.clear();hideTb();}
-function cleanHtml(){var cl=document.documentElement.cloneNode(true);
-  cl.querySelectorAll('#__pf_tb,[data-pf-injected],style#__pf_i').forEach(function(e){e.remove();});
-  cl.querySelectorAll('[contenteditable]').forEach(function(e){e.removeAttribute('contenteditable');
-  e.style.outline='';e.style.outlineOffset='';});
-  cl.querySelectorAll('[data-pf-h],[data-pf-s],[data-pf-e]').forEach(function(e){
-  e.removeAttribute('data-pf-h');e.removeAttribute('data-pf-s');e.removeAttribute('data-pf-e');});
-  return '<!doctype html>'+cl.outerHTML;}
-function onClick(e){if(!editOn)return;
-  if(tb.contains(e.target))return;
-  var el=e.target;
-  if(el.tagName==='IMG'){e.preventDefault();e.stopPropagation();
-  try{window.parent.postMessage({type:'pf-edit-img-click',selector:el.id?'#'+el.id:el.tagName.toLowerCase(),currentSrc:el.src},'*');}catch(x){}
-  return;}
-  if(TEXT_TAGS.includes(el.tagName)){enableEl(el);activeEditEl=el;showTb(el.getBoundingClientRect());return;}
-  if(!el.children.length&&(el.textContent||'').trim()&&el.tagName!=='SCRIPT'&&el.tagName!=='STYLE'){enableEl(el);activeEditEl=el;showTb(el.getBoundingClientRect());}}
-document.addEventListener('mouseup',function(){
-  if(!editOn)return;setTimeout(function(){showTb();},10);
-});
-document.addEventListener('keyup',function(e){
-  if(!editOn)return;
-  if(e.key==='Shift'||e.key.startsWith('Arrow'))setTimeout(showTb,10);
-  else if(tbVisible)updateActive();
-});
-document.addEventListener('mousedown',function(e){
-  if(!editOn)return;
-  if(!tb.contains(e.target))hideTb();
-});
-window.addEventListener('message',function(e){if(!e.data||typeof e.data!=='object')return;
-  if(e.data.type==='pf-edit'){editOn=e.data.on;if(!editOn)disableAll();}
-  if(e.data.type==='pf-edit-trigger-save'){try{window.parent.postMessage({type:'pf-edit-save',html:cleanHtml()},'*');}catch(x){}}
-  if(e.data.type==='pf-edit-set-img-src'){try{var img=document.querySelector(e.data.selector);
-  if(img&&img.tagName==='IMG')img.src=e.data.newSrc;}catch(x){}}});
-document.addEventListener('click',onClick,true);
-})();<` + `/script>`;
-
-function getElementTargetType(tag: string): "html" | "css" | "js" | "component" | "section" {
+function getElementTargetType(
+    tag: string,
+    mediaMode?: SelectedFocusElement["mediaMode"],
+): "html" | "css" | "js" | "component" | "section" {
+    if (mediaMode === "foreground" || mediaMode === "background") return "component";
     if (["section", "main", "article", "header", "footer", "nav", "aside"].includes(tag)) return "section";
-    if (["button", "input", "select", "textarea", "form"].includes(tag)) return "component";
+    if (["button", "input", "select", "textarea", "form", "canvas", "svg", "img", "picture", "figure", "video"].includes(tag)) return "component";
     return "html";
 }
 
@@ -2934,7 +4158,7 @@ function CodeEditorPanel({
     isSaving?: boolean;
 }) {
     const [fontSize, setFontSize] = useState(13);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { t } = useTranslation();
     const editorRef = useRef<any>(null);
 
     const handleFormat = useCallback(() => {
@@ -2970,39 +4194,39 @@ function CodeEditorPanel({
                     type="button"
                     style={toolbarBtnStyle}
                     onClick={handleFormat}
-                    title="Formatta / Beautify (equivale a Alt+Shift+F)"
+                    title={t("workspace.ui.codeEditor.beautifyTitle")}
                 >
                     ✦ Beautify
                 </button>
                 <span style={{ color: "var(--border)", fontSize: "0.72rem", userSelect: "none" }}>│</span>
                 <span style={{ color: "var(--text-muted)", fontSize: "0.68rem", userSelect: "none" }}>
-                    Ctrl+scroll = zoom · Alt+Shift+F = format
+                    {t("workspace.ui.codeEditor.shortcuts")}
                 </span>
                 {onSave && (
                     <button
                         type="button"
                         disabled={isSaving}
                         onClick={onSave}
-                        title="Salva le modifiche come nuova versione preview (attiva)"
+                        title={t("workspace.ui.codeEditor.saveVersionTitle")}
                         style={{
                             ...toolbarBtnStyle,
-                            background: isSaving ? undefined : "rgba(34,211,238,0.08)",
-                            color: isSaving ? "var(--text-muted)" : "#22d3ee",
-                            borderColor: "#22d3ee",
+                            background: isSaving ? undefined : "rgba(125,211,252,0.08)",
+                            color: isSaving ? "var(--text-muted)" : "#7dd3fc",
+                            borderColor: "#7dd3fc",
                             cursor: isSaving ? "wait" : "pointer",
                             fontWeight: 700,
                         }}
                     >
-                        {isSaving ? "Salvataggio…" : "💾 Salva versione"}
+                        {isSaving ? t("workspace.ui.codeEditor.saving") : t("workspace.ui.codeEditor.saveVersion")}
                     </button>
                 )}
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                    <span style={{ color: "var(--text-muted)", fontSize: "0.68rem", userSelect: "none" }}>Font</span>
+                    <span style={{ color: "var(--text-muted)", fontSize: "0.68rem", userSelect: "none" }}>{t("workspace.ui.codeEditor.font")}</span>
                     <button
                         type="button"
                         style={toolbarBtnStyle}
                         onClick={() => setFontSize((s) => Math.max(10, s - 1))}
-                        title="Riduci dimensione carattere"
+                        title={t("workspace.ui.codeEditor.fontDecrease")}
                     >
                         A−
                     </button>
@@ -3021,7 +4245,7 @@ function CodeEditorPanel({
                         type="button"
                         style={toolbarBtnStyle}
                         onClick={() => setFontSize((s) => Math.min(28, s + 1))}
-                        title="Aumenta dimensione carattere"
+                        title={t("workspace.ui.codeEditor.fontIncrease")}
                     >
                         A+
                     </button>
@@ -3142,8 +4366,22 @@ function formatDuration(ms: number | undefined): string {
 }
 
 function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto | undefined; variant?: "message" | "global" }) {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
+    const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
     const containerRef = useRef<HTMLDivElement>(null);
+
+    function openTooltip() {
+        if (containerRef.current) {
+            const r = containerRef.current.getBoundingClientRect();
+            setTooltipStyle({
+                position: "fixed",
+                bottom: `calc(100vh - ${Math.round(r.top)}px + 8px)`,
+                left: `${Math.round(r.left)}px`,
+            });
+        }
+        setOpen(true);
+    }
 
     if (!message || !message.metadata) return null;
 
@@ -3151,6 +4389,7 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
     const usage = m.tokenUsage;
     const cost = m.costEstimate;
     const trace = m.promptingTrace;
+    const operation = m.operation;
 
     // Preprompt weight
     const systemMsg = trace?.messagesSentToLlm?.find((x) => x.role === "system");
@@ -3158,7 +4397,7 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
     const prePromptChars = systemMsg?.content?.length ?? 0;
     const msgsSentCount = trace?.messagesSentToLlm?.length ?? 0;
 
-    const tooltipTitle = variant === "global" ? "Dettagli ultima richiesta" : "Dettagli richiesta";
+    const tooltipTitle = variant === "global" ? t("workspace.ui.reqMeta.detailsGlobal") : t("workspace.ui.reqMeta.details");
 
     // Compact label shown in the badge
     const badgeLabel = (() => {
@@ -3171,7 +4410,7 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
 
     return (
         <div ref={containerRef} className="req-meta-info"
-            onMouseEnter={() => setOpen(true)}
+            onMouseEnter={openTooltip}
             onMouseLeave={() => setOpen(false)}
         >
             <button
@@ -3184,21 +4423,37 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
             </button>
 
             {open && (
-                <div className="req-meta-tooltip">
+                <div className="req-meta-tooltip" style={tooltipStyle}>
                     <div className="req-meta-tooltip-title">{tooltipTitle}</div>
+
+                    {operation && (
+                        <>
+                            <div className="req-meta-section">
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.flow")}</span>
+                                <span className="req-meta-value">{operation.label ?? operation.kind}</span>
+                            </div>
+                            {operation.target && (
+                                <div className="req-meta-section">
+                                    <span className="req-meta-label">{t("workspace.ui.reqMeta.target")}</span>
+                                    <span className="req-meta-value">{operation.target}</span>
+                                </div>
+                            )}
+                            <div className="req-meta-divider" />
+                        </>
+                    )}
 
                     {/* Provider / Model */}
                     <div className="req-meta-section">
-                        <span className="req-meta-label">Provider</span>
+                        <span className="req-meta-label">{t("workspace.ui.reqMeta.provider")}</span>
                         <span className="req-meta-value">{m.provider ?? "—"}</span>
                     </div>
                     <div className="req-meta-section">
-                        <span className="req-meta-label">Modello</span>
+                        <span className="req-meta-label">{t("workspace.ui.reqMeta.model")}</span>
                         <span className="req-meta-value">{m.model ?? "—"}</span>
                     </div>
                     {m.finishReason && (
                         <div className="req-meta-section">
-                            <span className="req-meta-label">Finish reason</span>
+                            <span className="req-meta-label">{t("workspace.ui.reqMeta.finishReason")}</span>
                             <span className="req-meta-value">{m.finishReason}</span>
                         </div>
                     )}
@@ -3208,15 +4463,15 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Prompt tokens</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.promptTokens")}</span>
                                 <span className="req-meta-value">{usage.promptTokens.toLocaleString()}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Completion tokens</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.completionTokens")}</span>
                                 <span className="req-meta-value">{usage.completionTokens.toLocaleString()}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Totale tokens</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.totalTokens")}</span>
                                 <span className="req-meta-value" style={{ fontWeight: 600 }}>{usage.totalTokens.toLocaleString()}</span>
                             </div>
                         </>
@@ -3227,16 +4482,16 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Preprompt (system)</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.prepromptSystem")}</span>
                                 <span className="req-meta-value">~{prePromptTokensEst.toLocaleString()} tok ({prePromptChars.toLocaleString()} chars)</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Messaggi inviati a LLM</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.msgsSent")}</span>
                                 <span className="req-meta-value">{msgsSentCount}</span>
                             </div>
                             {trace.promptConfigId && (
                                 <div className="req-meta-section">
-                                    <span className="req-meta-label">Prompt config ID</span>
+                                    <span className="req-meta-label">{t("workspace.ui.reqMeta.promptConfigId")}</span>
                                     <span className="req-meta-value" style={{ fontSize: "0.6rem", wordBreak: "break-all" }}>{trace.promptConfigId}</span>
                                 </div>
                             )}
@@ -3248,7 +4503,7 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Tempo esecuzione</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.execTime")}</span>
                                 <span className="req-meta-value">{formatDuration(m.executionTimeMs)} ({m.executionTimeMs.toLocaleString()}ms)</span>
                             </div>
                         </>
@@ -3259,28 +4514,28 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Costo totale</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.totalCost")}</span>
                                 <span className="req-meta-value" style={{ fontWeight: 600 }}>{formatCostEur(cost.amount) || "€0"}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">  Token cost</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.tokenCost")}</span>
                                 <span className="req-meta-value">{formatCostEur(cost.breakdown.tokenCost) || "€0"}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">  Image cost</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.imageCost")}</span>
                                 <span className="req-meta-value">{formatCostEur(cost.breakdown.imageCost) || "€0"}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">  Video cost</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.videoCost")}</span>
                                 <span className="req-meta-value">{formatCostEur(cost.breakdown.videoCost) || "€0"}</span>
                             </div>
                             <div className="req-meta-section">
-                                <span className="req-meta-label">€/1k tok</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.eurPerKTok")}</span>
                                 <span className="req-meta-value">€{cost.unitRates.textEurPer1kTokens.toFixed(4)}</span>
                             </div>
                             {cost.providerCostUsd != null && (
                                 <div className="req-meta-section">
-                                    <span className="req-meta-label">Provider USD</span>
+                                    <span className="req-meta-label">{t("workspace.ui.reqMeta.providerUsd")}</span>
                                     <span className="req-meta-value">${cost.providerCostUsd.toFixed(6)}</span>
                                 </div>
                             )}
@@ -3292,8 +4547,8 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                         <>
                             <div className="req-meta-divider" />
                             <div className="req-meta-section">
-                                <span className="req-meta-label">Structured parse</span>
-                                <span className="req-meta-value">{m.structuredParseValid ? "✓ valido" : "✗ fallito"}</span>
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.structuredParse")}</span>
+                                <span className="req-meta-value">{m.structuredParseValid ? t("workspace.ui.reqMeta.parseValid") : t("workspace.ui.reqMeta.parseFailed")}</span>
                             </div>
                         </>
                     )}
@@ -3304,9 +4559,11 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
 }
 
 function MessageBubble({ message }: { message: MessageDto }) {
-    const [copyLabel, setCopyLabel] = useState("Copia");
+    const { t } = useTranslation();
+    const [copyLabel, setCopyLabel] = useState(() => t("workspace.ui.messageBubble.copy"));
     const isUser = message.role === "user";
     const isError = message.role === "error";
+    const operation = message.metadata?.operation;
 
     const chatStructured = message.metadata?.chatStructured ?? (!isUser && !isError ? parseChatFromContent(message.content) : null);
 
@@ -3332,18 +4589,42 @@ function MessageBubble({ message }: { message: MessageDto }) {
                     onClick={async () => {
                         try {
                             await copyTextToClipboard(message.content);
-                            setCopyLabel("Copiato");
-                            window.setTimeout(() => setCopyLabel("Copia"), 1200);
+                            setCopyLabel(t("workspace.ui.messageBubble.copied"));
+                            window.setTimeout(() => setCopyLabel(t("workspace.ui.messageBubble.copy")), 1200);
                         } catch {
-                            setCopyLabel("Errore");
-                            window.setTimeout(() => setCopyLabel("Copia"), 1200);
+                            setCopyLabel(t("workspace.ui.messageBubble.copyError"));
+                            window.setTimeout(() => setCopyLabel(t("workspace.ui.messageBubble.copy")), 1200);
                         }
                     }}
-                    title="Copia messaggio"
-                    aria-label="Copia messaggio"
+                    title={t("workspace.ui.messageBubble.copyTitle")}
+                    aria-label={t("workspace.ui.messageBubble.copyTitle")}
                 >
                     {copyLabel}
                 </button>
+                {operation && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.45rem", flexWrap: "wrap" }}>
+                        <span
+                            style={{
+                                fontSize: "0.66rem",
+                                fontWeight: 700,
+                                letterSpacing: "0.04em",
+                                textTransform: "uppercase",
+                                padding: "0.12rem 0.4rem",
+                                borderRadius: "999px",
+                                background: "rgba(125,211,252,0.12)",
+                                color: "#7dd3fc",
+                                border: "1px solid rgba(125,211,252,0.25)",
+                            }}
+                        >
+                            ⚙ {operation.label ?? operation.kind}
+                        </span>
+                        {operation.mode && (
+                            <span style={{ fontSize: "0.66rem", color: "var(--text-muted)" }}>
+                                {operation.mode}
+                            </span>
+                        )}
+                    </div>
+                )}
                 {chatStructured ? (
                     <div>
                         <p style={{ margin: 0 }}>{chatStructured.summary}</p>
@@ -3354,7 +4635,7 @@ function MessageBubble({ message }: { message: MessageDto }) {
                         )}
                         {chatStructured.nextActions.length > 0 && (
                             <div style={{ marginTop: "0.5rem" }}>
-                                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.2rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>Prossimi passi</div>
+                                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.2rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>{t("workspace.ui.messageBubble.nextSteps")}</div>
                                 <ol style={{ margin: 0, paddingLeft: "1.2rem" }}>
                                     {chatStructured.nextActions.map((a, i) => <li key={i} style={{ marginBottom: "0.18rem" }}>{a}</li>)}
                                 </ol>
@@ -3366,7 +4647,7 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 )}
             </div>
             <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.18rem" }}>
-                {message.role}
+                {operation?.label ? `${message.role} · ${operation.label}` : message.role}
             </span>
             {!isUser && !isError && <RequestMetaInfo message={message} />}
         </div>

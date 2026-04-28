@@ -1,4 +1,5 @@
 import type { LlmProviderCatalog, PipelineModelRole } from "../../domain/entities/LlmCatalog";
+import { decorateSeedModel } from "./modelRegistryPresets";
 
 /**
  * Free models on OpenRouter (no API key spend, limited rate).
@@ -54,7 +55,7 @@ export function buildDefaultOpenRouterCatalog(
         // Free models are registered only as fallbacks — they have
         // fixed upstream rate limits regardless of credit balance.
         PAID_DEFAULTS.forEach((m) => {
-            models.push({
+            models.push(decorateSeedModel({
                 id: m.id,
                 provider: "openrouter",
                 role: m.role,
@@ -62,10 +63,10 @@ export function buildDefaultOpenRouterCatalog(
                 isDefault: true,
                 isFallback: false,
                 isActive: true,
-            });
+            }));
         });
         FREE_DEFAULTS.forEach((m) => {
-            models.push({
+            models.push(decorateSeedModel({
                 id: m.id,
                 provider: "openrouter",
                 role: m.role,
@@ -73,12 +74,12 @@ export function buildDefaultOpenRouterCatalog(
                 isDefault: false,
                 isFallback: true,
                 isActive: true,
-            });
+            }));
         });
     } else {
         // No key: only free models available
         FREE_DEFAULTS.forEach((m, index) => {
-            models.push({
+            models.push(decorateSeedModel({
                 id: m.id,
                 provider: "openrouter",
                 role: m.role,
@@ -86,7 +87,7 @@ export function buildDefaultOpenRouterCatalog(
                 isDefault: index === 0,
                 isFallback: index !== 0,
                 isActive: true,
-            });
+            }));
         });
     }
 

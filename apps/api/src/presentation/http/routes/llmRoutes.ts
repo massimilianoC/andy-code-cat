@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     llmChatPreviewSchema,
     llmPromptConfigSchema,
+    optimizePromptSchema,
     type LlmChatPreviewResult,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson, buildFormattedReply } from "../../../application/llm/llmParser";
@@ -16,6 +17,7 @@ import {
 } from "../../../application/llm/llmMessageBuilder";
 import { buildStyleContextBlock } from "../../../application/llm/styleContextBuilder";
 import { composeSystemPrompt, composeSystemPromptWithLayers } from "../../../application/llm/systemPromptComposer";
+import { buildPresetLayerFromPreset } from "../../../application/llm/systemPromptLayers";
 import { estimateCost } from "../../../application/llm/costPolicy";
 import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
 import { env } from "../../../config";
@@ -23,14 +25,23 @@ import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
+import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
 import { MongoUserStyleProfileRepository } from "../../../infra/repositories/MongoUserStyleProfileRepository";
+import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
+import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
+import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
+import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
 import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptConfig";
 import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptConfig";
+import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
+import { HttpError, normalizeHttpError } from "../errors/httpError";
+import { PRESET_MAP } from "../../../domain/entities/ProjectPreset";
 
 type LlmRuntimeContext = {
     providerCatalog: {
@@ -45,6 +56,10 @@ type LlmRuntimeContext = {
             isDefault: boolean;
             isFallback: boolean;
             isActive: boolean;
+            displayName?: string;
+            description?: string;
+            promptTemplate?: string;
+            focusPromptTemplate?: string;
             priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
             priceInputUsdPerM?: number;
             priceOutputUsdPerM?: number;
@@ -55,6 +70,19 @@ type LlmRuntimeContext = {
     promptConfigId?: string;
     prePromptTemplate?: string;
     systemPrompt: string;
+    /** Governance focused-edit system prompt for this presetId (Layer E variant for focused mode). */
+    governanceFocusedSystemPrompt?: string;
+};
+
+type LlmProviderStatus = {
+    requiresKey: boolean;
+    hasApiKeyConfigured: boolean;
+    keyEnvironmentVariable?: string;
+};
+
+const PROVIDER_KEY_ENV_HINTS: Record<string, string> = {
+    siliconflow: "SILICONFLOW_API_KEY",
+    openrouter: "OPENROUTER_API_KEY",
 };
 
 function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]) {
@@ -81,6 +109,108 @@ function sendSse(res: RequestWithContext["res"], payload: unknown) {
     (res as any).write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+function getProviderStatus(providerKey: string, authType?: "api-key" | "bearer" | "none"): LlmProviderStatus {
+    const requiresKey = authType !== "none";
+    return {
+        requiresKey,
+        hasApiKeyConfigured: requiresKey ? Boolean(env.providerApiKeys[providerKey]) : true,
+        keyEnvironmentVariable: requiresKey ? (PROVIDER_KEY_ENV_HINTS[providerKey] ?? "LLM_PROVIDER_API_KEYS_JSON") : undefined,
+    };
+}
+
+function buildProviderApiKeyMissingError(context: LlmRuntimeContext): HttpError {
+    const providerStatus = getProviderStatus(context.providerCatalog.provider, context.providerCatalog.authType);
+    return new HttpError(`Missing API key for provider ${context.providerCatalog.provider}`, {
+        statusCode: 503,
+        code: "LLM_PROVIDER_API_KEY_MISSING",
+        userMessage: `Il provider ${context.providerCatalog.provider} richiede una API key che non e configurata.`,
+        details: {
+            provider: context.providerCatalog.provider,
+            model: context.modelId,
+            authType: context.providerCatalog.authType,
+            keyEnvironmentVariable: providerStatus.keyEnvironmentVariable,
+        },
+    });
+}
+
+function buildProviderResponseError(input: {
+    statusCode: number;
+    code: string;
+    message: string;
+    userMessage: string;
+    provider: string;
+    model: string;
+    providerStatus?: number;
+    providerBody?: unknown;
+}): HttpError {
+    return new HttpError(input.message, {
+        statusCode: input.statusCode,
+        code: input.code,
+        userMessage: input.userMessage,
+        details: {
+            provider: input.provider,
+            model: input.model,
+            providerStatus: input.providerStatus,
+            providerBody: input.providerBody,
+        },
+    });
+}
+
+function emitLlmFailureLog(input: {
+    projectId: string;
+    durationMs: number;
+    provider?: string;
+    model?: string;
+    code?: string;
+    message: string;
+    details?: unknown;
+    isFocusedMode?: boolean;
+}) {
+    ExecutionLogger.instance.emit({
+        projectId: input.projectId,
+        domain: "llm",
+        eventType: "llm_generation_failed",
+        level: "error",
+        status: "failure",
+        durationMs: input.durationMs,
+        metadata: {
+            provider: input.provider,
+            model: input.model,
+            code: input.code,
+            message: input.message,
+            details: input.details,
+            isFocusedMode: input.isFocusedMode,
+        },
+    });
+}
+
+function parseLlmChatPreviewBody(raw: unknown) {
+    const parsed = llmChatPreviewSchema.safeParse(raw);
+    if (parsed.success) {
+        return parsed.data;
+    }
+
+    const focusOnlyError =
+        parsed.error.issues.length > 0 &&
+        parsed.error.issues.every((issue) => issue.path[0] === "focusContext");
+
+    if (focusOnlyError && raw && typeof raw === "object") {
+        const fallbackParsed = llmChatPreviewSchema.safeParse({
+            ...(raw as Record<string, unknown>),
+            focusContext: undefined,
+        });
+
+        if (fallbackParsed.success) {
+            console.warn("[llm] invalid focusContext ignored — falling back to full-project context.", {
+                focusContextErrors: parsed.error.flatten().fieldErrors.focusContext,
+            });
+            return fallbackParsed.data;
+        }
+    }
+
+    throw parsed.error;
+}
+
 export function createLlmRoutes(): Router {
     const router = Router();
     const projectRepository = new MongoProjectRepository();
@@ -90,13 +220,35 @@ export function createLlmRoutes(): Router {
     const setLlmPromptConfig = new SetLlmPromptConfig(promptConfigRepository);
     const moodboardRepository = new MongoProjectMoodboardRepository();
     const userStyleProfileRepository = new MongoUserStyleProfileRepository();
+    const assetRepository = new MongoProjectAssetRepository();
+    const userRepo = new MongoUserRepository();
+    const platformConfigRepo = new MongoPlatformConfigRepository();
+    const presetRepository = new MongoProjectPresetRepository();
+    const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const snapshotRepository = new MongoPreviewSnapshotRepository();
 
     router.use(authMiddleware);
 
-    const getLlmCatalog =
-        env.LLM_CATALOG_SOURCE === "mongo"
-            ? new GetLlmCatalog("mongo", env.SILICONFLOW_BASE_URL, env.LMSTUDIO_BASE_URL, env.OPENROUTER_BASE_URL, new MongoLlmCatalogRepository(), env.hasOpenRouterApiKey)
-            : new GetLlmCatalog("env", env.SILICONFLOW_BASE_URL, env.LMSTUDIO_BASE_URL, env.OPENROUTER_BASE_URL, undefined, env.hasOpenRouterApiKey);
+    const llmCatalogRepository = new MongoLlmCatalogRepository();
+    const getLlmCatalog = new GetLlmCatalog(
+        env.LLM_CATALOG_SOURCE,
+        env.SILICONFLOW_BASE_URL,
+        env.LMSTUDIO_BASE_URL,
+        env.OPENROUTER_BASE_URL,
+        llmCatalogRepository,
+        env.hasOpenRouterApiKey,
+    );
+
+    const optimizeUserPrompt = new OptimizeUserPrompt(
+        projectRepository,
+        moodboardRepository,
+        userStyleProfileRepository,
+        assetRepository,
+        platformConfigRepo,
+        userRepo,
+        promptExecutionLogRepository,
+        getLlmCatalog,
+    );
 
     function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none") {
         if (authType === "none") {
@@ -227,6 +379,7 @@ export function createLlmRoutes(): Router {
             const mapped = textModels.map((m, index) => {
                 const id = String(m.id ?? "").trim();
                 const modality = m.architecture?.modality ?? "";
+                const existing = input.fallbackModels.find((model) => model.id === id);
 
                 // ── Attach real numeric prices ──────────────────────────────
                 let priceInputUsdPerM: number | undefined;
@@ -259,23 +412,38 @@ export function createLlmRoutes(): Router {
                     id.includes("gpt-4o") ||
                     (id.includes("gemini") && modality.includes("image"));
 
-                const capabilities: string[] = hasVision ? ["vision", "chat"] : ["chat"];
+                const capabilities: string[] = existing?.capabilities?.length
+                    ? existing.capabilities
+                    : hasVision ? ["vision", "chat"] : ["chat"];
 
                 return {
                     id,
                     provider: input.providerKey,
-                    role: "dialogue" as const,
+                    role: existing?.role ?? "dialogue",
                     capabilities,
-                    isDefault: index === 0,
-                    isFallback: index !== 0,
-                    isActive: true,
+                    isDefault: existing?.isDefault ?? (index === 0 && !input.fallbackModels.some((m) => m.isDefault)),
+                    isFallback: existing?.isFallback ?? index !== 0,
+                    isActive: existing?.isActive ?? true,
+                    displayName: existing?.displayName,
+                    description: existing?.description,
+                    promptTemplate: existing?.promptTemplate,
+                    focusPromptTemplate: existing?.focusPromptTemplate,
                     ...(priceInputUsdPerM !== undefined ? { priceInputUsdPerM } : {}),
                     ...(priceOutputUsdPerM !== undefined ? { priceOutputUsdPerM } : {}),
                 };
             });
 
+            // Re-inject image_generation (and other non-text) models from the
+            // seed catalog that were intentionally excluded from the /models
+            // discovery (FLUX, stable-diffusion…).  Without this merge the
+            // client sees "no image model available".
+            const discoveredIds = new Set(mapped.map((m) => m.id));
+            const nonTextFallbacks = input.fallbackModels
+                .filter((m) => m.isActive && !discoveredIds.has(m.id) && !m.capabilities.includes("chat"))
+                .map((m) => ({ ...m, provider: input.providerKey }));
+
             // Assign percentile-based € tiers per-provider after all prices are known
-            return assignPriceTiers(mapped);
+            return assignPriceTiers([...mapped, ...nonTextFallbacks]);
         } catch {
             return dedupeModelsById(input.fallbackModels);
         }
@@ -292,19 +460,24 @@ export function createLlmRoutes(): Router {
     }): Promise<LlmRuntimeContext> {
         const catalog = await getLlmCatalog.execute();
         const promptConfig = await getLlmPromptConfig.execute(input.projectId);
-        const [moodboard, userProfile, project] = await Promise.all([
+        const [moodboard, userProfile, project, platformConfig] = await Promise.all([
             moodboardRepository.findByProjectId(input.projectId),
             userStyleProfileRepository.findByUserId(input.userId),
             projectRepository.findByIdForUser(input.projectId, input.userId),
+            platformConfigRepo.get().catch(() => null),
         ]);
+        const preset = project?.presetId
+            ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
+            : null;
+
+        const governanceTemplates =
+            (project?.presetId ? platformConfig?.governanceByProduct?.[project.presetId]?.promptTemplates : undefined)
+            ?? platformConfig?.governanceByProduct?.["default"]?.promptTemplates;
+        const governanceSystemPrompt = governanceTemplates?.generationSystem || undefined;
+        const governanceFocusedBasePrompt = governanceTemplates?.focusedEditSystem || undefined;
+
         const styleBlock = buildStyleContextBlock(userProfile, moodboard);
-        const mkPrompt = () => composeSystemPrompt({
-            presetId: project?.presetId,
-            styleBlock,
-            prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-            outputBudgetPolicy: buildOutputBudgetPolicy(),
-            requestSystemPrompt: input.systemPrompt,
-        });
+        const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
 
         const providerCatalog =
             (input.provider
@@ -318,6 +491,42 @@ export function createLlmRoutes(): Router {
         }
 
         const providerModels = dedupeModelsById(providerCatalog.models);
+        const explicitModel = input.model
+            ? providerModels.find((model) => model.id === input.model)
+            : undefined;
+
+        const roleModel = explicitModel ??
+            (input.capability
+                ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
+                : undefined) ??
+            providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
+            providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
+            providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
+            providerModels.find((m) => m.isActive);
+
+        const effectivePrePromptTemplate = [
+            promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
+            roleModel?.promptTemplate,
+        ]
+            .filter((value): value is string => Boolean(value && value.trim()))
+            .join("\n\n---\n\n");
+
+        const systemPrompt = composeSystemPrompt({
+            presetId: project?.presetId,
+            presetLayer,
+            styleBlock,
+            prePromptTemplate: effectivePrePromptTemplate || undefined,
+            outputBudgetPolicy: buildOutputBudgetPolicy(),
+            requestSystemPrompt: input.systemPrompt,
+            governanceSystemPrompt,
+        });
+
+        const governanceFocusedSystemPrompt = [
+            roleModel?.focusPromptTemplate,
+            governanceFocusedBasePrompt,
+        ]
+            .filter((value): value is string => Boolean(value && value.trim()))
+            .join("\n\n");
 
         // For openai-compatible providers with an explicit model request, bypass the
         // local catalog lookup — the full model list is only available via live discovery
@@ -327,33 +536,9 @@ export function createLlmRoutes(): Router {
                 providerCatalog: { ...providerCatalog, models: providerModels },
                 modelId: input.model,
                 promptConfigId: promptConfig.id,
-                prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-                systemPrompt: mkPrompt(),
-            };
-        }
-
-        const roleModel =
-            (input.model
-                ? providerModels.find((m) => m.id === input.model && m.isActive)
-                : undefined) ??
-            (input.capability
-                ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
-                : undefined) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
-            providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.isActive);
-
-        if (!roleModel && input.model && providerCatalog.apiType === "openai-compatible") {
-            return {
-                providerCatalog: {
-                    ...providerCatalog,
-                    models: providerModels,
-                },
-                modelId: input.model,
-                promptConfigId: promptConfig.id,
-                prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-                systemPrompt: mkPrompt(),
+                prePromptTemplate: effectivePrePromptTemplate || undefined,
+                systemPrompt,
+                governanceFocusedSystemPrompt: governanceFocusedSystemPrompt || undefined,
             };
         }
 
@@ -368,8 +553,9 @@ export function createLlmRoutes(): Router {
             },
             modelId: roleModel.id,
             promptConfigId: promptConfig.id,
-            prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-            systemPrompt: mkPrompt(),
+            prePromptTemplate: effectivePrePromptTemplate || undefined,
+            systemPrompt,
+            governanceFocusedSystemPrompt: governanceFocusedSystemPrompt || undefined,
         };
     }
 
@@ -389,16 +575,25 @@ export function createLlmRoutes(): Router {
 
                     return {
                         ...provider,
+                        ...getProviderStatus(provider.provider, provider.authType),
                         models,
                     };
                 })
             );
 
+            // Derive activeProvider from the resolved model list: prefer the provider
+            // that owns a dialogue model explicitly marked isDefault, then fall back
+            // to the env-configured default so the value is never empty.
+            const activeProvider =
+                providers.find((p) => p.models.some((m) => m.isDefault && m.role === "dialogue"))?.provider
+                ?? providers.find((p) => p.models.some((m) => m.isDefault))?.provider
+                ?? env.LLM_DEFAULT_PROVIDER;
+
             res.json({
                 ...catalog,
                 providers,
                 byokEnabled: true,
-                activeProvider: env.LLM_DEFAULT_PROVIDER,
+                activeProvider,
                 hasProviderApiKeyConfigured: Object.keys(env.providerApiKeys).length > 0,
             });
         } catch (error) {
@@ -431,21 +626,173 @@ export function createLlmRoutes(): Router {
         }
     });
 
-    // R1.4 — Prompt preview debug endpoint: returns the resolved system prompt with all 4 layers visible
+    // R1.4 — Prompt preview debug endpoint: returns the resolved system prompt with all layers visible
+    router.get("/projects/:projectId/llm/prompt-usage-summary", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        try {
+            const summary = await promptExecutionLogRepository.summarizeByProject(req.sandbox!.projectId, req.auth!.userId);
+            res.json(summary);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.post("/projects/:projectId/llm/optimize-prompt", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        const startedAt = Date.now();
+        try {
+            const body = optimizePromptSchema.parse(req.body);
+            const result = await optimizeUserPrompt.execute({
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                rawPrompt: body.rawPrompt,
+                assetIds: body.assetIds,
+                conversationId: body.conversationId,
+                sessionId: body.sessionId,
+                provider: body.provider,
+                model: body.model,
+            });
+
+            ExecutionLogger.instance.emit({
+                projectId: req.sandbox!.projectId,
+                domain: "llm",
+                eventType: result.skipped ? "prompt_optimize_skipped" : "prompt_optimize_complete",
+                level: "info",
+                status: "success",
+                durationMs: result.durationMs,
+                metadata: {
+                    taskKey: result.taskKey,
+                    provider: result.provider,
+                    model: result.model,
+                    promptTokens: result.usage?.promptTokens,
+                    completionTokens: result.usage?.completionTokens,
+                    costEur: result.costEstimate?.amount,
+                    skipped: result.skipped ?? false,
+                },
+            });
+
+            res.json(result);
+        } catch (error) {
+            const normalized = normalizeHttpError(error);
+            emitLlmFailureLog({
+                projectId: req.sandbox!.projectId,
+                durationMs: Date.now() - startedAt,
+                provider: req.body?.provider,
+                model: req.body?.model,
+                code: normalized.code,
+                message: normalized.userMessage,
+                details: normalized.details,
+            });
+            next(error);
+        }
+    });
+
+    router.post("/projects/:projectId/llm/optimize-prompt/stream", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        const startedAt = Date.now();
+
+        try {
+            const body = optimizePromptSchema.parse(req.body);
+
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache, no-transform");
+            res.setHeader("Connection", "keep-alive");
+            res.setHeader("X-Accel-Buffering", "no");
+            res.flushHeaders?.();
+
+            sendSse(res, { type: "thinking", content: "Analizzo il prompt originale...\n" });
+            sendSse(res, { type: "thinking", content: "Recupero il contesto del progetto...\n" });
+            sendSse(res, { type: "thinking", content: "Sto preparando una versione piu chiara e completa...\n" });
+
+            const result = await optimizeUserPrompt.executeStream({
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                rawPrompt: body.rawPrompt,
+                assetIds: body.assetIds,
+                conversationId: body.conversationId,
+                sessionId: body.sessionId,
+                provider: body.provider,
+                model: body.model,
+            }, {
+                onThinking: (chunk) => sendSse(res, { type: "thinking", content: String(chunk) }),
+                onAnswer: (chunk) => sendSse(res, { type: "answer", content: String(chunk) }),
+            });
+
+            ExecutionLogger.instance.emit({
+                projectId: req.sandbox!.projectId,
+                domain: "llm",
+                eventType: result.skipped ? "prompt_optimize_skipped" : "prompt_optimize_complete",
+                level: "info",
+                status: "success",
+                durationMs: result.durationMs,
+                metadata: {
+                    taskKey: result.taskKey,
+                    provider: result.provider,
+                    model: result.model,
+                    promptTokens: result.usage?.promptTokens,
+                    completionTokens: result.usage?.completionTokens,
+                    costEur: result.costEstimate?.amount,
+                    skipped: result.skipped ?? false,
+                    streaming: true,
+                },
+            });
+
+            sendSse(res, { type: "done", result });
+            res.end();
+        } catch (error) {
+            const normalized = normalizeHttpError(error);
+            emitLlmFailureLog({
+                projectId: req.sandbox!.projectId,
+                durationMs: Date.now() - startedAt,
+                provider: req.body?.provider,
+                model: req.body?.model,
+                code: normalized.code,
+                message: normalized.userMessage,
+                details: normalized.details,
+            });
+
+            if (res.headersSent) {
+                if (!res.writableEnded && !res.destroyed) {
+                    sendSse(res, {
+                        type: "error",
+                        message: normalized.userMessage,
+                        durationMs: Date.now() - startedAt,
+                        error: {
+                            error: normalized.userMessage,
+                            code: normalized.code,
+                            status: normalized.statusCode,
+                            userMessage: normalized.userMessage,
+                            details: normalized.details,
+                        },
+                    });
+                    res.end();
+                }
+                return;
+            }
+
+            next(error);
+        }
+    });
+
     router.get("/projects/:projectId/llm/prompt-preview", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const promptConfig = await getLlmPromptConfig.execute(req.sandbox!.projectId);
-            const [moodboard, userProfile, project] = await Promise.all([
+            const [moodboard, userProfile, project, platformConfig] = await Promise.all([
                 moodboardRepository.findByProjectId(req.sandbox!.projectId),
                 userStyleProfileRepository.findByUserId(req.auth!.userId),
                 projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId),
+                platformConfigRepo.get().catch(() => null),
             ]);
+            const preset = project?.presetId
+                ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
+                : null;
             const styleBlock = buildStyleContextBlock(userProfile, moodboard);
+            const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
+            const governanceSystemPrompt = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates?.generationSystem || undefined;
             const layers = composeSystemPromptWithLayers({
                 presetId: project?.presetId,
+                presetLayer,
                 styleBlock,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 outputBudgetPolicy: buildOutputBudgetPolicy(),
+                governanceSystemPrompt,
             });
             res.json({
                 presetId: project?.presetId ?? null,
@@ -454,6 +801,7 @@ export function createLlmRoutes(): Router {
                     b_presetModule: layers.layerB,
                     c_styleContext: layers.layerC,
                     d_prePromptTemplate: layers.layerD,
+                    e_governance: layers.layerE,
                     budgetPolicy: layers.budgetPolicy,
                 },
                 composed: layers.composed,
@@ -490,7 +838,7 @@ export function createLlmRoutes(): Router {
         const startedAt = Date.now();
 
         try {
-            const body = llmChatPreviewSchema.parse(req.body);
+            const body = parseLlmChatPreviewBody(req.body);
             const context = await resolveContext({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
@@ -510,6 +858,7 @@ export function createLlmRoutes(): Router {
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
             const effectiveSystemPrompt = isFocusedMode
                 ? context.systemPrompt + "\n\n" + buildFocusedModeSystemAddendum(body.focusContext!, sectionOpts?.pageMap)
+                + (context.governanceFocusedSystemPrompt ? "\n\n" + context.governanceFocusedSystemPrompt : "")
                 : context.systemPrompt;
 
             const { messages } = buildMessagesWithHistory(
@@ -524,49 +873,7 @@ export function createLlmRoutes(): Router {
             const authHeader = resolveAuthHeader(context.providerCatalog.provider, context.providerCatalog.authType);
 
             if (!authHeader && context.providerCatalog.authType !== "none") {
-                const structured = buildFallbackStructured(body.message);
-                const simulated: LlmChatPreviewResult = {
-                    reply: structured.chat.summary,
-                    rawResponse: structured.chat.summary,
-                    structuredParseValid: true,
-                    promptingTrace: {
-                        originalUserMessage: body.message,
-                        promptConfigId: context.promptConfigId,
-                        prePromptTemplate: context.prePromptTemplate,
-                        effectiveSystemPrompt: context.systemPrompt,
-                        messagesSentToLlm: messages,
-                        focusContext: body.focusContext,
-                    },
-                    structured,
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                    finishReason: "simulated",
-                    usage: {
-                        promptTokens: Math.ceil(body.message.length / 4),
-                        completionTokens: 24,
-                        totalTokens: Math.ceil(body.message.length / 4) + 24,
-                    },
-                    costEstimate: estimateCost(
-                        {
-                            capability: body.capability,
-                            tokenUsage: {
-                                promptTokens: Math.ceil(body.message.length / 4),
-                                completionTokens: 24,
-                                totalTokens: Math.ceil(body.message.length / 4) + 24,
-                            },
-                        },
-                        {
-                            textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                            imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                            videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                        }
-                    ),
-                    durationMs: Date.now() - startedAt,
-                    simulated: true,
-                };
-
-                res.json(simulated);
-                return;
+                throw buildProviderApiKeyMissingError(context);
             }
 
             const sfRes = await fetch(`${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
@@ -599,27 +906,43 @@ export function createLlmRoutes(): Router {
                 // Pass through 429 (rate limit) and 404 (model not found) directly
                 // so the client knows the actual reason instead of seeing a generic 502.
                 const outStatus = sfRes.status === 429 ? 429 : sfRes.status === 404 ? 404 : 502;
-                const outMessage =
-                    outStatus === 429 ? "LLM provider rate limit reached — try again shortly or select a different model" :
-                        outStatus === 404 ? "Model not found at provider — please select a different model" :
-                            "LLM provider call failed";
-                res.status(outStatus).json({
-                    error: outMessage,
+                throw buildProviderResponseError({
+                    statusCode: outStatus,
+                    code: outStatus === 429 ? "LLM_PROVIDER_RATE_LIMIT" : outStatus === 404 ? "LLM_MODEL_NOT_FOUND" : "LLM_PROVIDER_REQUEST_FAILED",
+                    message: outStatus === 429
+                        ? "LLM provider rate limit reached"
+                        : outStatus === 404
+                            ? "Model not found at provider"
+                            : "LLM provider call failed",
+                    userMessage: outStatus === 429
+                        ? "Il provider ha raggiunto il rate limit. Riprova tra poco o seleziona un altro modello."
+                        : outStatus === 404
+                            ? "Il modello selezionato non e disponibile presso il provider. Scegli un modello diverso."
+                            : "La chiamata al provider LLM non e andata a buon fine.",
+                    provider: context.providerCatalog.provider,
+                    model: context.modelId,
                     providerStatus: sfRes.status,
                     providerBody: sfJson,
                 });
-                return;
             }
 
             const rawReply = String(sfJson?.choices?.[0]?.message?.content ?? "").trim();
             if (!rawReply) {
-                res.status(502).json({ error: "LLM provider returned empty content", providerBody: sfJson });
-                return;
+                throw buildProviderResponseError({
+                    statusCode: 502,
+                    code: "LLM_PROVIDER_EMPTY_RESPONSE",
+                    message: "LLM provider returned empty content",
+                    userMessage: "Il provider ha restituito una risposta vuota.",
+                    provider: context.providerCatalog.provider,
+                    model: context.modelId,
+                    providerBody: sfJson,
+                });
             }
 
             const parsed = tryParseStructuredJson(rawReply);
             let structured = parsed.structured ?? buildFallbackStructured(body.message);
             let focusPatchApplied: boolean | undefined;
+            let focusPatchParseError: boolean | undefined;
             if (isFocusedMode && body.currentArtifacts) {
                 if (parsed.structured?.focusPatch) {
                     // When selectedElement is present, derive anchor server-side from outerHtml
@@ -648,6 +971,32 @@ export function createLlmRoutes(): Router {
                     };
                     structured = { ...structured, artifacts: patchedArtifacts };
                     focusPatchApplied = patchResult.patchApplied;
+                    // Fallback: client HTML may have been truncated (htmlLimit) so the target
+                    // element was cut off. Retry the merge against the server's stored active
+                    // snapshot which always contains the full artifact HTML.
+                    if (!focusPatchApplied) {
+                        const activeSnap = await snapshotRepository.getActiveForProject(req.sandbox!.projectId).catch(() => null);
+                        if (activeSnap?.artifacts.html) {
+                            const retryResult = applyFocusPatch(
+                                activeSnap.artifacts,
+                                parsed.structured.focusPatch,
+                                activeSnap.artifacts,
+                                serverAnchor
+                            );
+                            if (retryResult.patchApplied) {
+                                console.info("[focusPatch] server-snapshot fallback applied successfully");
+                                structured = {
+                                    ...structured,
+                                    artifacts: {
+                                        ...retryResult.artifacts,
+                                        css: [retryResult.artifacts.css, companionCss].filter(Boolean).join("\n"),
+                                        js: [retryResult.artifacts.js, companionJs].filter(Boolean).join("\n"),
+                                    },
+                                };
+                                focusPatchApplied = true;
+                            }
+                        }
+                    }
                 } else {
                     // Focused mode but no focusPatch (parse failed or LLM chat-only) —
                     // preserve currentArtifacts so no snapshot is created with fallback HTML.
@@ -660,9 +1009,26 @@ export function createLlmRoutes(): Router {
                         },
                     };
                     focusPatchApplied = false;
+                    // When the JSON parse itself failed in focused mode, craft a
+                    // user-friendly reply instead of dumping the raw LLM output,
+                    // and flag the error so the frontend can suggest a model switch.
+                    if (!parsed.parseValid) {
+                        focusPatchParseError = true;
+                        structured = {
+                            ...structured,
+                            chat: {
+                                summary: "Il modello ha prodotto una risposta non interpretabile (JSON malformato). L'elemento non è stato modificato.",
+                                bullets: [
+                                    "La pagina resta invariata.",
+                                    "Prova a cambiare modello o ripetere la richiesta.",
+                                ],
+                                nextActions: [],
+                            },
+                        };
+                    }
                 }
             }
-            const reply = parsed.parseValid ? buildFormattedReply(structured) : rawReply;
+            const reply = (parsed.parseValid || focusPatchParseError) ? buildFormattedReply(structured) : rawReply;
             const resolvedUsage = resolveUsageWithFallback({
                 usage: sfJson?.usage
                     ? {
@@ -674,6 +1040,7 @@ export function createLlmRoutes(): Router {
                 messages,
                 outputText: rawReply,
             });
+            userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => { });
 
             // OpenRouter (and compatible providers) may return usage.cost in USD.
             const rawProviderCost = sfJson?.usage?.cost;
@@ -705,6 +1072,7 @@ export function createLlmRoutes(): Router {
                 },
                 structured,
                 focusPatchApplied,
+                focusPatchParseError,
                 provider: context.providerCatalog.provider,
                 model: context.modelId,
                 finishReason: sfJson?.choices?.[0]?.finish_reason,
@@ -764,8 +1132,37 @@ export function createLlmRoutes(): Router {
             }
             // ── end execution log ─────────────────────────────────────────────
 
+            // ── Cost accounting: write chat call to PromptExecutionLog ─────────
+            // This ensures chat costs are included in project cost totals alongside
+            // optimize/suggest costs. Fire-and-forget — never block the response.
+            promptExecutionLogRepository.create({
+                taskKey: "chat",
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                conversationId: body.conversationId,
+                provider: result.provider,
+                model: result.model,
+                inputPrompt: body.message.slice(0, 2000),
+                contextMeta: { usedMoodboard: false, usedUserProfile: false },
+                usage: result.usage,
+                costEstimate: result.costEstimate,
+                status: "succeeded",
+                durationMs: result.durationMs,
+            }).catch(() => { });
+            // ── end cost accounting ───────────────────────────────────────────
+
             res.json(result);
         } catch (error) {
+            const normalized = normalizeHttpError(error);
+            emitLlmFailureLog({
+                projectId: req.sandbox!.projectId,
+                durationMs: Date.now() - startedAt,
+                provider: req.body?.provider,
+                model: req.body?.model,
+                code: normalized.code,
+                message: normalized.userMessage,
+                details: normalized.details,
+            });
             next(error);
         }
     });
@@ -774,7 +1171,7 @@ export function createLlmRoutes(): Router {
         const startedAt = Date.now();
 
         try {
-            const body = llmChatPreviewSchema.parse(req.body);
+            const body = parseLlmChatPreviewBody(req.body);
             const context = await resolveContext({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
@@ -794,6 +1191,7 @@ export function createLlmRoutes(): Router {
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
             const effectiveSystemPrompt = isFocusedMode
                 ? context.systemPrompt + "\n\n" + buildFocusedModeSystemAddendum(body.focusContext!, sectionOpts?.pageMap)
+                + (context.governanceFocusedSystemPrompt ? "\n\n" + context.governanceFocusedSystemPrompt : "")
                 : context.systemPrompt;
 
             const { messages, historyIncluded } = buildMessagesWithHistory(
@@ -805,72 +1203,11 @@ export function createLlmRoutes(): Router {
                 sectionOpts,
             );
 
-            res.setHeader("Content-Type", "text/event-stream");
-            res.setHeader("Cache-Control", "no-cache, no-transform");
-            res.setHeader("Connection", "keep-alive");
-            res.setHeader("X-Accel-Buffering", "no");
-            res.flushHeaders?.();
-
             const authHeader = resolveAuthHeader(context.providerCatalog.provider, context.providerCatalog.authType);
             console.log(`[stream-debug] provider=${context.providerCatalog.provider} model=${context.modelId} authType=${context.providerCatalog.authType} hasAuth=${Boolean(authHeader)} historyIncluded=${historyIncluded} msgCount=${messages.length}`);
 
             if (!authHeader && context.providerCatalog.authType !== "none") {
-                const simulatedThinking = [
-                    "Analyzing request context...",
-                    "Preparing structured JSON output...",
-                    "Generating HTML/CSS/JS artifacts...",
-                ];
-
-                for (const line of simulatedThinking) {
-                    sendSse(res, { type: "thinking", content: line });
-                    await new Promise((resolve) => setTimeout(resolve, 120));
-                }
-
-                const structured = buildFallbackStructured(body.message);
-                const simulated: LlmChatPreviewResult = {
-                    reply: structured.chat.summary,
-                    rawResponse: structured.chat.summary,
-                    structuredParseValid: true,
-                    promptingTrace: {
-                        originalUserMessage: body.message,
-                        promptConfigId: context.promptConfigId,
-                        prePromptTemplate: context.prePromptTemplate,
-                        effectiveSystemPrompt: context.systemPrompt,
-                        messagesSentToLlm: messages,
-                        focusContext: body.focusContext,
-                    },
-                    structured,
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                    finishReason: "simulated",
-                    usage: {
-                        promptTokens: Math.ceil(body.message.length / 4),
-                        completionTokens: 24,
-                        totalTokens: Math.ceil(body.message.length / 4) + 24,
-                    },
-                    costEstimate: estimateCost(
-                        {
-                            capability: body.capability,
-                            tokenUsage: {
-                                promptTokens: Math.ceil(body.message.length / 4),
-                                completionTokens: 24,
-                                totalTokens: Math.ceil(body.message.length / 4) + 24,
-                            },
-                        },
-                        {
-                            textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                            imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                            videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                        }
-                    ),
-                    durationMs: Date.now() - startedAt,
-                    simulated: true,
-                };
-
-                sendSse(res, { type: "answer", content: simulated.reply });
-                sendSse(res, { type: "done", result: simulated });
-                res.end();
-                return;
+                throw buildProviderApiKeyMissingError(context);
             }
 
             // Abort provider fetch on client disconnect or after 5-minute hard timeout.
@@ -920,22 +1257,42 @@ export function createLlmRoutes(): Router {
                     return;
                 }
                 console.log(`[stream-debug] fetch threw non-abort error at ${Date.now() - startedAt}ms:`, fetchErr);
-                // Headers already flushed — can't use next(error). Send SSE error and close.
-                sendSse(res, { type: "error", message: fetchErr instanceof Error ? fetchErr.message : "Provider connection error", durationMs: Date.now() - startedAt });
-                res.end();
-                return;
+                throw buildProviderResponseError({
+                    statusCode: 502,
+                    code: "LLM_PROVIDER_CONNECTION_FAILED",
+                    message: fetchErr instanceof Error ? fetchErr.message : "Provider connection error",
+                    userMessage: "Non e stato possibile contattare il provider LLM.",
+                    provider: context.providerCatalog.provider,
+                    model: context.modelId,
+                });
             }
             clearTimeout(fetchTimeout);
-            // Keep res "close" listener active during stream reading — do NOT remove it.
 
             if (!sfRes.ok || !sfRes.body) {
                 res.off("close", onClientClose);
                 const providerBody = await sfRes.text().catch(() => "");
                 console.log(`[stream-debug] provider error status=${sfRes.status} at ${Date.now() - startedAt}ms body=${providerBody.slice(0, 200)}`);
-                sendSse(res, { type: "error", message: `Provider error ${sfRes.status}: ${providerBody}`, durationMs: Date.now() - startedAt });
-                res.end();
-                return;
+                throw buildProviderResponseError({
+                    statusCode: sfRes.status === 429 ? 429 : sfRes.status === 404 ? 404 : 502,
+                    code: sfRes.status === 429 ? "LLM_PROVIDER_RATE_LIMIT" : sfRes.status === 404 ? "LLM_MODEL_NOT_FOUND" : "LLM_PROVIDER_REQUEST_FAILED",
+                    message: `Provider error ${sfRes.status}`,
+                    userMessage: sfRes.status === 429
+                        ? "Il provider ha raggiunto il rate limit. Riprova tra poco o seleziona un altro modello."
+                        : sfRes.status === 404
+                            ? "Il modello selezionato non e disponibile presso il provider. Scegli un modello diverso."
+                            : "La chiamata al provider LLM non e andata a buon fine.",
+                    provider: context.providerCatalog.provider,
+                    model: context.modelId,
+                    providerStatus: sfRes.status,
+                    providerBody,
+                });
             }
+
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache, no-transform");
+            res.setHeader("Connection", "keep-alive");
+            res.setHeader("X-Accel-Buffering", "no");
+            res.flushHeaders?.();
             console.log(`[stream-debug] provider response ok, starting stream read at ${Date.now() - startedAt}ms`);
 
             const reader = sfRes.body.getReader();
@@ -1052,6 +1409,7 @@ export function createLlmRoutes(): Router {
                 // Send an "interrupted" event with partial metadata so the client
                 // can persist the cost/token info even for aborted generations.
                 const partialUsage = resolveUsageWithFallback({ usage, messages, outputText: rawReply });
+                userRepo.incrementTokensConsumed(req.auth!.userId, partialUsage.totalTokens).catch(() => { });
                 const partialCost = estimateCost(
                     { capability: body.capability, tokenUsage: partialUsage, providerCostUsd: providerCostUsdStream },
                     {
@@ -1081,6 +1439,7 @@ export function createLlmRoutes(): Router {
             const parsed = tryParseStructuredJson(trimmedRaw);
             let structured = parsed.structured ?? buildFallbackStructured(body.message);
             let focusPatchAppliedStream: boolean | undefined;
+            let focusPatchParseErrorStream: boolean | undefined;
             if (isFocusedMode && body.currentArtifacts) {
                 if (parsed.structured?.focusPatch) {
                     const serverAnchor = body.focusContext?.selectedElement?.outerHtml;
@@ -1099,6 +1458,32 @@ export function createLlmRoutes(): Router {
                     };
                     structured = { ...structured, artifacts: patchedArtifactsStream };
                     focusPatchAppliedStream = patchResult.patchApplied;
+                    // Fallback: client HTML may have been truncated (htmlLimit) so the target
+                    // element was cut off. Retry the merge against the server's stored active
+                    // snapshot which always contains the full artifact HTML.
+                    if (!focusPatchAppliedStream) {
+                        const activeSnap = await snapshotRepository.getActiveForProject(req.sandbox!.projectId).catch(() => null);
+                        if (activeSnap?.artifacts.html) {
+                            const retryResult = applyFocusPatch(
+                                activeSnap.artifacts,
+                                parsed.structured.focusPatch,
+                                activeSnap.artifacts,
+                                serverAnchor
+                            );
+                            if (retryResult.patchApplied) {
+                                console.info("[focusPatch] server-snapshot fallback applied successfully");
+                                structured = {
+                                    ...structured,
+                                    artifacts: {
+                                        ...retryResult.artifacts,
+                                        css: [retryResult.artifacts.css, companionCssStream].filter(Boolean).join("\n"),
+                                        js: [retryResult.artifacts.js, companionJsStream].filter(Boolean).join("\n"),
+                                    },
+                                };
+                                focusPatchAppliedStream = true;
+                            }
+                        }
+                    }
                 } else {
                     structured = {
                         ...structured,
@@ -1109,14 +1494,29 @@ export function createLlmRoutes(): Router {
                         },
                     };
                     focusPatchAppliedStream = false;
+                    if (!parsed.parseValid) {
+                        focusPatchParseErrorStream = true;
+                        structured = {
+                            ...structured,
+                            chat: {
+                                summary: "Il modello ha prodotto una risposta non interpretabile (JSON malformato). L'elemento non è stato modificato.",
+                                bullets: [
+                                    "La pagina resta invariata.",
+                                    "Prova a cambiare modello o ripetere la richiesta.",
+                                ],
+                                nextActions: [],
+                            },
+                        };
+                    }
                 }
             }
-            const reply = parsed.parseValid ? buildFormattedReply(structured) : trimmedRaw;
+            const reply = (parsed.parseValid || focusPatchParseErrorStream) ? buildFormattedReply(structured) : trimmedRaw;
             const resolvedUsage = resolveUsageWithFallback({
                 usage,
                 messages,
                 outputText: trimmedRaw,
             });
+            userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => { });
 
             const result: LlmChatPreviewResult = {
                 reply,
@@ -1152,6 +1552,7 @@ export function createLlmRoutes(): Router {
                 durationMs: Date.now() - startedAt,
                 simulated: false,
                 focusPatchApplied: focusPatchAppliedStream,
+                focusPatchParseError: focusPatchParseErrorStream,
             };
 
             // ── Execution log (fire-and-forget) ──────────────────────────────
@@ -1193,16 +1594,54 @@ export function createLlmRoutes(): Router {
             }
             // ── end execution log ─────────────────────────────────────────────
 
+            // ── Cost accounting: write chat-stream call to PromptExecutionLog ──
+            promptExecutionLogRepository.create({
+                taskKey: "chat",
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                conversationId: body.conversationId,
+                provider: result.provider,
+                model: result.model,
+                inputPrompt: body.message.slice(0, 2000),
+                contextMeta: { usedMoodboard: false, usedUserProfile: false },
+                usage: result.usage,
+                costEstimate: result.costEstimate,
+                status: "succeeded",
+                durationMs: result.durationMs,
+            }).catch(() => { });
+            // ── end cost accounting ───────────────────────────────────────────
+
             sendSse(res, { type: "done", result });
             res.end();
         } catch (error) {
+            const normalized = normalizeHttpError(error);
+            emitLlmFailureLog({
+                projectId: req.sandbox!.projectId,
+                durationMs: Date.now() - startedAt,
+                provider: req.body?.provider,
+                model: req.body?.model,
+                code: normalized.code,
+                message: normalized.userMessage,
+                details: normalized.details,
+            });
             // If headers have already been flushed (SSE started), we cannot use
             // next(error) which would try res.status().json() and crash. Instead
             // send an SSE error event so the client can handle it gracefully.
             if (res.headersSent) {
                 console.error(`[stream-debug] post-flush error at ${Date.now() - startedAt}ms:`, error);
                 if (!res.writableEnded && !res.destroyed) {
-                    sendSse(res, { type: "error", message: error instanceof Error ? error.message : "Unexpected error", durationMs: Date.now() - startedAt });
+                    sendSse(res, {
+                        type: "error",
+                        message: normalized.userMessage,
+                        durationMs: Date.now() - startedAt,
+                        error: {
+                            error: normalized.userMessage,
+                            code: normalized.code,
+                            status: normalized.statusCode,
+                            userMessage: normalized.userMessage,
+                            details: normalized.details,
+                        },
+                    });
                     res.end();
                 }
                 return;

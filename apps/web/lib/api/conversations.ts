@@ -73,6 +73,13 @@ export interface MessageDto {
             bullets: string[];
             nextActions: string[];
         };
+        operation?: {
+            kind: string;
+            mode?: "operational" | "preview" | "background";
+            target?: "input" | "artifacts" | "external";
+            label?: string;
+            suppressArtifacts?: boolean;
+        };
     };
     backgroundTasks: BackgroundTaskDto[];
 }

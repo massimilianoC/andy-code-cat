@@ -9,6 +9,7 @@ const LAYER_SEPARATOR = "\n\n---\n\n";
  * Layer B — Preset output format (only when presetId is set)
  * Layer C — Style context block (from buildStyleContextBlock)
  * Layer D — Pre-prompt template (user-configurable per project)
+ * Layer E — Governance system prompt (operator-injected via platform config)
  * Budget policy — Token / format rules (always present)
  * Request override — Optional per-request system prompt from the chat call
  *
@@ -16,16 +17,19 @@ const LAYER_SEPARATOR = "\n\n---\n\n";
  */
 export function composeSystemPrompt(opts: {
     presetId?: string | null;
+    presetLayer?: string;
     styleBlock?: string;
     prePromptTemplate?: string;
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
+    governanceSystemPrompt?: string;
 }): string {
     return [
         buildBaseConstraintsLayer(),
-        buildPresetLayer(opts.presetId),
+        opts.presetLayer ?? buildPresetLayer(opts.presetId),
         opts.styleBlock ?? "",
         opts.prePromptTemplate ?? "",
+        opts.governanceSystemPrompt ?? "",
         opts.outputBudgetPolicy ?? "",
         opts.requestSystemPrompt ?? "",
     ]
@@ -39,6 +43,7 @@ export interface ResolvedPromptLayers {
     layerB: string;
     layerC: string;
     layerD: string;
+    layerE: string;
     budgetPolicy: string;
     composed: string;
 }
@@ -49,21 +54,24 @@ export interface ResolvedPromptLayers {
  */
 export function composeSystemPromptWithLayers(opts: {
     presetId?: string | null;
+    presetLayer?: string;
     styleBlock?: string;
     prePromptTemplate?: string;
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
+    governanceSystemPrompt?: string;
 }): ResolvedPromptLayers {
     const layerA = buildBaseConstraintsLayer();
-    const layerB = buildPresetLayer(opts.presetId);
+    const layerB = opts.presetLayer ?? buildPresetLayer(opts.presetId);
     const layerC = opts.styleBlock ?? "";
     const layerD = opts.prePromptTemplate ?? "";
+    const layerE = opts.governanceSystemPrompt ?? "";
     const budgetPolicy = opts.outputBudgetPolicy ?? "";
 
-    const composed = [layerA, layerB, layerC, layerD, budgetPolicy, opts.requestSystemPrompt ?? ""]
+    const composed = [layerA, layerB, layerC, layerD, layerE, budgetPolicy, opts.requestSystemPrompt ?? ""]
         .filter(Boolean)
         .join(LAYER_SEPARATOR)
         .trim();
 
-    return { layerA, layerB, layerC, layerD, budgetPolicy, composed };
+    return { layerA, layerB, layerC, layerD, layerE, budgetPolicy, composed };
 }

@@ -7,9 +7,12 @@
 3. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — current codebase structure
 4. `docs/architecture/PIPELINE_LAYERS.md` — 2-layer architecture and transition mechanism
 5. `docs/security/SECURITY_BASELINE.md` — auth and isolation baseline
-6. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
-7. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 9 typed presets with `outputSpec` and `systemPromptModule`
-8. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
+6. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
+7. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
+8. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
+9. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 9 typed presets with `outputSpec` and `systemPromptModule`
+10. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
+11. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
 
 ---
 
@@ -40,7 +43,7 @@ apps/api/src/
     Session.ts               ← refresh token session
     Conversation.ts          ← messages, MessageMetadata, backgroundTasks
     LlmCatalog.ts            ← provider/model catalog
-    LlmPromptConfig.ts       ← prePromptTemplate per project
+    LlmPromptConfig.ts       ← project-level prePromptTemplate
     StyleTag.ts              ← static catalog of 82 tags + VALID_TAG_IDS + MAX_TAGS_PER_CATEGORY
     UserStyleProfile.ts      ← user style profile (10 tag categories + brandBio)
     ProjectMoodboard.ts      ← per-project moodboard (style override + project brief)
@@ -171,6 +174,7 @@ apps/web/lib/
 - **Secrets:** no hardcoded secrets — use only `process.env.*` via `apps/api/src/config.ts`
 - **Queue:** workers must never call HTTP routes directly — they use domain/application use-cases
 - **LLM providers:** adding a new provider means adding a `default<Name>Catalog.ts`, updating `GetLlmCatalog`, `SeedLlmCatalog`, `index.ts`, `seed-llm.ts`, and `.env.example`. See `defaultOpenRouterCatalog.ts` as the example.
+- **Gitflow:** every git operation must follow `docs/guides/GITFLOW_RELEASE_POLICY.md`; release versioning uses `RELEASE_VERSION`, not `package.json`.
 
 ## Do Not Do
 

@@ -1,4 +1,4 @@
-import type { ProjectAsset, AssetSource } from "../entities/ProjectAsset";
+import type { AssetScope, AssetSource, AssetStyleRole, ProjectAsset, AssetSemanticMetadata, AssetGenerationStatus, AssetGenerationMetadata, AssetGenerationUsageSummary } from "../entities/ProjectAsset";
 
 export interface ProjectAssetRepository {
     create(input: {
@@ -9,14 +9,22 @@ export interface ProjectAssetRepository {
         mimeType: string;
         fileSize: number;
         source: AssetSource;
+        scope?: AssetScope;
         label?: string;
         useInProject?: boolean;
-        styleRole?: "inspiration" | "material";
+        styleRole?: AssetStyleRole;
         descriptionText?: string;
         externalUrl?: string;
+        generationStatus?: AssetGenerationStatus;
+        generationPrompt?: string;
+        generationMetadata?: AssetGenerationMetadata;
+        semanticMetadata?: AssetSemanticMetadata;
     }): Promise<ProjectAsset>;
 
     listByProject(projectId: string, userId: string, source?: AssetSource): Promise<ProjectAsset[]>;
+
+    /** All assets owned by the user across all projects (for the user media library). */
+    listByUser(userId: string): Promise<ProjectAsset[]>;
 
     findById(id: string, projectId: string, userId: string): Promise<ProjectAsset | null>;
 
@@ -27,11 +35,35 @@ export interface ProjectAssetRepository {
 
     countByProject(projectId: string, userId: string): Promise<number>;
 
+    summarizeGenerationByProject(projectId: string, userId: string): Promise<AssetGenerationUsageSummary>;
+
+    /** Returns a map of projectId -> total image generation cost (EUR) for all assets of a user. */
+    summarizeGenerationCostsByUser(userId: string): Promise<Record<string, number>>;
+
+    listRecentGeneratedByProject(projectId: string, userId: string, limit?: number): Promise<ProjectAsset[]>;
+
+    summarizeGenerationAll(): Promise<AssetGenerationUsageSummary>;
+
+    listRecentGeneratedAll(limit?: number): Promise<ProjectAsset[]>;
+
     /** Partial update of user-editable metadata fields. Enforces ownership via projectId/userId. */
     update(
         id: string,
         projectId: string,
         userId: string,
-        data: Partial<{ label: string; useInProject: boolean; styleRole: "inspiration" | "material"; descriptionText: string }>
+        data: Partial<{
+            originalName: string;
+            storedFilename: string;
+            label: string;
+            useInProject: boolean;
+            styleRole: AssetStyleRole;
+            descriptionText: string;
+            mimeType: string;
+            fileSize: number;
+            generationStatus: AssetGenerationStatus;
+            generationPrompt: string;
+            generationMetadata: AssetGenerationMetadata;
+            semanticMetadata: AssetSemanticMetadata;
+        }>
     ): Promise<ProjectAsset | null>;
 }

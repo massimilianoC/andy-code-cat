@@ -1,18 +1,22 @@
 import type { UserRepository } from "../../../domain/repositories/UserRepository";
 import type { SiteDeploymentRepository } from "../../../domain/repositories/SiteDeploymentRepository";
+import type { ProjectRepository } from "../../../domain/repositories/ProjectRepository";
 
 /** Aggregates platform-wide statistics for the super admin dashboard. */
 export class GetPlatformStats {
     constructor(
         private readonly userRepository: UserRepository,
         private readonly siteDeploymentRepository: SiteDeploymentRepository,
+        private readonly projectRepository: ProjectRepository,
     ) {}
 
     async execute() {
-        const [totalUsers, blockedUsers, totalLiveDeployments] = await Promise.all([
+        const [totalUsers, blockedUsers, totalLiveDeployments, totalTokensConsumedLifetime, totalProjects] = await Promise.all([
             this.userRepository.countAll(),
             this.userRepository.countBlocked(),
             this.siteDeploymentRepository.countLive(),
+            this.userRepository.sumTokensConsumedLifetime(),
+            this.projectRepository.countAll(),
         ]);
 
         // Role breakdown from a paginated sweep (up to 1000 users for stats)
@@ -27,7 +31,9 @@ export class GetPlatformStats {
         return {
             totalUsers,
             blockedUsers,
+            totalProjects,
             totalLiveDeployments,
+            totalTokensConsumedLifetime,
             usersByRole,
         };
     }

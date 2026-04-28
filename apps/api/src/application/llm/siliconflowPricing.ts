@@ -6,8 +6,8 @@
  * Embeddings are free (0 / 0).
  *
  * Source: https://www.siliconflow.com/pricing
- * Last scraped: 2026-04-09  (authoritative CSV: docs/cost-providers/siliconflow_pricing.csv)
- * Last probe:   2026-04-09  (report: docs/cost-providers/sf-probe-2026-04-09.json)
+ * Last scraped: 2026-04-27  (authoritative CSV: docs/cost-providers/siliconflow_pricing.csv)
+ * Last probe:   2026-04-27  (report: docs/cost-providers/sf-probe-2026-04-27.json)
  *
  * To update: re-scrape the pricing page, update the CSV, then keep this file in sync.
  */
@@ -22,6 +22,8 @@ export interface SfModelPrice {
 
 export const SILICONFLOW_MODEL_PRICES: Readonly<Record<string, SfModelPrice>> = {
     // ── DeepSeek ────────────────────────────────────────────────────────────
+    "deepseek-ai/DeepSeek-V4-Pro": { input: 0.50, output: 2.00, priceUnit: "per_m_tokens" },   // estimated — probe 2026-04-27
+    "deepseek-ai/DeepSeek-V4-Flash": { input: 0.20, output: 0.60, priceUnit: "per_m_tokens" }, // estimated — probe 2026-04-27
     "deepseek-ai/DeepSeek-V3.2": { input: 0.27, output: 0.42, priceUnit: "per_m_tokens" },
     "deepseek-ai/DeepSeek-V3.2-Exp": { input: 0.27, output: 0.41, priceUnit: "per_m_tokens" },
     "deepseek-ai/DeepSeek-V3.1-Terminus": { input: 0.27, output: 1.00, priceUnit: "per_m_tokens" },
@@ -73,12 +75,18 @@ export const SILICONFLOW_MODEL_PRICES: Readonly<Record<string, SfModelPrice>> = 
     "moonshotai/Kimi-K2-Instruct": { input: 0.58, output: 2.29, priceUnit: "per_m_tokens" },
     "moonshotai/Kimi-K2-Instruct-0905": { input: 0.40, output: 2.00, priceUnit: "per_m_tokens" },
     "moonshotai/Kimi-K2.5": { input: 0.23, output: 3.00, priceUnit: "per_m_tokens" },
+    "moonshotai/Kimi-K2.6": { input: 0.30, output: 3.00, priceUnit: "per_m_tokens" },    // estimated — probe 2026-04-27
 
     // ── MiniMax ─────────────────────────────────────────────────────────────
     "MiniMaxAI/MiniMax-M2.5": { input: 0.30, output: 1.20, priceUnit: "per_m_tokens" },
 
     // ── Tencent Hunyuan ──────────────────────────────────────────────────────
+    "tencent/Hy3-preview": { input: 0.20, output: 0.60, priceUnit: "per_m_tokens" },           // estimated — probe 2026-04-27
     "tencent/Hunyuan-A13B-Instruct": { input: 0.14, output: 0.57, priceUnit: "per_m_tokens" },
+
+    // ── Google ───────────────────────────────────────────────────────────────
+    "google/gemma-4-26B-A4B-it": { input: 0.07, output: 0.14, priceUnit: "per_m_tokens" },    // estimated — probe 2026-04-27
+    "google/gemma-4-31B-it": { input: 0.10, output: 0.20, priceUnit: "per_m_tokens" },         // estimated — probe 2026-04-27
 
     // ── Others ──────────────────────────────────────────────────────────────
     "openai/gpt-oss-120b": { input: 0.05, output: 0.45, priceUnit: "per_m_tokens" },
@@ -119,4 +127,42 @@ export const SILICONFLOW_MODEL_PRICES: Readonly<Record<string, SfModelPrice>> = 
  */
 export function getSiliconFlowPrice(modelId: string): SfModelPrice | undefined {
     return SILICONFLOW_MODEL_PRICES[modelId];
+}
+
+/**
+ * Price tier for display in the UI.
+ * Derived from output price per million tokens (text) or price per image (image-gen).
+ *
+ * Text thresholds (output $/M):
+ *   free  → priceUnit "free"
+ *   €     → ≤ 0.30
+ *   €€    → ≤ 1.00
+ *   €€€   → ≤ 2.50
+ *   €€€€  → > 2.50
+ *
+ * Image thresholds (input $/image):
+ *   €     → ≤ 0.005
+ *   €€    → ≤ 0.025
+ *   €€€   → ≤ 0.07
+ *   €€€€  → > 0.07
+ */
+export type SfPriceTier = "free" | "€" | "€€" | "€€€" | "€€€€";
+
+export function computePriceTier(price: SfModelPrice): SfPriceTier {
+    if (price.priceUnit === "free") return "free";
+
+    if (price.priceUnit === "per_image") {
+        const p = price.input;
+        if (p <= 0.005) return "€";
+        if (p <= 0.025) return "€€";
+        if (p <= 0.07) return "€€€";
+        return "€€€€";
+    }
+
+    // per_m_tokens — use output price as tier reference
+    const p = price.output;
+    if (p <= 0.30) return "€";
+    if (p <= 1.00) return "€€";
+    if (p <= 2.50) return "€€€";
+    return "€€€€";
 }

@@ -25,6 +25,7 @@ yarn-error.log*
 
 # ─── Private infrastructure (server IPs, SSH keys, live deploy runbooks) ─────
 docker-compose.droplet.yml
+docker-compose.override.yml
 scripts/deploy-to-droplet.sh
 scripts/seed-droplet.sh
 nginx/sites-enabled/
@@ -51,3 +52,4 @@ health_test.json
 .DS_Store
 Thumbs.db
 .vscode/settings.json
+docs/brand/Gatto_Codifica_Video_Generato.mp4

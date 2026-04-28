@@ -7,8 +7,9 @@ export interface IFileStorage {
     // --- Uploads ---
     uploadDirPath(userId: string, projectId: string): string;
     uploadFilePath(userId: string, projectId: string, storedFilename: string): string;
-    saveUpload(userId: string, projectId: string, storedFilename: string, buffer: Buffer): Promise<string>;
+    saveUpload(userId: string, projectId: string, storedFilename: string, buffer: Buffer, contentType?: string): Promise<string>;
     deleteUpload(userId: string, projectId: string, storedFilename: string): Promise<void>;
+    createReadStream(filePath: string): Promise<NodeJS.ReadableStream>;
 
     // --- Exports ---
     exportDirPath(userId: string, projectId: string, exportId: string): string;
@@ -40,6 +41,16 @@ export interface IFileStorage {
     writeProfileData(userId: string, filename: string, data: Buffer | string): Promise<void>;
     readProfileData(userId: string, filename: string): Promise<Buffer | null>;
     deleteProfileData(userId: string, filename: string): Promise<void>;
+
+    // --- Snapshot thumbnails ---
+    /** Stored path / key for a snapshot thumbnail (opaque — pass back to other methods). */
+    thumbnailFilePath(projectId: string, snapshotId: string): string;
+    /** Persist a JPEG thumbnail buffer. Returns the stored path/key. */
+    saveThumbnailFile(projectId: string, snapshotId: string, buffer: Buffer): Promise<string>;
+    /** Open a read stream for the thumbnail. Throws if not found. */
+    getThumbnailStream(storedPath: string): Promise<NodeJS.ReadableStream>;
+    /** Remove a thumbnail file (best-effort). */
+    deleteThumbnailFile(storedPath: string): Promise<void>;
 
     // --- Utils ---
     ensureDir(dirPath: string): Promise<void>;

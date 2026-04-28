@@ -1,3 +1,4 @@
+import { CURRENT_PASSWORD_POLICY_VERSION } from "@andy-code-cat/contracts";
 import type { UserRepository } from "../../../domain/repositories/UserRepository";
 import type { ProjectRepository } from "../../../domain/repositories/ProjectRepository";
 
@@ -5,7 +6,7 @@ export class GetUserDetail {
     constructor(
         private readonly userRepository: UserRepository,
         private readonly projectRepository: ProjectRepository,
-    ) {}
+    ) { }
 
     async execute(userId: string) {
         const user = await this.userRepository.findById(userId);
@@ -22,8 +23,10 @@ export class GetUserDetail {
             lastName: user.lastName,
             emailVerified: user.emailVerified,
             isBlocked: user.isBlocked,
+            requiresPasswordChange: (user.passwordPolicyVersion ?? 1) < CURRENT_PASSWORD_POLICY_VERSION,
             roles: user.roles,
             limits: user.limits,
+            tokensConsumedLifetime: user.tokensConsumedLifetime ?? 0,
             createdAt: user.createdAt.toISOString(),
             projects: projects.map(p => ({
                 id: p.id,

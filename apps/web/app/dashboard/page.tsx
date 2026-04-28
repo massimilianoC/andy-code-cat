@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, LayoutTemplate, Files, FileImage, Presentation, FormInput, GalleryVertical, RectangleEllipsis, Plus } from "lucide-react";
+import { Sparkles, LayoutTemplate, Files, FileImage, Presentation, FormInput, GalleryVertical, RectangleEllipsis, Plus, BarChart3, Rocket, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
     listProjects,
@@ -10,13 +10,15 @@ import {
     deleteProject,
     duplicateProject,
     getLlmPromptConfig,
+    getPresets,
     ApiError,
     type Project,
+    type ProjectPreset,
 } from "../../lib/api";
-import { getToken, clearSession, isPasswordChangeRequired } from "../../lib/token-store";
+import { getToken, clearSession, isPasswordChangeRequired, getRoles } from "../../lib/token-store";
 import { PasswordChangeDialog } from "../../components/PasswordChangeDialog";
 import ProjectCard from "../../components/ProjectCard";
-import { TipsChip } from "../../components/TipsPanel";
+import { TipsFab } from "../../components/TipsPanel";
 import GuideBanner from "../../components/GuideBanner";
 import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
@@ -33,18 +35,31 @@ import {
 
 const RECENT_KEY = "pf_recent_projects";
 const MAX_RECENTS = 3;
+const ACCORDION_KEY = "pf_preset_accordion";
 
-const PROJECT_PRESET_IDS = [
-    { id: "neutral", icon: Sparkles },
-    { id: "landing", icon: LayoutTemplate },
-    { id: "website", icon: Files },
-    { id: "form", icon: FormInput },
-    { id: "manifesto", icon: RectangleEllipsis },
-    { id: "slideshow", icon: Presentation },
-    { id: "keynote", icon: GalleryVertical },
-    { id: "a4poster", icon: FileImage },
-    { id: "infographic", icon: Sparkles },
-];
+function loadAccordionState(): Record<string, boolean> {
+    try {
+        return JSON.parse(localStorage.getItem(ACCORDION_KEY) ?? "{}");
+    } catch {
+        return {};
+    }
+}
+
+function saveAccordionState(state: Record<string, boolean>) {
+    localStorage.setItem(ACCORDION_KEY, JSON.stringify(state));
+}
+
+const PRESET_ICON_MAP = {
+    Sparkles,
+    LayoutTemplate,
+    Files,
+    FileImage,
+    Presentation,
+    FormInput,
+    GalleryVertical,
+    RectangleEllipsis,
+    BarChart3,
+} as const;
 
 function getRecentIds(): string[] {
     try {
@@ -70,8 +85,12 @@ export default function DashboardPage() {
     const [createOpen, setCreateOpen] = useState(false);
     const [creating, setCreating] = useState(false);
     const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>(undefined);
+    const [presetCatalog, setPresetCatalog] = useState<ProjectPreset[]>([]);
+    const [accordionOpen, setAccordionOpen] = useState<Record<string, boolean>>({});
+    const [createDestination, setCreateDestination] = useState<"workspace" | "launch">("workspace");
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
     const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
+    const [canAccessSuperadmin, setCanAccessSuperadmin] = useState(false);
     const createInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -83,9 +102,13 @@ export default function DashboardPage() {
         }
         setToken(tok);
         setRecentIds(getRecentIds());
+        setAccordionOpen(loadAccordionState());
+        const roles = getRoles();
+        setCanAccessSuperadmin(roles.includes("admin") || roles.includes("superadmin"));
         setPasswordChangeRequiredState(isPasswordChangeRequired());
         setCheckingAuth(false);
         void load(tok);
+        void getPresets().then((res) => setPresetCatalog(res.presets ?? [])).catch(() => undefined);
     }, [router]);
 
     useEffect(() => {
@@ -119,7 +142,7 @@ export default function DashboardPage() {
             setCreateOpen(false);
             pushRecentId(res.project.id);
             setRecentIds(getRecentIds());
-            router.push(`/workspace/${res.project.id}`);
+            router.push(createDestination === "launch" ? `/launch/${res.project.id}` : `/workspace/${res.project.id}`);
         } catch {
             showToast(t("dashboard.toast.loadError"), false);
         } finally {
@@ -174,6 +197,14 @@ export default function DashboardPage() {
         }
     }
 
+    function toggleAccordion(key: string) {
+        setAccordionOpen((prev) => {
+            const next = { ...prev, [key]: !prev[key] };
+            saveAccordionState(next);
+            return next;
+        });
+    }
+
     function handleLogout() {
         clearSession();
         router.replace("/login");
@@ -193,6 +224,32 @@ export default function DashboardPage() {
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
+    const selectedPresetLabel = presetCatalog.find((preset) => preset.id === selectedPresetId)?.labelIt;
+    const blankPreset = presetCatalog.find((preset) => preset.id === "neutral");
+    const activePresets = presetCatalog
+        .filter((preset) => preset.id !== "neutral" && preset.isActive !== false)
+        .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+
+    const seenCategories = new Map<string, { key: string; label: string; hint: string }>();
+    for (const preset of activePresets) {
+        const key = preset.category ?? "custom";
+        if (!seenCategories.has(key)) {
+            seenCategories.set(key, {
+                key,
+                label: preset.categoryLabel ?? "Custom",
+                hint: preset.categoryHint ?? "",
+            });
+        }
+    }
+    const presetCategories = [...seenCategories.values()];
+
+    const groupedPresets = presetCategories
+        .map((category) => ({
+            ...category,
+            presets: activePresets.filter((preset) => (preset.category ?? "custom") === category.key),
+        }))
+        .filter((group) => group.presets.length > 0);
+
     return (
         <div className="min-h-screen bg-background flex flex-col">
             {token ? (
@@ -211,7 +268,29 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher className="mr-1" />
-                    <Button size="sm" className="gap-1" onClick={() => setCreateOpen(true)}>
+                    {canAccessSuperadmin ? (
+                        <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>{t("dashboard.superadmin")}</Button>
+                    ) : null}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => {
+                            setCreateDestination("launch");
+                            setCreateOpen(true);
+                        }}
+                    >
+                        <Rocket className="h-3.5 w-3.5" />
+                        {t("dashboard.zeroEffort")}
+                    </Button>
+                    <Button
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => {
+                            setCreateDestination("workspace");
+                            setCreateOpen(true);
+                        }}
+                    >
                         <Plus className="h-3.5 w-3.5" />
                         {t("dashboard.newProject")}
                     </Button>
@@ -244,29 +323,92 @@ export default function DashboardPage() {
                 </section>
 
                 {/* Preset section */}
-                <section className="mb-16">
-                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-5">
-                        {t("dashboard.presets.title")}
-                    </h2>
-                    <div className="grid grid-cols-3 gap-4">
-                        {PROJECT_PRESET_IDS.map(({ id, icon: Icon }) => {
-                            const label = t(`presets.${id}.label`);
-                            const hint = t(`presets.${id}.hint`);
+                <section className="mb-16 space-y-4">
+                    <div>
+                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            {t("dashboard.presets.title")}
+                        </h2>
+                    </div>
+
+                    {blankPreset ? (
+                        <Button
+                            variant="outline"
+                            className="w-full h-auto min-h-16 p-4 flex flex-col items-start justify-start gap-2 text-left border-dashed"
+                            onClick={() => handleCreateFromPreset(blankPreset.id, blankPreset.labelIt || blankPreset.label)}
+                        >
+                            <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
+                                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                                </div>
+                                <div>
+                                    <div className="text-sm font-semibold text-foreground leading-tight">{blankPreset.labelIt || blankPreset.label}</div>
+                                    <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{blankPreset.hint}</div>
+                                </div>
+                            </div>
+                        </Button>
+                    ) : null}
+
+                    <div className="space-y-2">
+                        {groupedPresets.map((group) => {
+                            const isOpen = !!accordionOpen[group.key];
                             return (
-                                <Button
-                                    key={id}
-                                    variant="outline"
-                                    className="h-auto min-h-28 p-5 flex flex-col items-start justify-start gap-3 text-left"
-                                    onClick={() => handleCreateFromPreset(id, label)}
-                                >
-                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                        <Icon className="h-4 w-4 text-primary" />
-                                    </div>
-                                    <div>
-                                        <div className="text-sm font-semibold text-foreground leading-tight">{label}</div>
-                                        <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{hint}</div>
-                                    </div>
-                                </Button>
+                                <div key={group.key} className="border border-border rounded-lg overflow-hidden">
+                                    {/* Accordion header */}
+                                    <button
+                                        type="button"
+                                        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                                        onClick={() => toggleAccordion(group.key)}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-sm font-semibold text-foreground">{group.label}</h3>
+                                            {group.hint ? <span className="text-xs text-muted-foreground">{group.hint}</span> : null}
+                                            <span className="text-xs text-muted-foreground/60">({group.presets.length})</span>
+                                        </div>
+                                        <ChevronDown
+                                            className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                                        />
+                                    </button>
+                                    {/* Accordion body */}
+                                    {isOpen && (
+                                        <div className="px-4 pb-4 pt-1">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                                {group.presets.map((preset) => {
+                                                    const Icon = PRESET_ICON_MAP[preset.icon as keyof typeof PRESET_ICON_MAP] ?? Sparkles;
+                                                    return (
+                                                        <Button
+                                                            key={preset.id}
+                                                            variant="outline"
+                                                            className="h-auto min-h-24 p-4 flex flex-col items-start justify-start gap-2 text-left"
+                                                            onClick={() => handleCreateFromPreset(preset.id, preset.labelIt || preset.label)}
+                                                        >
+                                                            <div className="flex items-start justify-between w-full gap-2">
+                                                                <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                                                    <Icon className="h-4 w-4 text-primary" />
+                                                                </div>
+                                                                {preset.recommendedModel?.label ? (
+                                                                    <Badge variant="secondary" className="text-[10px] leading-tight">
+                                                                        {preset.recommendedModel.label}
+                                                                    </Badge>
+                                                                ) : null}
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-sm font-semibold text-foreground leading-tight">{preset.labelIt || preset.label}</div>
+                                                                <div className="text-xs text-muted-foreground mt-1 leading-snug line-clamp-2">{preset.hint}</div>
+                                                            </div>
+                                                            {preset.tags?.length ? (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {preset.tags.slice(0, 3).map((tag) => (
+                                                                        <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0">{tag}</Badge>
+                                                                    ))}
+                                                                </div>
+                                                            ) : null}
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             );
                         })}
                     </div>
@@ -304,7 +446,6 @@ export default function DashboardPage() {
 
             {/* Footer bar */}
             <footer className="fixed bottom-0 left-0 right-0 z-30 bg-card/90 backdrop-blur-sm border-t border-border h-12 flex items-center px-8 gap-4">
-                <TipsChip />
                 {projects.length > 0 && (
                     <span className="ml-auto text-xs text-muted-foreground">
                         {t("dashboard.footer.count_other", { count: projects.length })}
@@ -312,14 +453,23 @@ export default function DashboardPage() {
                 )}
             </footer>
 
+            {/* Tips FAB — rendered outside the footer to avoid backdrop-filter containment */}
+            <TipsFab />
+
             {/* Create project modal */}
-            <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setSelectedPresetId(undefined); }}>
+            <Dialog open={createOpen} onOpenChange={(open) => {
+                setCreateOpen(open);
+                if (!open) {
+                    setSelectedPresetId(undefined);
+                    setCreateDestination("workspace");
+                }
+            }}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>{t("dashboard.modal.title")}</DialogTitle>
                         <DialogDescription>
                             {selectedPresetId
-                                ? t("dashboard.modal.descPreset", { preset: t(`presets.${selectedPresetId}.label`) })
+                                ? t("dashboard.modal.descPreset", { preset: selectedPresetLabel ?? selectedPresetId })
                                 : t("dashboard.modal.descBlank")}
                         </DialogDescription>
                     </DialogHeader>
@@ -337,7 +487,10 @@ export default function DashboardPage() {
                             <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
                                 {t("dashboard.modal.cancel")}
                             </Button>
-                            <Button type="submit" disabled={creating}>
+                            <Button type="submit" variant="outline" disabled={creating} onClick={() => setCreateDestination("launch")}>
+                                {creating ? t("dashboard.modal.creating") : t("dashboard.modal.startZeroEffort")}
+                            </Button>
+                            <Button type="submit" disabled={creating} onClick={() => setCreateDestination("workspace")}>
                                 {creating ? t("dashboard.modal.creating") : t("dashboard.modal.create")}
                             </Button>
                         </DialogFooter>

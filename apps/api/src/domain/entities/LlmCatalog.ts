@@ -18,6 +18,14 @@ export interface LlmModel {
     isDefault: boolean;
     isFallback: boolean;
     isActive: boolean;
+    /** Friendly label shown in the superadmin registry UI. */
+    displayName?: string;
+    /** Optional short note to explain when the model should be used. */
+    description?: string;
+    /** Optional model-specific prompt layer appended to the generation system prompt. */
+    promptTemplate?: string;
+    /** Optional model-specific prompt layer appended in focused-edit mode. */
+    focusPromptTemplate?: string;
     /** Cost tier derived from provider pricing data (computed at discovery time via percentile buckets). */
     priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
     /** Actual input price in USD per million tokens (0 = free; undefined = unknown). */

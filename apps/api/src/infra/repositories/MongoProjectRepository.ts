@@ -1,6 +1,6 @@
-import { ObjectId, type Collection } from "mongodb";
+import { ObjectId, type Collection, type Filter } from "mongodb";
 import type { Project } from "../../domain/entities/Project";
-import type { ProjectRepository } from "../../domain/repositories/ProjectRepository";
+import type { ProjectRepository, AdminProjectFilters, AdminProjectListResult } from "../../domain/repositories/ProjectRepository";
 import { getDb } from "../db/mongo";
 
 interface ProjectDocument {
@@ -65,6 +65,12 @@ export class MongoProjectRepository implements ProjectRepository {
         return doc ? mapDocument(doc) : null;
     }
 
+    async findById(projectId: string): Promise<Project | null> {
+        const collection = await this.collection();
+        const doc = await collection.findOne({ _id: new ObjectId(projectId) });
+        return doc ? mapDocument(doc) : null;
+    }
+
     async deleteById(projectId: string, userId: string): Promise<boolean> {
         const collection = await this.collection();
         const result = await collection.deleteOne({
@@ -82,5 +88,36 @@ export class MongoProjectRepository implements ProjectRepository {
             { returnDocument: "after" }
         );
         return result ? mapDocument(result) : null;
+    }
+
+    async listAllPaginated(page: number, limit: number, filters?: AdminProjectFilters): Promise<AdminProjectListResult> {
+        const collection = await this.collection();
+        const query: Filter<ProjectDocument> = {};
+        if (filters?.ownerId) {
+            query.ownerUserId = new ObjectId(filters.ownerId);
+        }
+        if (filters?.search) {
+            query.name = { $regex: filters.search, $options: "i" };
+        }
+        if (filters?.presetId) {
+            query.presetId = filters.presetId;
+        }
+        const skip = (page - 1) * limit;
+        const [docs, total] = await Promise.all([
+            collection.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
+            collection.countDocuments(query),
+        ]);
+        return { projects: docs.map(mapDocument), total };
+    }
+
+    async countAll(): Promise<number> {
+        const collection = await this.collection();
+        return collection.countDocuments();
+    }
+
+    async adminDeleteById(projectId: string): Promise<boolean> {
+        const collection = await this.collection();
+        const result = await collection.deleteOne({ _id: new ObjectId(projectId) });
+        return result.deletedCount > 0;
     }
 }

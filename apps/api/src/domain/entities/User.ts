@@ -38,5 +38,7 @@ export interface User {
     roles: UserRole[];
     limits?: UserLimits;
     llmPreferences?: UserLlmPreferences;
+    /** Lifetime total tokens consumed via LLM calls (integer, accumulated). */
+    tokensConsumedLifetime?: number;
     createdAt: Date;
 }

@@ -7,6 +7,8 @@ import { MongoProjectRepository } from "../../../infra/repositories/MongoProject
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
 import { MongoPublishHistoryRepository } from "../../../infra/repositories/MongoPublishHistoryRepository";
+import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
+import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { PublishProject } from "../../../application/use-cases/PublishProject";
 import { UnpublishProject } from "../../../application/use-cases/UnpublishProject";
@@ -38,12 +40,30 @@ const MIME_MAP: Record<string, string> = {
 // Validate publishId: only lowercase alphanumeric, 6-12 chars
 const PUBLISH_ID_RE = /^[a-z0-9]{6,12}$/;
 
-function toDto(d: SiteDeployment) {
-    // Prefer customSlug for subdomain URL so human-readable link is shown when set
+function buildSubdomainUrl(d: SiteDeployment): string | null {
+    const domain = env.PUBLIC_DOMAIN?.trim();
+    if (!domain) return null;
+
+    // Localhost/ports/schemes are not valid wildcard publish domains.
+    // In those cases the safe local URL is the path-based /p/{publishId} route.
+    if (
+        domain.includes(":") ||
+        domain.includes("/") ||
+        /^https?:/i.test(domain) ||
+        domain === "localhost" ||
+        domain.startsWith("localhost.") ||
+        domain.endsWith(".localhost") ||
+        domain === "127.0.0.1"
+    ) {
+        return null;
+    }
+
     const identifier = d.customSlug ?? d.publishId;
-    const subdomainUrl = env.PUBLIC_DOMAIN
-        ? `http://${identifier}.${env.PUBLIC_DOMAIN}`
-        : null;
+    return `https://${identifier}.${domain}`;
+}
+
+function toDto(d: SiteDeployment) {
+    const subdomainUrl = buildSubdomainUrl(d);
     return {
         id: d.id,
         publishId: d.publishId,
@@ -87,9 +107,11 @@ export function createPublishRoutes() {
     const snapshotRepository = new MongoPreviewSnapshotRepository();
     const deploymentRepository = new MongoSiteDeploymentRepository();
     const historyRepository = new MongoPublishHistoryRepository();
+    const userRepository = new MongoUserRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
-    const publishProject = new PublishProject(deploymentRepository, snapshotRepository, localFileStorage, historyRepository);
+    const platformConfigRepository = new MongoPlatformConfigRepository();
+    const publishProject = new PublishProject(deploymentRepository, snapshotRepository, localFileStorage, historyRepository, platformConfigRepository);
     const unpublishProject = new UnpublishProject(deploymentRepository, localFileStorage);
     const getSiteDeployment = new GetSiteDeployment(deploymentRepository);
 
@@ -104,11 +126,13 @@ export function createPublishRoutes() {
             try {
                 const body = publishProjectSchema.parse(req.body);
 
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
                 const deployment = await publishProject.execute({
                     projectId: req.sandbox!.projectId,
                     userId: req.auth!.userId,
                     snapshotId: body.snapshotId,
                     customSlug: body.customSlug,
+                    presetId: project?.presetId,
                 });
 
                 res.status(201).json(toDto(deployment));
@@ -307,6 +331,15 @@ export function createPublishRoutes() {
             );
             return;
         }
+        if (deploymentRecord) {
+            const owner = await userRepository.findById(deploymentRecord.userId).catch(() => null);
+            if (owner?.isBlocked) {
+                res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
+                    "This site is unavailable because the owner account has been suspended."
+                );
+                return;
+            }
+        }
 
         const filePath = localFileStorage.resolvePublishFile(publishId, "index.html");
         if (!filePath) {
@@ -326,6 +359,12 @@ export function createPublishRoutes() {
         // avoiding a full re-download while still guaranteeing freshness on every republish.
         const stat = await fs.promises.stat(filePath);
         const etag = `"${stat.mtimeMs.toString(16)}-${stat.size.toString(16)}"`;
+
+        // Override helmet's restrictive default CSP before the 304 check so the permissive
+        // policy is sent on both 200 and 304 responses (304 headers update the browser cache).
+        // removeHeader first eliminates any existing CSP set by helmet, ensuring a single header.
+        res.removeHeader("Content-Security-Policy");
+        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
         res.setHeader("ETag", etag);
         res.setHeader("Last-Modified", stat.mtime.toUTCString());
         if (req.headers["if-none-match"] === etag) {
@@ -338,7 +377,6 @@ export function createPublishRoutes() {
         // instant freshness after a republish while still leveraging the browser cache.
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("X-Content-Type-Options", "nosniff");
-        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
         fs.createReadStream(filePath).pipe(res);
     });
 
@@ -347,6 +385,23 @@ export function createPublishRoutes() {
         if (!PUBLISH_ID_RE.test(publishId) || !file) {
             res.status(404).send("Not found");
             return;
+        }
+
+        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        if (deploymentRecord?.isAdminBlocked) {
+            res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
+                "This site has been suspended by the platform administrator."
+            );
+            return;
+        }
+        if (deploymentRecord) {
+            const owner = await userRepository.findById(deploymentRecord.userId).catch(() => null);
+            if (owner?.isBlocked) {
+                res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
+                    "This site is unavailable because the owner account has been suspended."
+                );
+                return;
+            }
         }
 
         // Only allow simple filenames — no path traversal
@@ -374,6 +429,11 @@ export function createPublishRoutes() {
         // ETag + conditional GET for all assets
         const stat = await fs.promises.stat(filePath);
         const etag = `"${stat.mtimeMs.toString(16)}-${stat.size.toString(16)}"`;
+
+        // Same override pattern as the index.html handler: remove helmet's restrictive CSP
+        // first, then set the permissive one before the 304 check.
+        res.removeHeader("Content-Security-Policy");
+        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
         res.setHeader("ETag", etag);
         res.setHeader("Last-Modified", stat.mtime.toUTCString());
         if (req.headers["if-none-match"] === etag) {
@@ -391,7 +451,6 @@ export function createPublishRoutes() {
         res.setHeader("Content-Type", contentType);
         res.setHeader("Cache-Control", cacheControl);
         res.setHeader("X-Content-Type-Options", "nosniff");
-        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
         fs.createReadStream(filePath).pipe(res);
     });
 

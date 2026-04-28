@@ -1,7 +1,7 @@
 # LOCAL DEV stack — hot-reload with bind mounts.
 # Use: npm run local:dev:up / local:dev:down
 # See docker-compose.deploy.yml for local prod-test builds.
-name: andy-code-cat-dev
+name: andy-code-cat
 
 services:
   workspace:
@@ -37,6 +37,22 @@ services:
     networks:
       - andy-code-cat-net
 
+  minio:
+    image: minio/minio:latest
+    container_name: andy-code-cat-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./data/minio:/data
+    networks:
+      - andy-code-cat-net
+
   api:
     build:
       context: .
@@ -54,6 +70,7 @@ services:
       - workspace
       - mongodb
       - redis
+      - minio
     ports:
       - "4000:4000"
     volumes:
@@ -70,6 +87,8 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       target: dev
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     container_name: andy-code-cat-web
     restart: unless-stopped
     env_file:

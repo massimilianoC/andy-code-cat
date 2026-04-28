@@ -43,6 +43,26 @@ function extractInlineJs(html: string): { html: string; extracted: string } {
     return { html: cleaned, extracted: blocks.join("\n\n") };
 }
 
+function stripMetaCsp(html: string): string {
+    return html.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, "");
+}
+
+function joinUniqueBlocks(...parts: string[]): string {
+    const unique: string[] = [];
+    const seen = new Set<string>();
+
+    for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        const key = trimmed.replace(/\s+/g, " ").trim();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(trimmed);
+    }
+
+    return unique.join("\n\n");
+}
+
 function ensureLinkTag(html: string): string {
     const linkTag = '<link rel="stylesheet" href="style.css">';
     if (html.includes('href="style.css"')) return html;
@@ -102,15 +122,20 @@ function detectPlaceholders(html: string, css: string): AssetPlaceholder[] {
 function postProcess(artifacts: { html: string; css: string; js: string }): ProcessedArtifacts {
     let { html, css, js } = artifacts;
 
+    html = stripMetaCsp(html);
+
     // Extract inline blocks
     const { html: htmlNoCss, extracted: extractedCss } = extractInlineCss(html);
     html = htmlNoCss;
     const { html: htmlNoJs, extracted: extractedJs } = extractInlineJs(html);
     html = htmlNoJs;
 
-    // Merge: artifact CSS/JS come first (they are "intentional" from LLM), then extracted
-    css = [css.trim(), extractedCss].filter(Boolean).join("\n\n");
-    js = [js.trim(), extractedJs].filter(Boolean).join("\n\n");
+    // If the dedicated field is already populated it is the canonical source —
+    // the LLM also embeds the same content inline in HTML for iframe preview,
+    // so merging would produce duplicate declarations. Fall back to extracted
+    // content only when the dedicated field is empty.
+    css = css.trim() ? css.trim() : joinUniqueBlocks(extractedCss);
+    js = js.trim() ? js.trim() : joinUniqueBlocks(extractedJs);
 
     // Ensure separated file references exist in HTML
     if (css.trim()) html = ensureLinkTag(html);

@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+const optionalTrimmedString = (max: number) =>
+    z.preprocess(
+        (value) => {
+            if (typeof value === "string") {
+                return value.trim().slice(0, max);
+            }
+            return value == null ? undefined : value;
+        },
+        z.string().max(max).optional(),
+    );
+
+const requiredTrimmedString = (max: number) =>
+    z.preprocess(
+        (value) => (typeof value === "string" ? value.trim().slice(0, max) : value),
+        z.string().min(1).max(max),
+    );
+
 export const uploadProjectAssetSchema = z.object({
     // file is handled by multer, this schema validates any extra body fields if needed
 });
@@ -21,12 +38,59 @@ export type PrepareWorkspaceInput = z.infer<typeof prepareWorkspaceSchema>;
 
 // ---- Asset DTOs ----
 
-export type AssetSourceDto = "user_upload" | "platform_generated";
-export type AssetStyleRole = "inspiration" | "material";
+export type AssetSourceDto = "user_upload" | "url_reference" | "platform_generated";
+export type AssetScopeDto = "project" | "user" | "global";
+export type AssetStyleRole = "inspiration" | "material" | "logo" | "background" | "icon" | "watermark" | "reference";
+export type AssetGenerationStatusDto = "queued" | "ready" | "failed";
+
+export const userFacingAssetScopeSchema = z.enum(["project", "user"]);
+
+export interface AssetSemanticMetadataDto {
+    title: string;
+    summary: string;
+    description: string;
+    tags: string[];
+    colors: string[];
+    mediaKind: "image" | "background" | "logo" | "icon" | "document" | "reference";
+    classifierProvider: string;
+    classifierModel: string;
+    classifiedAt: string;
+}
+
+export interface AssetGenerationMetadataDto {
+    provider: string;
+    model?: string;
+    imageSize?: string;
+    numInferenceSteps?: number;
+    requestedAt: string;
+    completedAt?: string;
+    latencyMs?: number;
+    revisedPrompt?: string;
+    finishReason?: string;
+    providerRequestId?: string;
+    sourceUrl?: string;
+    outputMimeType?: string;
+    width?: number;
+    height?: number;
+    tokenUsage?: {
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+    };
+    cost?: {
+        currency: "EUR";
+        amount: number;
+        source: "provider" | "flat-rate";
+        providerCostUsd?: number;
+    };
+    errorMessage?: string;
+    providerResponse?: Record<string, unknown>;
+}
 
 export interface ProjectAssetDto {
     id: string;
     projectId: string;
+    scope: AssetScopeDto;
     originalName: string;
     mimeType: string;
     fileSize: number;
@@ -40,13 +104,19 @@ export interface ProjectAssetDto {
     descriptionText?: string;
     /** External URL (for URL-reference assets, no file on disk). */
     externalUrl?: string;
+    generationStatus?: AssetGenerationStatusDto;
+    generationPrompt?: string;
+    generationMetadata?: AssetGenerationMetadataDto;
+    semanticMetadata?: AssetSemanticMetadataDto;
     createdAt: string;
 }
+
+export const assetStyleRoleSchema = z.enum(["inspiration", "material", "logo", "background", "icon", "watermark", "reference"]);
 
 export const updateProjectAssetSchema = z.object({
     label: z.string().max(100).optional(),
     useInProject: z.boolean().optional(),
-    styleRole: z.enum(["inspiration", "material"]).optional(),
+    styleRole: assetStyleRoleSchema.optional(),
     descriptionText: z.string().max(500).optional(),
 });
 
@@ -55,9 +125,98 @@ export type UpdateProjectAssetInput = z.infer<typeof updateProjectAssetSchema>;
 export const addUrlReferenceSchema = z.object({
     url: z.string().url().max(2000),
     label: z.string().max(100).optional(),
-    styleRole: z.enum(["inspiration", "material"]).optional(),
+    scope: userFacingAssetScopeSchema.optional(),
+    styleRole: assetStyleRoleSchema.optional(),
     descriptionText: z.string().max(500).optional(),
 });
+
+export const suggestProjectImageIdeaSchema = z.object({
+    prompt: optionalTrimmedString(2000),
+    targetMode: z.enum(["foreground", "background"]).default("foreground"),
+    selectedElement: z.object({
+        stableNodeId: requiredTrimmedString(120),
+        selector: requiredTrimmedString(300),
+        tag: requiredTrimmedString(64),
+        textSnippet: optionalTrimmedString(500),
+        currentSrc: optionalTrimmedString(1500),
+        currentAlt: optionalTrimmedString(300),
+        backgroundImageUrl: optionalTrimmedString(1500),
+        mediaMode: z.enum(["foreground", "background", "none"]).optional(),
+        originalWidth: z.number().positive().max(10000).optional(),
+        originalHeight: z.number().positive().max(10000).optional(),
+        aspectRatio: z.number().positive().max(100).optional(),
+    }).optional(),
+});
+
+export type SuggestProjectImageIdeaInput = z.infer<typeof suggestProjectImageIdeaSchema>;
+
+export interface SuggestProjectImageIdeaResultDto {
+    suggestion: string;
+    suggestedPrompt: string;
+    provider: string;
+    model: string;
+    durationMs: number;
+    skipped: boolean;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    costEstimate?: {
+        currency: "EUR";
+        amount: number;
+        source: "provider" | "flat-rate";
+        providerCostUsd?: number;
+    };
+}
+
+export const generateProjectImageSchema = z.object({
+    prompt: requiredTrimmedString(2000),
+    fileNameHint: z.string().max(120).optional(),
+    scope: userFacingAssetScopeSchema.optional(),
+    provider: z.string().min(1).max(80).optional(),
+    model: z.string().min(1).max(160).optional(),
+    imageSize: z.string().regex(/^\d+x\d+$/).optional(),
+    numInferenceSteps: z.number().int().min(1).max(50).optional(),
+    targetMode: z.enum(["foreground", "background"]).default("foreground"),
+    selectedElement: z.object({
+        stableNodeId: requiredTrimmedString(120),
+        selector: requiredTrimmedString(300),
+        tag: requiredTrimmedString(64),
+        textSnippet: optionalTrimmedString(500),
+        currentSrc: optionalTrimmedString(1500),
+        currentAlt: optionalTrimmedString(300),
+        backgroundImageUrl: optionalTrimmedString(1500),
+        mediaMode: z.enum(["foreground", "background", "none"]).optional(),
+        originalWidth: z.number().positive().max(10000).optional(),
+        originalHeight: z.number().positive().max(10000).optional(),
+        aspectRatio: z.number().positive().max(100).optional(),
+    }).optional(),
+    mediaConfig: z.object({
+        fit: z.enum(["cover", "contain", "auto"]).optional(),
+        repeat: z.enum(["no-repeat", "repeat", "repeat-x", "repeat-y"]).optional(),
+        opacity: z.number().min(0).max(1).optional(),
+        filter: z.string().max(120).optional(),
+    }).optional(),
+});
+
+export type GenerateProjectImageInput = z.infer<typeof generateProjectImageSchema>;
+
+export interface GenerateProjectImageResultDto {
+    taskId: string;
+    status: "queued";
+    mode: "placeholder" | "live";
+    asset: ProjectAssetDto;
+    storagePath: string;
+    downloadUrl: string;
+    cssDefaults: {
+        fit: "cover" | "contain" | "auto";
+        repeat: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+        position: "center center";
+        opacity: number;
+        filter: string;
+    };
+}
 
 export type AddUrlReferenceInput = z.infer<typeof addUrlReferenceSchema>;
 

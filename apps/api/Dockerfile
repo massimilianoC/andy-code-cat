@@ -23,6 +23,10 @@ RUN npm install
 
 FROM base AS dev
 COPY . .
+# Build the contracts package so @andy-code-cat/contracts resolves at runtime.
+# (node_modules are excluded from the build context via .dockerignore, so Linux-native
+# workspace symlinks created by RUN npm install in the base stage are preserved.)
+RUN npm run build -w packages/contracts
 WORKDIR /workspace/apps/api
 EXPOSE 4000
 CMD ["npm", "run", "dev"]

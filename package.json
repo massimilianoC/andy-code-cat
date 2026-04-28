@@ -10,14 +10,16 @@
     "dev": "npm run dev -w apps/api",
     "dev:api": "npm run dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",
-
+    "release:version": "node scripts/release-version.mjs print",
+    "release:version:validate": "node scripts/release-version.mjs validate",
+    "release:version:set": "node scripts/release-version.mjs set",
+    "gitflow:guard": "node scripts/gitflow-guard.mjs",
     "_comment_local_dev": "--- LOCAL DEV (docker-compose.yml) — hot-reload, bind mounts ---",
     "local:dev": "docker compose up --build",
     "local:dev:up": "docker compose up --build -d",
     "local:dev:down": "docker compose down",
     "local:dev:logs": "docker compose logs -f --tail=100",
     "local:dev:restart:api": "docker compose up -d --no-deps api",
-
     "_comment_local_deploy": "--- LOCAL DEPLOY TEST (docker-compose.deploy.yml) — prod builds, named volumes ---",
     "local:up": "docker compose -f docker-compose.deploy.yml up -d",
     "local:down": "docker compose -f docker-compose.deploy.yml down",
@@ -26,8 +28,22 @@
     "local:logs": "docker compose -f docker-compose.deploy.yml logs -f --tail=100",
     "local:logs:api": "docker compose -f docker-compose.deploy.yml logs -f --tail=200 api",
     "local:restart:api": "docker compose -f docker-compose.deploy.yml up -d --no-deps api",
-
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w packages/contracts && npm run build -w apps/api && npm run build -w apps/web",
+    "storage:probe": "npm run build -w apps/api && node apps/api/dist/scripts/storage-probe.js",
+    "storage:migrate": "npm run build -w apps/api && node apps/api/dist/scripts/migrate-assets-to-storage.js",
+    "local:minio:up": "docker compose -f docker-compose.deploy.yml up -d --no-deps minio",
+    "local:minio:logs": "docker compose -f docker-compose.deploy.yml logs -f --tail=100 minio",
+    "_comment_droplet": "--- DROPLET / PRODUCTION (docker-compose.droplet.yml) — remote deploy on docker-2 ---",
+    "droplet:deploy": "bash .deploy/deploy/deploy-to-droplet.sh",
+    "droplet:deploy:nocache": "bash .deploy/deploy/deploy-to-droplet.sh --no-cache",
+    "droplet:restart:api": "bash .deploy/deploy/deploy-to-droplet.sh --env-only",
+    "droplet:build": "ssh docker-2 'cd /opt/docker/projects/pageforge && docker compose -f docker-compose.droplet.yml --env-file .env.droplet build api web'",
+    "droplet:up": "ssh docker-2 'cd /opt/docker/projects/pageforge && docker compose -f docker-compose.droplet.yml --env-file .env.droplet up -d --no-deps api web nginx'",
+    "droplet:logs": "ssh docker-2 'cd /opt/docker/projects/pageforge && docker compose -f docker-compose.droplet.yml --env-file .env.droplet logs -f --tail=100'",
+    "droplet:logs:api": "ssh docker-2 'cd /opt/docker/projects/pageforge && docker compose -f docker-compose.droplet.yml --env-file .env.droplet logs -f --tail=200 api'",
+    "droplet:ps": "ssh docker-2 'docker ps --format \"{{.Names}}: {{.Status}}\"'",
+    "droplet:seed": "bash .deploy/deploy/seed-droplet.sh",
+    "droplet:minio:init": "bash scripts/minio-init.sh",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces",
     "seed": "npm run seed -w apps/api",
@@ -37,7 +53,8 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1"
+    "@playwright/test": "^1.59.1",
+    "esbuild": "^0.28.0"
   },
   "optionalDependencies": {
     "@esbuild/win32-x64": "^0.28.0"

@@ -14,7 +14,7 @@ This document is for the repository owner. It explains what stays local and how 
 | Generic Docker Compose files | `docker-compose.yml`, `docker-compose.deploy.yml` |
 | Template env files | `.env.example`, `.env.deploy.example` |
 | Documentation | `docs/specs/`, `docs/guides/`, `docs/agents/`, `docs/architecture/` |
-| Architecture contract | `AGENTS.md`, `CONTRIBUTING.md`, `ROADMAP.md` |
+| Architecture contract | `AGENTS.md`, `CONTRIBUTING.md`, `docs/project/ROADMAP.md` |
 | LICENSE, README | `LICENSE`, `README.md` |
 
 ### Private — stays on your machine only (gitignored)

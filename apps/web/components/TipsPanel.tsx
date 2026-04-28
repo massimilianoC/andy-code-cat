@@ -11,12 +11,16 @@ interface Tip {
 }
 
 const TIPS: Tip[] = [
-    { id: "tip-onboarding",  type: "tip",      key: "onboarding", icon: "🎨" },
-    { id: "tip-duplicate",   type: "tip",      key: "duplicate",  icon: "📋" },
-    { id: "tip-prompt",      type: "tip",      key: "prompt",     icon: "💬" },
-    { id: "news-streaming",  type: "news",     key: "streaming",  icon: "⚡" },
-    { id: "news-publish",    type: "news",     key: "publish",    icon: "🚀" },
-    { id: "shortcut-save",   type: "shortcut", key: "save",       icon: "⌨️" },
+    { id: "tip-style-profile",  type: "tip",      key: "style_profile",       icon: "🎨" },
+    { id: "tip-duplicate",      type: "tip",      key: "duplicate",           icon: "📋" },
+    { id: "tip-prompt-reuse",   type: "tip",      key: "prompt_reuse",        icon: "💬" },
+    { id: "tip-iterative",      type: "tip",      key: "iterative",           icon: "🔄" },
+    { id: "tip-workspace",      type: "tip",      key: "workspace_isolation", icon: "🗂️" },
+    { id: "news-streaming",     type: "news",     key: "streaming",           icon: "⚡" },
+    { id: "news-publish",       type: "news",     key: "publish",             icon: "🚀" },
+    { id: "tip-model-choice",   type: "tip",      key: "model_choice",        icon: "🤖" },
+    { id: "shortcut-save",      type: "shortcut", key: "save_snapshot",       icon: "⌨️" },
+    { id: "tip-rollback",       type: "tip",      key: "rollback",            icon: "↩️" },
 ];
 
 const TYPE_CLASS: Record<Tip["type"], string> = {

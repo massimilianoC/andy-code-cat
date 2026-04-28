@@ -1,52 +1,52 @@
 # OpenRouter Multi-Provider Integration Guide
 
-Guida tecnica derivata dall'implementazione in questo progetto.
-Copertura: backend (Node.js / Express, clean architecture) + frontend (Next.js / React).
+Technical guide derived from the implementation in this repository.
+Coverage: backend (Node.js / Express, Clean Architecture) and frontend (Next.js / React).
 
 ---
 
-## Indice
+## Index
 
-1. [Cos'è OpenRouter e quando usarlo](#1-cosè-openrouter-e-quando-usarlo)
-2. [Variabili d'ambiente necessarie](#2-variabili-dambiente-necessarie)
-3. [Architettura del catalog multi-provider](#3-architettura-del-catalog-multi-provider)
-4. [Struttura dati: entità di dominio](#4-struttura-dati-entità-di-dominio)
-5. [Catalog statico di default (seed)](#5-catalog-statico-di-default-seed)
-6. [Discovery live dei modelli via /models](#6-discovery-live-dei-modelli-via-models)
-7. [Price tier — derivazione e thresholds](#7-price-tier--derivazione-e-thresholds)
-8. [Cost Policy — dual-source (provider vs flat-rate)](#8-cost-policy--dual-source-provider-vs-flat-rate)
-9. [Autenticazione e routing delle chiavi](#9-autenticazione-e-routing-delle-chiavi)
-10. [Route di risoluzione del modello (resolveContext)](#10-route-di-risoluzione-del-modello-resolvecontext)
-11. [Endpoint `/llm/providers` — risposta al frontend](#11-endpoint-llmproviders--risposta-al-frontend)
-12. [Frontend: tipi TypeScript e model selector](#12-frontend-tipi-typescript-e-model-selector)
-13. [Frontend: visualizzazione del costo nella UI](#13-frontend-visualizzazione-del-costo-nella-ui)
-14. [Seed script e sorgente mongo vs env](#14-seed-script-e-sorgente-mongo-vs-env)
-15. [Pattern di fallback e deduplicazione](#15-pattern-di-fallback-e-deduplicazione)
-16. [Checklist per portare questa integrazione in un nuovo progetto](#16-checklist-per-portare-questa-integrazione-in-un-nuovo-progetto)
-
----
-
-## 1. Cos'è OpenRouter e quando usarlo
-
-[OpenRouter](https://openrouter.ai) è un proxy unificato che espone centinaia di modelli LLM (OpenAI, Anthropic, Google, Meta, Mistral, ecc.) attraverso una singola API **compatibile OpenAI** (`POST /chat/completions`).
-
-**Vantaggi chiave:**
-
-- Singola API key per accedere a decine di provider.
-- Modelli `:free` completamente gratuiti (rate-limited ma nessun addebito).
-- L'endpoint `/models` restituisce metadati di pricing **per-token in USD** — consente price tier accurati senza tabelle statiche.
-- Il campo `usage.cost` nella risposta di completamento riporta il **costo reale della chiamata in USD** — elimina la necessità di stimare.
-- L'header `X-Title` / HTTP-Referer permette di identificare l'app nelle statistiche OpenRouter.
-
-**Usalo quando:**
-
-- Vuoi accesso a modelli diversi (Anthropic, Google, ecc.) senza gestire n API key separate.
-- Vuoi costi zero per prototipi/test usando i modelli `:free`.
-- Vuoi tracking accurato dei costi per-call senza stime flat-rate.
+1. [What OpenRouter is and when to use it](#1-what-openrouter-is-and-when-to-use-it)
+2. [Required environment variables](#2-required-environment-variables)
+3. [Multi-provider catalog architecture](#3-multi-provider-catalog-architecture)
+4. [Data structure: domain entities](#4-data-structure-domain-entities)
+5. [Default static catalog (seed)](#5-default-static-catalog-seed)
+6. [Live model discovery via /models](#6-live-model-discovery-via-models)
+7. [Price tiers — derivation and thresholds](#7-price-tiers--derivation-and-thresholds)
+8. [Cost policy — dual-source (provider vs flat-rate)](#8-cost-policy--dual-source-provider-vs-flat-rate)
+9. [Authentication and key routing](#9-authentication-and-key-routing)
+10. [Model resolution route (`resolveContext`)](#10-model-resolution-route-resolvecontext)
+11. [Endpoint `/llm/providers` — frontend response](#11-endpoint-llmproviders--frontend-response)
+12. [Frontend: TypeScript types and model selector](#12-frontend-typescript-types-and-model-selector)
+13. [Frontend: showing cost in the UI](#13-frontend-showing-cost-in-the-ui)
+14. [Seed script and Mongo vs env source](#14-seed-script-and-mongo-vs-env-source)
+15. [Fallback and deduplication patterns](#15-fallback-and-deduplication-patterns)
+16. [Checklist for bringing this integration into a new project](#16-checklist-for-bringing-this-integration-into-a-new-project)
 
 ---
 
-## 2. Variabili d'ambiente necessarie
+## 1. What OpenRouter is and when to use it
+
+[OpenRouter](https://openrouter.ai) is a unified proxy that exposes hundreds of LLMs (OpenAI, Anthropic, Google, Meta, Mistral, and others) through a single **OpenAI-compatible** API (`POST /chat/completions`).
+
+**Key advantages:**
+
+- One API key for access to many providers
+- Fully free `:free` models (rate-limited, but no charge)
+- The `/models` endpoint returns **per-token USD pricing metadata**, allowing precise price tiers without static lookup tables
+- The `usage.cost` field in completion responses returns the **real request cost in USD**, reducing the need for estimation
+- `X-Title` and `HTTP-Referer` headers make it easier to identify your app in OpenRouter analytics
+
+**Use it when:**
+
+- you want access to multiple model families without managing separate API keys
+- you want zero-cost prototypes or tests using the `:free` models
+- you want accurate per-call cost tracking rather than flat-rate estimates
+
+---
+
+## 2. Required environment variables
 
 ```env
 # URL base dell'API (non cambia)

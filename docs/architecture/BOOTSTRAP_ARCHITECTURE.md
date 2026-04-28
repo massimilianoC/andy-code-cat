@@ -3,10 +3,11 @@
 ## Services
 
 - **web**: Next.js 15 App Router — UI client
-- **api**: Express + TypeScript — backend API (Clean Architecture)
+- **api**: Express + TypeScript — backend API built with Clean Architecture
 - **mongodb**: primary database (host port 27018)
-- **redis**: cache + BullMQ queue (host port 6380)
-- **workspace**: container for OpenCode worker (planned for M3)
+- **redis**: cache and BullMQ queue (host port 6380)
+- **minio**: S3-like object storage for user/project media assets (host ports 9000 and 9001)
+- **workspace**: container for the OpenCode worker (planned for M3)
 
 ## Clean Architecture Map (API)
 
@@ -25,19 +26,20 @@ Required flow: `presentation → application → domain`, `infra → domain`
 ### Domain entities (✅)
 
 - `User` — with `llmPreferences.defaultProvider` and `passwordPolicyVersion` for legacy password migration
-- `Project` — con `ownerUserId` per sandbox
-- `Session` — session-bound refresh token rotation (only hashed refresh token stored in DB)
+- `Project` — with `ownerUserId` for sandbox isolation
+- `Session` — session-bound refresh token rotation (only a hashed refresh token is stored in the DB)
 - `Conversation` + `Message` + `MessageMetadata` + `BackgroundTask`
 - `LlmCatalog` — provider/model registry
-- `LlmPromptConfig` — prePromptTemplate per progetto
-- `StyleTag` — catalog statico 82 tag, 10 categorie (identity, sector, audience, visual, palette, typography, layout, tone, reference, feature)
-- `UserStyleProfile` — profilo stilistico utente con onboarding state
-- `ProjectMoodboard` — override stilistico per progetto + brief + targetBusiness
+- `ProjectPreset` — preset library with category taxonomy, ordering, and recommended-model metadata
+- `LlmPromptConfig` — project-level `prePromptTemplate`
+- `StyleTag` — static catalog of 82 tags across 10 categories
+- `UserStyleProfile` — user style profile with onboarding state
+- `ProjectMoodboard` — per-project style override, brief, and target-business context
 
 ### Application use-cases (✅)
 
 - Auth: `RegisterUser`, `LoginUser`, `RefreshSession`, `ChangePassword`
-- Projects: via routes dirette
+- Projects: currently handled through route-level orchestration
 - Conversations: `CreateConversation`, `AddMessage`, `GetConversation`, `GetConversations`, `LogBackgroundTask`
 - LLM: `GetLlmCatalog`, `SeedLlmCatalog`, `GetLlmPromptConfig`, `SetLlmPromptConfig`
 - Style profiling: `GetUserStyleProfile`, `UpdateUserStyleProfile`
@@ -59,42 +61,50 @@ Required flow: `presentation → application → domain`, `infra → domain`
 - `POST /v1/projects/:id/llm/chat-preview/stream` (SSE)
 - `GET/PUT /v1/projects/:id/llm/prompt-config`
 - `GET /v1/llm/providers`
+- `GET /v1/presets` (public preset catalog from Mongo with static fallback)
 - `GET /v1/style-tags` (public — no auth)
 - `GET|PUT /v1/users/me/profile`
 - `GET|PUT /v1/projects/:id/moodboard`
 
-⚠️ **Route ordering**: `createUserProfileRoutes()` must be registered BEFORE `createProjectRoutes()` in `app.ts`. The `projectRoutes` router uses `router.use(authMiddleware)`, which applies to all incoming paths, including `/v1/style-tags` if project routes are registered first.
+⚠️ **Route ordering:** `createUserProfileRoutes()` must be registered BEFORE `createProjectRoutes()` in `app.ts`. The `projectRoutes` router uses `router.use(authMiddleware)`, which will also block `/v1/style-tags` if project routes are registered first.
 
 ### Frontend screens (✅)
 
-- `/login` · `/register` (con redirect a /login?registered=1 dopo registrazione)
-- `/dashboard` — ProjectCard grid + GuideBanner + TipsPanel + toast
-- `/onboarding` — wizard 3-step con TagPicker (stili utente)
-- `/workspace/[projectId]` — split-panel: chat + preview iframe
-- `/admin` · `/admin/users` · `/admin/users/[userId]` · `/admin/config` · `/admin/governance` — superadmin-only control plane
+- `/login` · `/register` (with redirect to `/login?registered=1` after sign-up)
+- `/dashboard` — ProjectCard grid + GuideBanner + TipsPanel + toast notifications
+- `/onboarding` — 3-step wizard with `TagPicker` for user style preferences
+- `/workspace/[projectId]` — split panel with chat and preview iframe
+- `/admin` · `/admin/users` · `/admin/users/[userId]` · `/admin/config` · `/admin/presets` · `/admin/models` · `/admin/governance` — superadmin control plane
 
 ### Frontend components (✅)
 
-- `TagPicker` — multi-select griglia tag per categoria
-- `ProjectCard` — card con thumbnail colorata + menu ⋮ (Apri / Duplica / Elimina / Copia Prompt)
-- `TipsPanel` — sidebar collassabile, suggerimenti, localStorage seen-tracking, badge non letti
-- `GuideBanner` — banner con video guida, apre `VideoModal`
-- `VideoModal` — modal YouTube embedded
+- `TagPicker` — multi-select tag grid by category
+- `ProjectCard` — card with colored thumbnail and contextual menu (Open / Duplicate / Delete / Copy Prompt)
+- `TipsPanel` — collapsible sidebar with suggestions and unread state tracking
+- `GuideBanner` — guide banner that opens `VideoModal`
+- `VideoModal` — embedded YouTube modal
 
 ### Storage adapters (✅)
 
-- `IFileStorage` — port interface (upload / getSignedUrl / delete)
-- `LocalFileStorage` — disk-based (DEV, `STORAGE_DRIVER=local`)
-- `MinioFileStorage` — MinIO/S3 (PROD, `STORAGE_DRIVER=minio`)
-- `StorageFactory` — seleziona adapter da env
+- `IFileStorage` — port interface for media and private file persistence
+- `LocalFileStorage` — disk-based storage for local fallback (`STORAGE_ADAPTER=local`)
+- `MinioFileStorage` — MinIO-backed S3-like storage for user/project media (`STORAGE_ADAPTER=minio`)
+- `StorageFactory` — selects the validated adapter from env while keeping publish/export flows locally compatible
+
+### Media generation flow (✅ local-first, provider-backed)
+
+- `POST /v1/projects/:id/assets/generate-image` creates a sandboxed media job for the selected WYSIWYG element
+- The route stores a placeholder asset immediately so the editor can react without blocking
+- When SiliconFlow is configured, the backend fetches the real generated image, persists it to MinIO, and updates the same asset record
+- The asset document retains the full generation ledger: provider, model, prompt, semantic classification, latency, cost, token usage when available, and provider response summary
 
 ### Layer 1 — Chat Preview (✅)
 
-- Streaming SSE con eventi `thinking` / `answer` / `done`
-- History injection (ultimi N turni, budget 6000 token)
-- Artifact context injection (HTML/CSS/JS precedenti)
+- Streaming SSE with `thinking` / `answer` / `done` events
+- History injection (latest N turns, 6000-token budget)
+- Artifact context injection (previous HTML/CSS/JS)
 - Structured JSON response: `{ chat: { summary, bullets, nextActions }, artifacts: { html, css, js } }`
-- `contextStats: { estimatedTokens, historyTurns, atCapacity }` (da aggiungere in M1)
+- `contextStats: { estimatedTokens, historyTurns, atCapacity }` planned for M1
 
 ## What Is NOT Built Yet
 
@@ -111,7 +121,7 @@ Required flow: `presentation → application → domain`, `infra → domain`
 - Environment shape: `apps/api/src/config.ts`
 - Docker topology: `docker-compose.yml`
 - Pipeline architecture: `docs/architecture/PIPELINE_LAYERS.md`
-- Development milestones: `docs/DEVELOPMENT_PLAN.md`
+- Documentation index: `docs/INDEX.md`
 
 ## LLM Catalog Bootstrap
 
@@ -119,25 +129,24 @@ Required flow: `presentation → application → domain`, `infra → domain`
 - `LLM_CATALOG_SOURCE=mongo` — catalog from the `llm_providers` collection
 - Seed: `npm run seed:llm` (idempotent)
 
-### Provider registrati
+### Registered providers
 
-| Provider | Auth | Nota |
+| Provider | Auth | Notes |
 |---|---|---|
-| `siliconflow` | Bearer (`SILICONFLOW_API_KEY`) | Discovery filtra modelli image/video gen per ID |
-| `lmstudio` | none | Modello locale, nessuna chiave richiesta |
-| `openrouter` | Bearer (`OPENROUTER_API_KEY`) | Discovery filtra per `architecture.modality` → solo `->text`; modelli `:free` senza crediti |
+| `siliconflow` | Bearer (`SILICONFLOW_API_KEY`) | Discovery filters out image/video generation models by ID |
+| `lmstudio` | none | Local model, no key required |
+| `openrouter` | Bearer (`OPENROUTER_API_KEY`) | Discovery filters by `architecture.modality` to keep only text-capable models; `:free` models are available without credits |
 
-`OPENROUTER_API_KEY` è opzionale: senza chiave il catalog espone i modelli free di default.
-Con chiave vengono registrati anche i modelli paid e la discovery live restituisce l'intera libreria filtrata.
+`OPENROUTER_API_KEY` is optional. Without a key, the catalog still exposes the free models by default. With a key, paid models and the full filtered catalog are also available.
 
 ## Tenant Isolation Model (Double Sandbox)
 
 1. **User sandbox**: JWT subject (`authMiddleware`)
 2. **Project sandbox**: `x-project-id` header + `project.ownerUserId === jwt.sub` (`sandboxMiddleware`)
 
-Entrambi i check sono obbligatori su ogni route mutabile.
-In Layer 2, il workspace filesystem rispetta lo stesso modello:
-`/data/workspaces/{jobId}/` è isolato per job, `/var/www/Andy Code Cat/{slug}/` per progetto.
+Both checks are mandatory for every mutable route.
+Layer 2 follows the same isolation pattern at the filesystem level:
+`/data/workspaces/{jobId}/` is isolated per job and `/var/www/Andy Code Cat/{slug}/` is isolated per project.
 
 ## Admin Governance Configuration
 
@@ -147,10 +156,29 @@ In Layer 2, il workspace filesystem rispetta lo stesso modello:
   - Global injection snippets (`headHtml`, `headerHtml`, `footerHtml`, script blocks, analytics IDs)
   - Nginx runtime knobs (`publicDomain`, `publishSubdomainPattern`, cache/body-size tuning, extra directives)
 - Backward compatibility is preserved: existing deployments using only base platform config fields remain valid.
+- Current runtime status:
+  - `/admin/governance` is active and persists data through `GET|PATCH /v1/admin/config`
+  - Registration and email-verification switches are active runtime controls
+  - Governance prompt, injection, and nginx fields are persisted and editable, but not yet fully consumed by the generation/publish runtime
+
+## Admin User Operations
+
+- `/admin/users` supports inline superadmin configuration through a right-sidebar workflow.
+- Available actions:
+  - block/unblock a user
+  - edit email, first name, last name, and verification state
+  - edit roles
+  - edit plan and limits overrides
+  - reset the password with optional forced change on next login
+  - force or clear password reset requirement
+  - delete the user
+- When a user is blocked:
+  - active sessions are invalidated
+  - public sites owned by that user return HTTP 403 until the account is restored
 
 ## Auth Hardening Notes
 
-- Refresh tokens are now bound to a session token identifier (`sid`) and rotated after each successful refresh.
+- Refresh tokens are bound to a session token identifier (`sid`) and rotated after each successful refresh.
 - Legacy refresh tokens without `sid` are accepted once and upgraded during the next successful refresh.
-- Legacy accounts can still sign in, but the frontend must force the authenticated password change flow before normal workspace use.
-- Email verification remains bypassable through environment configuration until an operationally safe delivery flow is available.
+- Legacy accounts can still sign in, but the frontend must force the authenticated password-change flow before normal workspace use.
+- Email verification remains bypassable through environment configuration until a safe operational delivery flow is available.

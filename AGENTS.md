@@ -33,13 +33,29 @@ Architecture goals:
 - API validation contracts: packages/contracts
 - Runtime topology: docker-compose.yml
 - Environment contract: .env.example and apps/api/src/config.ts
-- Agent navigation docs: docs/INDEX.md
+- Documentation index: docs/INDEX.md
+- Agent navigation docs: docs/agents/CODE_AGENT_INDEX.md
 
 When conflicts exist, apply this priority:
 
 1. AGENTS.md
 2. docs/INDEX.md and docs/agents/CODE_AGENT_INDEX.md
-3. technical specs (SPEC.md, DB_PLATFORM_SPEC.md, WORKFLOWS.md)
+3. technical specs under docs/specs/ (especially SPEC.md, DB_PLATFORM_SPEC.md, and WORKFLOWS.md)
+
+## Documentation Layout Rules
+
+The repository root should remain contributor-friendly and minimal.
+Keep long-form documentation, architecture notes, specifications, and runbooks under `docs/`.
+Only repository entry points should stay at the root, such as:
+
+- AGENTS.md
+- CLAUDE.md
+- README.md
+- CONTRIBUTING.md
+- LICENSE
+- Docker and package manifests
+
+If you add or move documentation, update `docs/INDEX.md` in the same change.
 
 ## Required Architecture
 
@@ -241,13 +257,37 @@ Always implement in testable increments:
 4. session creation with double sandbox.
 5. seed scripts for bootstrap users/projects.
 
-## Seed Requirements
+## First-Install Bootstrap
 
-Provide and maintain a seed script that:
+New deployments require a two-step bootstrap that agents must understand and respect.
 
-- creates a default owner user if missing.
-- creates at least one project for that user.
-- is idempotent.
+### Step 1 — Run `install.sh`
+
+`install.sh` (repo root) is the single entry point for all new deployments:
+
+- User edits the `CONFIGURATION` block at the top (MODE, DOMAIN, API keys).
+- Running `bash install.sh` generates `.env.docker`, builds Docker images, starts all
+  containers, and (in domain mode) obtains SSL certificates via certbot.
+- Do NOT run this script in an existing deployment — it skips `.env.docker` generation if
+  the file already exists but will rebuild and restart containers.
+
+### Step 2 — `/install` setup wizard
+
+After `install.sh` completes, the system is in an **uninitialized** state: no superadmin exists.
+
+- Navigate to `http://localhost/install` (local) or `https://app.DOMAIN/install` (domain).
+- The wizard creates the first superadmin account, seeds `PlatformConfig`, and locks permanently.
+- Detection: `existsWithRole("superadmin")` — if a superadmin exists, the system is installed.
+- `POST /v1/install` is public and idempotent: returns 409 after first completion.
+- Full spec: `docs/specs/FIRST_INSTALL_SETUP_SPEC.md`
+
+### What agents must NOT do
+
+- Do not create superadmin accounts via seed scripts on a production or deploy stack.
+  The wizard is the only supported path.
+- Do not call `npm run seed` on a deploy stack without explicit operator instruction.
+  `seed.ts` is for dev stacks only (creates a test user + project).
+- Do not modify `.env.docker` after generation by `install.sh` without operator confirmation.
 
 ## LLM Provider Configuration — Runtime Only, No Seed Required
 
@@ -260,32 +300,56 @@ LLM providers, models, API keys, and token limits are fully resolved at runtime 
 - To change any LLM setting: edit `.env.docker`, then run `docker compose -f docker-compose.deploy.yml up -d --no-deps api`.
 - `seed.ts` seeds user + project only. `seed-llm.ts` seeds the catalog only when `LLM_CATALOG_SOURCE=mongo`.
 
-## Git & Branch Contract
+## Git & Release Contract
 
-This project follows **Gitflow**. Agents must respect the following rules when proposing or executing any git-related operation.
+This project follows full **Gitflow**. Agents must respect the following rules when proposing or executing any git-related operation.
+
+### Canonical Release Version
+
+The repository publication version is stored in the root `RELEASE_VERSION` file.
+
+- Format: `YYYY.MM.DD.N`
+- Example: `2026.04.12.6`
+- Release branch example: `release/2026.04.12.6`
+- Release tag example: `2026.04.12.6`
+
+Important:
+
+- This publication version is the source of truth for repository releases.
+- `package.json` versions remain SemVer-compatible for npm/tooling stability and are NOT the authoritative release identifier.
 
 ### Branch model
 
-| Branch | Purpose | Push allowed |
-|---|---|---|
-| `main` | Stable, released code — never commit directly | No — PRs only |
-| `develop` | Integration target — all features merge here | No — PRs only |
-| `feat/<name>` | New feature, branched off `develop` | Yes (via PR only) |
-| `fix/<name>` | Bug fix, branched off `develop` | Yes (via PR only) |
-| `hotfix/<name>` | Critical production fix, branched off `main`; merged into both `main` and `develop` | Yes (via PR only) |
-| `docs/<name>` | Documentation changes only | Yes (via PR only) |
-| `chore/<name>` | Tooling, config, dependency bumps | Yes (via PR only) |
-| `refactor/<name>` | Code restructuring, no behaviour change | Yes (via PR only) |
+| Branch | Base | Purpose | Push allowed |
+|---|---|---|---|
+| `main` | n/a | Stable, released code | No — PRs only |
+| `develop` | n/a | Integration target for upcoming work | No — PRs only |
+| `feat/<name>` | `develop` | New feature | Yes (via PR only) |
+| `fix/<name>` | `develop` | Bug fix | Yes (via PR only) |
+| `docs/<name>` | `develop` | Documentation-only change | Yes (via PR only) |
+| `chore/<name>` | `develop` | Tooling, config, dependency work | Yes (via PR only) |
+| `refactor/<name>` | `develop` | Internal restructuring with no behaviour change | Yes (via PR only) |
+| `release/<version>` | `develop` | Release stabilization branch | Yes (via PR only) |
+| `hotfix/<name>` | `main` | Critical production fix | Yes (via PR only) |
+
+### Gitflow Semantics
+
+1. **Feature flow**: branch from `develop`, open PR back into `develop`, merge only after review/checks.
+2. **Release flow**: create `release/<RELEASE_VERSION>` from `develop`, stabilize, merge into `main`, tag `main` with the same release version, then merge the release branch back into `develop`.
+3. **Hotfix flow**: create `hotfix/<name>` from `main`, merge into `main`, publish/tag if needed, then merge the fix back into `develop`.
 
 ### Non-Negotiable Rules
 
-1. **Never propose a direct push to `main` or `develop`** — all changes go through PRs.
-2. **All feature and fix branches must be created off `develop`**, not `main`.
-3. **Hotfix branches only**: base off `main`, merge back into both `main` and `develop`.
-4. **One logical change per commit** — no "WIP" or stacked unrelated changes in a single commit.
-5. **Commit messages must follow Conventional Commits**: `type(scope): description`.
-6. **Never rewrite published history** — no `git push --force` or `--force-with-lease` on `main` or `develop`.
-7. **PRs target `develop`** unless it is a hotfix (which targets `main`).
+1. **Never propose a direct push to `main` or `develop`** — all shared-branch changes go through PRs.
+2. **All feature, fix, docs, chore, and refactor branches must be created off `develop`**, not `main`.
+3. **Release branches must be created as `release/<RELEASE_VERSION>` from `develop`**.
+4. **Release branches are for stabilization only** — no new feature scope on `release/*`.
+5. **Hotfix branches only**: base off `main`, merge back into both `main` and `develop`.
+6. **One logical change per commit** — no "WIP" or stacked unrelated changes in a single commit.
+7. **Commit messages must follow Conventional Commits**: `type(scope): description`.
+8. **Never rewrite published history** — no `git push --force` or `--force-with-lease` on `main` or `develop`.
+9. **PRs target `develop`** unless the branch is `release/*` or `hotfix/*`, which first target `main` and then must be back-merged into `develop`.
+10. **Agents must treat `RELEASE_VERSION` as the single source of truth for publication versioning**.
 
 ### Commit message format
 
@@ -304,13 +368,16 @@ Valid types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `ci`.
 Before coding:
 
 1. Read docs/agents/CODE_AGENT_INDEX.md.
-2. Validate impact on layer boundaries.
-3. Validate impact on sandbox and auth.
-4. Check which Docker compose stack is running before any `docker compose` command.
+2. Read docs/guides/GITFLOW_RELEASE_POLICY.md before proposing branch, PR, or tag operations.
+3. Read docs/guides/AGENT_RELEASE_CHECKLIST.md before performing branch, commit, merge, or release actions.
+4. Validate impact on layer boundaries.
+5. Validate impact on sandbox and auth.
+6. Check which Docker compose stack is running before any `docker compose` command.
 
 After coding:
 
 1. Run available checks and smoke tests.
-2. Update documentation index and runbooks when needed.
-3. Report residual risks explicitly.
-4. Never restart MongoDB or Redis to propagate env changes — use `--no-deps` on the correct compose file.
+2. If release/versioning rules were touched, update `RELEASE_VERSION`, README, CONTRIBUTING, and agent instructions consistently.
+3. Update documentation index and runbooks when needed.
+4. Report residual risks explicitly.
+5. Never restart MongoDB or Redis to propagate env changes — use `--no-deps` on the correct compose file.

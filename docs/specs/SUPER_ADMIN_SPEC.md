@@ -202,10 +202,19 @@ application.  It is not linked from the user-facing navigation and is invisible 
 
 ---
 
-## Seed
+## Seed & First-Install Wizard
+
+> **Preferred path:** Use the guided web installer at `/install` on first deployment.
+> See [FIRST_INSTALL_SETUP_SPEC.md](FIRST_INSTALL_SETUP_SPEC.md) for the full spec.
+
+The installer creates the first superadmin interactively, collects server configuration, and
+seeds the `PlatformConfig` singleton in a single guided flow. It is permanently disabled after
+the first superadmin account exists.
+
+### Env-var seed (legacy / CI)
 
 The `apps/api/src/scripts/seed.ts` script creates a superadmin account if it does not already
-exist.  Credentials are read from environment variables:
+exist. Credentials are read from environment variables:
 
 | Variable | Default |
 |---|---|
@@ -214,6 +223,12 @@ exist.  Credentials are read from environment variables:
 
 If `SUPERADMIN_PASSWORD` is not set, the seed script logs a warning and skips superadmin creation
 (the regular seed user is created regardless).
+
+### Emergency manual promotion (mongosh)
+
+If neither the wizard nor the seed script is usable, a user can be promoted directly from
+`mongosh`. See [FIRST_INSTALL_SETUP_SPEC.md § Manual DB Promotion](FIRST_INSTALL_SETUP_SPEC.md#manual-db-promotion-emergency--dev)
+for the exact commands.
 
 ---
 
@@ -229,6 +244,64 @@ SUPERADMIN_PASSWORD=
 
 ---
 
+## Delivery Status Snapshot — 2026-04-15
+
+The superadmin area now includes live governance surfaces for the current template-management wave:
+
+- `/admin/presets` — project-type template model library with category taxonomy, sort order, recommended runtime metadata, and CRUD persistence
+- `/admin/governance` — optimized preprompting controls for template-driven rewriting and runtime rules
+- `/dashboard` start UX now consumes the managed template catalog rather than only a static hardcoded list
+
+### Validation priority versus future additions
+
+For the current UX and end-to-end validation cycle, the only indispensable next activity is:
+
+- visual/authenticated QA of the template-model and preprompt flow in the browser
+
+The following remain useful but **additive**, not blocking:
+
+- drag-and-drop template ordering UX
+- user-private or pending-review template models with superadmin promotion
+- advanced low-level LLM runtime catalog maintenance
+
+## Project-Type Template Model Governance
+
+The current superadmin direction is centered on editable project-type template models.
+
+Each template model should be manageable from the admin side with:
+
+- category and tags
+- short description and start UX copy
+- brief starter template
+- style direction template
+- optimized preprompt module injected into the existing preprompting flow
+- optional suggested runtime hints
+
+The superadmin workflow should support AI-assisted authoring so that a new template model can be drafted from a few human instructions and refined through the optimizer before publication.
+
+The low-level LLM model catalog remains available only as a paused technical track and should not replace this template-first governance model.
+
+## Planned Extension — Prompting Task Governance
+
+The governance model should be extended with a modular prompt-task section for internal AI helper features such as:
+
+- optimize user prompt
+- summarize project brief
+- classify intent
+- describe uploaded assets
+- run content quality checks
+
+Each task should support:
+
+- enable/disable toggle
+- provider selection
+- model selection
+- temperature and max token limits
+- editable system and user templates
+- per-product overrides
+
+This extension is specified in `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` and is designed to be additive, preserving backward compatibility with the existing governance editor.
+
 ## Out of Scope (Future Milestones)
 
 - Limit enforcement in use-cases (billing milestone)
@@ -242,6 +315,7 @@ SUPERADMIN_PASSWORD=
 
 ## Related Documents
 
+- [First Install & Guided Setup Wizard](FIRST_INSTALL_SETUP_SPEC.md)
 - [Architecture overview](../architecture/BOOTSTRAP_ARCHITECTURE.md)
 - [Security baseline](../security/SECURITY_BASELINE.md)
 - [Testable steps runbook](../runbooks/TESTABLE_STEPS.md)

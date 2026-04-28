@@ -1,51 +1,290 @@
 /**
- * MinioFileStorage — S3-compatible storage adapter (stub).
+ * MinioFileStorage — S3-compatible storage adapter for user/project media.
  *
- * This is a future-ready stub. All methods throw "not implemented" until
- * the MinIO client is configured and connected.
- *
- * To enable: set STORAGE_ADAPTER=minio in env and configure MINIO_* vars.
+ * Uploads and private profiling files are stored in MinIO.
+ * Export, publish, and workspace folders still use the local filesystem so the
+ * current ZIP/publish/OpenCode flows remain backward-compatible.
  */
+import { Client } from "minio";
+import path from "path";
+import { env } from "../../config";
+import { LocalFileStorage } from "./LocalFileStorage";
 import type { IFileStorage } from "./IFileStorage";
 
+function toPosixPath(...parts: string[]): string {
+    return parts.filter(Boolean).join("/").replace(/\\+/g, "/");
+}
+
+function isVirtualMinioPath(filePath: string): boolean {
+    return filePath.startsWith("minio://");
+}
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+}
+
 export class MinioFileStorage implements IFileStorage {
-    private notImplemented(): never {
-        throw Object.assign(new Error("MinIO storage adapter not yet implemented"), {
-            statusCode: 501,
-        });
+    private readonly fallback = new LocalFileStorage();
+    private readonly bucket = env.MINIO_BUCKET;
+    private readonly rootPrefix = (env.MINIO_ROOT_PREFIX || "andy-code-cat").replace(/^\/+|\/+$/g, "");
+    private readonly client = new Client({
+        endPoint: env.MINIO_ENDPOINT,
+        port: env.MINIO_PORT,
+        useSSL: env.MINIO_USE_SSL,
+        accessKey: env.MINIO_ACCESS_KEY,
+        secretKey: env.MINIO_SECRET_KEY,
+        region: env.MINIO_REGION,
+    });
+    private bucketReady?: Promise<void>;
+
+    private virtualUri(key: string): string {
+        return `minio://${this.bucket}/${key}`;
     }
 
-    uploadDirPath(_userId: string, _projectId: string): string { this.notImplemented(); }
-    uploadFilePath(_userId: string, _projectId: string, _storedFilename: string): string { this.notImplemented(); }
-    async saveUpload(_userId: string, _projectId: string, _storedFilename: string, _buffer: Buffer): Promise<string> { this.notImplemented(); }
-    async deleteUpload(_userId: string, _projectId: string, _storedFilename: string): Promise<void> { this.notImplemented(); }
+    private keyFor(kind: string, ...parts: string[]): string {
+        return toPosixPath(this.rootPrefix, kind, ...parts);
+    }
 
-    exportDirPath(_userId: string, _projectId: string, _exportId: string): string { this.notImplemented(); }
-    exportZipPath(_userId: string, _projectId: string, _exportId: string): string { this.notImplemented(); }
-    async writeExportFile(_userId: string, _projectId: string, _exportId: string, _filename: string, _content: string): Promise<void> { this.notImplemented(); }
-    async deleteExportDir(_userId: string, _projectId: string, _exportId: string): Promise<void> { this.notImplemented(); }
+    private parseVirtualPath(filePath: string): { bucket: string; key: string } {
+        const trimmed = filePath.replace(/^minio:\/\//, "");
+        const slashIndex = trimmed.indexOf("/");
+        if (slashIndex < 0) {
+            throw Object.assign(new Error("Invalid MinIO file path"), { statusCode: 500 });
+        }
+        return {
+            bucket: trimmed.slice(0, slashIndex),
+            key: trimmed.slice(slashIndex + 1),
+        };
+    }
 
-    publishDirPath(_publishId: string): string { this.notImplemented(); }
-    async writePublishFiles(_publishId: string, _files: Record<string, string>): Promise<string[]> { this.notImplemented(); }
-    resolvePublishFile(_publishId: string, _relativePath: string): string | null { this.notImplemented(); }
-    async deletePublishDir(_publishId: string): Promise<void> { this.notImplemented(); }
-    async copyPublishDir(_srcId: string, _destId: string): Promise<void> { this.notImplemented(); }
+    private async ensureBucketReady(): Promise<void> {
+        if (!this.bucketReady) {
+            this.bucketReady = (async () => {
+                const exists = await this.client.bucketExists(this.bucket);
+                if (!exists) {
+                    await this.client.makeBucket(this.bucket, env.MINIO_REGION);
+                }
+            })().catch((err) => {
+                // Reset so the next call retries instead of re-awaiting a stale rejection.
+                this.bucketReady = undefined;
+                throw err;
+            });
+        }
+        await this.bucketReady;
+    }
 
-    workspacePath(_userId: string, _projectId: string, _jobId: string): string { this.notImplemented(); }
-    workspaceInputPath(_userId: string, _projectId: string, _jobId: string): string { this.notImplemented(); }
-    workspaceInputAssetsPath(_userId: string, _projectId: string, _jobId: string): string { this.notImplemented(); }
-    workspaceInputLayer1Path(_userId: string, _projectId: string, _jobId: string): string { this.notImplemented(); }
-    workspaceOutputPath(_userId: string, _projectId: string, _jobId: string): string { this.notImplemented(); }
-    workspaceLogsPath(_userId: string, _projectId: string, _jobId: string): string { this.notImplemented(); }
-    async writeWorkspaceFile(_workspaceRoot: string, _relativePath: string, _content: string | Buffer): Promise<string> { this.notImplemented(); }
-    async deleteWorkspaceDir(_userId: string, _projectId: string, _jobId: string): Promise<void> { this.notImplemented(); }
+    uploadDirPath(userId: string, projectId: string): string {
+        return this.virtualUri(this.keyFor("uploads", userId, projectId));
+    }
 
-    profileDirPath(_userId: string): string { this.notImplemented(); }
-    async writeProfileData(_userId: string, _filename: string, _data: Buffer | string): Promise<void> { this.notImplemented(); }
-    async readProfileData(_userId: string, _filename: string): Promise<Buffer | null> { this.notImplemented(); }
-    async deleteProfileData(_userId: string, _filename: string): Promise<void> { this.notImplemented(); }
+    uploadFilePath(userId: string, projectId: string, storedFilename: string): string {
+        return this.virtualUri(this.keyFor("uploads", userId, projectId, storedFilename));
+    }
 
-    async ensureDir(_dirPath: string): Promise<void> { this.notImplemented(); }
-    async fileExists(_filePath: string): Promise<boolean> { this.notImplemented(); }
-    async fileSize(_filePath: string): Promise<number> { this.notImplemented(); }
+    async saveUpload(
+        userId: string,
+        projectId: string,
+        storedFilename: string,
+        buffer: Buffer,
+        contentType?: string,
+    ): Promise<string> {
+        await this.ensureBucketReady();
+        const key = this.keyFor("uploads", userId, projectId, storedFilename);
+        await this.client.putObject(
+            this.bucket,
+            key,
+            buffer,
+            buffer.byteLength,
+            contentType ? { "Content-Type": contentType } : undefined,
+        );
+        return this.virtualUri(key);
+    }
+
+    async deleteUpload(userId: string, projectId: string, storedFilename: string): Promise<void> {
+        await this.ensureBucketReady();
+        const key = this.keyFor("uploads", userId, projectId, storedFilename);
+        try {
+            await this.client.removeObject(this.bucket, key);
+        } catch {
+            // idempotent delete for missing objects
+        }
+    }
+
+    async createReadStream(filePath: string): Promise<NodeJS.ReadableStream> {
+        if (!isVirtualMinioPath(filePath)) {
+            return this.fallback.createReadStream(filePath);
+        }
+        const { bucket, key } = this.parseVirtualPath(filePath);
+        await this.ensureBucketReady();
+        return this.client.getObject(bucket, key);
+    }
+
+    exportDirPath(userId: string, projectId: string, exportId: string): string {
+        return this.fallback.exportDirPath(userId, projectId, exportId);
+    }
+
+    exportZipPath(userId: string, projectId: string, exportId: string): string {
+        return this.fallback.exportZipPath(userId, projectId, exportId);
+    }
+
+    async writeExportFile(userId: string, projectId: string, exportId: string, filename: string, content: string): Promise<void> {
+        return this.fallback.writeExportFile(userId, projectId, exportId, filename, content);
+    }
+
+    async deleteExportDir(userId: string, projectId: string, exportId: string): Promise<void> {
+        return this.fallback.deleteExportDir(userId, projectId, exportId);
+    }
+
+    publishDirPath(publishId: string): string {
+        return this.fallback.publishDirPath(publishId);
+    }
+
+    async writePublishFiles(publishId: string, files: Record<string, string>): Promise<string[]> {
+        return this.fallback.writePublishFiles(publishId, files);
+    }
+
+    resolvePublishFile(publishId: string, relativePath: string): string | null {
+        return this.fallback.resolvePublishFile(publishId, relativePath);
+    }
+
+    async deletePublishDir(publishId: string): Promise<void> {
+        return this.fallback.deletePublishDir(publishId);
+    }
+
+    async copyPublishDir(srcId: string, destId: string): Promise<void> {
+        return this.fallback.copyPublishDir(srcId, destId);
+    }
+
+    workspacePath(userId: string, projectId: string, jobId: string): string {
+        return this.fallback.workspacePath(userId, projectId, jobId);
+    }
+
+    workspaceInputPath(userId: string, projectId: string, jobId: string): string {
+        return this.fallback.workspaceInputPath(userId, projectId, jobId);
+    }
+
+    workspaceInputAssetsPath(userId: string, projectId: string, jobId: string): string {
+        return this.fallback.workspaceInputAssetsPath(userId, projectId, jobId);
+    }
+
+    workspaceInputLayer1Path(userId: string, projectId: string, jobId: string): string {
+        return this.fallback.workspaceInputLayer1Path(userId, projectId, jobId);
+    }
+
+    workspaceOutputPath(userId: string, projectId: string, jobId: string): string {
+        return this.fallback.workspaceOutputPath(userId, projectId, jobId);
+    }
+
+    workspaceLogsPath(userId: string, projectId: string, jobId: string): string {
+        return this.fallback.workspaceLogsPath(userId, projectId, jobId);
+    }
+
+    async writeWorkspaceFile(workspaceRoot: string, relativePath: string, content: string | Buffer): Promise<string> {
+        return this.fallback.writeWorkspaceFile(workspaceRoot, relativePath, content);
+    }
+
+    async deleteWorkspaceDir(userId: string, projectId: string, jobId: string): Promise<void> {
+        return this.fallback.deleteWorkspaceDir(userId, projectId, jobId);
+    }
+
+    profileDirPath(userId: string): string {
+        return this.virtualUri(this.keyFor("profiles", userId));
+    }
+
+    async writeProfileData(userId: string, filename: string, data: Buffer | string): Promise<void> {
+        await this.ensureBucketReady();
+        const key = this.keyFor("profiles", userId, path.basename(filename));
+        const payload = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        await this.client.putObject(this.bucket, key, payload, payload.byteLength);
+    }
+
+    async readProfileData(userId: string, filename: string): Promise<Buffer | null> {
+        await this.ensureBucketReady();
+        const key = this.keyFor("profiles", userId, path.basename(filename));
+        try {
+            const stream = await this.client.getObject(this.bucket, key);
+            return await streamToBuffer(stream);
+        } catch {
+            return null;
+        }
+    }
+
+    async deleteProfileData(userId: string, filename: string): Promise<void> {
+        await this.ensureBucketReady();
+        const key = this.keyFor("profiles", userId, path.basename(filename));
+        try {
+            await this.client.removeObject(this.bucket, key);
+        } catch {
+            // idempotent delete for missing objects
+        }
+    }
+
+    async ensureDir(dirPath: string): Promise<void> {
+        if (isVirtualMinioPath(dirPath)) return;
+        return this.fallback.ensureDir(dirPath);
+    }
+
+    async fileExists(filePath: string): Promise<boolean> {
+        if (!isVirtualMinioPath(filePath)) {
+            return this.fallback.fileExists(filePath);
+        }
+        try {
+            const { bucket, key } = this.parseVirtualPath(filePath);
+            await this.ensureBucketReady();
+            await this.client.statObject(bucket, key);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    async fileSize(filePath: string): Promise<number> {
+        if (!isVirtualMinioPath(filePath)) {
+            return this.fallback.fileSize(filePath);
+        }
+        const { bucket, key } = this.parseVirtualPath(filePath);
+        await this.ensureBucketReady();
+        const stat = await this.client.statObject(bucket, key);
+        return stat.size;
+    }
+
+    // -----------------------------------------------------------------------
+    // Snapshot thumbnails — stored in MinIO under thumbnails/{projectId}/{snapshotId}.jpg
+    // -----------------------------------------------------------------------
+
+    thumbnailFilePath(projectId: string, snapshotId: string): string {
+        return this.virtualUri(this.keyFor("thumbnails", projectId, `${snapshotId}.jpg`));
+    }
+
+    async saveThumbnailFile(projectId: string, snapshotId: string, buffer: Buffer): Promise<string> {
+        await this.ensureBucketReady();
+        const key = this.keyFor("thumbnails", projectId, `${snapshotId}.jpg`);
+        await this.client.putObject(this.bucket, key, buffer, buffer.byteLength, { "Content-Type": "image/jpeg" });
+        return this.virtualUri(key);
+    }
+
+    async getThumbnailStream(storedPath: string): Promise<NodeJS.ReadableStream> {
+        if (!isVirtualMinioPath(storedPath)) {
+            return this.fallback.getThumbnailStream(storedPath);
+        }
+        const { bucket, key } = this.parseVirtualPath(storedPath);
+        await this.ensureBucketReady();
+        return this.client.getObject(bucket, key);
+    }
+
+    async deleteThumbnailFile(storedPath: string): Promise<void> {
+        if (!isVirtualMinioPath(storedPath)) {
+            return this.fallback.deleteThumbnailFile(storedPath);
+        }
+        const { bucket, key } = this.parseVirtualPath(storedPath);
+        try {
+            await this.client.removeObject(bucket, key);
+        } catch {
+            // idempotent
+        }
+    }
 }

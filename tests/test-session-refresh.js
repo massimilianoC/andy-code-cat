@@ -44,7 +44,7 @@ async function testSessionRefresh() {
             },
             {
                 email: `test-${Date.now()}@example.com`,
-                password: 'testpassword123',
+                password: 'Testpassword123!',
                 firstName: 'Test',
                 lastName: 'User'
             }
@@ -69,7 +69,7 @@ async function testSessionRefresh() {
             },
             {
                 email: registerRes.body.user.email,
-                password: 'testpassword123'
+                password: 'Testpassword123!'
             }
         );
 

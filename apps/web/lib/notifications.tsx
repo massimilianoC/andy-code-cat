@@ -61,14 +61,24 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
             ...prev,
             { ...n, id, startedAt: Date.now() },
         ]);
-        // Auto-open panel when a process starts
-        setPanelOpen(true);
         return id;
     }, []);
 
     const update = useCallback((id: string, patch: Partial<Omit<SystemNotification, "id">>) => {
         setNotifications((prev) =>
-            prev.map((n) => (n.id === id ? { ...n, ...patch } : n))
+            prev.map((n) => {
+                if (n.id !== id) return n;
+
+                const nextStatus = patch.status ?? n.status;
+                return {
+                    ...n,
+                    ...patch,
+                    completedAt:
+                        patch.completedAt ??
+                        (nextStatus === "running" ? n.completedAt : Date.now()),
+                    progress: nextStatus === "running" ? patch.progress ?? n.progress : 100,
+                };
+            })
         );
     }, []);
 

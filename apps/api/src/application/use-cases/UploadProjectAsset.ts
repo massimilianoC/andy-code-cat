@@ -4,6 +4,7 @@ import type { ProjectAsset } from "../../domain/entities/ProjectAsset";
 import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAssetRepository";
 import type { IFileStorage } from "../../infra/storage/IFileStorage";
 import { env } from "../../config";
+import { buildAssetSemanticMetadata, guessStyleRole } from "../media/projectAssetSemantics";
 
 const ALLOWED_MIME_PREFIXES = ["image/", "text/", "application/pdf", "application/json"];
 const QUOTA_TOTAL_BYTES = 100 * 1024 * 1024; // 100 MB
@@ -36,8 +37,9 @@ export class UploadProjectAsset {
         fileSize: number;
         buffer: Buffer;
         label?: string;
+        scope?: "project" | "user";
         useInProject?: boolean;
-        styleRole?: "inspiration" | "material";
+        styleRole?: "inspiration" | "material" | "logo" | "background" | "icon" | "watermark" | "reference";
         descriptionText?: string;
     }): Promise<ProjectAsset> {
         if (!isAllowedMime(input.mimeType)) {
@@ -62,7 +64,15 @@ export class UploadProjectAsset {
         const safeFilename = safenameFromOriginal(input.originalName);
         const storedFilename = `${assetId}-${safeFilename}`;
 
-        await this.storage.saveUpload(input.userId, input.projectId, storedFilename, input.buffer);
+        await this.storage.saveUpload(input.userId, input.projectId, storedFilename, input.buffer, input.mimeType);
+
+        const semanticMetadata = env.MEDIA_AUTO_CLASSIFY_UPLOADS === true
+            ? buildAssetSemanticMetadata({
+                promptOrName: input.descriptionText || input.label || input.originalName,
+                mimeType: input.mimeType,
+                mediaKind: input.mimeType.startsWith("image/") ? "image" : "document",
+            })
+            : undefined;
 
         return this.assetRepository.create({
             projectId: input.projectId,
@@ -72,10 +82,13 @@ export class UploadProjectAsset {
             mimeType: input.mimeType,
             fileSize: input.fileSize,
             source: "user_upload",
+            scope: input.scope ?? "project",
             label: input.label,
             useInProject: input.useInProject,
-            styleRole: input.styleRole,
+            styleRole: input.styleRole ?? (semanticMetadata ? guessStyleRole(semanticMetadata.mediaKind) : undefined),
             descriptionText: input.descriptionText,
+            generationStatus: "ready",
+            semanticMetadata,
         });
     }
 }

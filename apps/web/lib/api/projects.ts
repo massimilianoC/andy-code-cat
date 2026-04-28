@@ -6,6 +6,15 @@ export interface Project {
     ownerUserId: string;
     presetId?: string;
     createdAt: string;
+    /** Total LLM cost in EUR for this project (sum of succeeded runs). */
+    totalCostEur?: number;
+    /** Relative URL of the live published site, e.g. /p/{publishId}. Null if not published. */
+    publishedUrl?: string | null;
+    /**
+     * Snapshot ID of the active snapshot that has a ready Puppeteer thumbnail.
+     * Present only after the background job completes. Used to build the thumbnail URL.
+     */
+    activeThumbnailSnapshotId?: string;
 }
 
 export interface PresetOutputSpec {
@@ -28,6 +37,12 @@ export interface PresetTagDefaults {
     audienceTags?: string[];
 }
 
+export interface PresetRecommendedModelDto {
+    provider: string;
+    modelId: string;
+    label?: string;
+}
+
 export interface ProjectPreset {
     id: string;
     label: string;
@@ -35,6 +50,16 @@ export interface ProjectPreset {
     labelEn: string;
     hint: string;
     icon: string;
+    category?: string;
+    categoryLabel?: string;
+    categoryHint?: string;
+    tags?: string[];
+    sortOrder?: number;
+    isActive?: boolean;
+    scope?: "global" | "user" | "project";
+    status?: "draft" | "pending_review" | "published" | "archived";
+    ownerUserId?: string;
+    recommendedModel?: PresetRecommendedModelDto;
     outputSpec: PresetOutputSpec;
     defaultTags: PresetTagDefaults;
     briefTemplate: string;

@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getThumbnail, getPromptExcerpt, getSnapCount } from "@/lib/thumbnail";
+import { getAccessToken } from "@/lib/token-store";
 
 interface ProjectCardProps {
     project: Project;
@@ -46,21 +47,69 @@ function relativeTime(dateString: string, t: (key: string, opts?: any) => string
     return new Date(dateString).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
+/** Fetch a thumbnail JPEG with auth and return an object URL, or null on failure. */
+async function fetchThumbnailBlobUrl(projectId: string, snapshotId: string): Promise<string | null> {
+    const token = getAccessToken();
+    if (!token) return null;
+    const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+    const url = `${base}/v1/projects/${projectId}/preview-snapshots/${snapshotId}/thumbnail`;
+    try {
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        return URL.createObjectURL(blob);
+    } catch {
+        return null;
+    }
+}
+
 export default function ProjectCard({ project, onOpen, onDuplicate, onDelete, onCopyPrompt }: ProjectCardProps) {
     const { t } = useTranslation();
     const gradientIndex = project.id.charCodeAt(0) % GRADIENT_PALETTES.length;
     const gradient = GRADIENT_PALETTES[gradientIndex];
 
-    const [thumbnail, setThumbnail] = useState<string | null>(null);
+    // screenshotUrl — Puppeteer JPEG blob URL (preferred when available)
+    const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+    // legacyHtml — full-HTML localStorage-based thumbnail (fallback)
+    const [legacyHtml, setLegacyHtml] = useState<string | null>(null);
     const [promptExcerpt, setPromptExcerpt] = useState<string | null>(null);
     const [snapCount, setSnapCount] = useState(0);
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    const blobUrlRef = useRef<string | null>(null);
 
     useEffect(() => {
-        setThumbnail(getThumbnail(project.id));
+        setLegacyHtml(getThumbnail(project.id));
         setPromptExcerpt(getPromptExcerpt(project.id));
         setSnapCount(getSnapCount(project.id));
     }, [project.id]);
+
+    // Fetch Puppeteer screenshot when the project has one ready
+    useEffect(() => {
+        if (!project.activeThumbnailSnapshotId) return;
+        let cancelled = false;
+
+        fetchThumbnailBlobUrl(project.id, project.activeThumbnailSnapshotId).then((url) => {
+            if (cancelled || !url) return;
+            // Revoke previous blob URL to avoid memory leaks
+            if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+            blobUrlRef.current = url;
+            setScreenshotUrl(url);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [project.id, project.activeThumbnailSnapshotId]);
+
+    // Revoke blob URL on unmount
+    useEffect(() => {
+        return () => {
+            if (blobUrlRef.current) {
+                URL.revokeObjectURL(blobUrlRef.current);
+                blobUrlRef.current = null;
+            }
+        };
+    }, []);
 
     return (
         <div className="group relative bg-card rounded-2xl border border-border overflow-hidden hover:shadow-xl hover:border-primary/40 transition-all duration-200 flex flex-col">
@@ -71,12 +120,28 @@ export default function ProjectCard({ project, onOpen, onDuplicate, onDelete, on
                 onClick={() => onOpen(project)}
                 aria-label={`Apri ${project.name}`}
             >
-                {thumbnail ? (
-                    /* Render actual snapshot HTML at reduced scale */
+                {screenshotUrl ? (
+                    /* Puppeteer JPEG screenshot — width-aligned, anchored to top */
+                    <img
+                        src={screenshotUrl}
+                        alt={`Anteprima ${project.name}`}
+                        aria-hidden="true"
+                        style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            objectPosition: "top center",
+                            display: "block",
+                            pointerEvents: "none",
+                            userSelect: "none",
+                        }}
+                    />
+                ) : legacyHtml ? (
+                    /* Fallback: render actual snapshot HTML at reduced scale */
                     <div className="absolute inset-0 overflow-hidden">
                         <iframe
                             ref={iframeRef}
-                            srcDoc={thumbnail}
+                            srcDoc={legacyHtml}
                             title={`Anteprima ${project.name}`}
                             sandbox=""
                             scrolling="no"
@@ -181,6 +246,44 @@ export default function ProjectCard({ project, onOpen, onDuplicate, onDelete, on
                     <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                         {promptExcerpt}
                     </p>
+                )}
+
+                {/* Cost + publish row */}
+                {(project.totalCostEur != null || project.publishedUrl) && (
+                    <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                        {project.totalCostEur != null && project.totalCostEur > 0 && (
+                            <span
+                                className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-secondary/60 rounded px-1.5 py-0.5"
+                                title={`Costo totale LLM: €${project.totalCostEur.toFixed(6)}`}
+                            >
+                                <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                €{project.totalCostEur < 0.0001
+                                    ? project.totalCostEur.toExponential(2)
+                                    : project.totalCostEur.toFixed(4)}
+                            </span>
+                        )}
+                        {project.publishedUrl && (
+                            <a
+                                href={
+                                    project.publishedUrl.startsWith("/")
+                                        ? `${(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000")}${project.publishedUrl}`
+                                        : project.publishedUrl
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 bg-primary/10 rounded px-1.5 py-0.5 transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                                title="Sito pubblicato — apri in nuova scheda"
+                            >
+                                <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                                Pubblicato
+                            </a>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

@@ -2,25 +2,25 @@
 
 ## Summary
 
-Describe what changes and why.
+Describe what changed and why.
 
 ## Checklist
 
-- [ ] Branch follows Gitflow (base: `develop`, except for hotfixes)
-- [ ] If the branch is `release/*`, its name uses the `release/YYYY.MM.DD.N` format and matches `RELEASE_VERSION`
-- [ ] Commit in Conventional Commits
+- [ ] Branch follows Gitflow policy (base: `develop`, unless this is a hotfix)
+- [ ] If this is a `release/*` branch, the name matches `release/YYYY.MM.DD.N` and `RELEASE_VERSION`
+- [ ] Commits follow Conventional Commits
 - [ ] No secrets or sensitive data were committed
-- [ ] Contracts/API updated if needed (`packages/contracts`)
-- [ ] Documentation updated if needed (`docs/INDEX.md`, runbooks, architecture)
-- [ ] Relevant tests were executed successfully
+- [ ] Contracts or APIs were updated when required (`packages/contracts`)
+- [ ] Documentation was updated when needed (`docs/INDEX.md`, runbooks, architecture)
+- [ ] Relevant tests or validation checks were executed successfully
 
 ## Testing
 
-List the commands/tests that were run and their results.
+List the commands or checks you ran and their outcome.
 
 ## Scope & Risk
 
-Describe impacts, possible regressions, and mitigations.
+Describe impact, possible regressions, and mitigations.
 
 ## Linked Issues
 

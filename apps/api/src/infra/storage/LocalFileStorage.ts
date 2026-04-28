@@ -1,4 +1,5 @@
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import { env } from "../../config";
 import type { IFileStorage } from "./IFileStorage";
@@ -56,7 +57,8 @@ export class LocalFileStorage implements IFileStorage {
         userId: string,
         projectId: string,
         storedFilename: string,
-        buffer: Buffer
+        buffer: Buffer,
+        _contentType?: string
     ): Promise<string> {
         const dir = this.uploadDirPath(userId, projectId);
         await this.ensureDir(dir);
@@ -73,6 +75,10 @@ export class LocalFileStorage implements IFileStorage {
             // If file is already gone, ignore (idempotent delete).
             if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
         }
+    }
+
+    async createReadStream(filePath: string): Promise<NodeJS.ReadableStream> {
+        return fsSync.createReadStream(filePath);
     }
 
     async writeExportFile(
@@ -309,6 +315,37 @@ export class LocalFileStorage implements IFileStorage {
         };
         await walk(dir);
         return results;
+    }
+
+    // -----------------------------------------------------------------------
+    // Snapshot thumbnails — /data/thumbnails/{projectId}/{snapshotId}.jpg
+    // -----------------------------------------------------------------------
+
+    private thumbnailsRoot(): string {
+        return path.join(dataRoot(), "thumbnails");
+    }
+
+    thumbnailFilePath(projectId: string, snapshotId: string): string {
+        return path.join(this.thumbnailsRoot(), projectId, `${snapshotId}.jpg`);
+    }
+
+    async saveThumbnailFile(projectId: string, snapshotId: string, buffer: Buffer): Promise<string> {
+        const filePath = this.thumbnailFilePath(projectId, snapshotId);
+        await this.ensureDir(path.dirname(filePath));
+        await fs.writeFile(filePath, buffer);
+        return filePath;
+    }
+
+    async getThumbnailStream(storedPath: string): Promise<NodeJS.ReadableStream> {
+        return fsSync.createReadStream(storedPath);
+    }
+
+    async deleteThumbnailFile(storedPath: string): Promise<void> {
+        try {
+            await fs.unlink(storedPath);
+        } catch (err: unknown) {
+            if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        }
     }
 }
 

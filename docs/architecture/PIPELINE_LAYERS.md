@@ -2,27 +2,27 @@
 
 ## Overview
 
-Il sistema Andy Code Cat usa **due layer distinti** per la generazione di siti web.
-Ogni layer è indipendente, testabile e collegato al successivo da un meccanismo di trigger esplicito.
+The Andy Code Cat platform uses **two distinct generation layers**.
+Each layer is independent, testable, and explicitly connected to the next one through a trigger mechanism.
 
 ---
 
 ## Layer 1 — Chat Preview
 
-**Scopo:** iterazione rapida, feedback immediato, refinement testuale.
+**Goal:** rapid iteration, immediate feedback, and text-based refinement.
 
 ```
 User message
     │
-    ├─ + history (ultimi N turni user/assistant, budget 6000 token)
-    ├─ + currentArtifacts (HTML/CSS/JS generati in precedenza)
+    ├─ + history (latest N user/assistant turns, 6000-token budget)
+    ├─ + currentArtifacts (previously generated HTML/CSS/JS)
     ├─ + focusContext (project | preview-element | code-selection)
     │
     ▼
 LLM (SiliconFlow · dialogue model · streaming SSE)
     │
-    ├─── event: thinking  → UI: testo fluente (last 600 chars)
-    ├─── event: answer    → UI: draft box fisso (max 80px)
+    ├─── event: thinking  → UI: flowing text preview (last 600 chars)
+    ├─── event: answer    → UI: fixed draft box (max 80px)
     └─── event: done      → result: LlmChatPreviewResult
                                 │
                                 ├─ structured.chat.summary  → chat bubble
@@ -37,17 +37,17 @@ LLM (SiliconFlow · dialogue model · streaming SSE)
                                    }
 ```
 
-**Caratteristiche:**
+**Characteristics:**
 
-- Sincrono dal punto di vista UX (risposta in ~5-30s)
-- Nessun file su disco, tutto in-memory
-- Persiste in Conversation.messages (MongoDB)
-- Artifacts nell'iframe via `srcdoc` (no hosting)
-- Focus contestuale su target specifico (elemento preview o porzione codice)
+- Synchronous from the UX point of view (response in ~5-30s)
+- No disk writes, everything stays in memory
+- Persists in `Conversation.messages` (MongoDB)
+- Artifacts are rendered through iframe `srcdoc` (no hosting required)
+- Context can be focused on a specific target (preview element or code selection)
 
-### Layer 1.5 — Focused Asset Control (estensione prioritaria)
+### Layer 1.5 — Focused Asset Control
 
-Questa estensione rimane nel Layer 1 ma aggiunge controllo puntuale dell'asset da modificare.
+This extension stays in Layer 1 and adds precise control over the asset being edited.
 
 ```
 Preview iframe
@@ -68,7 +68,7 @@ Code tabs (HTML/CSS/JS)
 focusContext injected into prompt wrapper
 ```
 
-`focusContext` minimo consigliato:
+Recommended minimum `focusContext`:
 
 ```typescript
 interface FocusContext {
@@ -90,50 +90,50 @@ interface FocusContext {
 }
 ```
 
-**Limiti:**
+**Limits:**
 
-- Contesto massimo: ~6000 token (~24.000 chars)
-- Output non deployabile direttamente (inline JSON, non file strutturati)
-- Non adatto per siti con logica complessa o multi-file
+- Max context: ~6000 tokens (~24,000 chars)
+- Output is not directly deployable (inline JSON rather than structured files)
+- Not suitable for complex multi-file websites
 
 ---
 
 ## Transition Mechanism — Token Limit Trigger
 
-Il trigger è **automatico** quando `contextStats.atCapacity === true` oppure **manuale** quando l'utente clicca "Avvia Pipeline Professionale".
+The trigger is **automatic** when `contextStats.atCapacity === true`, or **manual** when the user clicks “Start Professional Pipeline”.
 
 ```
-Frontend riceve contextStats.atCapacity === true
+Frontend receives contextStats.atCapacity === true
     │
     ▼
 Banner in chat:
-"Il contesto è quasi saturo (N token / 6000).
-Vuoi avviare la pipeline professionale per generare
-i file definitivi del tuo sito?"
+"The context is almost full (N tokens / 6000).
+Do you want to start the professional pipeline to generate
+the final files for your site?"
     │
-    ├── [Continua nel chat]  → Layer 1 continua (context trimming automatico)
-    └── [Avvia Pipeline]     → POST /v1/projects/:id/generate
+    ├── [Continue in chat]   → Layer 1 continues (automatic context trimming)
+    └── [Start Pipeline]     → POST /v1/projects/:id/generate
                                   body: {
                                       conversationId,
-                                      profileId,      // opz.
-                                      fromChat: true  // porta artifacts attuali
+                                      profileId,      // optional
+                                      fromChat: true  // carries current artifacts forward
                                   }
                                   → { jobId }
                                   → redirect /jobs/:jobId
 ```
 
-**Dati trasferiti da Layer 1 a Layer 2:**
+**Data transferred from Layer 1 to Layer 2:**
 
-- `conversationId` — per estrarre storia e ultima richiesta
-- `currentArtifacts` — HTML/CSS/JS come "iteration-0" di riferimento
-- `conversationSummary` — riassunto della conversazione per il preprompt
-- `focusContext` (quando presente) — scope dell'asset selezionato da preservare/ottimizzare
+- `conversationId` — used to extract the history and latest request
+- `currentArtifacts` — HTML/CSS/JS as the “iteration-0” reference
+- `conversationSummary` — condensed summary for preprompting
+- `focusContext` — when present, preserves or optimizes the selected asset scope
 
 ---
 
 ## Layer 2 — OpenCode Pipeline
 
-**Scopo:** generazione professionale, file reali su filesystem, deploy su nginx.
+**Goal:** professional generation, real files on disk, deployment through nginx.
 
 ```
 POST /generate
@@ -143,59 +143,59 @@ Job { status: "queued" }
     │
     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    STAGE A — PrepromptEngine                 │
-│                                                              │
-│  Input: conversationId · userPrompt · profileId · attachments│
-│                                                              │
+│                    STAGE A — PrepromptEngine               │
+│                                                             │
+│  Input: conversationId · userPrompt · profileId · attachments
+│                                                             │
 │  LayerComposer (Nunjucks + JSONata)                         │
-│    └─ layers: system · context · constraint · format · persona│
-│                                                              │
-│  Output: resolvedPrompt · CLAUDE.md · opencode.json          │
-│  Cost: 0.5 crediti                                           │
+│    └─ layers: system · context · constraint · format · persona
+│                                                             │
+│  Output: resolvedPrompt · CLAUDE.md · opencode.json         │
+│  Cost: 0.5 credits                                          │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   STAGE B — GenerationWorker                 │
-│                                                              │
-│  Workspace: /data/workspaces/{jobId}/                        │
-│    ├── opencode.json                                         │
-│    ├── CLAUDE.md                                             │
-│    └── skills/                                               │
-│                                                              │
-│  spawn: opencode run --dangerously-skip-permissions          │
-│    stdout → Job.logs[] + SSE stream                          │
-│                                                              │
-│  Post-processor: verifica dist/index.html                    │
-│  Git: commit branch "iteration-N" su Gitea                   │
-│  Cost: 5 crediti/iterazione                                  │
+│                   STAGE B — GenerationWorker               │
+│                                                             │
+│  Workspace: /data/workspaces/{jobId}/                       │
+│    ├── opencode.json                                        │
+│    ├── CLAUDE.md                                            │
+│    └── skills/                                              │
+│                                                             │
+│  spawn: opencode run --dangerously-skip-permissions         │
+│    stdout → Job.logs[] + SSE stream                         │
+│                                                             │
+│  Post-processor: verify dist/index.html                     │
+│  Git: commit branch "iteration-N" in Gitea                 │
+│  Cost: 5 credits per iteration                              │
 └──────────────────────────┬──────────────────────────────────┘
                            │
               ┌────────────┴────────────┐
-              │ (opzionale, Phase 2)    │
+              │ (optional, Phase 2)     │
               ▼                         │
 ┌─────────────────────────┐             │
 │  STAGE C — QualityCheck │             │
 │                         │             │
 │  Playwright screenshot  │  score≥75 → │
 │  LLM vision score       │             │
-│  se score<75: re-run B  │             │
-│  Cost: 1.5 cred/ciclo   │             │
+│  if score<75: re-run B  │             │
+│  Cost: 1.5 credits/cycle│             │
 └───────────┬─────────────┘             │
             └───────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    STAGE D — DeployWorker                    │
-│                                                              │
-│  Copy: dist/ → /var/www/Andy Code Cat/{slug}/                    │
-│  nginx.conf: template Nunjucks → sites-available/            │
-│  nginx -t → rollback se KO                                   │
-│  nginx reload (graceful)                                     │
-│  Certbot SSL (prod) / http (dev)                             │
-│  Cost: 1 credito                                             │
-│                                                              │
-│  Output: https://{slug}.Andy Code Cat.io                         │
+│                    STAGE D — DeployWorker                  │
+│                                                             │
+│  Copy: dist/ → /var/www/Andy Code Cat/{slug}/               │
+│  nginx.conf: Nunjucks template → sites-available/           │
+│  nginx -t → rollback if invalid                             │
+│  nginx reload (graceful)                                    │
+│  Certbot SSL (prod) / HTTP only (dev)                       │
+│  Cost: 1 credit                                             │
+│                                                             │
+│  Output: https://{slug}.Andy Code Cat.io                    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -203,10 +203,10 @@ Job { status: "queued" }
 
 ```
 queued → running → completed
-                └→ failed (con retry automatico max 2)
+                └→ failed (with automatic retry up to 2 times)
 ```
 
-**SSE events dal job:**
+**SSE events from the job:**
 
 ```typescript
 type JobEvent =
@@ -221,24 +221,24 @@ type JobEvent =
 
 ---
 
-## Confronto dei due layer
+## Comparing the two layers
 
-| Aspetto | Layer 1 Chat Preview | Layer 2 OpenCode Pipeline |
+| Aspect | Layer 1 Chat Preview | Layer 2 OpenCode Pipeline |
 |---|---|---|
-| Latenza | 5-30s | 1-10 min |
-| Output | JSON inline (HTML/CSS/JS string) | File reali su disco |
-| Deploy | No (iframe srcdoc) | Sì (nginx serve) |
-| Iterazioni | Tramite chat | Branch git iteration-N |
-| Rollback | Storia conversazione | `POST /iterations/:n/restore` |
-| Costo | ~0 (token LLM) | 5-8 crediti per run |
-| Adatto per | Esplorazione, brief, mockup | Sito definitivo, produzione |
-| Limite | 6000 token contesto | Nessun limite pratico |
+| Latency | 5-30s | 1-10 min |
+| Output | Inline JSON (HTML/CSS/JS strings) | Real files on disk |
+| Deploy | No (`iframe srcdoc`) | Yes (served by nginx) |
+| Iterations | Through chat | Git branch `iteration-N` |
+| Rollback | Conversation history | `POST /iterations/:n/restore` |
+| Cost | ~0 (LLM tokens only) | 5-8 credits per run |
+| Best for | Exploration, briefing, mockups | Final production site |
+| Limit | 6000 context tokens | No practical limit |
 
 ---
 
-## Configurazione pipeline per PrepromptProfile
+## Pipeline configuration per `PrepromptProfile`
 
-Ogni profilo definisce quali stage attivare e i parametri per stage:
+Each profile defines which stages are active and which parameters each stage uses:
 
 ```typescript
 interface PipelineConfig {
@@ -253,8 +253,8 @@ interface PipelineConfig {
         mode: 'placeholder' | 'flux' | 'dalle';
     };
     deploy?: {
-        autoPublish: boolean;   // se false, richiede conferma utente
-        domain?: string;        // custom domain opzionale
+        autoPublish: boolean;   // if false, explicit user confirmation is required
+        domain?: string;        // optional custom domain
     };
 }
 
@@ -271,20 +271,20 @@ const defaultPipeline: PipelineConfig = {
 
 ## Double Sandboxing (Layer 2)
 
-Ogni workspace è isolato a due livelli:
+Each workspace is isolated at two levels:
 
 ```
-Livello 1 — Tenant sandbox (utente)
-    /data/workspaces/{jobId}/      ← workspace del singolo job
-    /var/www/Andy Code Cat/{slug}/     ← webroot del progetto
-    
-    Isolamento: ogni job ha una directory dedicata
-    Cleanup: workspace eliminato dopo N giorni (configurabile)
+Level 1 — Tenant sandbox (user)
+    /data/workspaces/{jobId}/          ← workspace for a single job
+    /var/www/Andy Code Cat/{slug}/     ← project webroot
 
-Livello 2 — Project sandbox (progetto)
-    nginx: ogni subdomain serve solo il suo webroot
-    crediti: addebitati per userId+projectId
-    git: ogni progetto ha il suo repo Gitea privato
+    Isolation: each job has a dedicated directory
+    Cleanup: workspace is removed after N days (configurable)
+
+Level 2 — Project sandbox (project)
+    nginx: each subdomain serves only its own webroot
+    credits: charged per userId + projectId
+    git: each project has its own private Gitea repository
 ```
 
-Questo modello rispecchia il `Tenant Isolation Model` definito in `AGENTS.md`.
+This model mirrors the `Tenant Isolation Model` defined in `AGENTS.md`.

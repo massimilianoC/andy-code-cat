@@ -7,13 +7,18 @@ import { MongoProjectRepository } from "../../../infra/repositories/MongoProject
 import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
 import { MongoSessionRepository } from "../../../infra/repositories/MongoSessionRepository";
+import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
+import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
+import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
+import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { DeleteProject } from "../../../application/use-cases/DeleteProject";
 import { DuplicateProject } from "../../../application/use-cases/DuplicateProject";
 import { GetProjectMoodboard } from "../../../application/use-cases/GetProjectMoodboard";
 import { UpdateProjectMoodboard } from "../../../application/use-cases/UpdateProjectMoodboard";
 import { hashPassword } from "../../../infra/security/password";
 import { signRefreshToken, verifyRefreshToken } from "../../../infra/security/jwt";
-import { PRESET_MAP, VALID_PRESET_IDS } from "../../../domain/entities/ProjectPreset";
+import { PRESET_MAP } from "../../../domain/entities/ProjectPreset";
 import type { RequestWithContext } from "../types";
 
 const createProjectSchema = z.object({
@@ -51,6 +56,11 @@ export function createProjectRoutes(): Router {
     const sessionRepository = new MongoSessionRepository();
     const moodboardRepository = new MongoProjectMoodboardRepository();
     const promptConfigRepository = new MongoLlmPromptConfigRepository();
+    const presetRepository = new MongoProjectPresetRepository();
+    const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const siteDeploymentRepository = new MongoSiteDeploymentRepository();
+    const assetRepository = new MongoProjectAssetRepository();
+    const previewSnapshotRepository = new MongoPreviewSnapshotRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
     const deleteProject = new DeleteProject(projectRepository, moodboardRepository);
@@ -62,8 +72,36 @@ export function createProjectRoutes(): Router {
 
     router.get("/projects", async (req: RequestWithContext, res, next) => {
         try {
-            const projects = await projectRepository.listForUser(req.auth!.userId);
-            res.json({ projects });
+            const userId = req.auth!.userId;
+            const projects = await projectRepository.listForUser(userId);
+
+            const projectIds = projects.map((p) => p.id);
+
+            const [costMap, imageGenCostMap, liveDeployments, activeSnapshotMap] = await Promise.all([
+                promptExecutionLogRepository.summarizeCostsByUser(userId),
+                assetRepository.summarizeGenerationCostsByUser(userId),
+                siteDeploymentRepository.findActivesByUserId(userId),
+                previewSnapshotRepository.getActiveForProjects(projectIds),
+            ]);
+
+            const deploymentByProject = new Map<string, string>();
+            for (const d of liveDeployments) {
+                if (!deploymentByProject.has(d.projectId)) {
+                    deploymentByProject.set(d.projectId, d.url);
+                }
+            }
+
+            const enriched = projects.map((p) => {
+                const activeSnap = activeSnapshotMap.get(p.id);
+                return {
+                    ...p,
+                    totalCostEur: (costMap[p.id] ?? 0) + (imageGenCostMap[p.id] ?? 0),
+                    publishedUrl: deploymentByProject.get(p.id) ?? null,
+                    activeThumbnailSnapshotId: activeSnap?.thumbnailPath ? activeSnap.id : undefined,
+                };
+            });
+
+            res.json({ projects: enriched });
         } catch (error) {
             next(error);
         }
@@ -73,8 +111,11 @@ export function createProjectRoutes(): Router {
         try {
             const { name, presetId } = createProjectSchema.parse(req.body);
 
-            // Validate presetId if provided
-            if (presetId !== undefined && !VALID_PRESET_IDS.has(presetId)) {
+            const preset = presetId
+                ? (await presetRepository.findById(presetId).catch(() => null)) ?? PRESET_MAP.get(presetId) ?? null
+                : null;
+
+            if (presetId !== undefined && !preset) {
                 res.status(400).json({ error: `Unknown preset: ${presetId}` });
                 return;
             }
@@ -82,8 +123,7 @@ export function createProjectRoutes(): Router {
             const project = await projectRepository.create(req.auth!.userId, name, presetId);
 
             // Seed moodboard from preset defaults when presetId is provided
-            if (presetId) {
-                const preset = PRESET_MAP.get(presetId)!;
+            if (preset) {
                 const tags = preset.defaultTags;
                 const brief = preset.briefTemplate.replace(/\{\{projectName\}\}/g, name);
                 await moodboardRepository.upsert(project.id, req.auth!.userId, {

@@ -1,152 +1,112 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Bell, CheckCircle2, Loader2, X, XCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useNotifications, type SystemNotification } from "../lib/notifications";
 
-// ---------------------------------------------------------------------------
-// Spinner (CSS-based, no external lib)
-// ---------------------------------------------------------------------------
-function Spinner() {
-    return (
-        <span
-            style={{
-                display: "inline-block",
-                width: 14,
-                height: 14,
-                border: "2px solid var(--border)",
-                borderTopColor: "var(--accent)",
-                borderRadius: "50%",
-                animation: "pf-spin 0.7s linear infinite",
-                flexShrink: 0,
-            }}
-        />
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Single notification row
-// ---------------------------------------------------------------------------
 function NotificationRow({ n, onRemove }: { n: SystemNotification; onRemove: () => void }) {
     const { t } = useTranslation();
     const isRunning = n.status === "running";
     const isDone = n.status === "done";
     const isError = n.status === "error";
 
-    const iconColor = isRunning
-        ? "var(--accent)"
-        : isDone
-        ? "var(--success)"
-        : "var(--danger)";
-
-    const statusIcon = isRunning ? null : isDone ? "✓" : "✕";
-
     return (
-        <div
-            style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "0.5rem",
-                padding: "0.5rem 0.55rem",
-                borderBottom: "1px solid var(--border)",
-                fontSize: "0.78rem",
-            }}
-        >
-            {/* Status indicator */}
-            <div style={{ paddingTop: 1, flexShrink: 0, color: iconColor }}>
+        <div className="flex items-start gap-3 border-b border-border px-3 py-3 text-sm last:border-b-0">
+            <div
+                className={cn(
+                    "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
+                    isRunning && "border-primary/30 bg-primary/10",
+                    isDone && "border-success/30 bg-success/10",
+                    isError && "border-destructive/30 bg-destructive/10"
+                )}
+            >
                 {isRunning ? (
-                    <Spinner />
+                    <Loader2 className="size-4 animate-spin text-primary" />
+                ) : isDone ? (
+                    <CheckCircle2 className="size-4 text-success" />
                 ) : (
-                    <span style={{ fontWeight: 700, fontSize: 12 }}>{statusIcon}</span>
+                    <XCircle className="size-4 text-destructive" />
                 )}
             </div>
 
-            {/* Main content */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                    style={{
-                        color: isError ? "var(--danger)" : "var(--text)",
-                        fontWeight: 500,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                    }}
-                >
+            <div className="min-w-0 flex-1">
+                <div className={cn("truncate font-medium", isError ? "text-destructive" : "text-foreground")}>
                     {n.label}
                 </div>
 
-                {/* Progress bar (deterministic) */}
                 {isRunning && typeof n.progress === "number" && (
-                    <div
-                        style={{
-                            marginTop: "0.3rem",
-                            height: 4,
-                            background: "var(--border)",
-                            borderRadius: 2,
-                            overflow: "hidden",
-                        }}
-                    >
-                        <div
-                            style={{
-                                height: "100%",
-                                width: `${Math.min(100, n.progress)}%`,
-                                background: "var(--accent)",
-                                transition: "width 0.3s ease",
-                            }}
-                        />
+                    <div className="mt-1.5">
+                        <Badge variant="outline" className="text-[11px]">
+                            {Math.min(100, n.progress)}%
+                        </Badge>
                     </div>
                 )}
 
-                {/* Message detail */}
                 {n.message && (
-                    <div
-                        style={{
-                            color: isError ? "var(--danger)" : "var(--text-muted)",
-                            marginTop: "0.2rem",
-                            fontSize: "0.72rem",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                        }}
-                    >
+                    <div className={cn("mt-1 text-xs break-words", isError ? "text-destructive/90" : "text-muted-foreground")}>
                         {n.message}
                     </div>
                 )}
             </div>
 
-            {/* Close button — always visible */}
-            <button
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 text-muted-foreground"
                 onClick={onRemove}
                 title={t("notifications.close")}
-                style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "var(--text-muted)",
-                    fontSize: 13,
-                    lineHeight: 1,
-                    padding: "0 2px",
-                    flexShrink: 0,
-                }}
+                aria-label={t("notifications.close")}
             >
-                ×
-            </button>
+                <X className="size-4" />
+            </Button>
         </div>
     );
 }
 
-// ---------------------------------------------------------------------------
-// Panel + toggle button (Chrome-download style — bottom-right fixed)
-// ---------------------------------------------------------------------------
-export function NotificationPanel() {
+export function NotificationPanel({ hideTrigger = false }: { hideTrigger?: boolean }) {
     const { t } = useTranslation();
     const { notifications, remove, panelOpen, setPanelOpen } = useNotifications();
     const panelRef = useRef<HTMLDivElement>(null);
 
-    const runningCount = notifications.filter((n) => n.status === "running").length;
-    const hasAny = notifications.length > 0;
+    const orderedNotifications = useMemo(
+        () =>
+            [...notifications].sort((a, b) => {
+                const aRunning = a.status === "running";
+                const bRunning = b.status === "running";
 
-    // Close panel on outside click
+                if (aRunning !== bRunning) {
+                    return aRunning ? -1 : 1;
+                }
+
+                return (b.completedAt ?? b.startedAt) - (a.completedAt ?? a.startedAt);
+            }),
+        [notifications]
+    );
+
+    const runningCount = orderedNotifications.filter((n) => n.status === "running").length;
+    const doneCount = orderedNotifications.filter((n) => n.status === "done").length;
+    const errorCount = orderedNotifications.filter((n) => n.status === "error").length;
+    const hasAny = orderedNotifications.length > 0;
+
+    // Animate badge when a new notification is added
+    const [bumped, setBumped] = useState(false);
+    const prevCountRef = useRef(orderedNotifications.length);
+    useEffect(() => {
+        const curr = orderedNotifications.length;
+        if (curr > prevCountRef.current) {
+            setBumped(true);
+            const timer = setTimeout(() => setBumped(false), 450);
+            prevCountRef.current = curr;
+            return () => clearTimeout(timer);
+        }
+        prevCountRef.current = curr;
+    }, [orderedNotifications.length]);
+
     useEffect(() => {
         function onDown(e: MouseEvent) {
             if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
@@ -157,122 +117,86 @@ export function NotificationPanel() {
         return () => document.removeEventListener("mousedown", onDown);
     }, [setPanelOpen]);
 
-    // Don't render anything when no notifications exist
     if (!hasAny && !panelOpen) return null;
 
     return (
-        <>
-            {/* Keyframe for spinner — injected once */}
-            <style>{`@keyframes pf-spin { to { transform: rotate(360deg); } }`}</style>
-
-            <div
-                ref={panelRef}
-                style={{
-                    position: "fixed",
-                    bottom: "3.5rem",
-                    left: "1rem",
-                    zIndex: 1000,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "flex-start",
-                    gap: "0.35rem",
-                }}
-            >
-                {/* Panel */}
-                {panelOpen && hasAny && (
-                    <div
-                        style={{
-                            background: "var(--surface)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "var(--radius)",
-                            width: 280,
-                            maxHeight: 360,
-                            overflowY: "auto",
-                            boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
-                        }}
-                    >
-                        {/* Header */}
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                padding: "0.45rem 0.6rem",
-                                borderBottom: "1px solid var(--border)",
-                                fontSize: "0.75rem",
-                                color: "var(--text-muted)",
-                                fontWeight: 600,
-                                letterSpacing: "0.04em",
-                                textTransform: "uppercase",
-                            }}
-                        >
-                            <span>{t("notifications.title")}</span>
-                            {notifications.some((n) => n.status !== "running") && (
-                                <button
-                                    onClick={() => notifications.forEach((n) => n.status !== "running" && remove(n.id))}
-                                    style={{
-                                        background: "none",
-                                        border: "none",
-                                        cursor: "pointer",
-                                        color: "var(--text-muted)",
-                                        fontSize: "0.7rem",
-                                        padding: 0,
-                                    }}
-                                    title={t("notifications.clearTitle")}
-                                >
-                                    {t("notifications.clear")}
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Notification rows */}
-                        {notifications.map((n) => (
-                            <NotificationRow
-                                key={n.id}
-                                n={n}
-                                onRemove={() => remove(n.id)}
-                            />
-                        ))}
-                    </div>
-                )}
-
-                {/* Toggle button (Chrome-download style) */}
-                {hasAny && (
-                    <button
+        <div
+            ref={panelRef}
+            className="fixed right-4 top-[52px] z-[1000] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2"
+            aria-live="polite"
+        >
+            {!hideTrigger && hasAny && (
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-card/95 p-2 shadow-xl backdrop-blur">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={() => setPanelOpen(!panelOpen)}
                         title={panelOpen ? t("notifications.hide") : t("notifications.show")}
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.35rem",
-                            background: "var(--surface)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "var(--radius)",
-                            color: runningCount > 0 ? "var(--accent)" : "var(--text-muted)",
-                            cursor: "pointer",
-                            fontSize: "0.78rem",
-                            fontWeight: 600,
-                            padding: "0.35rem 0.65rem",
-                            boxShadow: runningCount > 0
-                                ? "0 0 0 2px rgba(99,102,241,0.25)"
-                                : "none",
-                            transition: "box-shadow 0.2s",
-                        }}
-                    >
-                        {/* Icon */}
-                        {runningCount > 0 ? <Spinner /> : <span style={{ fontSize: 13 }}>⬇</span>}
-
-                        {/* Badge */}
-                        {runningCount > 0 ? (
-                            <span>
-                                {t("notifications.running", { count: runningCount })}
-                            </span>
-                        ) : (
-                            <span>{t("notifications.completed", { count: notifications.length })}</span>
+                        className={cn(
+                            "gap-2 border-border bg-transparent",
+                            runningCount > 0 && "border-primary/40 text-primary"
                         )}
-                    </button>
-                )}
-            </div>
-        </>
+                    >
+                        {runningCount > 0 ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}
+                        <span className="max-w-44 truncate">
+                            {runningCount > 0
+                                ? t("notifications.running", { count: runningCount })
+                                : t("notifications.completed", { count: doneCount || orderedNotifications.length })}
+                        </span>
+                        <Badge
+                            variant={runningCount > 0 ? "accent" : "outline"}
+                            className={cn(
+                                "ml-1 transition-all duration-200",
+                                bumped && "scale-150 ring-2 ring-primary/60"
+                            )}
+                        >
+                            {runningCount > 0 ? runningCount : orderedNotifications.length}
+                        </Badge>
+                    </Button>
+
+                    {doneCount > 0 && (
+                        <Badge variant="success" className="hidden md:inline-flex">
+                            {doneCount} ✓
+                        </Badge>
+                    )}
+
+                    {errorCount > 0 && (
+                        <Badge variant="destructive" className="hidden md:inline-flex">
+                            {errorCount} !
+                        </Badge>
+                    )}
+                </div>
+            )}
+
+            {panelOpen && hasAny && (
+                <div className="w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+                    <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            {t("notifications.title")}
+                        </div>
+
+                        {orderedNotifications.some((n) => n.status !== "running") && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground"
+                                onClick={() => orderedNotifications.forEach((n) => n.status !== "running" && remove(n.id))}
+                                title={t("notifications.clearTitle")}
+                            >
+                                {t("notifications.clear")}
+                            </Button>
+                        )}
+                    </div>
+
+                    <div className="max-h-[24rem] overflow-y-auto">
+                        {orderedNotifications.map((n) => (
+                            <NotificationRow key={n.id} n={n} onRemove={() => remove(n.id)} />
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

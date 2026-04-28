@@ -92,11 +92,75 @@
 ### Step 11b - Backward Compatibility of Platform Config
 
 - Call `PATCH /v1/admin/config` with payload containing only legacy fields:
- 	- `registrationOpen`
- 	- `emailVerificationRequired`
- 	- `defaultUserLimits`
+  - `registrationOpen`
+  - `emailVerificationRequired`
+  - `defaultUserLimits`
 - Expected: 200 OK and no regression in existing config reads/writes
 - Verify: `governanceByProduct` remains optional and does not break old clients
+
+### Step 11c - Superadmin User Sidebar Operations
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/users`
+- Click a row in the users table
+- Expected: a right sidebar opens with status, profile, roles, limits, password controls, and project summary
+- Change first name / last name / email and confirm save
+- Expected: updated values are persisted and reloaded in the sidebar and list
+- Trigger `Force reset next login`
+- Expected: user detail reports `requiresPasswordChange = true`
+- Reset password with a temporary password and keep `Force change on next login` enabled
+- Expected: reset succeeds and existing sessions for that user are invalidated
+- Block the user
+- Expected: user becomes blocked and public published sites owned by the user return HTTP 403
+
+### Step 11d - Preset Registry and Start UX
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/presets`
+- Click `Sync presets → Mongo`
+- Expected: the preset seed is persisted and editable from the superadmin UI
+- Change category, short hint, sort order, or recommended model for one preset and save
+- Expected: the preset remains visible in the registry with the updated metadata
+- Open `/dashboard`
+- Expected: presets are grouped by category, `Blank` remains available, and recommended-model badges are shown when configured
+- Create a project from a preset that has a recommended model
+- Expected: the workspace defaults to that provider/model when available in the runtime catalog
+
+### Step 11e - Template Preprompting Governance
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/governance`
+- Verify the optimized preprompting section is visible and editable
+- Expected: the superadmin can tune the pre-generation rewriting layer used by the active project-type template model
+
+### Step 11e-bis - Advanced LLM Runtime Catalog (optional)
+
+- Open `/admin/models` only if runtime-provider maintenance is needed
+- Expected: this area is clearly secondary and does not replace the template-model governance flow
+
+### Step 11f - AI-assisted Template Authoring
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/presets`
+- In the `AI Template Workbench`, write a short instruction for a new template family (for example VR, 3D game, or poster format)
+- Click `Generate AI draft`
+- Expected: the current template form is enriched with AI-generated brief, style direction, tags, and preprompt module suggestions
+
+### Step 11g - Current UX/E2E Validation Boundary
+
+The current preset-governance wave is considered validated when:
+
+- Step 11d passes
+- Step 11e passes
+- the dashboard start flow remains smooth for blank and categorized template models
+- the workspace still opens correctly after project creation and recommended runtime auto-selection
+
+The following are **not blockers** for the current UX/E2E cycle:
+
+- drag-and-drop preset reordering
+- user-private presets or `pending_review` submission flows
+
+These two items are additive roadmap improvements and can be delivered after the current browser validation cycle.
 
 ---
 
@@ -129,6 +193,22 @@
 - Send 3 consecutive prompts with changes
 - Expected: 3 snapshots ordered by timestamp, browsable from the history combo box
 - Expected: restoring a previous snapshot is available
+
+### Step 16a - Asset Storage Adapter
+
+- Set `STORAGE_ADAPTER=minio` with valid MinIO credentials and start the stack
+- Upload an image from the project asset manager
+- Expected: upload, list, download, and delete continue to work through the same API routes
+- Verify: the object is isolated under the same user/project sandbox path and the file can still be streamed back from the API
+
+### Step 16b - Provider-backed Image Generation
+
+- Ensure `SILICONFLOW_API_KEY` is configured and `STORAGE_ADAPTER=minio`
+- In the workspace, enable `Inspect`, select an element, open the media inspector, and click `Generate image`
+- Expected: `POST /v1/projects/:id/assets/generate-image` returns `202 queued` with a placeholder asset immediately
+- Expected: within a few seconds, the asset changes to `generationStatus = ready`
+- Verify: the saved asset now includes provider metadata such as provider, model, image size, prompt, timing, cost, and the persisted semantic classification payload
+- Verify: the binary is stored in MinIO and can be applied back into the WYSIWYG preview
 
 ---
 
@@ -240,3 +320,46 @@
 ### Step 33 - SSE Credits Event
 
 - During the job, the SSE listener receives `{ type: "credits_charged", amount: N, balance: M }`
+
+---
+
+## Repository Governance — Gitflow Release
+
+### Step 34 - Release Version Format
+
+- `npm run release:version`
+- Expected: prints the contents of `RELEASE_VERSION` in `YYYY.MM.DD.N` format
+
+### Step 35 - Release Version Validation
+
+- `npm run release:version:validate`
+- Expected: output `Release version OK: ...`
+
+### Step 36 - Gitflow Branch Guard
+
+- `npm run gitflow:guard`
+- Expected: the current branch passes only if it matches one of these forms:
+  - `main`
+  - `develop`
+  - `feat/*`
+  - `fix/*`
+  - `docs/*`
+  - `chore/*`
+  - `refactor/*`
+  - `release/YYYY.MM.DD.N`
+  - `hotfix/*`
+
+### Step 37 - Release Branch Naming
+
+- Create branch `release/<RELEASE_VERSION>` from `develop`
+- Expected: branch name matches the canonical version stored in `RELEASE_VERSION`
+
+### Step 38 - Release Merge Intent
+
+- Open PR from `release/<RELEASE_VERSION>` to `main`
+- Expected: no new feature scope is present on the branch; only release hardening fixes, docs, and chore work
+
+### Step 39 - Agent Release Checklist Available
+
+- Open `docs/guides/AGENT_RELEASE_CHECKLIST.md`
+- Expected: the checklist covers branch selection, release identity, commit hygiene, PR targets, merge order, and back-merge rules

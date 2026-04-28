@@ -6,7 +6,7 @@ export const metadata = { title: "ANDY — The cat that codes for you." };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="it">
+    <html lang="it" suppressHydrationWarning>
       <body>
         <RootClientWrapper>
           {children}

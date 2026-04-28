@@ -1,4 +1,4 @@
-import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
+import { PRESET_MAP, type ProjectPreset } from "../../domain/entities/ProjectPreset";
 
 /**
  * Layer A — Base architectural constraints common to ALL Layer 1 output.
@@ -21,6 +21,14 @@ export function buildBaseConstraintsLayer(): string {
         "- No JavaScript framework (React, Vue, Angular, Svelte) — vanilla JS only.",
         "- CSS strategy: choose Tailwind CDN OR vanilla CSS — never both in the same output.",
         "- artifacts.css and artifacts.js must be plain strings without <style> or <script> wrappers.",
+        "",
+        "HTML compactness rules (mandatory):",
+        "- Target HTML under 30 KB (approx 30 000 chars). Aim for the minimum markup that achieves the design.",
+        "- Use 2-space indentation — never 4-space or tabs.",
+        "- Do NOT add HTML comments in the output.",
+        "- Never duplicate a structural pattern — extract repeating markup into reusable CSS classes instead.",
+        "- Avoid inline style= attributes; put all styling in artifacts.css.",
+        "- Do not repeat identical class lists across sibling elements — factor them into a shared parent or CSS rule.",
     ].join("\n");
 }
 
@@ -30,9 +38,7 @@ export function buildBaseConstraintsLayer(): string {
  * Contains the preset's systemPromptModule (structural format rules) and optional
  * cssConstraints (verbatim CSS required in the generated output).
  */
-export function buildPresetLayer(presetId?: string | null): string {
-    if (!presetId) return "";
-    const preset = PRESET_MAP.get(presetId);
+export function buildPresetLayerFromPreset(preset?: Pick<ProjectPreset, "outputSpec"> | null): string {
     if (!preset) return "";
 
     const parts: string[] = [preset.outputSpec.systemPromptModule];
@@ -46,4 +52,10 @@ export function buildPresetLayer(presetId?: string | null): string {
     }
 
     return parts.join("\n\n");
+}
+
+export function buildPresetLayer(presetId?: string | null): string {
+    if (!presetId) return "";
+    const preset = PRESET_MAP.get(presetId);
+    return buildPresetLayerFromPreset(preset);
 }
