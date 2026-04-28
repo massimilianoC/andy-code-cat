@@ -50,6 +50,7 @@ import {
     generateProjectImage,
     suggestProjectImageIdea,
     downloadProjectAssetDataUrl,
+    getPublicAssetUrl,
     type SiteDeploymentDto,
     type ProjectAssetDto,
     type AiUsageAnalyticsDto,
@@ -1296,7 +1297,7 @@ export default function WorkspacePage() {
             const resolvedUrl = asset.source === "url_reference"
                 ? (asset.externalUrl ?? "")
                 : asset.mimeType.startsWith("image/")
-                    ? await downloadProjectAssetDataUrl(token, projectId, asset.id)
+                    ? getPublicAssetUrl(asset.id)
                     : "";
 
             if (!resolvedUrl) {
@@ -1439,7 +1440,7 @@ export default function WorkspacePage() {
             let placeholderApplied = false;
             let placeholderVersioned = false;
             try {
-                const placeholderUrl = await downloadProjectAssetDataUrl(token, projectId, result.asset.id);
+                const placeholderUrl = getPublicAssetUrl(result.asset.id);
                 const placeholderHtml = applyMediaToPreview(placeholderUrl);
                 placeholderApplied = true;
                 placeholderVersioned = await saveMediaVersion(
@@ -1495,7 +1496,7 @@ export default function WorkspacePage() {
                         }
 
                         if (trackedAsset.generationStatus === "ready" && trackedAsset.mimeType.startsWith("image/")) {
-                            const finalUrl = await downloadProjectAssetDataUrl(token, projectId, trackedAsset.id);
+                            const finalUrl = getPublicAssetUrl(trackedAsset.id);
                             const finalHtml = applyMediaToPreview(finalUrl);
                             const finalVersioned = await saveMediaVersion(
                                 finalHtml || editorHtmlRef.current,
@@ -3167,6 +3168,17 @@ export default function WorkspacePage() {
                                     optimizer: {promptOpsSummary.runs} run{promptOpsSummary.runs === 1 ? "" : "s"} · {formatCostEur(promptOpsSummary.totalCost) || "€0"}
                                 </span>
                             )}
+                            {prompt.trim() && !sending && !optimizingPrompt && (
+                                <button
+                                    type="button"
+                                    className="secondary"
+                                    onClick={() => { setPrompt(""); setPromptRestoreValue(null); }}
+                                    title={t("workspace.ui.clearPrompt")}
+                                    style={{ fontSize: "0.78rem" }}
+                                >
+                                    {t("workspace.ui.clearPrompt")}
+                                </button>
+                            )}
                         </div>
                         <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
                             <Button
@@ -4069,7 +4081,12 @@ function buildPreviewDoc(html: string, css: string, js: string, rawResponse?: st
         if (css && styleTag && !doc.includes(styleTag)) {
             doc = doc.replace("</head>", `${styleTag}</head>`);
         }
-        if (js && scriptTag && !doc.includes(scriptTag)) {
+        // Skip fallback JS injection if the JS content is already embedded inline in the HTML.
+        // The LLM may put the same code both in artifacts.js and in an inline <script> block,
+        // which would cause duplicate const/let/var declarations (e.g. "Identifier already declared").
+        const jsLead = js ? js.trim().slice(0, 60) : "";
+        const jsAlreadyEmbedded = jsLead.length >= 20 && doc.includes(jsLead);
+        if (js && scriptTag && !doc.includes(scriptTag) && !jsAlreadyEmbedded) {
             doc = doc.replace("</body>", `${scriptTag}</body>`);
         }
 

@@ -505,6 +505,7 @@ export interface AdminProjectActiveDeploymentDto {
     publishId: string;
     customSlug?: string;
     url: string;
+    subdomainUrl?: string | null;
     isAdminBlocked: boolean;
 }
 
