@@ -26,16 +26,16 @@ services:
     networks:
       - andy-code-cat-net
 
-  redis:
-    image: redis:7-alpine
-    container_name: andy-code-cat-redis
-    restart: unless-stopped
-    ports:
-      - "6380:6379"
-    volumes:
-      - ./data/redis:/data
-    networks:
-      - andy-code-cat-net
+  # redis:  # not yet used — enable when BullMQ workers are implemented (M3)
+  #   image: redis:7-alpine
+  #   container_name: andy-code-cat-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6380:6379"
+  #   volumes:
+  #     - ./data/redis:/data
+  #   networks:
+  #     - andy-code-cat-net
 
   minio:
     image: minio/minio:latest
@@ -64,12 +64,11 @@ services:
       - .env.docker
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/andy-code-cat
-      - REDIS_URL=redis://redis:6379
+      # - REDIS_URL=redis://redis:6379  # enable with redis service (M3)
       - NODE_ENV=development
     depends_on:
       - workspace
       - mongodb
-      - redis
       - minio
     ports:
       - "4000:4000"
