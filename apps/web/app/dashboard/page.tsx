@@ -315,7 +315,7 @@ export default function DashboardPage() {
                 {/* Guide banner */}
                 <section className="mb-12">
                     <GuideBanner
-                        videoUrl="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                        videoUrl="https://youtu.be/TQqWJOub7gQ"
                         title={t("guide.title")}
                         subtitle={t("guide.subtitle")}
                         ctaLabel={t("guide.cta")}
