@@ -7,11 +7,62 @@ import { Label } from "@/components/ui/label";
 import { MonacoCodeEditor } from "@/components/admin/MonacoCodeEditor";
 import type { PromptTaskSettingDto, AdminLlmProviderDto } from "@/lib/api/admin";
 
-// Shared class matching shadcn Input visual style for native <select>
+// Shared class matching shadcn Input visual style for native <select>.
+// `[color-scheme:dark]` forces the browser to render native dropdown chrome in dark mode.
 const SELECT_CLASS =
-    "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm " +
+    "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm " +
     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring " +
-    "disabled:cursor-not-allowed disabled:opacity-50";
+    "disabled:cursor-not-allowed disabled:opacity-50 " +
+    "[color-scheme:dark]";
+
+/** Maps the org prefix of a model ID to a human-readable manufacturer name. */
+function getManufacturer(modelId: string): string {
+    const org = modelId.split("/")[0];
+    const NAMES: Record<string, string> = {
+        "google":             "Google",
+        "anthropic":          "Anthropic",
+        "openai":             "OpenAI",
+        "Qwen":               "Qwen / Alibaba",
+        "deepseek-ai":        "DeepSeek",
+        "deepseek":           "DeepSeek",
+        "MiniMaxAI":          "MiniMax",
+        "zai-org":            "Zhipu AI",
+        "z-ai":               "Zhipu AI",
+        "THUDM":              "Zhipu AI",
+        "black-forest-labs":  "Black Forest Labs",
+        "BAAI":               "BAAI",
+        "liquid":             "Liquid AI",
+        "nvidia":             "NVIDIA",
+        "moonshotai":         "Moonshot / Kimi",
+        "meta-llama":         "Meta",
+        "mistralai":          "Mistral",
+        "microsoft":          "Microsoft",
+        "tencent":            "Tencent",
+        "ByteDance-Seed":     "ByteDance",
+        "stepfun-ai":         "StepFun",
+        "baidu":              "Baidu",
+        "inclusionAI":        "InclusionAI",
+        "nex-agi":            "Nex AGI",
+        "Tongyi-MAI":         "Alibaba Tongyi",
+        "Wan-AI":             "Wan AI",
+    };
+    return NAMES[org] ?? org;
+}
+
+/** Groups models by manufacturer, preserving insertion order within each group. */
+function groupByManufacturer<T extends { id: string }>(models: T[]): Map<string, T[]> {
+    const map = new Map<string, T[]>();
+    for (const m of models) {
+        const maker = getManufacturer(m.id);
+        const bucket = map.get(maker);
+        if (bucket) {
+            bucket.push(m);
+        } else {
+            map.set(maker, [m]);
+        }
+    }
+    return map;
+}
 
 interface PromptTaskSettingsCardProps {
     title: string;
@@ -94,10 +145,14 @@ export function PromptTaskSettingsCard({
                             value={value.model}
                             onChange={(e) => onFieldChange("model", e.target.value)}
                         >
-                            {modelOptions.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                    {m.displayName ?? m.id}
-                                </option>
+                            {Array.from(groupByManufacturer(modelOptions)).map(([maker, group]) => (
+                                <optgroup key={maker} label={maker}>
+                                    {group.map((m) => (
+                                        <option key={m.id} value={m.id}>
+                                            {m.displayName ?? m.id}
+                                        </option>
+                                    ))}
+                                </optgroup>
                             ))}
                         </select>
                     ) : (
