@@ -224,23 +224,15 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 attachmentMeta,
             }).catch(() => null);
 
-            // LLM prefill pass — extract structured ZeroEffortLaunchInput fields
-            setPhase("prefilling");
-            const prefillResult = await prefillZeroEffort(token, {
-                prompt: prompt.trim(),
-                attachmentMeta,
-                templateId: classification?.templateId ?? null,
-                formatHint: classification?.formatHint ?? null,
-            }).catch(() => null);
-
-            // Create project (with preset from classification if available)
+            // Create project early so files (and their Layer D enrichment) can be uploaded
+            // before the LLM prefill pass runs
             setPhase("creating");
             const projectName = prompt.trim().slice(0, 64) || "Progetto";
             const presetId = classification?.templateId ?? undefined;
             const projectResult = await createProject(token, projectName, presetId);
             const projectId = projectResult.project.id;
 
-            // Upload files to the new project
+            // Upload files to the new project (triggers async enrichment pipeline)
             if (files.length > 0) {
                 setPhase("uploading");
                 await Promise.allSettled(
@@ -252,6 +244,16 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     ),
                 );
             }
+
+            // LLM prefill pass — now includes Layer D document context from uploaded assets
+            setPhase("prefilling");
+            const prefillResult = await prefillZeroEffort(token, {
+                prompt: prompt.trim(),
+                projectId,
+                attachmentMeta,
+                templateId: classification?.templateId ?? null,
+                formatHint: classification?.formatHint ?? null,
+            }).catch(() => null);
 
             // Store prefill draft in sessionStorage for launch page
             const hasPrefill = prefillResult && !prefillResult.skipped;

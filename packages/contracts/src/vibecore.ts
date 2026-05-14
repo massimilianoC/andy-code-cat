@@ -33,6 +33,8 @@ export interface VibeClassifyResponse {
 
 export interface VibePrefillRequest {
     prompt: string;
+    /** If provided, backend loads project assets and injects Layer D document context into the prefill prompt. */
+    projectId?: string;
     attachmentMeta?: AttachmentMeta[];
     templateId?: string | null;
     formatHint?: FormatHint | null;

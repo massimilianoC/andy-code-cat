@@ -153,6 +153,8 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
 
 export interface VibePrefillInput {
     prompt: string;
+    /** Pre-built Layer D block from project assets — injected verbatim into the system prompt. */
+    layerDContext?: string;
     attachmentMeta?: AttachmentMeta[];
     templateId?: string | null;
     formatHint?: FormatHint | null;
@@ -198,6 +200,11 @@ export class VibePrefill {
 
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta, input.templateId, input.formatHint);
 
+        // Extend system prompt with Layer D document context when available
+        const systemPrompt = input.layerDContext
+            ? `${SYSTEM_PROMPT}\n\n${input.layerDContext}`
+            : SYSTEM_PROMPT;
+
         try {
             const response = await fetch(`${providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
                 method: "POST",
@@ -210,7 +217,7 @@ export class VibePrefill {
                     max_tokens: Math.min(taskSettings.maxCompletionTokens, MAX_TOKENS),
                     temperature: taskSettings.temperature ?? 0.3,
                     messages: [
-                        { role: "system" as const, content: SYSTEM_PROMPT },
+                        { role: "system" as const, content: systemPrompt },
                         { role: "user" as const, content: userMessage },
                     ],
                 }),
