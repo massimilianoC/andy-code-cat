@@ -3,6 +3,10 @@ import { zeroEffortLaunchSchema } from "@andy-code-cat/contracts";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
+import { CostTransactionService } from "../cost/CostTransactionService";
+import { ResourceType } from "../../domain/entities/CostTransaction";
+import { estimateCost } from "../llm/costPolicy";
+import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { env } from "../../config";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -158,6 +162,10 @@ export interface VibePrefillInput {
     attachmentMeta?: AttachmentMeta[];
     templateId?: string | null;
     formatHint?: FormatHint | null;
+    /** When provided, the use-case records an LLM cost transaction against this project. */
+    userId?: string;
+    /** When provided together with userId, cost is attributed to this project. */
+    projectId?: string;
 }
 
 // ── Use-case ──────────────────────────────────────────────────────────────────
@@ -231,6 +239,48 @@ export class VibePrefill {
             const raw = String(
                 (payload?.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? ""
             ).trim();
+
+            // Record cost transaction when userId + projectId are both present
+            if (input.userId && input.projectId) {
+                const usage = payload.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+                const promptTokens = Number(usage?.prompt_tokens ?? 0);
+                const completionTokens = Number(usage?.completion_tokens ?? 0);
+                const totalTokens = Number(usage?.total_tokens ?? (promptTokens + completionTokens));
+
+                let providerCostUsd: number | undefined;
+                if (providerCatalog.provider === "siliconflow") {
+                    const sfPrice = getSiliconFlowPrice(modelId);
+                    if (sfPrice && sfPrice.priceUnit === "per_m_tokens") {
+                        providerCostUsd =
+                            (promptTokens / 1_000_000) * sfPrice.input +
+                            (completionTokens / 1_000_000) * sfPrice.output;
+                    }
+                }
+
+                const costEstimate = estimateCost(
+                    { capability: "chat", tokenUsage: { promptTokens, completionTokens, totalTokens }, providerCostUsd },
+                    {
+                        textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
+                        imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
+                        videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
+                        usdToEurRate: env.COST_POLICY_USD_TO_EUR_RATE,
+                        providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
+                    },
+                );
+
+                CostTransactionService.instance.record({
+                    userId: input.userId,
+                    projectId: input.projectId,
+                    resourceType: ResourceType.LLM_BACKGROUND,
+                    resourceSubtype: modelId,
+                    precomputedTotalEur: costEstimate.amount,
+                    units: { promptTokens, completionTokens, totalTokens },
+                    meta: {
+                        taskKey: TASK_KEY,
+                        provider: providerCatalog.provider,
+                    },
+                });
+            }
 
             const { draft, confidence } = parsePrefillResponse(raw, input.prompt);
             return { draft, confidence, skipped: false };

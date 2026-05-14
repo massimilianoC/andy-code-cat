@@ -167,6 +167,8 @@ export function createVibecoreRoutes(): Router {
                     attachmentMeta: parsed.data.attachmentMeta,
                     templateId: parsed.data.templateId ?? null,
                     formatHint: (parsed.data.formatHint ?? null) as import("@andy-code-cat/contracts").FormatHint | null,
+                    userId,
+                    projectId: parsed.data.projectId,
                 });
 
                 // Attach document names that contributed to the brief (informational, shown to user)
