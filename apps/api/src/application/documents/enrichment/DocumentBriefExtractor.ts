@@ -8,7 +8,10 @@ import type { EnrichmentAssetKind } from "../../../domain/entities/AssetEnrichme
 import type { ParsedDocumentSheet, ParsedDocumentSlide } from "../parsers/PdfParser";
 
 const TEXT_SNIPPET_MAX = 20_000;
-const SPREADSHEET_SNIPPET_MAX = 12_000;
+// The structured inventory already conveys the data shape; keep the raw CSV
+// excerpt small so spreadsheet prompts don't blow the provider's context cap.
+const SPREADSHEET_SNIPPET_MAX = 6_000;
+const SPREADSHEET_PROMPT_HARD_CAP = 28_000;
 
 const VALID_DOC_TYPES = new Set<DocumentTypeHint>([
     "brochure", "landing_copy", "product_sheet", "menu", "faq",
@@ -195,11 +198,17 @@ export async function extractDocumentBrief(input: DocumentBriefInput): Promise<D
         prompt = buildGenericPrompt(input.textSnippet);
     }
 
+    // Hard cap for spreadsheet prompts — defensive trim if the inventory + snippet
+    // overshoot. Some providers reject prompts over their context cap with HTTP 400.
+    const safePrompt = isSpreadsheet && hasSheets && prompt.length > SPREADSHEET_PROMPT_HARD_CAP
+        ? prompt.slice(0, SPREADSHEET_PROMPT_HARD_CAP) + "\n...(truncated to fit context window)"
+        : prompt;
+
     const maxTokens = isSpreadsheet ? 2800 : isPresentation ? 2400 : 2000;
 
     const body = {
         model: input.model,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: safePrompt }],
         max_tokens: maxTokens,
         temperature: 0,
     };
@@ -214,7 +223,11 @@ export async function extractDocumentBrief(input: DocumentBriefInput): Promise<D
     });
 
     if (!res.ok) {
-        throw new Error(`LLM returned HTTP ${res.status} for document brief extraction`);
+        // Surface the provider's error body so the trace explains what went wrong.
+        const responseSnippet = await res.text().catch(() => "(unable to read body)");
+        throw new Error(
+            `LLM returned HTTP ${res.status} for document brief extraction (assetKind=${input.assetKind}, model=${input.model}, promptLen=${safePrompt.length}): ${responseSnippet.slice(0, 400)}`,
+        );
     }
 
     const json = (await res.json()) as {

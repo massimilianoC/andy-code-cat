@@ -253,6 +253,10 @@ export class AssetEnrichmentPipeline {
         let llmModel: string | null = null;
         let llmTokensUsed: number | null = null;
         let llmCostEur: number | null = null;
+        // When the brief LLM fails the parsed data (textLayer + structuredData) is
+        // already valuable enough for Layer D — record the failure on the trace but
+        // keep the asset marked "ready" so it is still injected downstream.
+        let briefErrorMessage: string | null = null;
 
         if (env.enrichmentDocumentLlmPass && parsed.rawText.length >= 50) {
             const taskSetting = resolvePromptTaskSettingFromConfig(input.platformConfig, "default", "enrich_document");
@@ -262,30 +266,40 @@ export class AssetEnrichmentPipeline {
             const provider = resolveProvider(catalog, textProviderKey);
             if (provider) {
                 const authHeader = resolveAuthHeader(provider.provider, provider.authType);
-                const result = await extractDocumentBrief({
-                    textSnippet: parsed.rawText,
-                    assetKind,
-                    sheets: parsed.sheets,
-                    slides: parsed.slides,
-                    baseUrl: provider.baseUrl,
-                    model: textModel,
-                    authHeader,
-                });
-                documentBrief = result.brief;
-                structuredData = result.structuredData ?? null;
-                llmProvider = provider.provider;
-                llmModel = textModel;
-                llmTokensUsed = result.tokensUsed;
-
-                // ── Cost ledger: attribute LLM call to (user, project) ──
-                if (result.usage) {
-                    llmCostEur = recordEnrichmentCost({
-                        asset: input.asset,
-                        providerKey: provider.provider,
-                        modelId: textModel,
-                        usage: result.usage,
-                        taskKey: "enrich_document",
+                try {
+                    const result = await extractDocumentBrief({
+                        textSnippet: parsed.rawText,
+                        assetKind,
+                        sheets: parsed.sheets,
+                        slides: parsed.slides,
+                        baseUrl: provider.baseUrl,
+                        model: textModel,
+                        authHeader,
                     });
+                    documentBrief = result.brief;
+                    structuredData = result.structuredData ?? earlyStructuredData;
+                    llmProvider = provider.provider;
+                    llmModel = textModel;
+                    llmTokensUsed = result.tokensUsed;
+
+                    // ── Cost ledger: attribute LLM call to (user, project) ──
+                    if (result.usage) {
+                        llmCostEur = recordEnrichmentCost({
+                            asset: input.asset,
+                            providerKey: provider.provider,
+                            modelId: textModel,
+                            usage: result.usage,
+                            taskKey: "enrich_document",
+                        });
+                    }
+                } catch (briefErr) {
+                    briefErrorMessage = briefErr instanceof Error ? briefErr.message : String(briefErr);
+                    console.warn(
+                        `[AssetEnrichmentPipeline] brief extraction failed for asset ${input.asset.id} — keeping parsed textLayer/structuredData. Reason:`,
+                        briefErrorMessage,
+                    );
+                    // structuredData stays = earlyStructuredData (sheets/slides from parser)
+                    // documentBrief stays null
                 }
             }
         }
@@ -295,6 +309,8 @@ export class AssetEnrichmentPipeline {
             assetKind,
             provenance: {
                 traceVersion: CURRENT_TRACE_VERSION,
+                // Parsing succeeded; brief is optional. Layer D can render the asset
+                // from textLayer + structuredData alone — see renderAssetLayerDFragment.
                 enrichmentStatus: "ready",
                 enrichedAt: new Date(),
                 processingMs: Date.now() - startMs,
@@ -304,7 +320,7 @@ export class AssetEnrichmentPipeline {
                 llmModel,
                 llmTokensUsed,
                 llmCostEur,
-                errorMessage: null,
+                errorMessage: briefErrorMessage,
             },
             textLayer,
             documentBrief,
