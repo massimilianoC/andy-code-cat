@@ -2,35 +2,35 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, ArrowRight, X, ChevronDown, Loader2 } from "lucide-react";
+import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { ModeSelector, type VibeMode } from "./ModeSelector";
 import { VibeCoreBackground } from "./VibeCoreBackground";
+import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
 import { classifyVibeIntent } from "@/lib/api/vibecore";
 import { createProject, uploadProjectAsset } from "@/lib/api";
 
 /** Max file size accepted via the VibeCore drag-and-drop zone (10 MB). */
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_FILES = 3;
-const ACCEPTED_MIME_TYPES = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "image/png", "image/jpeg", "image/svg+xml"];
-const VIBE_MODE_KEY = "vibe_mode";
+const ACCEPTED_MIME_TYPES = [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/png",
+    "image/jpeg",
+    "image/svg+xml",
+];
 
-type EntryPhase =
-    | "idle"
-    | "classifying"
-    | "creating"
-    | "uploading"
-    | "redirecting";
+type EntryPhase = "idle" | "classifying" | "creating" | "uploading" | "redirecting";
 
-// Spec §B state labels
-const PHASE_LABELS: Record<EntryPhase, string> = {
+/** i18n keys for phase labels — translated at render time. */
+const PHASE_LABEL_KEYS: Record<EntryPhase, string> = {
     idle:        "",
-    classifying: "Analisi della richiesta…",
-    creating:    "Creazione del workspace…",
-    uploading:   "Carico i file…",
-    redirecting: "Apertura…",
+    classifying: "vibecore.phase.classifying",
+    creating:    "vibecore.phase.creating",
+    uploading:   "vibecore.phase.uploading",
+    redirecting: "vibecore.phase.redirecting",
 };
 
 interface FilePill {
@@ -64,26 +64,22 @@ const MODE_GLOW: Record<VibeMode, string> = {
 
 interface VibeCoreEntryProps {
     token: string;
-    /** Called when user switches to MEDIUM — parent shows the Zero Effort form */
-    onSwitchToMedium?: () => void;
+    /** Controlled mode — owned by the parent (dashboard page). */
+    mode: VibeMode;
+    /** Called for EASY ↔ MEDIUM changes. HARD is handled internally by this component. */
+    onModeChange: (mode: VibeMode) => void;
 }
 
-export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
+export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps) {
     const router = useRouter();
     const { t } = useTranslation();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    const [mode, setMode] = useState<VibeMode>("easy");
     const [prompt, setPrompt] = useState("");
     const [files, setFiles] = useState<FilePill[]>([]);
     const [phase, setPhase] = useState<EntryPhase>("idle");
     const [error, setError] = useState<string | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
-
-    // Hydrate mode from localStorage after mount
-    useEffect(() => {
-        setMode(loadMode());
-    }, []);
 
     // Cmd/Ctrl + K focuses input from anywhere on the page
     useEffect(() => {
@@ -98,25 +94,62 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
     }, []);
 
     function handleModeChange(next: VibeMode) {
-        setMode(next);
-        saveMode(next);
-        if (next === "medium") {
-            onSwitchToMedium?.();
-        } else if (next === "hard") {
-            router.push("/workspace/new");
+        if (next === "hard") {
+            // HARD: create blank project + enter God Mode with auto-templating engine.
+            // The parent resets the mode to "easy" so returning to dashboard shows EASY.
+            void handleHardMode();
+            return;
+        }
+        // EASY / MEDIUM: delegate to parent.
+        onModeChange(next);
+    }
+
+    /**
+     * HARD mode: creates a blank project (carrying current prompt + files if any),
+     * then navigates to God Mode with autoTemplating=true so the workspace's
+     * auto-templating engine can classify the intent on first generation.
+     */
+    async function handleHardMode() {
+        setPhase("creating");
+        try {
+            const projectName = prompt.trim()
+                ? prompt.trim().slice(0, 64)
+                : t("vibecore.newProject", "Nuovo progetto");
+            const projectResult = await createProject(token, projectName, undefined);
+            const projectId = projectResult.project.id;
+
+            if (files.length > 0) {
+                setPhase("uploading");
+                await Promise.allSettled(
+                    files.map((pill) =>
+                        uploadProjectAsset(token, projectId, pill.file, {
+                            scope: "project",
+                            useInProject: true,
+                        }),
+                    ),
+                );
+            }
+
+            setPhase("redirecting");
+            const query = new URLSearchParams({ autoTemplating: "true" });
+            if (prompt.trim()) query.set("autoPrompt", prompt.trim().slice(0, 2000));
+            router.push(`/workspace/${projectId}?${query.toString()}`);
+        } catch {
+            setError(t("vibecore.error", "Si è verificato un errore. Riprova."));
+            setPhase("idle");
         }
     }
 
     const addFiles = useCallback((incoming: File[]) => {
-        const valid = incoming.filter((f) => {
-            if (f.size > MAX_FILE_SIZE_BYTES) return false;
-            if (!ACCEPTED_MIME_TYPES.includes(f.type)) return false;
-            return true;
-        });
-        setFiles((prev) => {
-            const combined = [...prev, ...valid.map((file) => ({ file, id: `${file.name}-${Date.now()}-${Math.random()}` }))];
-            return combined.slice(0, MAX_FILES);
-        });
+        const valid = incoming.filter(
+            (f) => f.size <= MAX_FILE_SIZE_BYTES && ACCEPTED_MIME_TYPES.includes(f.type),
+        );
+        setFiles((prev) =>
+            [
+                ...prev,
+                ...valid.map((file) => ({ file, id: `${file.name}-${Date.now()}-${Math.random()}` })),
+            ].slice(0, MAX_FILES),
+        );
     }, []);
 
     function removeFile(id: string) {
@@ -135,8 +168,11 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
         setIsDragOver(true);
     }
 
-    function handleDragLeave() {
-        setIsDragOver(false);
+    function handleDragLeave(e: React.DragEvent) {
+        // Only clear drag state when leaving the section entirely (not when moving to a child)
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setIsDragOver(false);
+        }
     }
 
     function handleDrop(e: React.DragEvent) {
@@ -222,11 +258,12 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
 
     const glowColor = MODE_GLOW[mode];
     const isLoading = phase !== "idle";
+    const phaseKey = PHASE_LABEL_KEYS[phase];
+    const phaseLabel = phaseKey ? t(phaseKey, phase) : "";
 
     return (
         <section
-            className="relative flex flex-col items-center justify-center w-full"
-            style={{ minHeight: "100dvh" }}
+            className="relative flex flex-col items-center justify-center w-full h-full"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -234,8 +271,11 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
             {/* Background blobs */}
             <VibeCoreBackground />
 
-            {/* Mode selector — top right */}
-            <div className="absolute top-4 right-4 z-20">
+            {/* Blur overlay — absolute inside sticky section */}
+            <ScrollBlurOverlay />
+
+            {/* Mode selector — top right, above blur overlay (z-30) */}
+            <div className="absolute top-4 right-4 z-30">
                 <ModeSelector value={mode} onChange={handleModeChange} />
             </div>
 
@@ -279,7 +319,7 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
                         // Elevate glow on focus
                     }}
                 >
-                    {/* Textarea */}
+                    {/* Textarea — extra padding for breathing room */}
                     <textarea
                         ref={textareaRef}
                         value={prompt}
@@ -289,11 +329,11 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
                         rows={3}
                         placeholder={t("vibecore.placeholder", "Es. una landing page per un salone di bellezza, tono elegante, palette neutra…")}
                         aria-label={t("vibecore.heading", "Cosa vuoi realizzare oggi?")}
-                        className="w-full bg-transparent text-foreground resize-none outline-none text-sm leading-relaxed"
+                        className="w-full bg-transparent text-foreground resize-none outline-none text-sm leading-relaxed px-2 pt-2 pb-1"
                         style={{
                             color: "rgba(255,255,255,0.88)",
                             caretColor: glowColor,
-                            minHeight: "72px",
+                            minHeight: "80px",
                             maxHeight: "260px",
                             overflowY: "auto",
                         }}
@@ -301,7 +341,7 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
 
                     {/* File pills */}
                     {files.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mb-2 mt-1">
+                        <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
                             {files.map((pill) => (
                                 <span
                                     key={pill.id}
@@ -334,19 +374,45 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
                     {/* Divider */}
                     <div className="border-t mt-2 mb-3" style={{ borderColor: "rgba(255,255,255,0.07)" }} />
 
-                    {/* Bottom row: attach + send */}
+                    {/* Bottom row: attach (click or drag) · status · send */}
                     <div className="flex items-center justify-between gap-2">
-                        {/* Attach file */}
+                        {/* Attach — dashed drop zone with dual click / drag functionality */}
                         <label
-                            className="flex items-center gap-1.5 cursor-pointer text-xs px-2 py-1.5 rounded-lg transition-colors"
+                            className={cn(
+                                "flex items-center gap-1.5 cursor-pointer text-xs px-2.5 py-1.5 rounded-lg",
+                                "transition-all duration-150 border border-dashed select-none",
+                                (isLoading || files.length >= MAX_FILES) &&
+                                    "opacity-40 pointer-events-none",
+                            )}
                             style={{
-                                color: "rgba(255,255,255,0.4)",
-                                userSelect: "none",
+                                color: isDragOver ? `${glowColor}dd` : "rgba(255,255,255,0.38)",
+                                borderColor: isDragOver ? `${glowColor}70` : "rgba(255,255,255,0.15)",
+                                background: isDragOver ? `${glowColor}14` : "transparent",
                             }}
-                            title="Allega file (PDF, DOCX, immagini — max 10 MB)"
+                            title={t(
+                                "vibecore.attachHint",
+                                "Trascina file o clicca per allegare — PDF, DOCX, immagini, max 10 MB",
+                            )}
                         >
-                            <Paperclip className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">Allega</span>
+                            {isDragOver ? (
+                                <Upload className="h-3.5 w-3.5" />
+                            ) : (
+                                <Paperclip className="h-3.5 w-3.5" />
+                            )}
+                            <span>
+                                {isDragOver
+                                    ? t("vibecore.dropHere", "Rilascia qui")
+                                    : t("vibecore.attach", "Allega")}
+                            </span>
+                            <span
+                                className="hidden md:inline"
+                                style={{
+                                    fontSize: "0.68rem",
+                                    color: isDragOver ? `${glowColor}90` : "rgba(255,255,255,0.18)",
+                                }}
+                            >
+                                PDF · IMG · DOCX
+                            </span>
                             <input
                                 type="file"
                                 multiple
@@ -360,10 +426,10 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
                         {/* Phase status */}
                         <span
                             aria-live="polite"
-                            className="flex-1 text-center text-xs"
+                            className="flex-1 text-center text-xs truncate"
                             style={{ color: "rgba(255,255,255,0.35)" }}
                         >
-                            {phase !== "idle" ? PHASE_LABELS[phase] : ""}
+                            {phaseLabel}
                         </span>
 
                         {/* Submit */}

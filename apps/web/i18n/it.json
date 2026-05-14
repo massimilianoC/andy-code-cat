@@ -405,7 +405,19 @@
         "subtitle": "Descrivi la tua idea — l'AI fa il resto",
         "placeholder": "Es. una landing page per un salone di bellezza, tono elegante, palette neutra…",
         "cta": "Crea con AI",
-        "scrollHint": "scorri per i tuoi progetti"
+        "scrollHint": "scorri per i tuoi progetti",
+        "attach": "Allega",
+        "attachHint": "Trascina file o clicca per allegare — PDF, DOCX, immagini, max 10 MB",
+        "dropHere": "Rilascia qui",
+        "newProject": "Nuovo progetto",
+        "error": "Si è verificato un errore. Riprova.",
+        "removeFile": "Rimuovi",
+        "phase": {
+            "classifying": "Analisi della richiesta…",
+            "creating": "Creazione del workspace…",
+            "uploading": "Carico i file…",
+            "redirecting": "Apertura…"
+        }
     },
     "workspace": {
         "selectionNone": "Nessuna selezione",

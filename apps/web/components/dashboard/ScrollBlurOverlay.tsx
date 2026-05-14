@@ -3,24 +3,24 @@
 import { useScrollRatio } from "@/hooks/useScrollRatio";
 
 /**
- * Sticky overlay that fades in as the user scrolls down past the VibeCore section.
- * `pointer-events: none` — never intercepts clicks.
- * `position: fixed` so it covers the VibeCore section regardless of layout.
+ * Progressive blur overlay for the VibeCore sticky section.
+ * `position: absolute` — lives inside the sticky VibeCoreEntry wrapper,
+ * so it only blurs the VibeCore content as the legacy dashboard slides over it.
+ * `pointer-events: none` — never intercepts clicks or drag events.
  */
 export function ScrollBlurOverlay() {
-    const ratio = useScrollRatio(80, 220);
+    const ratio = useScrollRatio(80, 500);
 
     if (ratio <= 0) return null;
 
     return (
         <div
             aria-hidden="true"
-            className="fixed inset-0 pointer-events-none z-10"
+            className="absolute inset-0 pointer-events-none z-20"
             style={{
                 opacity: ratio,
-                backdropFilter: `blur(${ratio * 8}px)`,
-                background: `rgba(10,10,18,${ratio * 0.7})`,
-                transition: "none",
+                backdropFilter: `blur(${ratio * 10}px) saturate(${1 + ratio * 0.4})`,
+                background: `rgba(10,10,18,${ratio * 0.78})`,
             }}
         />
     );

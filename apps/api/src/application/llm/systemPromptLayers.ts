@@ -1,6 +1,23 @@
 import { PRESET_MAP, type ProjectPreset } from "../../domain/entities/ProjectPreset";
 import type { ProjectAsset } from "../../domain/entities/ProjectAsset";
+import { FORMAT_HINT_RULES } from "../prompting/formatHintRules";
 import { env } from "../../config";
+
+/**
+ * TemplateResolution — the output of Layer Φ (VibeClassify) or an explicit user selection.
+ * Used by Layer T to decide what to inject between Layer B and Layer C.
+ */
+export interface TemplateResolution {
+    /** Preset id from the PRESET_MAP (takes priority over everything). */
+    presetId?: string | null;
+    /** User-template id from the user_templates collection. */
+    userTemplateId?: string | null;
+    /** Canonical format hint key — fallback when no full preset/template matched. */
+    formatHint?: import("@andy-code-cat/contracts").FormatHint | null;
+    confidence: number;
+    reasoning: string;
+    source: "layer_phi" | "user_explicit" | "zero_effort_form";
+}
 
 /**
  * Layer A — Base architectural constraints common to ALL Layer 1 output.
@@ -153,4 +170,56 @@ export function buildProjectKnowledgeLayer(
     if (blocks.length === 0) return "";
 
     return `${header}\n\n${blocks.join("\n\n")}`;
+}
+
+/**
+ * Layer T — Template resolution slot.
+ * Injected between Layer B (preset constraints) and Layer C (style context)
+ * ONLY when a TemplateResolution is provided.
+ *
+ * Priority of resolution:
+ *   1. presetId  → full preset constraints already handled by Layer B; Layer T is empty.
+ *   2. userTemplateId → the caller must supply the prepromptBlock separately.
+ *   3. formatHint → canonical format rules from FORMAT_HINT_RULES.
+ *
+ * Returns "" when resolution is null/undefined — fully backward-compatible.
+ *
+ * Sentinels allow programmatic audit:
+ *   <!-- LAYER_T_START source=<source> confidence=<n> -->
+ *   ...content...
+ *   <!-- LAYER_T_END -->
+ */
+export function buildLayerT(
+    resolution: TemplateResolution | null | undefined,
+    opts?: {
+        /** Pre-fetched prepromptBlock for the resolved userTemplateId, if any. */
+        userTemplatePreprompt?: string;
+    },
+): string {
+    if (!resolution) return "";
+
+    // presetId is already covered by Layer B — Layer T adds nothing.
+    if (resolution.presetId) return "";
+
+    let content = "";
+
+    if (resolution.userTemplateId && opts?.userTemplatePreprompt) {
+        content = opts.userTemplatePreprompt;
+    } else if (resolution.formatHint) {
+        const rule = FORMAT_HINT_RULES[resolution.formatHint];
+        if (rule) {
+            content = [
+                `## LAYER T — FORMAT GUIDANCE (${resolution.formatHint})`,
+                rule.canonicalRules,
+            ].join("\n\n");
+        }
+    }
+
+    if (!content) return "";
+
+    return [
+        `<!-- LAYER_T_START source=${resolution.source} confidence=${resolution.confidence.toFixed(2)} -->`,
+        content,
+        `<!-- LAYER_T_END -->`,
+    ].join("\n");
 }

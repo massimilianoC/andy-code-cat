@@ -405,7 +405,19 @@
         "subtitle": "Describe your idea — the AI handles the rest",
         "placeholder": "E.g. a landing page for a beauty salon, elegant tone, neutral palette…",
         "cta": "Create with AI",
-        "scrollHint": "scroll to your projects"
+        "scrollHint": "scroll to your projects",
+        "attach": "Attach",
+        "attachHint": "Drag files or click to attach — PDF, DOCX, images, max 10 MB",
+        "dropHere": "Drop here",
+        "newProject": "New project",
+        "error": "An error occurred. Please try again.",
+        "removeFile": "Remove",
+        "phase": {
+            "classifying": "Analysing request…",
+            "creating": "Creating workspace…",
+            "uploading": "Uploading files…",
+            "redirecting": "Opening…"
+        }
     },
     "workspace": {
         "selectionNone": "No selection",
