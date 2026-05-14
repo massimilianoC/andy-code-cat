@@ -1,0 +1,82 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e35]
+  - main [ref=e253]:
+    - generic [ref=e254]:
+      - generic [ref=e255]:
+        - generic [ref=e256]: Zero Effort
+        - heading "Generazione guidata" [level=1] [ref=e257]
+        - paragraph [ref=e258]: DCL Test Project · Compila i 3 step e avvia la generazione automatica.
+      - generic [ref=e259]:
+        - button "Dashboard" [ref=e260] [cursor=pointer]
+        - button "GodMode" [ref=e261] [cursor=pointer]
+    - generic [ref=e262]:
+      - generic [ref=e263]:
+        - button [ref=e350] [cursor=pointer]
+        - generic [ref=e265]: Descrizione
+        - img [ref=e266]
+      - generic [ref=e268]:
+        - button "2" [ref=e269] [cursor=pointer]
+        - generic [ref=e270]: Target & Dati
+        - img [ref=e271]
+      - generic [ref=e273]:
+        - button "3" [ref=e274]
+        - generic [ref=e275]: Stile visivo
+    - generic [ref=e276]:
+      - button "Step 1 — Descrizione Brand, tipo sito e obiettivo principale" [ref=e278] [cursor=pointer]:
+        - img [ref=e352]
+        - generic [ref=e283]:
+          - paragraph [ref=e284]: Step 1 — Descrizione
+          - paragraph [ref=e285]: Brand, tipo sito e obiettivo principale
+        - img [ref=e286]
+      - generic [ref=e306]:
+        - button "Step 2 — Target & Dati Audience, contatti e info salienti" [ref=e307] [cursor=pointer]:
+          - img [ref=e309]
+          - generic [ref=e313]:
+            - paragraph [ref=e314]: Step 2 — Target & Dati
+            - paragraph [ref=e315]: Audience, contatti e info salienti
+          - img [ref=e316]
+        - generic [ref=e356]:
+          - generic [ref=e357]:
+            - generic [ref=e358]: Audience e target
+            - paragraph [ref=e359]: Chi sono i destinatari? Descrivi età, interessi, bisogni, lingua.
+            - textbox "Audience e target" [ref=e360]:
+              - /placeholder: es. Motociclisti appassionati tra 25-45 anni, italiani e europei, amanti del design e della qualità
+          - generic [ref=e361]:
+            - generic [ref=e362]:
+              - generic [ref=e363]: Informazioni di contatto e dati salienti
+              - button "Aggiungi" [ref=e364] [cursor=pointer]:
+                - img [ref=e365]
+                - text: Aggiungi
+            - paragraph [ref=e366]: Email, telefono, indirizzo, social — dati che devono apparire nel sito.
+            - generic [ref=e367]:
+              - paragraph [ref=e368]: Nessun dato aggiunto.
+              - generic [ref=e369]:
+                - button "+ Email" [ref=e370] [cursor=pointer]
+                - button "+ Telefono" [ref=e371] [cursor=pointer]
+                - button "+ Indirizzo" [ref=e372] [cursor=pointer]
+                - button "+ Instagram" [ref=e373] [cursor=pointer]
+                - button "+ Facebook" [ref=e374] [cursor=pointer]
+                - button "+ LinkedIn" [ref=e375] [cursor=pointer]
+                - button "+ YouTube" [ref=e376] [cursor=pointer]
+                - button "+ WhatsApp" [ref=e377] [cursor=pointer]
+                - button "+ Sito web" [ref=e378] [cursor=pointer]
+                - button "+ P.IVA" [ref=e379] [cursor=pointer]
+          - generic [ref=e380]:
+            - button "Indietro" [ref=e381] [cursor=pointer]:
+              - img [ref=e382]
+              - text: Indietro
+            - button "Avanti" [disabled]:
+              - text: Avanti
+              - img
+      - button "Step 3 — Stile visivo Attributi estetici, tono e CTA" [ref=e319] [cursor=pointer]:
+        - img [ref=e321]
+        - generic [ref=e327]:
+          - paragraph [ref=e328]: Step 3 — Stile visivo
+          - paragraph [ref=e329]: Attributi estetici, tono e CTA
+        - img [ref=e330]
+    - generic [ref=e334] [cursor=pointer]:
+      - img [ref=e345]
+      - generic [ref=e339]:
+        - paragraph [ref=e340]: Allega documenti di contesto
+        - paragraph [ref=e341]: PDF, DOCX, TXT, MD, immagini — trascinali qui o clicca per sfogliare
+      - generic [ref=e349]: test-dcl-document.txt

@@ -17,6 +17,8 @@ import {
     safeAssetLabelFromText,
 } from "../media/projectAssetSemantics";
 import { ExecutionLogger } from "../services/ExecutionLogger";
+import { CostTransactionService } from "../cost/CostTransactionService";
+import { ResourceType } from "../../domain/entities/CostTransaction";
 import { buildContextAwareImagePrompt, buildImagePromptContextPacket } from "../prompting/buildImagePromptContext";
 import type { OptimizeImagePrompt } from "../prompting/OptimizeImagePrompt";
 import { SavePlatformAsset } from "./SavePlatformAsset";
@@ -413,6 +415,24 @@ export class GenerateProjectImage {
                             imageSize: finalMetadata.imageSize,
                             cost: finalMetadata.cost,
                             tokenUsage: finalMetadata.tokenUsage,
+                            targetMode: input.targetMode,
+                        },
+                    });
+
+                    // Cost ledger (fire-and-forget)
+                    CostTransactionService.instance.record({
+                        userId: input.userId,
+                        projectId: input.projectId,
+                        resourceType: ResourceType.IMAGE_GEN,
+                        resourceSubtype: finalMetadata.model,
+                        providerCostUsd: finalMetadata.cost?.providerCostUsd,
+                        precomputedTotalEur: finalMetadata.cost?.amount,
+                        units: { imageCount: 1 },
+                        sourceRef: { assetId: created.id },
+                        meta: {
+                            provider: finalMetadata.provider,
+                            model: finalMetadata.model,
+                            imageSize: finalMetadata.imageSize,
                             targetMode: input.targetMode,
                         },
                     });

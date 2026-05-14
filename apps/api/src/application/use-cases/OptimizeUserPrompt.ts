@@ -12,6 +12,8 @@ import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { env } from "../../config";
 import { buildOptimizeUserPromptRequest } from "../prompting/optimizeUserPromptInstruction";
 import { resolvePromptTaskSettingFromConfig, type PromptTaskSetting } from "../../domain/entities/PlatformConfig";
+import { CostTransactionService } from "../cost/CostTransactionService";
+import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "optimize_user_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -207,6 +209,31 @@ export class OptimizeUserPrompt {
             status: "succeeded",
             durationMs: result.durationMs,
         });
+
+        // Cost ledger (fire-and-forget)
+        if (result.usage && !result.skipped) {
+            CostTransactionService.instance.record({
+                userId: request.userId,
+                projectId: request.projectId,
+                resourceType: ResourceType.LLM_PROMPT_OPT,
+                resourceSubtype: result.model,
+                precomputedTotalEur: result.costEstimate?.amount,
+                units: {
+                    promptTokens: result.usage.promptTokens,
+                    completionTokens: result.usage.completionTokens,
+                    totalTokens: result.usage.totalTokens,
+                },
+                sourceRef: {
+                    conversationId: request.conversationId,
+                    sessionId: request.sessionId,
+                },
+                meta: {
+                    taskKey: TASK_KEY,
+                    provider: result.provider,
+                    model: result.model,
+                },
+            });
+        }
     }
 
     private async persistFailureLog(input: {

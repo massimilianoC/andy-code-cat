@@ -63,7 +63,8 @@ import ProjectConfigPopup from "../../../components/ProjectConfigPopup";
 import MediaInspectorPanel from "../../../components/MediaInspectorPanel";
 import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
 import { MediaGrid, type MediaItem } from "@/components/media";
-import { ChevronDown, Mic, Settings, Square } from "lucide-react";
+import { ChevronDown, FileText, ImageIcon, Loader2, Mic, Paperclip, Settings, Square, X } from "lucide-react";
+import { uploadProjectAsset, deleteProjectAsset } from "../../../lib/api/assets";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
@@ -398,6 +399,7 @@ export default function WorkspacePage() {
     const [promptRestoreValue, setPromptRestoreValue] = useState<string | null>(null);
     const [promptOpsSummary, setPromptOpsSummary] = useState({ totalCost: 0, totalTokens: 0, runs: 0 });
     const [sending, setSending] = useState(false);
+    const [attachingFile, setAttachingFile] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [llmErrorDialog, setLlmErrorDialog] = useState<LlmProviderErrorDialogState | null>(null);
     const [promptConfigVersion, setPromptConfigVersion] = useState<string>("v1");
@@ -440,6 +442,10 @@ export default function WorkspacePage() {
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
     const [voiceError, setVoiceError] = useState<string | null>(null);
+    const [chatAttachedFiles, setChatAttachedFiles] = useState<{ id: string; name: string; mimeType: string }[]>([]);
+    const [isDragOverChat, setIsDragOverChat] = useState(false);
+    const chatFileInputRef = useRef<HTMLInputElement>(null);
+    const [autoOptimize, setAutoOptimize] = useState(true);
 
     const [leftWidth, setLeftWidth] = useState(40);
     const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -922,6 +928,8 @@ export default function WorkspacePage() {
         if (!decoded.trim()) return;
         setPrompt(decoded);
         setAutoPromptPending(true);
+        // Remove the param so a page refresh does not re-trigger the auto-send.
+        router.replace(`/workspace/${projectId}`, { scroll: false } as Parameters<typeof router.replace>[1]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // run once on mount — searchParams is stable
 
@@ -2000,8 +2008,15 @@ export default function WorkspacePage() {
 
     async function handleSend(e: React.FormEvent) {
         e.preventDefault();
-        const content = prompt.trim();
-        if (!content || !token || sending || conversationLoading) return;
+        let content = prompt.trim();
+        if (!content || !token || sending || conversationLoading || optimizingPrompt) return;
+
+        // Auto-optimize pipeline: run optimizer first, then send with the result.
+        if (autoOptimize) {
+            const optimized = await runOptimizeAsync(content);
+            if (optimized === null) return; // aborted or failed — don't send
+            content = optimized;
+        }
 
         setPrompt("");
         setSending(true);
@@ -2475,10 +2490,11 @@ export default function WorkspacePage() {
         }
     }
 
-    async function handleOptimizePrompt() {
-        if (!token || !prompt.trim() || optimizingPrompt || conversationLoading) return;
+    // Core optimization runner — returns optimized prompt or null on failure/abort.
+    // Does NOT set prompt state; callers decide what to do with the result.
+    async function runOptimizeAsync(original: string): Promise<string | null> {
+        if (!token || !original || optimizingPrompt || conversationLoading) return null;
 
-        const original = prompt.trim();
         let trackedConversationId: string | null = activeConvId;
         let trackedUserMessageId: string | null = null;
         const notifId = addNotification({
@@ -2500,9 +2516,7 @@ export default function WorkspacePage() {
 
         try {
             const convId = activeConvId;
-            if (!convId) {
-                throw new Error("Conversation not loaded yet");
-            }
+            if (!convId) throw new Error("Conversation not loaded yet");
 
             const userSaved = await addMessage(token, projectId, convId, {
                 role: "user",
@@ -2556,24 +2570,13 @@ export default function WorkspacePage() {
                     model: selectedModel || undefined,
                 },
                 (event) => {
-                    if (event.type === "thinking") {
-                        setThinkingText((prev) => prev + event.content);
-                        return;
-                    }
-
-                    if (event.type === "answer") {
-                        setDraftAnswer((prev) => `${prev}${event.content}`);
-                        return;
-                    }
-
+                    if (event.type === "thinking") { setThinkingText((prev) => prev + event.content); return; }
+                    if (event.type === "answer") { setDraftAnswer((prev) => `${prev}${event.content}`); return; }
                     if (event.type === "done") {
                         finalResult = event.result;
-                        if (event.result.usage) {
-                            setStreamUsageTokens(event.result.usage);
-                        }
+                        if (event.result.usage) setStreamUsageTokens(event.result.usage);
                         return;
                     }
-
                     if (event.type === "error") {
                         throw new ApiError(event.error?.status ?? 502, event.error ?? { error: event.message });
                     }
@@ -2581,13 +2584,9 @@ export default function WorkspacePage() {
                 abortController.signal
             );
 
-            if (!finalResult) {
-                throw new Error("Optimizer stream ended without final payload");
-            }
+            if (!finalResult) throw new Error("Optimizer stream ended without final payload");
 
             const result = finalResult;
-            setPromptRestoreValue(original);
-            setPrompt(result.optimizedPrompt);
             setPromptOpsSummary((prev) => ({
                 totalCost: prev.totalCost + (result.costEstimate?.amount ?? 0),
                 totalTokens: prev.totalTokens + (result.usage?.totalTokens ?? 0),
@@ -2651,6 +2650,9 @@ export default function WorkspacePage() {
                     ? t("workspace.notifications.promptOptimizer.skipped")
                     : t("workspace.notifications.promptOptimizer.done", { provider: result.provider, model: result.model }),
             });
+
+            return result.optimizedPrompt;
+
         } catch (err) {
             if (err instanceof Error && err.name === "AbortError") {
                 updateNotification(notifId, { label: t("workspace.notifications.promptOptimizer.label"), status: "error", message: t("workspace.notifications.promptOptimizer.aborted") });
@@ -2672,11 +2674,9 @@ export default function WorkspacePage() {
                         setActiveConv((prev) =>
                             prev ? { ...prev, messages: [...prev.messages, interruptedSaved.message] } : prev
                         );
-                    } catch {
-                        // non-blocking
-                    }
+                    } catch { /* non-blocking */ }
                 }
-                return;
+                return null;
             }
 
             const msg = err instanceof ApiError ? presentLlmError(err) : err instanceof Error ? err.message : "Prompt optimization failed";
@@ -2684,16 +2684,9 @@ export default function WorkspacePage() {
 
             if (token && trackedConversationId) {
                 try {
-                    const errorSaved = await addMessage(token, projectId, trackedConversationId, {
-                        role: "error",
-                        content: `Optimize prompt: ${msg}`,
-                    });
-                    setActiveConv((prev) =>
-                        prev ? { ...prev, messages: [...prev.messages, errorSaved.message] } : prev
-                    );
-                } catch {
-                    // keep initial error only
-                }
+                    const errorSaved = await addMessage(token, projectId, trackedConversationId, { role: "error", content: `Optimize prompt: ${msg}` });
+                    setActiveConv((prev) => prev ? { ...prev, messages: [...prev.messages, errorSaved.message] } : prev);
+                } catch { /* keep initial error only */ }
             }
 
             if (token && trackedConversationId && trackedUserMessageId) {
@@ -2705,12 +2698,11 @@ export default function WorkspacePage() {
                         error: msg,
                         status: "failed",
                     });
-                } catch {
-                    // non-blocking
-                }
+                } catch { /* non-blocking */ }
             }
 
             updateNotification(notifId, { label: t("workspace.notifications.promptOptimizer.label"), status: "error", message: msg });
+            return null;
         } finally {
             abortControllerRef.current = null;
             setThinkingText("");
@@ -2720,11 +2712,59 @@ export default function WorkspacePage() {
         }
     }
 
+    // Manual optimize button: run optimization and update the textarea prompt.
+    async function handleOptimizePrompt() {
+        const original = prompt.trim();
+        if (!original) return;
+        const optimized = await runOptimizeAsync(original);
+        if (optimized !== null) {
+            setPromptRestoreValue(original);
+            setPrompt(optimized);
+        }
+    }
+
     function handleRestoreOptimizedPrompt() {
         if (!promptRestoreValue) return;
         setPrompt(promptRestoreValue);
         setPromptRestoreValue(null);
     }
+
+    const handleChatFileAttach = useCallback(async (files: FileList | File[]) => {
+        const tok = getToken();
+        if (!tok) return;
+        const fileArray = Array.from(files);
+        setAttachingFile(true);
+        try {
+            await Promise.all(fileArray.map(async (file) => {
+                const notifId = addNotification({
+                    label: file.name,
+                    status: "running",
+                    message: t("workspace.ui.uploading"),
+                });
+                try {
+                    const { asset } = await uploadProjectAsset(tok, projectId, file, { useInProject: true });
+                    setChatAttachedFiles((prev) => [...prev, { id: asset.id, name: file.name, mimeType: file.type }]);
+                    updateNotification(notifId, { status: "done", message: t("workspace.ui.uploadSuccess") });
+                } catch (err) {
+                    const msg = (err as { body?: { error?: string } })?.body?.error;
+                    updateNotification(notifId, { status: "error", message: msg ?? t("workspace.ui.attachError") });
+                }
+            }));
+        } finally {
+            setAttachingFile(false);
+        }
+    }, [addNotification, updateNotification, projectId, t]);
+
+    const handleRemoveChatFile = useCallback(async (assetId: string) => {
+        const tok = getToken();
+        if (!tok) return;
+        try {
+            await deleteProjectAsset(tok, projectId, assetId);
+            setChatAttachedFiles((prev) => prev.filter((f) => f.id !== assetId));
+        } catch {
+            setChatAttachedFiles((prev) => prev.filter((f) => f.id !== assetId));
+        }
+    }, [projectId]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -2765,15 +2805,12 @@ export default function WorkspacePage() {
         };
 
         recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
+            // Only append on FINAL results — interim results are discarded so
+            // the textarea never overwrites / flickers during recognition.
             let finalTranscript = "";
-            let interimTranscript = "";
-
             for (let i = event.resultIndex; i < event.results.length; i += 1) {
-                const transcript = event.results[i]?.[0]?.transcript ?? "";
                 if (event.results[i]?.isFinal) {
-                    finalTranscript += transcript;
-                } else {
-                    interimTranscript += transcript;
+                    finalTranscript += event.results[i]?.[0]?.transcript ?? "";
                 }
             }
 
@@ -2782,14 +2819,8 @@ export default function WorkspacePage() {
                     speechCommittedTranscriptRef.current,
                     finalTranscript
                 );
+                setPrompt(appendPromptSegment(speechBasePromptRef.current, speechCommittedTranscriptRef.current));
             }
-
-            const liveTranscript = appendPromptSegment(
-                speechCommittedTranscriptRef.current,
-                interimTranscript
-            );
-
-            setPrompt(appendPromptSegment(speechBasePromptRef.current, liveTranscript));
         };
 
         recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
@@ -2825,6 +2856,7 @@ export default function WorkspacePage() {
         <WorkspaceHeader
             projectName={projectName}
             totalCostEur={promptOpsSummary.totalCost + (projectAiAnalytics?.totals.imageCost ?? 0)}
+            projectId={projectId}
             onConfigOpen={() => setConfigOpen(true)}
             onDashboard={() => router.push("/dashboard")}
         />
@@ -2922,6 +2954,28 @@ export default function WorkspacePage() {
                                     ? (draftAnswer ? t("workspace.ui.stream.optimizing") : thinkingText ? t("workspace.ui.stream.analysingOptimizer") : t("workspace.ui.stream.connectingOptimizer"))
                                     : (draftAnswer ? t("workspace.ui.stream.responding") : thinkingText ? t("workspace.ui.stream.reasoning") : t("workspace.ui.stream.connectingProvider"))}
                             </div>
+                            {/* Attached-file chips — show which documents are in context */}
+                            {chatAttachedFiles.length > 0 && (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", marginTop: "0.25rem" }}>
+                                    {chatAttachedFiles.map((f) => (
+                                        <span
+                                            key={f.id}
+                                            style={{
+                                                display: "inline-flex", alignItems: "center", gap: "0.25rem",
+                                                borderRadius: "9999px", border: "1px solid rgba(99,102,241,0.35)",
+                                                background: "rgba(99,102,241,0.1)", padding: "0.1rem 0.5rem",
+                                                fontSize: "0.65rem", color: "var(--accent-text, #818cf8)",
+                                            }}
+                                        >
+                                            {f.mimeType.startsWith("image/")
+                                                ? <ImageIcon style={{ width: "0.65rem", height: "0.65rem" }} />
+                                                : <FileText style={{ width: "0.65rem", height: "0.65rem" }} />
+                                            }
+                                            {f.name}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                             <div ref={thinkingFlowRef} className="workspace-thinking-flow">
                                 {thinkingText || (activeOperation === "prompt-optimizer" ? t("workspace.ui.stream.thinkingDefault") : t("workspace.ui.stream.thinkingOptimizer"))}
                             </div>
@@ -2972,12 +3026,48 @@ export default function WorkspacePage() {
                     aria-orientation="horizontal"
                     aria-label={t("workspace.ui.resizeChat")}
                 />
-                <form onSubmit={(e) => void handleSend(e)} className="workspace-input-form">
-                    <div className="flex items-start gap-2">
+                <form
+                    onSubmit={(e) => void handleSend(e)}
+                    className="workspace-input-form relative"
+                    onDragOver={(e) => { e.preventDefault(); setIsDragOverChat(true); }}
+                    onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOverChat(false); }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDragOverChat(false);
+                        const files = e.dataTransfer.files;
+                        if (files.length > 0) void handleChatFileAttach(files);
+                    }}
+                >
+                    {/* Drag-and-drop overlay */}
+                    {isDragOverChat && (
+                        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10">
+                            <span className="text-sm font-medium text-primary">{t("workspace.ui.dropToAttach")}</span>
+                        </div>
+                    )}
+
+                    {/* Hidden file input — driven by label htmlFor (reliable across all browsers) */}
+                    <input
+                        id="chat-file-input"
+                        ref={chatFileInputRef}
+                        type="file"
+                        style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
+                        accept=".pdf,.docx,.doc,.txt,.md,image/*"
+                        multiple
+                        disabled={sending || attachingFile || optimizingPrompt}
+                        onChange={(e) => {
+                            const files = e.target.files;
+                            e.target.value = "";
+                            if (files && files.length > 0) void handleChatFileAttach(files);
+                        }}
+                    />
+
+                    {/* Main input row: textarea + vertical action buttons */}
+                    <div className="workspace-input-row">
                         <textarea
                             style={textareaStyle}
-                            className={inspectMode && selectedElement ? "placeholder:italic" : undefined}
+                            className={`workspace-input-textarea${inspectMode && selectedElement ? " placeholder:italic" : ""}`}
                             value={prompt}
+                            autoFocus
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" && !e.shiftKey) {
@@ -2993,22 +3083,81 @@ export default function WorkspacePage() {
                             rows={3}
                             disabled={sending || optimizingPrompt}
                         />
-                        <Button
-                            type="button"
-                            variant={voiceListening ? "destructive" : "outline"}
-                            size="icon"
-                            onClick={handleToggleVoiceInput}
-                            disabled={!voiceSupported || sending || conversationLoading || optimizingPrompt}
-                            title={voiceListening ? t("workspace.ui.voiceListeningTitle") : t("workspace.ui.voiceStartTitle")}
-                            aria-label={voiceListening ? t("workspace.ui.voiceListeningLabel") : t("workspace.ui.voiceStartLabel")}
-                            className="shrink-0"
-                        >
-                            {voiceListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                        </Button>
+                        {/* Action buttons stacked vertically */}
+                        <div className="workspace-input-actions">
+                            {/* Label-based file trigger — most reliable cross-browser approach */}
+                            <label
+                                htmlFor="chat-file-input"
+                                title={t("workspace.ui.attachTitle")}
+                                aria-label={t("workspace.ui.attachLabel")}
+                                style={{
+                                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                    width: "2.25rem", height: "2.25rem", borderRadius: "var(--radius)",
+                                    border: "1px solid var(--border)", background: "transparent",
+                                    color: "var(--text-muted)", cursor: (sending || attachingFile || optimizingPrompt) ? "not-allowed" : "pointer",
+                                    opacity: (sending || attachingFile || optimizingPrompt) ? 0.5 : 1,
+                                    flexShrink: 0,
+                                }}
+                            >
+                                {attachingFile
+                                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                                    : <Paperclip className="h-4 w-4" />
+                                }
+                            </label>
+                            <button
+                                type="button"
+                                onClick={handleToggleVoiceInput}
+                                disabled={sending || optimizingPrompt}
+                                title={voiceListening ? t("workspace.ui.voiceListeningTitle") : t("workspace.ui.voiceStartTitle")}
+                                aria-label={voiceListening ? t("workspace.ui.voiceListeningLabel") : t("workspace.ui.voiceStartLabel")}
+                                style={{
+                                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                    width: "2.25rem", height: "2.25rem", borderRadius: "var(--radius)",
+                                    border: "1px solid var(--border)",
+                                    background: voiceListening ? "var(--error, #f87171)" : "transparent",
+                                    color: voiceListening ? "#fff" : "var(--text-muted)",
+                                    cursor: (sending || optimizingPrompt) ? "not-allowed" : "pointer",
+                                    opacity: (sending || optimizingPrompt) ? 0.5 : 1,
+                                    flexShrink: 0,
+                                }}
+                            >
+                                {voiceListening ? <Square style={{ width: "1rem", height: "1rem" }} /> : <Mic style={{ width: "1rem", height: "1rem" }} />}
+                            </button>
+                        </div>
                     </div>
-                    {(voiceSupported || voiceError) && (
+
+                    {/* Attached files scrollable bar */}
+                    {chatAttachedFiles.length > 0 && (
+                        <div className="flex gap-2 overflow-x-auto pb-1 pt-1" style={{ scrollbarWidth: "thin" }}>
+                            {chatAttachedFiles.map((f) => (
+                                <div
+                                    key={f.id}
+                                    className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 py-1 text-xs"
+                                    title={f.name}
+                                >
+                                    {f.mimeType.startsWith("image/")
+                                        ? <ImageIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                        : <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                    }
+                                    <span className="max-w-[120px] truncate text-muted-foreground">{f.name}</span>
+                                    <button
+                                        type="button"
+                                        className="ml-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+                                        title={t("workspace.ui.removeAttachment")}
+                                        aria-label={t("workspace.ui.removeAttachment")}
+                                        onClick={() => void handleRemoveChatFile(f.id)}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Voice status bar */}
+                    {(voiceListening || voiceError) && (
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{voiceListening ? t("workspace.ui.voiceListening") : t("workspace.ui.voiceReady")}</span>
+                            {voiceListening && <span>{t("workspace.ui.voiceListening")}</span>}
                             {voiceError && <span className="text-destructive">{voiceError}</span>}
                         </div>
                     )}
@@ -3181,20 +3330,45 @@ export default function WorkspacePage() {
                             )}
                         </div>
                         <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-                            <Button
+                            {/* Auto-optimize toggle */}
+                            <button
                                 type="button"
-                                variant="secondary"
-                                onClick={() => void handleOptimizePrompt()}
-                                disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt || currentProviderMissingKey}
-                                title={selectedModel ? t("workspace.ui.useProviderModel", { provider: selectedProvider, model: selectedModel }) : t("workspace.ui.useActiveProviderModel")}
+                                role="switch"
+                                aria-checked={autoOptimize}
+                                title={autoOptimize ? t("workspace.ui.autoOptimizeOnTitle") : t("workspace.ui.autoOptimizeOffTitle")}
+                                onClick={() => setAutoOptimize((v) => !v)}
+                                style={{
+                                    position: "relative", display: "inline-flex", height: "1.1rem", width: "2rem",
+                                    flexShrink: 0, cursor: "pointer", borderRadius: "9999px", border: "none",
+                                    background: autoOptimize ? "var(--accent, #6366f1)" : "var(--border)",
+                                    transition: "background 0.2s",
+                                    padding: 0, outline: "none",
+                                }}
                             >
-                                {optimizingPrompt
-                                    ? t("workspace.ui.optimizingPrompt")
-                                    : selectedModel
-                                        ? t("workspace.ui.optimizeWith", { model: selectedModel.split("/").pop() })
-                                        : t("workspace.ui.optimizePrompt")}
-                            </Button>
-                            {promptRestoreValue && (
+                                <span style={{
+                                    display: "inline-block", height: "0.85rem", width: "0.85rem", borderRadius: "9999px",
+                                    background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                                    transform: autoOptimize ? "translateX(1.05rem)" : "translateX(0.12rem)",
+                                    transition: "transform 0.2s", margin: "auto 0",
+                                    position: "absolute", top: "50%", translate: "0 -50%",
+                                }} />
+                            </button>
+                            <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                                {autoOptimize ? t("workspace.ui.autoOptimizeOn") : t("workspace.ui.autoOptimizeOff")}
+                            </span>
+                            {/* Manual optimize only when auto is OFF */}
+                            {!autoOptimize && (
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() => void handleOptimizePrompt()}
+                                    disabled={!prompt.trim() || sending || conversationLoading || optimizingPrompt || currentProviderMissingKey}
+                                    title={selectedModel ? t("workspace.ui.useProviderModel", { provider: selectedProvider, model: selectedModel }) : t("workspace.ui.useActiveProviderModel")}
+                                >
+                                    {optimizingPrompt ? t("workspace.ui.optimizingPrompt") : t("workspace.ui.optimizePrompt")}
+                                </Button>
+                            )}
+                            {promptRestoreValue && !autoOptimize && (
                                 <Button type="button" variant="outline" onClick={handleRestoreOptimizedPrompt} disabled={sending || optimizingPrompt}>
                                     {t("workspace.ui.restoreOriginal")}
                                 </Button>
@@ -3975,12 +4149,21 @@ export default function WorkspacePage() {
                                         />
                                         <PromptLayerBlock
                                             label={t("workspace.ui.layers.layerD")}
-                                            badge={t("workspace.ui.layers.layerDBadge")}
-                                            badgeColor="#6b7280"
+                                            badge={promptPreview.layers.d_documentContext ? t("workspace.ui.layers.layerDBadge") : t("workspace.ui.layers.layerDEmpty")}
+                                            badgeColor={promptPreview.layers.d_documentContext ? "#34d399" : "#6b7280"}
                                             source={t("workspace.ui.layers.layerDSource")}
-                                            content={promptPreview.layers.d_prePromptTemplate || t("workspace.ui.layers.layerDEmpty")}
-                                            empty={!promptPreview.layers.d_prePromptTemplate}
+                                            content={promptPreview.layers.d_documentContext || t("workspace.ui.layers.layerDEmpty")}
+                                            empty={!promptPreview.layers.d_documentContext}
                                         />
+                                        {promptPreview.layers.e_prePromptTemplate && (
+                                            <PromptLayerBlock
+                                                label={t("workspace.ui.layers.layerE")}
+                                                badge={t("workspace.ui.layers.layerEBadge")}
+                                                badgeColor="#f59e0b"
+                                                source={t("workspace.ui.layers.layerESource")}
+                                                content={promptPreview.layers.e_prePromptTemplate}
+                                            />
+                                        )}
                                         {promptPreview.layers.budgetPolicy && (
                                             <PromptLayerBlock
                                                 label={t("workspace.ui.layers.policy")}

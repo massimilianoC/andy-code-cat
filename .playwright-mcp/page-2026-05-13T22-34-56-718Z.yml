@@ -1,0 +1,129 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e35]
+  - main [ref=e253]:
+    - generic [ref=e254]:
+      - generic [ref=e255]:
+        - generic [ref=e256]: Zero Effort
+        - heading "Generazione guidata" [level=1] [ref=e257]
+        - paragraph [ref=e258]: DCL Test Project · Compila i 3 step e avvia la generazione automatica.
+      - generic [ref=e259]:
+        - button "Dashboard" [ref=e260] [cursor=pointer]
+        - button "GodMode" [ref=e261] [cursor=pointer]
+    - generic [ref=e262]:
+      - generic [ref=e263]:
+        - button [ref=e350] [cursor=pointer]
+        - generic [ref=e265]: Descrizione
+        - img [ref=e266]
+      - generic [ref=e268]:
+        - button [ref=e395] [cursor=pointer]
+        - generic [ref=e270]: Target & Dati
+        - img [ref=e271]
+      - generic [ref=e273]:
+        - button [ref=e454] [cursor=pointer]
+        - generic [ref=e275]: Stile visivo
+    - generic [ref=e276]:
+      - button "Step 1 — Descrizione Brand, tipo sito e obiettivo principale" [ref=e278] [cursor=pointer]:
+        - img [ref=e352]
+        - generic [ref=e283]:
+          - paragraph [ref=e284]: Step 1 — Descrizione
+          - paragraph [ref=e285]: Brand, tipo sito e obiettivo principale
+        - img [ref=e286]
+      - button "Step 2 — Target & Dati Audience, contatti e info salienti" [ref=e307] [cursor=pointer]:
+        - img [ref=e397]
+        - generic [ref=e313]:
+          - paragraph [ref=e314]: Step 2 — Target & Dati
+          - paragraph [ref=e315]: Audience, contatti e info salienti
+        - img [ref=e316]
+      - generic [ref=e318]:
+        - button "Step 3 — Stile visivo Attributi estetici, tono e CTA" [ref=e319] [cursor=pointer]:
+          - img [ref=e456]
+          - generic [ref=e327]:
+            - paragraph [ref=e328]: Step 3 — Stile visivo
+            - paragraph [ref=e329]: Attributi estetici, tono e CTA
+          - img [ref=e330]
+        - generic [ref=e401]:
+          - generic [ref=e402]:
+            - generic [ref=e403]: Attributi visivi
+            - paragraph [ref=e404]: Seleziona uno o più stili che caratterizzano il progetto.
+            - generic [ref=e405]:
+              - button "Minimal" [ref=e406] [cursor=pointer]: Minimal
+              - button "Premium" [ref=e408] [cursor=pointer]: Premium
+              - button "Dark / Night" [ref=e410] [cursor=pointer]:
+                - img [ref=e450]
+                - text: Dark / Night
+              - button "Chiaro / Luminoso" [ref=e412] [cursor=pointer]: Chiaro / Luminoso
+              - button "Bold / Impattante" [ref=e414] [cursor=pointer]: Bold / Impattante
+              - button "Elegante" [ref=e416] [cursor=pointer]: Elegante
+              - button "Corporate" [ref=e418] [cursor=pointer]: Corporate
+              - button "Giocoso / Creativo" [ref=e420] [cursor=pointer]: Giocoso / Creativo
+              - button "Tech / Moderno" [ref=e422] [cursor=pointer]:
+                - img [ref=e452]
+                - text: Tech / Moderno
+              - button "Artigianale" [ref=e424] [cursor=pointer]: Artigianale
+              - button "Luxury" [ref=e426] [cursor=pointer]: Luxury
+              - button "Eco / Naturale" [ref=e428] [cursor=pointer]: Eco / Naturale
+          - generic [ref=e430]:
+            - generic [ref=e431]:
+              - generic [ref=e432]: Tono di voce
+              - textbox "Tono di voce" [ref=e433]:
+                - /placeholder: Es. chiaro e moderno
+                - text: Professionale, innovativo, diretto
+            - generic [ref=e434]:
+              - generic [ref=e435]: CTA principale
+              - textbox "CTA principale" [ref=e436]:
+                - /placeholder: Es. Acquista ora, Scopri di più
+                - text: Inizia ora
+          - generic [ref=e437]:
+            - generic [ref=e438]: Note stilistiche aggiuntive
+            - textbox "Note stilistiche aggiuntive" [ref=e439]:
+              - /placeholder: Es. Telaio in alluminio, primo e-bike per ÖAMTC, colori brand KTM
+              - text: Colori scuri, accenti cyan/teal, tipografia moderna sans-serif
+          - generic [ref=e440]:
+            - button "Indietro" [ref=e441] [cursor=pointer]:
+              - img [ref=e442]
+              - text: Indietro
+            - button "Prepara Brief" [ref=e444] [cursor=pointer]:
+              - img [ref=e445]
+              - text: Prepara Brief
+    - generic [ref=e334] [cursor=pointer]:
+      - img [ref=e345]
+      - generic [ref=e339]:
+        - paragraph [ref=e340]: Allega documenti di contesto
+        - paragraph [ref=e341]: PDF, DOCX, TXT, MD, immagini — trascinali qui o clicca per sfogliare
+      - generic [ref=e349]: test-dcl-document.txt
+    - generic [ref=e458]:
+      - generic [ref=e460]:
+        - img [ref=e462]
+        - generic [ref=e465]:
+          - heading "Step 4 — Avvia Generazione" [level=3] [ref=e466]
+          - paragraph [ref=e467]: Pronto per la generazione
+        - generic [ref=e468]: MiniMaxAI/MiniMax-M2.5
+      - generic [ref=e469]:
+        - generic [ref=e470]:
+          - generic [ref=e471]: Brief strutturato — modificabile prima dell'ottimizzazione
+          - code [ref=e475]:
+            - generic [ref=e476]:
+              - textbox "Editor content" [ref=e477]
+              - textbox [ref=e478]
+              - generic [ref=e522]:
+                - generic [ref=e524]: "# BRIEF DI PROGETTO — DCL Test Project"
+                - generic [ref=e527]: "## [IDENTITÀ] Brand e tipo sito"
+                - generic [ref=e529]: "- **Brand:** DCL Test Project"
+                - generic [ref=e531]: "- **Tipo sito:** Business Site"
+                - generic [ref=e534]: "## [OBIETTIVO] Descrizione e obiettivo principale"
+                - generic [ref=e537]: Andy Code Cat è una piattaforma AI per la generazione automatica di siti web.
+                - generic [ref=e539]: "- Obiettivo: generare siti professionali in pochi minuti"
+                - generic [ref=e541]: "- Pubblico: sviluppatori e designer"
+                - generic [ref=e543]: "- Punto di forza: enrichment automatico dei documenti tramite DCL"
+                - generic [ref=e546]: "## [AUDIENCE] Target e pubblico di riferimento"
+                - generic [ref=e549]: Sviluppatori e designer professionisti tra 25-45 anni, italiani e internazionali,
+                - generic [ref=e551]: interessati a strumenti AI per la creazione rapida di siti web professionali
+                - generic [ref=e554]: "## [STILE] Attributi visivi, tono e CTA"
+        - generic [ref=e558]:
+          - paragraph [ref=e559]: Il brief verrà ottimizzato in prompt, poi usato per generare il sito.
+          - button "Avvia Generazione" [ref=e560] [cursor=pointer]:
+            - img [ref=e561]
+            - text: Avvia Generazione
+  - generic [ref=e564]:
+    - alert
+    - alert

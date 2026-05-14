@@ -52,6 +52,10 @@ const envSchema = z.object({
     OPENROUTER_BASE_URL: z.string().url().default("https://openrouter.ai/api/v1"),
     OPEN_ROUTER_API_KEY: z.string().optional(),
     LLM_PROVIDER_API_KEYS_JSON: z.string().optional(),
+    // --- External image services ---
+    PEXELS_API_KEY: z.string().optional(),
+    PIXABAY_API_KEY: z.string().optional(),
+    UNSPLASH_ACCESS_KEY: z.string().optional(),
     COST_POLICY_TEXT_EUR_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0.005),
     COST_POLICY_IMAGE_EUR_PER_ASSET: z.coerce.number().nonnegative().default(0.1),
     COST_POLICY_VIDEO_EUR_PER_ASSET: z.coerce.number().nonnegative().default(0.2),
@@ -83,6 +87,18 @@ const envSchema = z.object({
     EXPORT_JWT_SECRET: z.string().min(16).default("change-me-export-secret-32chars!!"),
     EXPORT_DOWNLOAD_TTL: z.string().default("3600"),
     UPLOAD_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
+    // ── Document Context Layer (DCL) enrichment ───────────────────────────────
+    ENRICHMENT_ENABLED: z.string().default("true"),
+    ENRICHMENT_DOCUMENT_PARSING: z.string().default("true"),
+    ENRICHMENT_DOCUMENT_LLM_PASS: z.string().default("true"),
+    ENRICHMENT_TEXT_PROVIDER: z.string().default("siliconflow"),
+    ENRICHMENT_TEXT_MODEL: z.string().default("Qwen/Qwen2.5-72B-Instruct"),
+    ENRICHMENT_IMAGE_ANALYSIS: z.string().default("true"),
+    ENRICHMENT_VISION_PROVIDER: z.string().default("siliconflow"),
+    ENRICHMENT_VISION_MODEL: z.string().default("Qwen/Qwen2.5-VL-72B-Instruct"),
+    ENRICHMENT_INJECT_LAYER_D: z.string().default("true"),
+    ENRICHMENT_LAYER_D_MAX_CHARS: z.coerce.number().int().positive().default(21000),
+    ENRICHMENT_LAYER_D_MAX_ASSETS: z.coerce.number().int().positive().default(5),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -105,6 +121,9 @@ export const env = {
     MEDIA_AUTO_CLASSIFY_UPLOADS: parsed.data.MEDIA_AUTO_CLASSIFY_UPLOADS === "true",
     hasSiliconFlowApiKey: Boolean(parsed.data.SILICONFLOW_API_KEY?.trim()),
     hasOpenRouterApiKey: Boolean(parsed.data.OPEN_ROUTER_API_KEY?.trim()),
+    hasPexelsApiKey: Boolean(parsed.data.PEXELS_API_KEY?.trim()),
+    hasPixabayApiKey: Boolean(parsed.data.PIXABAY_API_KEY?.trim()),
+    hasUnsplashApiKey: Boolean(parsed.data.UNSPLASH_ACCESS_KEY?.trim()),
     providerApiKeys: (() => {
         const map: Record<string, string> = {};
         if (parsed.data.SILICONFLOW_API_KEY?.trim()) {
@@ -134,4 +153,9 @@ export const env = {
         return map;
     })(),
     focusSectionContext: parsed.data.LLM_FOCUS_SECTION_CONTEXT === "true",
+    enrichmentEnabled: parsed.data.ENRICHMENT_ENABLED === "true",
+    enrichmentDocumentParsing: parsed.data.ENRICHMENT_DOCUMENT_PARSING === "true",
+    enrichmentDocumentLlmPass: parsed.data.ENRICHMENT_DOCUMENT_LLM_PASS === "true",
+    enrichmentImageAnalysis: parsed.data.ENRICHMENT_IMAGE_ANALYSIS === "true",
+    enrichmentInjectLayerD: parsed.data.ENRICHMENT_INJECT_LAYER_D === "true",
 };

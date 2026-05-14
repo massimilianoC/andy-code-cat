@@ -30,12 +30,17 @@
         "helmet": "^7.1.0",
         "jsonrepair": "^3.13.3",
         "jsonwebtoken": "^9.0.2",
-        "mongodb": "^6.7.0",
+        "mammoth": "^1.9.0",
         "minio": "^8.0.6",
+        "mongodb": "^6.7.0",
         "morgan": "^1.10.0",
         "multer": "^2.1.1",
+        "pdf-parse": "^1.1.1",
         "puppeteer": "^24.40.0",
         "zod": "^3.23.8"
+    },
+    "optionalDependencies": {
+        "sharp": "^0.33.0"
     },
     "devDependencies": {
         "@types/archiver": "^7.0.0",
@@ -47,6 +52,10 @@
         "@types/morgan": "^1.9.9",
         "@types/multer": "^2.1.0",
         "@types/node": "^20.14.10",
+        "@types/pdf-parse": "^1.1.5",
+        "@types/supertest": "^7.2.0",
+        "mongodb-memory-server": "^11.1.0",
+        "supertest": "^7.2.2",
         "tsx": "^4.16.2",
         "typescript": "^5.5.3"
     }

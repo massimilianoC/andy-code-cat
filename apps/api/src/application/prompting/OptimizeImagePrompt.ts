@@ -8,6 +8,8 @@ import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import type { GetLlmCatalog } from "../use-cases/GetLlmCatalog";
 import { buildContextAwareImagePrompt, type ImagePromptContextPacket } from "./buildImagePromptContext";
 import { buildOptimizeImagePromptRequest } from "./optimizeImagePromptInstruction";
+import { CostTransactionService } from "../cost/CostTransactionService";
+import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "optimize_image_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -263,6 +265,28 @@ export class OptimizeImagePrompt {
                 status: "succeeded",
                 durationMs: Date.now() - startedAt,
             }).catch(() => { });
+
+            // ── Cost ledger: image prompt optimization LLM call (fire-and-forget) ──
+            if (costEstimate) {
+                CostTransactionService.instance.record({
+                    userId: input.userId,
+                    projectId: input.projectId,
+                    resourceType: ResourceType.IMAGE_PROMPT_OPT,
+                    resourceSubtype: modelId,
+                    providerCostUsd: providerCostUsd,
+                    precomputedTotalEur: costEstimate.amount,
+                    units: {
+                        promptTokens: usage.promptTokens,
+                        completionTokens: usage.completionTokens,
+                        totalTokens: usage.totalTokens,
+                    },
+                    meta: {
+                        provider: providerCatalog.provider,
+                        model: modelId,
+                    },
+                });
+            }
+            // ── end cost ledger ───────────────────────────────────────────────
 
             return {
                 optimizedPrompt,

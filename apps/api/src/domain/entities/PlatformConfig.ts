@@ -64,6 +64,23 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 14000,
         systemTemplate: "",
     },
+    // Document Context Layer (DCL) enrichment tasks
+    enrich_document: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "Qwen/Qwen2.5-72B-Instruct",
+        temperature: 0.1,
+        maxCompletionTokens: 800,
+        systemTemplate: "",
+    },
+    enrich_image: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "Qwen/Qwen2.5-VL-72B-Instruct",
+        temperature: 0.1,
+        maxCompletionTokens: 600,
+        systemTemplate: "",
+    },
 };
 
 export interface ProductInjectionConfig {
@@ -125,6 +142,47 @@ export interface ProductGovernanceConfig {
 }
 
 /**
+ * Per-resource-type cost policy override.
+ * When set, these values override the global PlatformCostRates for the specified resource type.
+ * Unset fields fall back to the global rates.
+ */
+export interface ResourceTypeCostPolicy {
+    /** Percentage markup override (e.g. 0.15 = 15%). */
+    markupPct?: number;
+    /** Infrastructure cost percentage override (e.g. 0.05 = 5%). */
+    infraPct?: number;
+    /** Fixed fee in EUR added per transaction. */
+    fixedFeeEur?: number;
+    /** For LLM types: EUR per 1 000 tokens. */
+    tokenRateEurPer1k?: number;
+    /** For image / video types: EUR per generated asset. */
+    assetRateEur?: number;
+    /** When true, prefer provider-reported cost over flat-rate estimate. */
+    useProviderCost?: boolean;
+    /** Informational note (not used in cost computation). */
+    note?: string;
+}
+
+/**
+ * Live cost-rate overrides stored in platform config.
+ * When present, these override the env-var defaults used by CostTransactionService.
+ */
+export interface PlatformCostRates {
+    usdToEurRate: number;
+    platformMarkupPct: number;
+    infraCostPct: number;
+    textEurPer1kTokens: number;
+    imageEurPerAsset: number;
+    videoEurPerAsset: number;
+    computeEurPerMs: number;
+    storageEurPerGbMonth: number;
+    /** Per-resource-type policy overrides. Keys are ResourceType values (e.g. "llm.chat"). */
+    perType?: Record<string, ResourceTypeCostPolicy>;
+    updatedAt: Date;
+    updatedByUserId?: string;
+}
+
+/**
  * Singleton platform-wide configuration document.
  * Stored in the `platform_config` collection under id "global".
  */
@@ -141,6 +199,8 @@ export interface PlatformConfig {
     updatedAt: Date;
     /** userId of the superadmin that last modified this config. */
     updatedByUserId?: string;
+    /** Live cost-rate overrides. When absent, CostTransactionService falls back to env vars. */
+    costRates?: PlatformCostRates;
 }
 
 export function resolvePromptTaskSettingFromConfig(

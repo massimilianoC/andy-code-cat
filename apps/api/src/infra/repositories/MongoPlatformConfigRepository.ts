@@ -1,6 +1,6 @@
 import type { Collection } from "mongodb";
 import { getDb } from "../db/mongo";
-import { DEFAULT_PROMPT_TASK_SETTINGS, type PlatformConfig } from "../../domain/entities/PlatformConfig";
+import { DEFAULT_PROMPT_TASK_SETTINGS, type PlatformConfig, type PlatformCostRates } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository, UpdatePlatformConfigInput } from "../../domain/repositories/PlatformConfigRepository";
 import { DEFAULT_USER_LIMITS } from "../../domain/entities/User";
 
@@ -15,6 +15,7 @@ interface PlatformConfigDocument {
     governanceByProduct?: PlatformConfig["governanceByProduct"];
     updatedAt: Date;
     updatedByUserId?: string;
+    costRates?: PlatformCostRates;
 }
 
 function toEntity(doc: PlatformConfigDocument): PlatformConfig {
@@ -26,6 +27,7 @@ function toEntity(doc: PlatformConfigDocument): PlatformConfig {
         governanceByProduct: doc.governanceByProduct,
         updatedAt: doc.updatedAt,
         updatedByUserId: doc.updatedByUserId,
+        costRates: doc.costRates,
     };
 }
 
@@ -161,6 +163,22 @@ export class MongoPlatformConfigRepository implements PlatformConfigRepository {
         }
         if (input.updatedByUserId !== undefined) {
             setFields.updatedByUserId = input.updatedByUserId;
+        }
+        if (input.costRates !== undefined) {
+            const existingRates = existingDoc?.costRates;
+            const inputRates = input.costRates;
+            // Deep-merge perType: new entries are merged key by key with existing ones
+            let mergedPerType: PlatformCostRates["perType"] = existingRates?.perType;
+            if (inputRates.perType !== undefined) {
+                mergedPerType = { ...(existingRates?.perType ?? {}), ...inputRates.perType };
+            }
+            setFields.costRates = {
+                ...existingRates,
+                ...inputRates,
+                perType: mergedPerType,
+                updatedAt: new Date(),
+                updatedByUserId: inputRates.updatedByUserId ?? input.updatedByUserId,
+            } as PlatformCostRates;
         }
 
         await col.updateOne(

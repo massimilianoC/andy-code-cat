@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import { getAdminAiAnalytics, getAdminStats, type PlatformStatsDto } from "@/lib/api/admin";
 import type { AiUsageAnalyticsDto } from "@/lib/api/assets";
+import { getAdminCostDashboard, type AdminCostDashboardDto } from "@/lib/api/cost";
 import AiUsageSummaryPanel from "@/components/AiUsageSummaryPanel";
 
 // ── Stat card ──────────────────────────────────────────────────────────────────
@@ -113,15 +114,16 @@ export default function AdminDashboardPage() {
     const router = useRouter();
     const [stats, setStats] = useState<PlatformStatsDto | null>(null);
     const [aiAnalytics, setAiAnalytics] = useState<AiUsageAnalyticsDto | null>(null);
+    const [costDashboard, setCostDashboard] = useState<AdminCostDashboardDto | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const token = getToken();
         if (!token) { router.replace("/login"); return; }
-        Promise.allSettled([getAdminStats(token), getAdminAiAnalytics(token)])
+        Promise.allSettled([getAdminStats(token), getAdminAiAnalytics(token), getAdminCostDashboard()])
             .then((results) => {
-                const [statsResult, aiResult] = results;
+                const [statsResult, aiResult, costResult] = results;
                 if (statsResult.status === "fulfilled") {
                     setStats(statsResult.value);
                 } else {
@@ -130,6 +132,10 @@ export default function AdminDashboardPage() {
 
                 if (aiResult.status === "fulfilled") {
                     setAiAnalytics(aiResult.value);
+                }
+
+                if (costResult.status === "fulfilled") {
+                    setCostDashboard(costResult.value);
                 }
             })
             .finally(() => setLoading(false));
@@ -254,6 +260,114 @@ export default function AdminDashboardPage() {
                     ))}
                 </div>
             </div>
+
+            {/* ── Cost Ledger ──────────────────────────────────────────────── */}
+            {costDashboard && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem" }}>
+                        <h2 style={{ fontSize: "0.8rem", fontWeight: 600, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                            Cost Ledger
+                        </h2>
+                        <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>single source of truth · all times</span>
+                    </div>
+
+                    {/* KPI summary */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "10px" }}>
+                        <StatCard
+                            label="Total Cost"
+                            value={`€${costDashboard.summary.totalEur.toFixed(2)}`}
+                            accentColor="var(--accent)"
+                            sub={`${costDashboard.summary.txCount} transactions`}
+                        />
+                        <StatCard
+                            label="Provider Cost"
+                            value={`€${costDashboard.summary.providerCostEur.toFixed(2)}`}
+                            accentColor="#818cf8"
+                        />
+                        <StatCard
+                            label="Infra Cost"
+                            value={`€${costDashboard.summary.infraCostEur.toFixed(2)}`}
+                            accentColor="var(--text-muted)"
+                        />
+                        <StatCard
+                            label="Platform Markup"
+                            value={`€${costDashboard.summary.platformMarkupEur.toFixed(2)}`}
+                            accentColor="var(--success)"
+                        />
+                    </div>
+
+                    {/* Breakdown by resource type */}
+                    {costDashboard.breakdown.length > 0 && (
+                        <div style={{
+                            background: "var(--surface)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "10px",
+                            overflow: "hidden",
+                        }}>
+                            <div style={{ padding: "0.75rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
+                                <span style={{ fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                                    Breakdown by type
+                                </span>
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column" }}>
+                                {costDashboard.breakdown.map((row, i) => (
+                                    <div key={row.resourceType} style={{
+                                        display: "grid",
+                                        gridTemplateColumns: "1fr auto auto auto",
+                                        gap: "0.75rem",
+                                        padding: "0.6rem 1.25rem",
+                                        borderBottom: i < costDashboard.breakdown.length - 1 ? "1px solid var(--border)" : undefined,
+                                        alignItems: "center",
+                                    }}>
+                                        <span style={{ fontSize: "0.8125rem", color: "var(--text)", fontFamily: "monospace" }}>{row.resourceType}</span>
+                                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "right" }}>{row.txCount} tx</span>
+                                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "right", minWidth: "60px" }}>
+                                            prov €{row.providerCostEur.toFixed(3)}
+                                        </span>
+                                        <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--accent-hover)", textAlign: "right", fontVariantNumeric: "tabular-nums", minWidth: "70px" }}>
+                                            €{row.totalEur.toFixed(3)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Top projects */}
+                    {costDashboard.topProjects.length > 0 && (
+                        <div style={{
+                            background: "var(--surface)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "10px",
+                            overflow: "hidden",
+                        }}>
+                            <div style={{ padding: "0.75rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
+                                <span style={{ fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                                    Top projects by cost
+                                </span>
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column" }}>
+                                {costDashboard.topProjects.slice(0, 5).map((p, i) => (
+                                    <div key={p.projectId} style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        padding: "0.6rem 1.25rem",
+                                        borderBottom: i < Math.min(costDashboard.topProjects.length, 5) - 1 ? "1px solid var(--border)" : undefined,
+                                    }}>
+                                        <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "300px" }}>
+                                            {p.projectId}
+                                        </span>
+                                        <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>
+                                            €{p.totalEur.toFixed(3)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* ── Quick links ──────────────────────────────────────────────── */}
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>

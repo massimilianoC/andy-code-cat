@@ -19,6 +19,7 @@ export function composeSystemPrompt(opts: {
     presetId?: string | null;
     presetLayer?: string;
     styleBlock?: string;
+    documentContextLayer?: string;
     prePromptTemplate?: string;
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
@@ -28,6 +29,7 @@ export function composeSystemPrompt(opts: {
         buildBaseConstraintsLayer(),
         opts.presetLayer ?? buildPresetLayer(opts.presetId),
         opts.styleBlock ?? "",
+        opts.documentContextLayer ?? "",
         opts.prePromptTemplate ?? "",
         opts.governanceSystemPrompt ?? "",
         opts.outputBudgetPolicy ?? "",
@@ -44,6 +46,7 @@ export interface ResolvedPromptLayers {
     layerC: string;
     layerD: string;
     layerE: string;
+    layerF: string;
     budgetPolicy: string;
     composed: string;
 }
@@ -56,6 +59,7 @@ export function composeSystemPromptWithLayers(opts: {
     presetId?: string | null;
     presetLayer?: string;
     styleBlock?: string;
+    documentContextLayer?: string;
     prePromptTemplate?: string;
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
@@ -64,14 +68,15 @@ export function composeSystemPromptWithLayers(opts: {
     const layerA = buildBaseConstraintsLayer();
     const layerB = opts.presetLayer ?? buildPresetLayer(opts.presetId);
     const layerC = opts.styleBlock ?? "";
-    const layerD = opts.prePromptTemplate ?? "";
-    const layerE = opts.governanceSystemPrompt ?? "";
+    const layerD = opts.documentContextLayer ?? "";
+    const layerE = opts.prePromptTemplate ?? "";
+    const layerF = opts.governanceSystemPrompt ?? "";
     const budgetPolicy = opts.outputBudgetPolicy ?? "";
 
-    const composed = [layerA, layerB, layerC, layerD, layerE, budgetPolicy, opts.requestSystemPrompt ?? ""]
+    const composed = [layerA, layerB, layerC, layerD, layerE, layerF, budgetPolicy, opts.requestSystemPrompt ?? ""]
         .filter(Boolean)
         .join(LAYER_SEPARATOR)
         .trim();
 
-    return { layerA, layerB, layerC, layerD, layerE, budgetPolicy, composed };
+    return { layerA, layerB, layerC, layerD, layerE, layerF, budgetPolicy, composed };
 }

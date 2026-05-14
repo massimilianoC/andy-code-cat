@@ -1,4 +1,6 @@
 import { PRESET_MAP, type ProjectPreset } from "../../domain/entities/ProjectPreset";
+import type { ProjectAsset } from "../../domain/entities/ProjectAsset";
+import { env } from "../../config";
 
 /**
  * Layer A — Base architectural constraints common to ALL Layer 1 output.
@@ -21,6 +23,7 @@ export function buildBaseConstraintsLayer(): string {
         "- No JavaScript framework (React, Vue, Angular, Svelte) — vanilla JS only.",
         "- CSS strategy: choose Tailwind CDN OR vanilla CSS — never both in the same output.",
         "- artifacts.css and artifacts.js must be plain strings without <style> or <script> wrappers.",
+        "- All JavaScript MUST go exclusively in artifacts.js. Never embed script logic inline in the HTML artifact — not in <script> tags, not as event attributes. In the HTML, reference JS only with: <script src=\"app.js\"></script>.",
         "",
         "HTML compactness rules (mandatory):",
         "- Target HTML under 30 KB (approx 30 000 chars). Aim for the minimum markup that achieves the design.",
@@ -58,4 +61,96 @@ export function buildPresetLayer(presetId?: string | null): string {
     if (!presetId) return "";
     const preset = PRESET_MAP.get(presetId);
     return buildPresetLayerFromPreset(preset);
+}
+
+/**
+ * Layer D — Document context from enriched project assets.
+ * Owned by: Agente context/embed (see PROMPTING_PIPELINE_AGENT_GUARDRAILS.md §4.1).
+ * Returns "" when no enriched assets are available — the layer is then omitted by composeSystemPrompt.
+ * Contains only content (briefs, summaries, tags) — zero technical instructions.
+ */
+export function buildProjectKnowledgeLayer(
+    assets: ProjectAsset[],
+    opts?: { maxChars?: number; maxAssets?: number },
+): string {
+    if (!env.enrichmentInjectLayerD) return "";
+
+    const maxChars = opts?.maxChars ?? env.ENRICHMENT_LAYER_D_MAX_CHARS;
+    const maxAssets = opts?.maxAssets ?? env.ENRICHMENT_LAYER_D_MAX_ASSETS;
+
+    // Filter: only ready traces, only assets the user opted in or has a styleRole
+    const ready = assets.filter(a => {
+        const trace = a.enrichmentTrace;
+        if (!trace || trace.provenance.enrichmentStatus !== "ready") return false;
+        if (a.useInProject === false && !a.styleRole) return false;
+        return true;
+    });
+
+    // Rank: useInProject=true first, then styleRole=inspiration, material, then createdAt desc
+    const roleOrder: Record<string, number> = { inspiration: 1, material: 2, reference: 3 };
+    const ranked = [...ready].sort((a, b) => {
+        if (a.useInProject && !b.useInProject) return -1;
+        if (!a.useInProject && b.useInProject) return 1;
+        const ra = roleOrder[a.styleRole ?? ""] ?? 9;
+        const rb = roleOrder[b.styleRole ?? ""] ?? 9;
+        if (ra !== rb) return ra - rb;
+        return (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0);
+    });
+
+    const selected = ranked.slice(0, maxAssets);
+    if (selected.length === 0) return "";
+
+    const blocks: string[] = [];
+    let totalChars = 0;
+
+    const header = "## LAYER D — DOCUMENT CONTEXT\n\nThe following materials were provided by the user as reference for this project.\nUse them to inform the content, copy, brand voice, and visual direction of the output.\nDo not reproduce raw extracted text verbatim — synthesize it into the design.\n\n### Reference materials";
+    totalChars += header.length + 2;
+
+    for (const asset of selected) {
+        const trace = asset.enrichmentTrace!;
+        const lines: string[] = [
+            `Asset: ${trace.distilledTitle}`,
+            `Type: ${trace.assetKind}`,
+        ];
+
+        if (trace.distilledSummary) {
+            lines.push(`Summary: ${trace.distilledSummary}`);
+        }
+
+        const brief = trace.documentBrief;
+        if (brief) {
+            if (brief.purposeSentence) lines.push(`Purpose: ${brief.purposeSentence}`);
+            if (brief.detectedBrandName) lines.push(`Brand: ${brief.detectedBrandName}`);
+            if (brief.toneLabel) lines.push(`Tone: ${brief.toneLabel}`);
+            if (brief.keyMessages.length > 0) {
+                lines.push("Key messages:");
+                brief.keyMessages.forEach(m => lines.push(`- ${m}`));
+            }
+            if (brief.ctaText) lines.push(`Call to action: ${brief.ctaText}`);
+        }
+
+        const palette = trace.colorPalette;
+        const visual = trace.visualAnalysis;
+        const signals = trace.designSignals;
+        if (palette && palette.dominantNames.length > 0) {
+            lines.push(`Color palette: ${palette.dominantNames.join(", ")}`);
+        }
+        if (visual?.moodLabel) lines.push(`Mood: ${visual.moodLabel}`);
+        if (signals?.suggestedWebUse && signals.suggestedWebUse.length > 0) {
+            lines.push(`Design signals: ${signals.suggestedWebUse.join(", ")}`);
+        }
+
+        if (trace.distilledTags.length > 0) {
+            lines.push(`Tags: ${trace.distilledTags.join(", ")}`);
+        }
+
+        const block = `---\n${lines.join("\n")}\n---`;
+        if (totalChars + block.length + 2 > maxChars) break;
+        blocks.push(block);
+        totalChars += block.length + 2;
+    }
+
+    if (blocks.length === 0) return "";
+
+    return `${header}\n\n${blocks.join("\n\n")}`;
 }

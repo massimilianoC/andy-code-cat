@@ -1,0 +1,17 @@
+DCL Test Document
+
+Brand: Andy Code Cat Platform
+Descrizione: Platform per la generazione automatica di siti web tramite AI.
+
+Obiettivi:
+- Generare siti professionali con zero effort
+- Integrare Document Context Layer per enrichment automatico
+- Supporto multimodal AI per analisi di testo e immagini
+
+Target audience: sviluppatori e designer che vogliono accelerare il workflow creativo
+
+Contatti: info@andy-code-cat.local
+Sito: http://localhost
+
+Stile visivo: Moderno, minimalista, colori scuri con accenti tech
+Tono: Professionale, innovativo, diretto

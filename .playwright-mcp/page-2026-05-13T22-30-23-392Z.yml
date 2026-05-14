@@ -1,0 +1,214 @@
+- generic:
+  - alert
+  - generic:
+    - banner:
+      - generic:
+        - generic: 🐱
+        - generic: ANDY
+      - generic:
+        - group:
+          - button [pressed]: 🇮🇹
+          - button: 🇬🇧
+        - button: Superadmin
+        - button:
+          - img
+          - text: Zero Effort
+        - button:
+          - img
+          - text: Nuovo progetto
+        - button: Logout
+    - main:
+      - generic:
+        - heading [level=1]: Dashboard Progetti
+        - paragraph: 1 progetti nel workspace
+      - generic:
+        - button:
+          - generic:
+            - generic:
+              - img
+            - generic:
+              - paragraph: Come iniziare con ANDY
+              - paragraph: Guarda la guida rapida e crea il tuo primo sito in pochi minuti.
+            - generic: Guarda il tutorial →
+      - generic:
+        - generic:
+          - heading [level=2]: Nuovo progetto da preset
+        - button:
+          - generic:
+            - generic:
+              - img
+            - generic:
+              - generic: Vuoto / Neutro
+              - generic: Parti da una tela bianca
+        - generic:
+          - generic:
+            - button:
+              - generic:
+                - heading [level=3]: Web
+                - generic: Sites & forms
+                - generic: (3)
+              - img
+          - generic:
+            - button:
+              - generic:
+                - heading [level=3]: Print & Graphic
+                - generic: Poster, print, visual
+                - generic: (3)
+              - img
+          - generic:
+            - button:
+              - generic:
+                - heading [level=3]: Presentation
+                - generic: Slides & pitch
+                - generic: (2)
+              - img
+          - generic:
+            - button:
+              - generic:
+                - heading [level=3]: Game & XR
+                - generic: Playable experiences
+                - generic: (6)
+              - img
+      - generic:
+        - heading [level=2]:
+          - text: I tuoi progetti
+          - generic: (1)
+        - generic:
+          - generic:
+            - button:
+              - generic:
+                - generic: D
+              - generic:
+                - generic: Apri workspace →
+            - generic:
+              - generic:
+                - button: Default Project
+                - button:
+                  - img
+              - generic:
+                - generic: adesso
+    - contentinfo:
+      - generic: 1 progetti
+    - button:
+      - img
+      - generic: "10"
+    - dialog:
+      - generic:
+        - generic:
+          - generic: Consigli & Novità
+          - button:
+            - img
+        - generic:
+          - generic:
+            - generic:
+              - generic: 🎨
+              - generic:
+                - generic:
+                  - generic: Consiglio
+                - paragraph: Completa il profilo stile
+                - paragraph: Seleziona i tag di stile nell'onboarding per ottenere generazioni AI coerenti con la tua identità visiva.
+                - button: Segna come letto
+          - generic:
+            - generic:
+              - generic: 📋
+              - generic:
+                - generic:
+                  - generic: Consiglio
+                - paragraph: Duplica prima di sperimentare
+                - paragraph: Usa 'Duplica' dal menu progetto per conservare una copia sicura prima di grandi modifiche.
+                - button: Segna come letto
+          - generic:
+            - generic:
+              - generic: 💬
+              - generic:
+                - generic:
+                  - generic: Consiglio
+                - paragraph: Riutilizza i tuoi prompt migliori
+                - paragraph: Usa 'Copia prompt' per trasferire il tuo sistema di istruzioni in un nuovo progetto senza riscriverlo.
+                - button: Segna come letto
+          - generic:
+            - generic:
+              - generic: 🔄
+              - generic:
+                - generic:
+                  - generic: Consiglio
+                - paragraph: Descrivi le modifiche in modo naturale
+                - paragraph: "Dì all'AI cosa cambiare: 'Rendilo più minimal', 'Aggiungi una CTA', 'Usa colori più caldi'. Nessun codice necessario."
+                - button: Segna come letto
+          - generic:
+            - generic:
+              - generic: 🗂️
+              - generic:
+                - generic:
+                  - generic: Consiglio
+                - paragraph: Organizza i progetti per workspace
+                - paragraph: Crea workspace separati per ogni cliente o brand per mantenere prompt e stili isolati.
+                - button: Segna come letto
+          - generic:
+            - generic:
+              - generic: ⚡
+              - generic:
+                - generic:
+                  - generic: Novità
+                - paragraph: Streaming AI in tempo reale
+                - paragraph: Le risposte appaiono progressivamente mentre vengono generate — niente più attesa per l'output completo.
+                - button: Segna come letto
+          - generic:
+            - generic:
+              - generic: 🚀
+              - generic:
+                - generic:
+                  - generic: Novità
+                - paragraph: Pubblica il tuo sito con un click
+                - paragraph: Progetto pronto? Premi 'Pubblica' nell'editor per renderlo live istantaneamente sul tuo sottodominio.
+                - button: Segna come letto
+          - generic:
+            - generic:
+              - generic: 🤖
+              - generic:
+                - generic:
+                  - generic: Consiglio
+                - paragraph: Scegli il modello AI giusto
+                - paragraph: Modelli diversi si adattano a compiti diversi. Usa un modello veloce per iterare e uno più potente per la qualità finale.
+                - button: Segna come letto
+          - generic:
+            - generic:
+              - generic: ⌨️
+              - generic:
+                - generic:
+                  - generic: Scorciatoia
+                - paragraph: Salva uno snapshot con Ctrl+S
+                - paragraph: Premi Ctrl+S nell'editor per salvare uno snapshot a cui puoi tornare in qualsiasi momento.
+                - button: Segna come letto
+          - generic:
+            - generic:
+              - generic: ↩️
+              - generic:
+                - generic:
+                  - generic: Consiglio
+                - paragraph: Torna a qualsiasi snapshot
+                - paragraph: Apri il pannello cronologia per vedere tutti gli snapshot salvati e ripristinare qualsiasi versione precedente del progetto.
+                - button: Segna come letto
+  - dialog "Aggiornamento password richiesto" [ref=e35]:
+    - generic [ref=e36]:
+      - generic [ref=e37]:
+        - heading "Aggiornamento password richiesto" [level=2] [ref=e38]
+        - generic [ref=e39]: Account legacy
+      - paragraph [ref=e40]: Questo account è stato creato prima della policy password corrente. Imposta una password più robusta per continuare a usare il workspace.
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e43]: Password attuale
+        - textbox "Password attuale" [active] [ref=e44]
+      - generic [ref=e45]:
+        - generic [ref=e46]: Nuova password
+        - textbox "Nuova password" [ref=e47]
+        - paragraph [ref=e48]: Usa almeno 12 caratteri con maiuscole, minuscole, numero e simbolo.
+      - generic [ref=e49]:
+        - generic [ref=e50]: Conferma nuova password
+        - textbox "Conferma nuova password" [ref=e51]
+      - generic [ref=e52]:
+        - button "Esci" [ref=e53] [cursor=pointer]
+        - button "Aggiorna password" [ref=e54] [cursor=pointer]
+    - button "Close" [ref=e55] [cursor=pointer]:
+      - img [ref=e56]
+      - generic [ref=e59]: Close

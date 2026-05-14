@@ -6,12 +6,19 @@ import type { IFileStorage } from "../../infra/storage/IFileStorage";
 import { env } from "../../config";
 import { buildAssetSemanticMetadata, guessStyleRole } from "../media/projectAssetSemantics";
 
-const ALLOWED_MIME_PREFIXES = ["image/", "text/", "application/pdf", "application/json"];
+const ALLOWED_MIME_PREFIXES = ["image/", "text/"];
+const ALLOWED_MIME_EXACT = new Set([
+    "application/pdf",
+    "application/json",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
 const QUOTA_TOTAL_BYTES = 100 * 1024 * 1024; // 100 MB
 const QUOTA_MAX_FILES = 50;
 
 function isAllowedMime(mimeType: string): boolean {
-    return ALLOWED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix));
+    const mime = mimeType.toLowerCase().split(";")[0]!.trim();
+    return ALLOWED_MIME_PREFIXES.some((p) => mime.startsWith(p)) || ALLOWED_MIME_EXACT.has(mime);
 }
 
 function safenameFromOriginal(originalName: string): string {
