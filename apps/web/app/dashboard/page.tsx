@@ -537,6 +537,7 @@ export default function DashboardPage() {
                             placeholder={t("dashboard.modal.placeholder")}
                             value={newProjectName}
                             onChange={(e) => setNewProjectName(e.target.value)}
+                            onInput={(e) => setNewProjectName((e.target as HTMLInputElement).value)}
                             minLength={3}
                             required
                         />

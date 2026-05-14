@@ -3065,7 +3065,7 @@ export default function WorkspacePage() {
                         ref={chatFileInputRef}
                         type="file"
                         style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-                        accept=".pdf,.docx,.doc,.txt,.md,image/*"
+                        accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
                         multiple
                         disabled={sending || attachingFile || optimizingPrompt}
                         onChange={(e) => {
@@ -3083,6 +3083,7 @@ export default function WorkspacePage() {
                             value={prompt}
                             autoFocus
                             onChange={(e) => setPrompt(e.target.value)}
+                            onInput={(e) => setPrompt((e.target as HTMLTextAreaElement).value)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" && !e.shiftKey) {
                                     e.preventDefault();
@@ -3149,9 +3150,11 @@ export default function WorkspacePage() {
                                     className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 py-1 text-xs"
                                     title={f.name}
                                 >
-                                    {f.mimeType.startsWith("image/")
-                                        ? <ImageIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
-                                        : <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                    {pendingEnrichmentPolling.includes(f.id)
+                                        ? <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                                        : f.mimeType.startsWith("image/")
+                                            ? <ImageIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                            : <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
                                     }
                                     <span className="max-w-[120px] truncate text-muted-foreground">{f.name}</span>
                                     <button

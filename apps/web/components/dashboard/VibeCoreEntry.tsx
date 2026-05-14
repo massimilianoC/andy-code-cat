@@ -15,12 +15,33 @@ import { createProject, uploadProjectAsset, renameProject } from "@/lib/api";
 /** Max file size accepted via the VibeCore drag-and-drop zone (10 MB). */
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_FILES = 3;
+const VIBE_MODE_KEY = "vibecore_mode";
 const ACCEPTED_MIME_TYPES = [
+    // Documents
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "text/plain",
+    "text/markdown",
+    "text/x-markdown",
+    "text/html",
+    "application/xhtml+xml",
+    "text/csv",
+    "application/csv",
+    // Spreadsheets
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    // Presentations
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-powerpoint",
+    // Images
     "image/png",
     "image/jpeg",
+    "image/gif",
+    "image/webp",
     "image/svg+xml",
+    "image/bmp",
+    "image/tiff",
 ];
 
 type EntryPhase = "idle" | "classifying" | "prefilling" | "creating" | "uploading" | "redirecting";
@@ -377,6 +398,14 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         ref={textareaRef}
                         value={prompt}
                         onChange={handlePromptChange}
+                        onInput={(e) => {
+                            // Capture OS-level native dictation events (macOS Dictation,
+                            // Windows Voice Typing) that React's onChange may miss.
+                            const el = e.target as HTMLTextAreaElement;
+                            setPrompt(el.value);
+                            el.style.height = "auto";
+                            el.style.height = `${el.scrollHeight}px`;
+                        }}
                         onKeyDown={handleKeyDown}
                         disabled={isLoading}
                         rows={3}
@@ -464,12 +493,12 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                     color: isDragOver ? `${glowColor}90` : "rgba(255,255,255,0.18)",
                                 }}
                             >
-                                PDF · IMG · DOCX
+                                PDF · DOCX · XLS · PPT · IMG · TXT
                             </span>
                             <input
                                 type="file"
                                 multiple
-                                accept=".pdf,.docx,image/png,image/jpeg,image/svg+xml"
+                                accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
                                 className="sr-only"
                                 onChange={handleFileInput}
                                 disabled={isLoading || files.length >= MAX_FILES}
