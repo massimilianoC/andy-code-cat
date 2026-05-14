@@ -5,6 +5,10 @@ import type { PlatformConfigRepository } from "../../domain/repositories/Platfor
 import type { GetLlmCatalog } from "./GetLlmCatalog";
 import { buildTemplateListBlock, FORMAT_HINT_RULES } from "../prompting/formatHintRules";
 import { env } from "../../config";
+import { CostTransactionService } from "../cost/CostTransactionService";
+import { estimateCost } from "../llm/costPolicy";
+import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
+import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -75,6 +79,10 @@ function parseClassifyResponse(raw: string): Omit<VibeClassifyResponse, "skipped
 export interface VibeClassifyInput {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
+    /** Owner of the cost transaction. Optional only for backward compat — strongly recommended. */
+    userId?: string;
+    /** When provided together with userId the LLM cost is recorded in the project ledger. */
+    projectId?: string;
 }
 
 export class VibeClassify {
@@ -84,12 +92,13 @@ export class VibeClassify {
     ) { }
 
     async execute(input: VibeClassifyInput): Promise<VibeClassifyResponse> {
+        const echoProject = input.projectId ? { projectId: input.projectId } : {};
         const platformConfig = await this.platformConfigRepository.get().catch(() => null);
         const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, "default", TASK_KEY);
 
         // Feature flag: skip classifier when disabled globally or via task settings
         if (!env.vibeClassifierEnabled || !taskSettings.enabled) {
-            return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier disabled", skipped: true };
+            return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier disabled", skipped: true, ...echoProject };
         }
 
         const templateListBlock = buildTemplateListBlock(
@@ -111,7 +120,7 @@ export class VibeClassify {
             activeProviders[0];
 
         if (!providerCatalog) {
-            return { templateId: null, formatHint: null, confidence: 0, reasoning: "no active provider", skipped: true };
+            return { templateId: null, formatHint: null, confidence: 0, reasoning: "no active provider", skipped: true, ...echoProject };
         }
 
         const modelId =
@@ -122,7 +131,7 @@ export class VibeClassify {
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
-            return { templateId: null, formatHint: null, confidence: 0, reasoning: "missing API key", skipped: true };
+            return { templateId: null, formatHint: null, confidence: 0, reasoning: "missing API key", skipped: true, ...echoProject };
         }
 
         const messages = [
@@ -146,13 +155,62 @@ export class VibeClassify {
             });
 
             if (!response.ok) {
-                return { templateId: null, formatHint: null, confidence: 0, reasoning: `provider error ${response.status}`, skipped: true };
+                return { templateId: null, formatHint: null, confidence: 0, reasoning: `provider error ${response.status}`, skipped: true, ...echoProject };
             }
 
             const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
             const raw = String((payload?.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? "").trim();
 
             const parsed = parseClassifyResponse(raw);
+
+            // ── Cost ledger: classifier LLM call (fire-and-forget) ──
+            // Only recorded when the route layer ensured a (userId, projectId)
+            // pair — keeps backward compatibility with legacy callers.
+            if (input.userId && input.projectId) {
+                const usage = payload.usage as {
+                    prompt_tokens?: number;
+                    completion_tokens?: number;
+                    total_tokens?: number;
+                } | undefined;
+                const promptTokens = Number(usage?.prompt_tokens ?? 0);
+                const completionTokens = Number(usage?.completion_tokens ?? 0);
+                const totalTokens = Number(usage?.total_tokens ?? (promptTokens + completionTokens));
+
+                let providerCostUsd: number | undefined;
+                if (providerCatalog.provider === "siliconflow") {
+                    const sfPrice = getSiliconFlowPrice(modelId);
+                    if (sfPrice && sfPrice.priceUnit === "per_m_tokens") {
+                        providerCostUsd =
+                            (promptTokens / 1_000_000) * sfPrice.input +
+                            (completionTokens / 1_000_000) * sfPrice.output;
+                    }
+                }
+
+                const costEstimate = estimateCost(
+                    { capability: "chat", tokenUsage: { promptTokens, completionTokens, totalTokens }, providerCostUsd },
+                    {
+                        textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
+                        imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
+                        videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
+                        usdToEurRate: env.COST_POLICY_USD_TO_EUR_RATE,
+                        providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
+                    },
+                );
+
+                CostTransactionService.instance.record({
+                    userId: input.userId,
+                    projectId: input.projectId,
+                    resourceType: ResourceType.LLM_PREPROMPT,
+                    resourceSubtype: modelId,
+                    providerCostUsd,
+                    precomputedTotalEur: costEstimate.amount,
+                    units: { promptTokens, completionTokens, totalTokens },
+                    meta: {
+                        taskKey: TASK_KEY,
+                        provider: providerCatalog.provider,
+                    },
+                });
+            }
 
             // Enforce confidence threshold for templateId
             const templateId = parsed.confidence >= CONFIDENCE_THRESHOLD ? parsed.templateId : null;
@@ -163,9 +221,10 @@ export class VibeClassify {
                 confidence: parsed.confidence,
                 reasoning: parsed.reasoning,
                 skipped: false,
+                ...(input.projectId ? { projectId: input.projectId } : {}),
             };
         } catch {
-            return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier error", skipped: true };
+            return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier error", skipped: true, ...echoProject };
         }
     }
 }

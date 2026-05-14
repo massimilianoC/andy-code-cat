@@ -18,6 +18,12 @@ export interface AttachmentMeta {
 export interface VibeClassifyRequest {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
+    /**
+     * Optional. When omitted the API auto-creates a draft project so the LLM
+     * cost is always attributable to a (user, project) pair (double-sandbox).
+     * The resulting projectId is returned in the response.
+     */
+    projectId?: string;
 }
 
 export interface VibeClassifyResponse {
@@ -26,6 +32,12 @@ export interface VibeClassifyResponse {
     confidence: number;
     reasoning: string;
     skipped: boolean;
+    /**
+     * The project this classification was billed against. Either echoes the
+     * incoming projectId or returns the freshly-created draft project id.
+     * Optional only for backward compatibility with pre-cost-attribution clients.
+     */
+    projectId?: string;
 }
 
 // ── Zero-Effort LLM Prefill ───────────────────────────────────────────────────
@@ -62,5 +74,11 @@ export interface VibePrefillResponse {
     draft: ZeroEffortDraft;
     confidence: number;
     skipped: boolean;
+    /**
+     * The project this prefill was billed against. Either echoes the
+     * incoming projectId or returns the freshly-created draft project id.
+     * Optional only for backward compatibility with pre-cost-attribution clients.
+     */
+    projectId?: string;
 }
 

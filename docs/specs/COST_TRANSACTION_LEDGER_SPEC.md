@@ -757,4 +757,92 @@ infra
 
 ---
 
-*Last updated: 2026-05-14 — v1.0 initial draft*
+## 19. Audit Results — Phase D Project-Wide External API Sweep (2026-05-14)
+
+> Comprehensive audit of all external GenAI / paid-API call sites in `apps/api/src/`.
+> Every site verified for: `userId` in scope, `projectId` in scope, `CostTransactionService.record()` called.
+
+### 19.1 Conformant Sites (all ✅)
+
+| # | Call site | Endpoint | ResourceType | userId | projectId | Ledger write |
+|---|---|---|---|---|---|---|
+| 1 | `llmRoutes.ts` `/chat` ~L893 | `/chat/completions` | `LLM_CHAT` | ✅ | ✅ sandbox | ✅ ~L1176 |
+| 2 | `llmRoutes.ts` `/chat-stream` ~L1274 | `/chat/completions` | `LLM_CHAT` | ✅ | ✅ sandbox | ✅ ~L1666 |
+| 3 | `conversationRoutes.ts` background task finalization | (internal) | `LLM_BACKGROUND` | ✅ | ✅ | ✅ ~L191 |
+| 4 | `OptimizeUserPrompt.ts` L420 | `/chat/completions` | `LLM_PROMPT_OPT` | ✅ | ✅ | ✅ ~L216 |
+| 5 | `OptimizeUserPrompt.ts` L501 (retry path) | `/chat/completions` | `LLM_PROMPT_OPT` | ✅ | ✅ | ✅ same path |
+| 6 | `VibePrefill.ts` L220 | `/chat/completions` | `LLM_BACKGROUND` | ✅ | ✅ auto-create | ✅ L273 |
+| 7 | `VibeClassify.ts` L143 | `/chat/completions` | `LLM_PREPROMPT` | ✅ | ✅ auto-create | ✅ Phase C fix |
+| 8 | `SuggestProjectImageIdea.ts` L202 | `/chat/completions` | `IMAGE_SUGGEST` | ✅ | ✅ | ✅ L113 |
+| 9 | `OptimizeImagePrompt.ts` L194 | `/chat/completions` | `IMAGE_PROMPT_OPT` | ✅ | ✅ | ✅ L271 |
+| 10 | `DraftProjectTemplate.ts` L150 | `/chat/completions` | `LLM_TEMPLATE_DRAFT` | ✅ | ✅ `INTERNAL_PROJECT_ID` sentinel | ✅ L227 |
+| 11 | `generateImageWithSiliconFlow.ts` L97 | `/images/generations` | `IMAGE_GEN` | ✅ | ✅ | ✅ via `GenerateProjectImage.ts` L423 |
+| 12 | `DocumentBriefExtractor.ts` L79 | `/chat/completions` | `LLM_BACKGROUND` (`enrich_document`) | ✅ | ✅ | ✅ via `AssetEnrichmentPipeline` (Phase C fix) |
+| 13 | `ImageAnalyzer.ts` L102 | `/chat/completions` (vision) | `LLM_BACKGROUND` (`enrich_image`) | ✅ | ✅ | ✅ via `AssetEnrichmentPipeline` (Phase C fix) |
+
+**No active integrations found** for: OpenAI, Anthropic, Replicate, HuggingFace, fal.ai, Stability AI, ElevenLabs, Deepgram, RunwayML, TTS/STT, video generation.
+`/embeddings` calls exist only in `scripts/sf-probe.ts` (admin diagnostics, not a hot path).
+
+### 19.2 Known Gap — Stock-Image Connectors Not Tracked (GAP-001)
+
+**Status:** Open — pending product decision  
+**Severity:** Low (all three stock APIs are free-tier; zero monetary cost at current usage)  
+**Affected code:**
+
+- `infra/image/PexelsConnector.ts` → `api.pexels.com/v1/search`
+- `infra/image/PixabayConnector.ts` → `pixabay.com/api`
+- `infra/image/UnsplashConnector.ts` → `api.unsplash.com/search/photos`
+- `infra/image/LoremFlickrConnector.ts` → `loremflickr.com` (no key, always free)
+- Orchestrated by `infra/image/ImageServiceOrchestrator.ts` → `application/llm/imageUrlRewriter.ts`
+- Called from `llmRoutes.ts` L1049 and L1561 after every `/chat` and `/chat-stream` response that contains image placeholder URLs
+
+**Root cause:** `resolveImagesInHtml(html, keyRepo?)` does not accept `userId` / `projectId`
+parameters, so attribution is structurally impossible even if a record call were added.
+
+**Impact:**
+- Zero EUR cost today (free API tiers)
+- Usage quota burns are invisible in the cost dashboard
+- If any connector ever upgrades to a paid plan, consumption would not surface in project analytics
+
+**Proposed fix (backward-compatible):**
+
+1. Add `IMAGE_STOCK = "image.stock"` to the `ResourceType` enum in
+   `apps/api/src/domain/entities/CostTransaction.ts`.
+2. Extend `resolveImagesInHtml(html, keyRepo?, attribution?: { userId: string; projectId: string })`.
+3. For each image successfully resolved, call:
+   ```typescript
+   CostTransactionService.instance.record({
+     userId: attribution.userId,
+     projectId: attribution.projectId,
+     resourceType: ResourceType.IMAGE_STOCK,
+     resourceSubtype: result.provider,   // "pexels" | "pixabay" | "unsplash" | "loremflickr" | "picsum"
+     providerCostUsd: 0,
+     units: { imageCount: 1 },
+     meta: { keyword, width, height },
+   });
+   ```
+4. In `llmRoutes.ts` L1049 and L1561, pass `{ userId: req.auth.userId, projectId: req.sandbox.projectId }`.
+5. Update §3.2 ResourceType enum table in this spec (add `IMAGE_STOCK` row).
+6. Update §6 Integration Points table (add `resolveImagesInHtml` row).
+
+**Decision required:** Confirm whether zero-cost quota events should appear in the per-project cost ledger.
+
+### 19.3 ResourceType Gap — `IMAGE_STOCK` Not Defined
+
+The current `ResourceType` enum (§3.2) does not include a type for stock-image lookups.
+Adding `IMAGE_STOCK = "image.stock"` is non-breaking (additive only).  The `resourceSubtype`
+field carries the provider name (`pexels`, `pixabay`, `unsplash`, `loremflickr`, `picsum`).
+
+### 19.4 Audit Methodology
+
+- Searched all files under `apps/api/src/**` for: `chat/completions`, `/images/generations`,
+  `/embeddings`, `pexels`, `pixabay`, `unsplash`, `stability`, `replicate`, `elevenlabs`,
+  `deepgram`, `fal.ai`, `anthropic`, `huggingface`, `runwayml`, `generativelanguage`, `lmstudio`.
+- Cross-referenced each hit against `CostTransactionService.instance.record()` call presence.
+- Verified `userId` (from `req.auth.userId` / JWT sub) and `projectId` (from `req.sandbox.projectId`
+  or explicit parameter) are in scope at call time.
+- Script files (`scripts/`) excluded from production audit scope.
+
+---
+
+*Last updated: 2026-05-14 — v1.1 — added §19 Phase D audit results*

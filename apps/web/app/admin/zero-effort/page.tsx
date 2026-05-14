@@ -17,10 +17,12 @@ import { PromptTaskSettingsCard } from "@/components/admin/PromptTaskSettingsCar
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const DEFAULT_PRODUCT_KEY = "default";
-const CLASSIFY_TASK_KEY  = "vibe_intent_classify";
-const PREFILL_TASK_KEY   = "vibe_intent_prefill";
-const OPTIMIZE_TASK_KEY  = "zero_effort_optimize";
-const GENERATE_TASK_KEY  = "zero_effort_generate";
+const CLASSIFY_TASK_KEY       = "vibe_intent_classify";
+const PREFILL_TASK_KEY        = "vibe_intent_prefill";
+const OPTIMIZE_TASK_KEY       = "zero_effort_optimize";
+const GENERATE_TASK_KEY       = "zero_effort_generate";
+const VIBE_GENERATE_TASK_KEY  = "vibe_mode_generate";
+const GOD_MODE_GENERATE_TASK_KEY = "god_mode_generate";
 
 // ── Default system prompts (mirrors API hardcoded prompts) ─────────────────
 // These are shown in the "System template override" textarea.
@@ -128,6 +130,22 @@ const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
         maxCompletionTokens: 14000,
         systemTemplate: "",
     },
+    [VIBE_GENERATE_TASK_KEY]: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 14000,
+        systemTemplate: "",
+    },
+    [GOD_MODE_GENERATE_TASK_KEY]: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 14000,
+        systemTemplate: "",
+    },
 };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -142,10 +160,12 @@ export default function ZeroEffortAdminPage() {
 
     const [providers, setProviders] = useState<AdminLlmProviderDto[]>([]);
 
-    const [classifyTask, setClassifyTask] = useState<PromptTaskSettingDto>(TASK_DEFAULTS[CLASSIFY_TASK_KEY]);
-    const [prefillTask,  setPrefillTask]  = useState<PromptTaskSettingDto>(TASK_DEFAULTS[PREFILL_TASK_KEY]);
-    const [optimizeTask, setOptimizeTask] = useState<PromptTaskSettingDto>(TASK_DEFAULTS[OPTIMIZE_TASK_KEY]);
-    const [generateTask, setGenerateTask] = useState<PromptTaskSettingDto>(TASK_DEFAULTS[GENERATE_TASK_KEY]);
+    const [classifyTask,      setClassifyTask]      = useState<PromptTaskSettingDto>(TASK_DEFAULTS[CLASSIFY_TASK_KEY]);
+    const [prefillTask,       setPrefillTask]        = useState<PromptTaskSettingDto>(TASK_DEFAULTS[PREFILL_TASK_KEY]);
+    const [optimizeTask,      setOptimizeTask]       = useState<PromptTaskSettingDto>(TASK_DEFAULTS[OPTIMIZE_TASK_KEY]);
+    const [generateTask,      setGenerateTask]       = useState<PromptTaskSettingDto>(TASK_DEFAULTS[GENERATE_TASK_KEY]);
+    const [vibeGenerateTask,  setVibeGenerateTask]   = useState<PromptTaskSettingDto>(TASK_DEFAULTS[VIBE_GENERATE_TASK_KEY]);
+    const [godModeGenerateTask, setGodModeGenerateTask] = useState<PromptTaskSettingDto>(TASK_DEFAULTS[GOD_MODE_GENERATE_TASK_KEY]);
 
     useEffect(() => {
         const t = getToken();
@@ -166,6 +186,8 @@ export default function ZeroEffortAdminPage() {
             setPrefillTask(mergeTask(PREFILL_TASK_KEY, productSettings[PREFILL_TASK_KEY]));
             setOptimizeTask(mergeTask(OPTIMIZE_TASK_KEY, productSettings[OPTIMIZE_TASK_KEY]));
             setGenerateTask(mergeTask(GENERATE_TASK_KEY, productSettings[GENERATE_TASK_KEY]));
+            setVibeGenerateTask(mergeTask(VIBE_GENERATE_TASK_KEY, productSettings[VIBE_GENERATE_TASK_KEY]));
+            setGodModeGenerateTask(mergeTask(GOD_MODE_GENERATE_TASK_KEY, productSettings[GOD_MODE_GENERATE_TASK_KEY]));
             setProviders(registry.providers ?? []);
         })
         .catch(() => setError("Unable to load config."))
@@ -173,7 +195,7 @@ export default function ZeroEffortAdminPage() {
     }, [router]);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const hasChanges = useMemo(() => true, [classifyTask, prefillTask, optimizeTask, generateTask]);
+    const hasChanges = useMemo(() => true, [classifyTask, prefillTask, optimizeTask, generateTask, vibeGenerateTask, godModeGenerateTask]);
 
     async function handleSave() {
         if (!token) return;
@@ -183,10 +205,12 @@ export default function ZeroEffortAdminPage() {
         try {
             await updateProductGovernance(token, DEFAULT_PRODUCT_KEY, {
                 promptTaskSettings: {
-                    [CLASSIFY_TASK_KEY]:  classifyTask,
-                    [PREFILL_TASK_KEY]:   prefillTask,
-                    [OPTIMIZE_TASK_KEY]:  optimizeTask,
-                    [GENERATE_TASK_KEY]:  generateTask,
+                    [CLASSIFY_TASK_KEY]:          classifyTask,
+                    [PREFILL_TASK_KEY]:           prefillTask,
+                    [OPTIMIZE_TASK_KEY]:          optimizeTask,
+                    [GENERATE_TASK_KEY]:          generateTask,
+                    [VIBE_GENERATE_TASK_KEY]:     vibeGenerateTask,
+                    [GOD_MODE_GENERATE_TASK_KEY]: godModeGenerateTask,
                 },
             });
             setSuccess(true);
@@ -210,9 +234,9 @@ export default function ZeroEffortAdminPage() {
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle>Vibe Mode &amp; Zero Effort — Model Settings</CardTitle>
+                    <CardTitle>Vibe Mode &amp; Guided Mode — Model Settings</CardTitle>
                     <CardDescription>
-                        Configura provider e modello per ogni fase del pipeline VibeCore e Zero Effort.
+                        Configura provider e modello per ogni fase del pipeline VibeCore e Guided Mode.
                         Le impostazioni si applicano al prodotto <code className="text-xs font-mono bg-muted px-1 rounded">default</code>.
                     </CardDescription>
                 </CardHeader>
@@ -238,7 +262,7 @@ export default function ZeroEffortAdminPage() {
                         }
                     />
                     <PromptTaskSettingsCard
-                        title="Zero Effort Prefill — Estrazione brief (vibe_intent_prefill)"
+                        title="Prefill Brief — Estrazione brief (vibe_intent_prefill)"
                         description="Estrae businessName, siteType, obiettivo, audience e stile dal prompt utente."
                         helperText="Usa un modello capace di estrarre JSON strutturato. Max token: 768."
                         value={prefillTask}
@@ -250,10 +274,10 @@ export default function ZeroEffortAdminPage() {
                 </CardContent>
             </Card>
 
-            {/* ── Zero Effort pipeline section ─────────────────────────────── */}
+            {/* ── Guided Mode pipeline section ─────────────────────────────── */}
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-base">Zero Effort — Pipeline di generazione</CardTitle>
+                    <CardTitle className="text-base">Guided Mode — Pipeline di generazione</CardTitle>
                     <CardDescription>
                         Modelli usati per ottimizzare il brief in prompt strutturato e generare il contenuto HTML.
                     </CardDescription>
@@ -271,12 +295,32 @@ export default function ZeroEffortAdminPage() {
                     />
                     <PromptTaskSettingsCard
                         title="Generazione Contenuto (zero_effort_generate)"
-                        description="Genera il sito HTML/CSS/JS completo a partire dal prompt ottimizzato."
+                        description="Genera il sito HTML/CSS/JS completo a partire dal prompt ottimizzato (flusso Guided Mode diretto)."
                         helperText="Usa un modello con finestra di contesto estesa. Temperature bassa (0.3–0.6). Token limite consigliato: 10000–16000."
                         value={generateTask}
                         providers={providers}
                         onFieldChange={(field, value) =>
                             setGenerateTask((prev) => ({ ...prev, [field]: value }))
+                        }
+                    />
+                    <PromptTaskSettingsCard
+                        title="Vibe Mode — Generazione finale (vibe_mode_generate)"
+                        description="Modello usato per la generazione HTML quando si arriva da Vibe Mode (flusso easy/medium via launch page)."
+                        helperText="Usa un modello con finestra di contesto estesa. Temperature bassa. Token limite consigliato: 10000–16000."
+                        value={vibeGenerateTask}
+                        providers={providers}
+                        onFieldChange={(field, value) =>
+                            setVibeGenerateTask((prev) => ({ ...prev, [field]: value }))
+                        }
+                    />
+                    <PromptTaskSettingsCard
+                        title="Guided Mode — Generazione finale (god_mode_generate)"
+                        description="Modello usato per la generazione HTML quando si arriva da Vibe Mode Expert o dal workspace in modalità autoTemplating."
+                        helperText="Usa un modello con finestra di contesto estesa. Temperature bassa. Token limite consigliato: 10000–16000."
+                        value={godModeGenerateTask}
+                        providers={providers}
+                        onFieldChange={(field, value) =>
+                            setGodModeGenerateTask((prev) => ({ ...prev, [field]: value }))
                         }
                     />
                 </CardContent>

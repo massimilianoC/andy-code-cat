@@ -34,7 +34,7 @@ Full end-to-end automated test covering: auth flow, Zero Effort form → workspa
 
 **Steps:**
 1. Navigate to `http://localhost:3000`
-2. Login with superadmin credentials (`massimiliano.camillucci@gmail.com`)
+2. Login with superadmin credentials (superadmin account created during the `/install` wizard)
 3. Handle forced password-change dialog (seed creates accounts with `requiresPasswordChange: true`)
 4. Re-login with new password, confirm access to dashboard
 

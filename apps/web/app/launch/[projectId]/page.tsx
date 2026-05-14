@@ -54,7 +54,7 @@ interface ExtendedForm {
 type GenerationPhase =
     | "review"       // show normalized brief, Avvia Generazione button
     | "optimizing"   // calling optimize API
-    | "optimized";   // show optimized prompt — redirect to GodMode to generate
+    | "optimized";   // show optimized prompt — redirect to Guided Mode to generate
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -411,7 +411,7 @@ function buildStructuredBrief(form: ExtendedForm, projectName: string, docNames?
         sections.push(`## [ALLEGATI] Documenti analizzati per il brief\n\n${docList}`);
     }
 
-    const footer = `\n---\n*Brief strutturato Zero Effort · ${siteLabel} · Sezioni: ${sections.length - 1}*`;
+    const footer = `\n---\n*Brief strutturato Guided Mode · ${siteLabel} · Sezioni: ${sections.length - 1}*`;
     return sections.join("\n\n") + footer;
 }
 
@@ -429,7 +429,7 @@ function phaseLabel(phase: GenerationPhase): string {
     switch (phase) {
         case "review": return "Pronto per la generazione";
         case "optimizing": return "Ottimizzazione prompt...";
-        case "optimized": return "Prompt ottimizzato — continua in GodMode per generare";
+        case "optimized": return "Prompt ottimizzato — continua in Guided Mode per generare";
     }
 }
 
@@ -653,17 +653,17 @@ export default function ZeroEffortLaunchPage() {
         if (!result) return;
         const finalPrompt = editedOptimizedPrompt || optimizedPrompt;
         let url = `/workspace/${projectId}?conv=${result.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`;
-        if (pipelineConfig?.generate.provider) {
-            url += `&preferredProvider=${encodeURIComponent(pipelineConfig.generate.provider)}`;
+        if (pipelineConfig?.vibeGenerate?.provider) {
+            url += `&preferredProvider=${encodeURIComponent(pipelineConfig.vibeGenerate!.provider)}`;
         }
-        if (pipelineConfig?.generate.model) {
-            url += `&preferredModel=${encodeURIComponent(pipelineConfig.generate.model)}`;
+        if (pipelineConfig?.vibeGenerate?.model) {
+            url += `&preferredModel=${encodeURIComponent(pipelineConfig.vibeGenerate!.model)}`;
         }
         router.push(url);
     }
 
     /**
-     * God Mode one-click flow (from AI prefill card):
+     * Guided Mode one-click flow (from AI prefill card):
      * 1. launchZeroEffort → get brief + conversationId
      * 2. optimizePrompt   → get optimized prompt
      * 3. navigate         → /workspace with autoPrompt
@@ -694,7 +694,7 @@ export default function ZeroEffortLaunchPage() {
             const brief = buildStructuredBrief(form, project?.name ?? "", attachedFiles);
 
             // Always run one optimization pass — the structured brief (AI-prefilled or manual)
-            // needs to be rewritten with system-layer context before entering God Mode.
+            // needs to be rewritten with system-layer context before entering Guided Mode.
             // When AI-prefilled, skipAutoOptimize=1 prevents a second pass in the workspace.
             const optimizeRes = await optimizePrompt(token, projectId, {
                 rawPrompt: brief,
@@ -706,8 +706,8 @@ export default function ZeroEffortLaunchPage() {
             const finalPrompt = optimizeRes.optimizedPrompt;
 
             const skipParam = aiPrefilled ? "&skipAutoOptimize=1" : "";
-            const modelParams = localConfig?.generate
-                ? `&preferredProvider=${encodeURIComponent(localConfig.generate.provider)}&preferredModel=${encodeURIComponent(localConfig.generate.model)}`
+            const modelParams = localConfig?.vibeGenerate
+                ? `&preferredProvider=${encodeURIComponent(localConfig.vibeGenerate!.provider)}&preferredModel=${encodeURIComponent(localConfig.vibeGenerate!.model)}`
                 : "";
             router.push(
                 `/workspace/${projectId}?conv=${briefResult.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}${skipParam}${modelParams}`,
@@ -734,7 +734,7 @@ export default function ZeroEffortLaunchPage() {
                 {/* Header */}
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <Badge variant="accent" className="mb-2">Zero Effort</Badge>
+                        <Badge variant="accent" className="mb-2">Guided Mode</Badge>
                         <h1 className="text-2xl font-semibold tracking-tight">
                             Generazione guidata
                         </h1>
@@ -748,9 +748,7 @@ export default function ZeroEffortLaunchPage() {
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => router.push(
                             result ? `/workspace/${projectId}?conv=${result.conversationId}` : `/workspace/${projectId}`
-                        )}>
-                            GodMode
-                        </Button>
+                        )}>Guided Mode</Button>
                     </div>
                 </div>
 
@@ -847,7 +845,7 @@ export default function ZeroEffortLaunchPage() {
                                     {submitting ? (
                                         <><Loader2 className="h-4 w-4 animate-spin" /> Generazione in corso…</>
                                     ) : (
-                                        <><Rocket className="h-4 w-4" /> God Mode — Genera</>
+                                        <><Rocket className="h-4 w-4" /> Guided Mode — Genera</>
                                     )}
                                 </Button>
                             </div>
@@ -1020,7 +1018,7 @@ export default function ZeroEffortLaunchPage() {
                             type="file"
                             className="hidden"
                             multiple
-                            accept=".pdf,.docx,.doc,.txt,.md,image/*"
+                            accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
                             onChange={(e) => { if (e.target.files) void handleFiles(e.target.files); e.target.value = ""; }}
                         />
                     </CardContent>
@@ -1049,7 +1047,7 @@ export default function ZeroEffortLaunchPage() {
                                     </CardDescription>
                                 </div>
                                 <Badge variant={phase === "optimized" ? "success" : "secondary"} className="ml-auto text-xs">
-                                    {phase === "optimized" ? "Prompt pronto" : `${pipelineConfig?.generate?.model ?? "MiniMax-M2.5"}`}
+                                    {phase === "optimized" ? "Prompt pronto" : `${pipelineConfig?.vibeGenerate?.model ?? "MiniMax-M2.5"}`}
                                 </Badge>
                             </div>
                         </CardHeader>
@@ -1153,7 +1151,7 @@ export default function ZeroEffortLaunchPage() {
                                         <div className="flex items-start gap-3">
                                             <Sparkles className="mt-0.5 h-4 w-4 text-primary shrink-0" />
                                             <p className="text-xs text-muted-foreground">
-                                                Il prompt è pronto. Clicca <strong className="text-foreground">Continua in GodMode</strong> per generare il sito con salvataggio completo dell&apos;artefatto, preview e strumenti di modifica.
+                                                Il prompt è pronto. Clicca <strong className="text-foreground">Continua in Guided Mode</strong> per generare il sito con salvataggio completo dell&apos;artefatto, preview e strumenti di modifica.
                                             </p>
                                         </div>
                                     </div>
@@ -1168,7 +1166,7 @@ export default function ZeroEffortLaunchPage() {
                                             </Button>
                                             <Button size="sm" onClick={handleGoToGodMode} className="gap-2">
                                                 <Rocket className="h-3.5 w-3.5" />
-                                                Continua in GodMode
+                                                Continua in Guided Mode
                                             </Button>
                                         </div>
                                     </div>

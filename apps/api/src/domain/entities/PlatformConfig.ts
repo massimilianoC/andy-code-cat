@@ -99,6 +99,24 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 768,
         systemTemplate: "",
     },
+    // Vibe Mode — final generation step (workspace model when arriving from Vibe Mode expert path)
+    vibe_mode_generate: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 14000,
+        systemTemplate: "",
+    },
+    // God Mode — default model for standalone God Mode workspace generation
+    god_mode_generate: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 14000,
+        systemTemplate: "",
+    },
 };
 
 export interface ProductInjectionConfig {

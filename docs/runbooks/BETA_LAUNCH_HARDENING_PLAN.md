@@ -1,9 +1,9 @@
 # Beta Launch Hardening Plan
 
-**Data redazione:** 2026-04-15
-**Autore audit:** Claude Sonnet 4.6 (assistente)
-**Destinatario:** agente di implementazione autonomo
-**Branch target:** `feat/beta-launch-hardening` (da creare da `develop`)
+**Audit date:** 2026-04-15
+**Audit author:** Claude Sonnet 4.6 (assistant)
+**Recipient:** autonomous implementation agent
+**Target branch:** `feat/beta-launch-hardening` (create from `develop`)
 
 ---
 
@@ -56,7 +56,7 @@ git pull origin develop
 git checkout -b feat/beta-launch-hardening
 ```
 
-Conventional commits richiesti:
+Required conventional commits:
 - `feat(api): add rate limiting on auth and llm endpoints`
 - `fix(i18n): translate hardcoded Italian strings in workspace`
 - `fix(api): fix Italian fallback in httpError normalizer`
@@ -64,32 +64,32 @@ Conventional commits richiesti:
 
 ---
 
-## 4. Blockers — descrizione e spec di implementazione
+## 4. Blockers — description and implementation spec
 
 ---
 
-### BLOCKER 1 — Rate limiting mancante sugli endpoint auth e LLM
+### BLOCKER 1 — Missing rate limiting on auth and LLM endpoints
 
-**File da modificare:** `apps/api/src/app.ts`
+**File to edit:** `apps/api/src/app.ts`
 
-**Problema:** nessun rate limiting. `/v1/auth/register`, `/v1/auth/login` e gli endpoint LLM
-sono esposti a brute force, credential stuffing e abuso di token.
+**Problem:** no rate limiting. `/v1/auth/register`, `/v1/auth/login` and LLM endpoints
+are exposed to brute force, credential stuffing, and token abuse.
 
-**Dipendenze da installare:**
+**Dependencies to install:**
 
 ```bash
 npm install express-rate-limit -w apps/api
 ```
 
-**Spec di implementazione:**
+**Implementation spec:**
 
-In `apps/api/src/app.ts`, dopo `app.use(express.json(...))` e prima delle route,
-aggiungere tre limitatori distinti:
+In `apps/api/src/app.ts`, after `app.use(express.json(...))` and before the routes,
+add three separate limiters:
 
 ```typescript
 import rateLimit from "express-rate-limit";
 
-// Limiter 1 — auth: 10 tentativi ogni 15 minuti per IP
+// Limiter 1 — auth: 10 attempts per 15 minutes per IP
 const authRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
@@ -98,7 +98,7 @@ const authRateLimiter = rateLimit({
     message: { code: "RATE_LIMITED", userMessage: "Too many attempts. Please try again later." },
 });
 
-// Limiter 2 — LLM: 30 richieste al minuto per IP (protezione token exhaustion)
+// Limiter 2 — LLM: 30 requests per minute per IP (token exhaustion protection)
 const llmRateLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 30,
@@ -107,7 +107,7 @@ const llmRateLimiter = rateLimit({
     message: { code: "RATE_LIMITED", userMessage: "Too many requests. Please slow down." },
 });
 
-// Limiter 3 — generale: 200 req/min per IP (protezione DDoS leggera)
+// Limiter 3 — global: 200 req/min per IP (light DDoS protection)
 const globalRateLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 200,
@@ -116,7 +116,7 @@ const globalRateLimiter = rateLimit({
 });
 ```
 
-Applicare **prima** delle route, nell'ordine corretto:
+Apply **before** the routes, in the correct order:
 
 ```typescript
 app.use(globalRateLimiter);                         // globale
@@ -125,19 +125,19 @@ app.use("/v1/llm", llmRateLimiter);                 // specifico LLM
 app.use("/v1/generation-workspace", llmRateLimiter); // generazione
 ```
 
-`app.set("trust proxy", 1)` è già presente a riga 27 — non rimuoverlo (necessario per
-leggere l'IP reale dietro nginx).
+`app.set("trust proxy", 1)` is already present at line 27 — do not remove it (required to read
+the real IP behind nginx).
 
 ---
 
-### BLOCKER 2 — Fallback italiano (con typo) in httpError.ts
+### BLOCKER 2 — Italian fallback (with typo) in httpError.ts
 
-**File da modificare:** `apps/api/src/presentation/http/errors/httpError.ts`
+**File to edit:** `apps/api/src/presentation/http/errors/httpError.ts`
 
-**Problema:** riga 75 restituisce `"Si e verificato un errore inatteso."` (italiano, typo: manca `è`)
-come `userMessage` per tutti gli errori non classificati. Raggiunge il browser dell'utente.
+**Problem:** line 75 returns `"Si e verificato un errore inatteso."` (Italian, typo: missing `è`)
+as the `userMessage` for all unclassified errors. This reaches the user's browser.
 
-**Modifica puntuale:**
+**Targeted change:**
 
 ```typescript
 // PRIMA (riga 71-76):
@@ -157,7 +157,7 @@ return {
 };
 ```
 
-Anche alla riga 54, la validazione Zod restituisce un messaggio in italiano:
+Also at line 54, Zod validation returns an Italian message:
 
 ```typescript
 // PRIMA (riga 54):
@@ -169,14 +169,14 @@ userMessage: "Some request fields are invalid.",
 
 ---
 
-### BLOCKER 3 — fallbackLng italiano in i18n.ts
+### BLOCKER 3 — Italian fallbackLng in i18n.ts
 
-**File da modificare:** `apps/web/lib/i18n.ts`
+**File to edit:** `apps/web/lib/i18n.ts`
 
-**Problema:** riga 16 imposta `fallbackLng: "it"`. Un utente anglofono senza `localStorage["andy_lang"]`
-vede l'interfaccia in italiano alla prima visita.
+**Problem:** line 16 sets `fallbackLng: "it"`. An English-speaking user without `localStorage["andy_lang"]`
+sees the interface in Italian on first visit.
 
-**Modifica puntuale:**
+**Targeted change:**
 
 ```typescript
 // PRIMA (riga 16):
@@ -188,18 +188,18 @@ fallbackLng: "en",
 
 ---
 
-### BLOCKER 4 — 16 stringhe italiane hardcoded nel workspace (file principale)
+### BLOCKER 4 — 16 hardcoded Italian strings in the workspace (main file)
 
-**File da modificare:** `apps/web/app/workspace/[projectId]/page.tsx`
+**File to edit:** `apps/web/app/workspace/[projectId]/page.tsx`
 
-**Problema:** il workspace (pagina più usata della piattaforma) contiene stringhe italiane
-hardcoded che non rispondono al cambio lingua. Sono stringhe usate in:
-- fallback di catch block (`.message ?? "Errore X"`)
-- notifiche (`updateNotification(..., { message: "Stringa" })`)
-- label di bottoni in stato loading/saving
-- attributi `title`
+**Problem:** the workspace (most-used page of the platform) contains hardcoded Italian strings
+that do not respond to language changes. They are used in:
+- catch block fallbacks (`.message ?? "Errore X"`)
+- notifications (`updateNotification(..., { message: "Stringa" })`)
+- button labels in loading/saving state
+- `title` attributes
 
-**Step 1 — Aggiungere le chiavi ai file i18n**
+**Step 1 — Add keys to i18n files**
 
 Aggiungere il seguente blocco a `apps/web/i18n/it.json`, in coda al JSON esistente
 (prima della chiusura `}`):
@@ -256,14 +256,14 @@ Aggiungere il seguente blocco a `apps/web/i18n/en.json`:
 }
 ```
 
-**Step 2 — Sostituire le stringhe hardcoded nel componente**
+**Step 2 — Replace hardcoded strings in the component**
 
-Il componente workspace è già un `"use client"`. Verificare che `useTranslation` sia già
-importato e il hook `const { t } = useTranslation();` sia già dichiarato nel corpo del componente.
-Se non c'è, aggiungerlo vicino agli altri hook.
+The workspace component is already a `"use client"`. Verify that `useTranslation` is already
+imported and the hook `const { t } = useTranslation();` is already declared in the component body.
+If not, add it near the other hooks.
 
-Sostituzioni puntuali (usare il numero di riga come riferimento per individuare il contesto,
-ma verificare il contesto prima di editare perché le righe potrebbero essere slittate):
+Targeted replacements (use the line number as a reference to locate context,
+but verify context before editing since lines may have shifted):
 
 | Riga approx. | Stringa attuale | Sostituzione |
 |---|---|---|
@@ -284,24 +284,24 @@ ma verificare il contesto prima di editare perché le righe potrebbero essere sl
 | 3157 | `"Salvataggio…"` (bottone save) | `isSaving ? t("workspace.actions.saving") : t("workspace.actions.save")` |
 | 3499 | `"Errore"` (copy label) | `t("workspace.errors.copy")` |
 
-**Nota critica:** le stringhe nei catch block vengono passate a `updateNotification` come
-`message`, oppure a `setError`. In entrambi i casi devono essere string calcolate, non JSX.
-Poiché `t()` ritorna una string quando chiamato fuori da JSX, la sostituzione è diretta.
+**Critical note:** strings in catch blocks are passed to `updateNotification` as
+`message`, or to `setError`. In both cases they must be plain strings, not JSX.
+Since `t()` returns a string when called outside JSX, the replacement is direct.
 
 ---
 
-### BLOCKER 5 — Stringa italiana hardcoded in ProjectConfigPopup.tsx
+### BLOCKER 5 — Hardcoded Italian string in ProjectConfigPopup.tsx
 
-**File da modificare:** `apps/web/components/ProjectConfigPopup.tsx`
+**File to edit:** `apps/web/components/ProjectConfigPopup.tsx`
 
-**Problema:** riga 590 ha `"Salvataggio…"` hardcoded nel testo del bottone.
+**Problem:** line 590 has `"Salvataggio…"` hardcoded in the button text.
 
-**Step 1 — Aggiungere chiavi i18n** (se non già fatto nel BLOCKER 4)
+**Step 1 — Add i18n keys** (if not already done in BLOCKER 4)
 
-Le chiavi `workspace.actions.saving` e `workspace.actions.save` sono già definite
-nel BLOCKER 4. Non aggiungere chiavi duplicate.
+The keys `workspace.actions.saving` and `workspace.actions.save` are already defined
+in BLOCKER 4. Do not add duplicate keys.
 
-**Step 2 — Modificare il componente**
+**Step 2 — Edit the component**
 
 ```tsx
 // Aggiungere in cima al componente (se non presente):
@@ -318,10 +318,10 @@ const { t } = useTranslation();
 
 ---
 
-## 5. Parallelizzazione consigliata
+## 5. Recommended parallelization
 
-I 5 blockers sono **indipendenti tra loro** e possono essere eseguiti in parallelo
-su track separate, oppure in sequenza nella stessa sessione.
+The 5 blockers are **independent of each other** and can be executed in parallel
+on separate tracks, or sequentially in the same session.
 
 ```
 TRACK A — API (apps/api/)
@@ -334,47 +334,47 @@ TRACK B — Frontend i18n (apps/web/)
 └── BLOCKER 5: ProjectConfigPopup.tsx (import hook + 1 sostituzione)
 ```
 
-TRACK A e TRACK B non condividono file — possono procedere in parallelo senza conflitti.
+TRACK A and TRACK B do not share files — they can proceed in parallel without conflicts.
 
-All'interno di TRACK B, eseguire in ordine:
-1. Prima aggiungere le chiavi JSON (BLOCKER 4 Step 1) — prerequisito per le sostituzioni
-2. Poi BLOCKER 3 (1 riga, indipendente)
-3. Poi BLOCKER 4 Step 2 (sostituzioni workspace)
-4. Poi BLOCKER 5 (dipende dalle chiavi JSON già aggiunte)
+Within TRACK B, execute in order:
+1. First add the JSON keys (BLOCKER 4 Step 1) — prerequisite for the replacements
+2. Then BLOCKER 3 (1 line, independent)
+3. Then BLOCKER 4 Step 2 (workspace replacements)
+4. Then BLOCKER 5 (depends on JSON keys already added)
 
 ---
 
-## 6. Verifiche dopo implementazione
+## 6. Post-implementation verification
 
 ### TRACK A
 
 ```bash
-# Avviare il server in dev
+# Start the server in dev
 docker ps --format '{{.Names}}'
-# Poi test manuale con curl:
+# Then manual test with curl:
 for i in $(seq 1 12); do curl -s -o /dev/null -w "%{http_code}\n" \
   -X POST http://localhost:4000/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@test.com","password":"wrong"}'; done
-# Deve restituire 429 dopo 10 tentativi
+# Should return 429 after 10 attempts
 ```
 
 ```bash
-# Verificare che httpError.ts non abbia più stringhe italiane:
+# Verify that httpError.ts no longer has Italian strings:
 grep -n "italiano\|Si e\|campi della" apps/api/src/presentation/http/errors/httpError.ts
-# Deve restituire vuoto
+# Should return empty
 ```
 
 ### TRACK B
 
 ```bash
-# Cercare stringhe italiane rimanenti nei file modificati:
+# Search for remaining Italian strings in modified files:
 grep -n '"Errore\|"Caricamento\|"Salvataggio\|"ZIP scaricato\|"Sessione scaduta' \
   apps/web/app/workspace/\[projectId\]/page.tsx \
   apps/web/components/ProjectConfigPopup.tsx
-# Deve restituire vuoto
+# Should return empty
 
-# Verificare che le chiavi siano presenti in entrambi i file JSON:
+# Verify that keys are present in both JSON files:
 node -e "
   const en = require('./apps/web/i18n/en.json');
   const it = require('./apps/web/i18n/it.json');
@@ -384,43 +384,43 @@ node -e "
 ```
 
 ```bash
-# Test visivo cambio lingua (se app in esecuzione):
-# 1. Aprire il browser su localhost:3000
+# Visual language-switch test (if app is running):
+# 1. Open browser at localhost:3000
 # 2. F12 > Console: localStorage.setItem('andy_lang', 'en'); location.reload();
-# 3. Navigare al workspace — verificare che tutti i bottoni e messaggi siano in inglese
-# 4. Forzare un errore (disconnettere API) — verificare che il messaggio di errore sia in inglese
+# 3. Navigate to workspace — verify all buttons and messages are in English
+# 4. Force an error (disconnect API) — verify the error message is in English
 ```
 
 ---
 
-## 7. Fuori scope per questo piano
+## 7. Out of scope for this plan
 
-I seguenti item sono stati identificati nell'audit ma **non fanno parte di questo piano**
-perché richiedono infrastruttura esterna o decisioni di prodotto:
+The following items were identified in the audit but **are not part of this plan**
+because they require external infrastructure or product decisions:
 
-| Item | Motivo esclusione |
+| Item | Reason for exclusion |
 |---|---|
-| Email verification (`AUTH_BYPASS_EMAIL_VERIFICATION=false`) | Richiede provider email (Resend/SendGrid) configurato |
-| CORS ristretto al dominio reale | Richiede dominio di produzione definito |
-| nginx `limit_req` per DDoS | Infrastruttura deploy, non codice applicativo |
-| Request timeout middleware | Da valutare insieme a strategia LLM streaming |
+| Email verification (`AUTH_BYPASS_EMAIL_VERIFICATION=false`) | Requires a configured email provider (Resend/SendGrid) |
+| CORS restricted to real domain | Requires a defined production domain |
+| nginx `limit_req` for DDoS | Deploy infrastructure, not application code |
+| Request timeout middleware | To be evaluated alongside LLM streaming strategy |
 
-Questi blockers rimangono aperti e devono essere gestiti prima del deploy pubblico.
+These blockers remain open and must be addressed before public deployment.
 
 ---
 
-## 8. File da aggiornare a fine lavoro
+## 8. Files to update after completion
 
-Dopo aver completato tutte le modifiche, aggiornare:
+After all changes are done, update:
 
-1. `docs/INDEX.md` — nessuna modifica strutturale, nessun aggiornamento necessario
-2. `docs/runbooks/TESTABLE_STEPS.md` — aggiungere step per rate limiting test
-3. `docs/guides/I18N.md` — aggiornare la tabella "Componenti coperti" aggiungendo:
+1. `docs/INDEX.md` — no structural changes, no update needed
+2. `docs/runbooks/TESTABLE_STEPS.md` — add a step for the rate limiting test
+3. `docs/guides/I18N.md` — update the "Components covered" table by adding:
    - `workspace/[projectId]/page.tsx` → `workspace.*`
    - `components/ProjectConfigPopup.tsx` → `workspace.actions.*`
-   E rimuovere dalla sezione "Componenti esclusi (by design)" queste due voci.
+   And remove these two entries from the "Components excluded (by design)" section.
 
 ---
 
-*Piano generato il 2026-04-15. Verificare con `git log` che nessun commit successivo
-abbia già risolto parzialmente questi blockers prima di iniziare l'implementazione.*
+*Plan generated on 2026-04-15. Verify with `git log` that no subsequent commit has already
+partially resolved these blockers before starting implementation.*

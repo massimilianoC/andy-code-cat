@@ -73,7 +73,7 @@ function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
         sections.push(`## [CONTATTI] Informazioni di contatto e dati salienti\n\n${contactLines}`);
     }
 
-    const footer = `\n---\n*Brief strutturato Zero Effort · ${siteLabel} · Sezioni: ${sections.length - 1}*`;
+    const footer = `\n---\n*Brief strutturato Guided Mode · ${siteLabel} · Sezioni: ${sections.length - 1}*`;
     return sections.join("\n\n") + footer;
 }
 
@@ -118,7 +118,7 @@ export class LaunchZeroEffortProject {
         const conversation = await this.conversationRepository.create({
             projectId: input.projectId,
             userId: input.userId,
-            title: `Zero Effort · ${input.intake.businessName}`,
+            title: `Guided Mode · ${input.intake.businessName}`,
             firstMessage: {
                 role: "user",
                 content: normalizedBrief,
@@ -138,7 +138,7 @@ export class LaunchZeroEffortProject {
             jobId,
             normalizedBrief,
             suggestedNextActions: [
-                "Review the generated brief in GodMode if you want deeper control.",
+                "Review the generated brief in Guided Mode if you want deeper control.",
                 "Start the next automated generation stage from the prepared workspace.",
                 "Add visual assets or a logo to improve the first output.",
             ],

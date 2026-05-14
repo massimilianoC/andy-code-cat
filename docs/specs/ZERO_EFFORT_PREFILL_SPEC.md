@@ -189,6 +189,7 @@ ze_prefill_${projectId}   →   JSON.stringify(ZeroEffortLaunchInput)
 ## 10. Document Carry-Through
 
 Files attached in `VibeCoreEntry`:
+
 1. Their metadata (filename, mimeType, sizeBytes) is forwarded to the prefill LLM call.
 2. The actual files are uploaded to the project via `uploadProjectAsset` (existing).
 3. The workspace (`/workspace/[projectId]`) can then access them through the project's

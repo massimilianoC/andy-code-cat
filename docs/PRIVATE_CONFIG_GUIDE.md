@@ -38,10 +38,10 @@ You don't need two separate repos. One repo with two remotes is simpler:
 
 ```bash
 # Public remote (open-source, sanitized)
-git remote add public https://github.com/massimilianoC/andy-code-cat.git
+git remote add public https://github.com/<org>/andy-code-cat.git
 
 # Private remote (your full working copy — use a private GitHub repo or a local bare repo)
-git remote add private git@github.com:massimilianoC/andy-code-cat-private.git
+git remote add private git@github.com:<your-username>/andy-code-cat-private.git
 # Or a local network backup:
 # git remote add private /path/to/backup/andy-code-cat.git
 ```
@@ -153,7 +153,7 @@ Your private configs (`.env.docker`, `.env.droplet`, `docs/deploy/`, etc.) are *
 
 ### Option 1: Private GitHub repo
 
-Create a private repo `andy-code-cat-private` and add it as the `private` remote (see above). Push periodically. This gives you cloud backup + history.
+Create a private repo (e.g. `andy-code-cat-private`) and add it as the `private` remote (see above). Push periodically. This gives you cloud backup + history.
 
 ### Option 2: Encrypted local archive
 
@@ -175,12 +175,12 @@ For the small set of secrets (API keys, JWT secrets), a password manager is the 
 If you clone the public repo on a new machine:
 
 ```bash
-git clone https://github.com/massimilianoC/andy-code-cat.git
+git clone https://github.com/<org>/andy-code-cat.git
 cd andy-code-cat
 
 # Restore your private env files from your secure backup
-cp ~/Backup/andy/.env.docker .env.docker
-cp ~/Backup/andy/.env.droplet .env.droplet
+cp ~/Backup/andy-code-cat/.env.docker .env.docker
+cp ~/Backup/andy-code-cat/.env.droplet .env.droplet
 # etc.
 ```
 

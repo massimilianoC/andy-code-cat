@@ -177,11 +177,12 @@ export class VibePrefill {
     ) { }
 
     async execute(input: VibePrefillInput): Promise<VibePrefillResponse> {
+        const echoProject = input.projectId ? { projectId: input.projectId } : {};
         const platformConfig = await this.platformConfigRepository.get().catch(() => null);
         const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, "default", TASK_KEY);
 
         if (!env.vibeClassifierEnabled || !taskSettings.enabled) {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true };
+            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
         }
 
         const catalog = await this.getLlmCatalog.execute();
@@ -192,7 +193,7 @@ export class VibePrefill {
             activeProviders[0];
 
         if (!providerCatalog) {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true };
+            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
         }
 
         const modelId =
@@ -203,7 +204,7 @@ export class VibePrefill {
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true };
+            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
         }
 
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta, input.templateId, input.formatHint);
@@ -234,7 +235,7 @@ export class VibePrefill {
             });
 
             if (!response.ok) {
-                return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true };
+                return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
             }
 
             const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -285,9 +286,9 @@ export class VibePrefill {
             }
 
             const { draft, confidence } = parsePrefillResponse(raw, input.prompt);
-            return { draft, confidence, skipped: false };
+            return { draft, confidence, skipped: false, ...echoProject };
         } catch {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true };
+            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
         }
     }
 }

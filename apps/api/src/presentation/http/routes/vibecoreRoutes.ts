@@ -32,6 +32,12 @@ const attachmentMetaSchema = z.object({
 const classifyBodySchema = z.object({
     prompt: z.string().min(1).max(2000),
     attachmentMeta: z.array(attachmentMetaSchema).max(3).optional(),
+    /**
+     * Optional. When omitted the API auto-creates a draft project so the
+     * classifier LLM cost is always attributable (double-sandbox).
+     * Returned in the response so the client can pin subsequent calls to it.
+     */
+    projectId: z.string().max(128).optional(),
 });
 
 const prefillBodySchema = z.object({
@@ -62,6 +68,28 @@ export function createVibecoreRoutes(): Router {
     const assetRepository = new MongoProjectAssetRepository();
     const storage = getFileStorage();
 
+    /**
+     * Ensure a (user, project) sandbox pair for any vibe pipeline call.
+     *
+     * - If `projectId` is provided AND owned by the user → reuse it.
+     * - Otherwise auto-create a lightweight draft project so every LLM call
+     *   downstream is billable to a real project (double-sandbox guarantee).
+     *
+     * The draft name is derived from the prompt (first 60 chars) and prefixed
+     * with "Vibe draft" so it is recognisable in the project list.
+     * Returned projectId is echoed back to the client in the response.
+     */
+    async function ensureVibeProject(userId: string, projectId: string | undefined, prompt: string): Promise<string> {
+        if (projectId) {
+            const owned = await projectRepository.findByIdForUser(projectId, userId).catch(() => null);
+            if (owned) return owned.id;
+        }
+        const seed = prompt.replace(/\s+/g, " ").trim().slice(0, 60) || "Untitled";
+        const draftName = `Vibe draft — ${seed}`;
+        const created = await projectRepository.create(userId, draftName);
+        return created.id;
+    }
+
     router.use(authMiddleware as RequestHandler);
 
     router.post(
@@ -74,12 +102,19 @@ export function createVibecoreRoutes(): Router {
                     return;
                 }
 
+                const userId = req.auth!.userId;
+                const projectId = await ensureVibeProject(userId, parsed.data.projectId, parsed.data.prompt);
+
                 const result = await vibeClassify.execute({
                     prompt: parsed.data.prompt,
                     attachmentMeta: parsed.data.attachmentMeta,
+                    userId,
+                    projectId,
                 });
 
-                res.json(result);
+                // Always echo projectId so the client pins follow-up calls
+                // (prefill, generation, conversation) to the same sandbox.
+                res.json({ ...result, projectId });
             } catch (error) {
                 next(error);
             }
@@ -100,17 +135,21 @@ export function createVibecoreRoutes(): Router {
                 let layerDContext: string | undefined;
                 const layerDocNames: string[] = [];
 
-                // Layer D injection: when projectId is provided, verify ownership and build document context
+                // Double-sandbox: if client passed a projectId they don't own, refuse.
+                // (Auto-create only when no projectId was provided at all.)
                 if (parsed.data.projectId) {
-                    const projectId = parsed.data.projectId;
-
-                    // Double sandbox: verify project belongs to the authenticated user
-                    const project = await projectRepository.findByIdForUser(projectId, userId).catch(() => null);
-                    if (!project) {
+                    const owned = await projectRepository.findByIdForUser(parsed.data.projectId, userId).catch(() => null);
+                    if (!owned) {
                         res.status(403).json({ error: "Project not found or access denied" });
                         return;
                     }
+                }
 
+                // Resolve (or create) the billing sandbox.
+                const projectId = await ensureVibeProject(userId, parsed.data.projectId, parsed.data.prompt);
+
+                // Layer D injection: load assets only when caller pinned an existing project.
+                if (parsed.data.projectId) {
                     // Load project assets (ownership already verified above)
                     const assets = await assetRepository.listByProject(projectId, userId).catch(() => []);
 
@@ -168,7 +207,7 @@ export function createVibecoreRoutes(): Router {
                     templateId: parsed.data.templateId ?? null,
                     formatHint: (parsed.data.formatHint ?? null) as import("@andy-code-cat/contracts").FormatHint | null,
                     userId,
-                    projectId: parsed.data.projectId,
+                    projectId,
                 });
 
                 // Attach document names that contributed to the brief (informational, shown to user)
@@ -176,7 +215,7 @@ export function createVibecoreRoutes(): Router {
                     result.draft.attachedDocuments = layerDocNames;
                 }
 
-                res.json(result);
+                res.json({ ...result, projectId });
             } catch (error) {
                 next(error);
             }

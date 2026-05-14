@@ -70,7 +70,26 @@ function toDto(asset: {
         providerResponse?: Record<string, unknown>;
     };
     semanticMetadata?: { title: string; summary: string; description: string; tags: string[]; colors: string[]; mediaKind: string; classifierProvider: string; classifierModel: string; classifiedAt: Date };
-    enrichmentTrace?: { provenance: { enrichmentStatus: string; enrichedAt: Date | null; errorMessage: string | null }; distilledTitle: string; distilledSummary: string; distilledTags: string[]; distilledColors: string[] } | null;
+    enrichmentTrace?: {
+        provenance: { enrichmentStatus: string; enrichedAt: Date | null; errorMessage: string | null };
+        distilledTitle: string;
+        distilledSummary: string;
+        distilledTags: string[];
+        distilledColors: string[];
+        documentBrief?: {
+            documentType: string; detectedTitle: string | null; detectedBrandName: string | null;
+            purposeSentence: string; contentSummary: string; mainArgumentOrValue: string | null;
+            structureSummary: string | null; keyMessages: string[]; toneLabel: string;
+            targetAudience: string | null; ctaText: string | null; primaryTopics: string[];
+            contentLanguage: string; suggestedStyleRole: string;
+        } | null;
+        designSignals?: {
+            imageCategory: string; hasText: boolean; detectedTextSnippet: string | null;
+            hasLogo: boolean; hasPeople: boolean; hasProduct: boolean;
+            layoutStyle: string | null; aspectRatioLabel: string | null;
+            suggestedWebUse: string[]; suggestedStyleRole: string;
+        } | null;
+    } | null;
     createdAt: Date;
 }): ProjectAssetDto {
     return {
@@ -108,6 +127,8 @@ function toDto(asset: {
             distilledSummary: asset.enrichmentTrace.distilledSummary,
             distilledTags: asset.enrichmentTrace.distilledTags,
             distilledColors: asset.enrichmentTrace.distilledColors,
+            documentBrief: asset.enrichmentTrace.documentBrief ?? null,
+            designSignals: asset.enrichmentTrace.designSignals ?? null,
         } : undefined,
         createdAt: asset.createdAt.toISOString(),
     };
@@ -358,6 +379,28 @@ export function createProjectAssetRoutes(): Router {
             try {
                 const analytics = await getProjectAiAnalytics.execute(req.sandbox!.projectId, req.auth!.userId);
                 res.json(analytics);
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    // GET /v1/projects/:projectId/assets/:assetId — single asset (for enrichment polling)
+    router.get(
+        "/projects/:projectId/assets/:assetId",
+        sandboxMiddleware,
+        async (req: RequestWithContext, res, next) => {
+            try {
+                const asset = await assetRepository.findById(
+                    req.params.assetId!,
+                    req.sandbox!.projectId,
+                    req.auth!.userId
+                );
+                if (!asset) {
+                    res.status(404).json({ error: "Asset not found" });
+                    return;
+                }
+                res.json({ asset: toDto(asset) });
             } catch (error) {
                 next(error);
             }

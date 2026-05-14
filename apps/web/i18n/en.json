@@ -382,7 +382,9 @@
             "styleRole": "Style role…",
             "descriptionPlaceholder": "Description…",
             "confirmDelete": "Delete \"{{name}}\"?",
-            "uploadError": "Upload error."
+            "uploadError": "Upload error.",
+            "assetBriefHeading": "Brief",
+            "assetDesignSignalsHeading": "Image analysis"
         },
         "tagCategories": {
             "era": "Era / Movement",
@@ -621,6 +623,10 @@
             "removeAttachment": "Remove attachment",
             "uploading": "Uploading…",
             "uploadSuccess": "Attached to project",
+            "imageSuggestionLogo": "Use as logo",
+            "imageSuggestionBackground": "Use as background",
+            "imageSuggestionIcon": "Use as icon",
+            "imageSuggestionDismiss": "Dismiss",
             "autoOptimizeOn": "Auto-optimize ON",
             "autoOptimizeOff": "Auto-optimize OFF",
             "autoOptimizeOnTitle": "Auto-optimize is ON: Send will optimize the prompt automatically before sending",

@@ -79,10 +79,30 @@ Only use CDNs from this list. Do not reference any other external URLs.
   Pattern: after including script, call lucide.createIcons(); and use <i data-lucide="icon-name"></i>
 
 ### Scroll & Reveal
-- AOS (Animate on Scroll): 
+- AOS (Animate on Scroll) — REQUIRES BOTH CSS AND JS, otherwise content stays invisible:
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2/dist/aos.css">
   <script src="https://cdn.jsdelivr.net/npm/aos@2/dist/aos.js"></script>
   Pattern: AOS.init(); on elements: <div data-aos="fade-up">...</div>
+  CRITICAL: If you write \`data-aos="..."\` anywhere or include the AOS stylesheet, you MUST also include the AOS script tag AND call AOS.init() in artifacts.js. The AOS CSS sets opacity:0 on every \`[data-aos]\` element — without the JS that adds the \`aos-animate\` class, the entire page is permanently invisible. Prefer pure CSS animations / GSAP for hero reveals when you can.
+
+## LIBRARY PAIRING — CSS+JS MUST SHIP TOGETHER (critical visibility rule)
+Several libraries hide content by default via CSS and rely on JS to reveal it.
+If you include either half without the other, the rendered page will appear blank
+even though the markup is correct. Treat the following as atomic pairs — include
+BOTH or NEITHER:
+
+| Library | CSS link | JS script | HTML markers |
+|---|---|---|---|
+| AOS | aos.css | aos.js + \`AOS.init()\` | \`data-aos="..."\` |
+| WOW.js | animate.css | wow.min.js + \`new WOW().init()\` | \`.wow\` class |
+| ScrollReveal | (none) | scrollreveal.min.js + \`ScrollReveal().reveal(...)\` | any selector |
+| Swiper | swiper-bundle.min.css | swiper-bundle.min.js + \`new Swiper(...)\` | \`.swiper\` class |
+| GLightbox | glightbox.min.css | glightbox.min.js + \`GLightbox()\` | \`.glightbox\` class |
+
+Rule: before emitting the HTML, audit it for these markers. If a marker is present,
+the matching script MUST be in the HTML head/body AND the matching init call MUST
+be in artifacts.js. If you cannot guarantee both, do not use the library — fall
+back to vanilla CSS animations or remove the marker attributes entirely.
 
 ## LIBRARY SELECTION GUIDANCE
 - Simple pages with no interactivity: Tailwind only.

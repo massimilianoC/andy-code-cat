@@ -382,7 +382,9 @@
             "styleRole": "Ruolo stile…",
             "descriptionPlaceholder": "Descrizione…",
             "confirmDelete": "Eliminare \"{{name}}\"?",
-            "uploadError": "Errore durante il caricamento."
+            "uploadError": "Errore durante il caricamento.",
+            "assetBriefHeading": "Brief",
+            "assetDesignSignalsHeading": "Analisi immagine"
         },
         "tagCategories": {
             "era": "Era / Movimento",
@@ -621,6 +623,10 @@
             "removeAttachment": "Rimuovi allegato",
             "uploading": "Caricamento in corso…",
             "uploadSuccess": "Allegato al progetto",
+            "imageSuggestionLogo": "Usa come logo",
+            "imageSuggestionBackground": "Usa come sfondo",
+            "imageSuggestionIcon": "Usa come icona",
+            "imageSuggestionDismiss": "Ignora",
             "autoOptimizeOn": "Auto-ottimizza ON",
             "autoOptimizeOff": "Auto-ottimizza OFF",
             "autoOptimizeOnTitle": "Auto-ottimizzazione attiva: il prompt verrà ottimizzato automaticamente prima dell'invio",

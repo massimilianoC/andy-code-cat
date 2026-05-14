@@ -726,11 +726,15 @@ Crea una vera esperienza giocabile browser-first in HTML/CSS/JS.
 CDN APPROVATA PER QUESTO PRESET (solo se necessaria):
 - Phaser: <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 STRUTTURA RICHIESTA:
-1. Start screen con titolo, obiettivo e bottone Play.
-2. Game area principale con canvas o stage dedicato.
+1. Start screen con titolo, obiettivo e bottone Play (visibile senza JS).
+2. Game area: <div id='game-root'></div> con larghezza/altezza esplicite via CSS — MAI passare l'id di un <canvas> come parent di Phaser.
 3. HUD visibile con score, vite/energia, timer o progresso.
 4. Feedback immediato su collisioni, premi, game over e restart.
 5. Supporto minimo keyboard + touch.
+REGOLE PHASER OBBLIGATORIE:
+- new Phaser.Game({ parent: 'game-root', width, height, scene: ... }) — il parent è SEMPRE l'id di un <div> esistente nell'HTML.
+- this.load.image('key', '<urlString>') — il secondo argomento deve essere una stringa URL, MAI il risultato di una funzione (es. una helper che genera dataURL); per texture procedurali usa this.add.graphics().generateTexture() dentro create().
+- Includi <noscript> dentro #game-root con un breve testo che descrive il gioco — la pagina non deve mai apparire vuota se JS fallisce.
 Usa meccaniche semplici ma complete. Nessun backend richiesto. Il gioco deve essere eseguibile subito nel browser.`,
         },
         defaultTags: {
@@ -767,6 +771,10 @@ VINCOLI:
 - Ostacoli leggibili, incremento progressivo della difficoltà.
 - Score persistente solo in memoria locale del browser.
 - Restart rapido e onboarding minimo.
+REGOLE PHASER OBBLIGATORIE:
+- Mount: <div id='game-root'></div> con width/height in CSS, e new Phaser.Game({ parent: 'game-root', ... }) — MAI usare l'id di un <canvas> come parent.
+- this.load.image('key', '<urlString>') accetta solo stringhe URL; per asset procedurali usa Graphics.generateTexture() dentro create().
+- Aggiungi un <noscript> con titolo gioco e istruzioni dentro #game-root.
 Preferisci codice semplice, performance fluide e controlli molto reattivi.`,
         },
         defaultTags: {
@@ -831,9 +839,10 @@ CDN APPROVATA PER QUESTO PRESET (solo se necessaria):
 - Three.js: <script src="https://cdn.jsdelivr.net/npm/three@0.174/build/three.min.js"></script>
 REGOLE:
 - Nessuna pipeline complessa o build tool esterni.
-- Prediligi canvas, CSS transforms o librerie CDN leggere solo se davvero utili.
-- Introduci camera, scena, obiettivi chiari e controlli base.
-- Mantieni asset placeholder e geometrie semplici per stabilità e performance.
+- Mount: <div id='scene-root'></div> con width/height in CSS; in JS fai document.getElementById('scene-root').appendChild(renderer.domElement). MAI selezionare un <canvas> esistente come parent.
+- Imposta renderer.setSize(width, height) in modo esplicito; non lasciare il canvas a 0×0.
+- Prediligi camera/scena/obiettivi chiari e controlli base; geometrie semplici per stabilità.
+- Aggiungi <noscript> dentro #scene-root con descrizione e istruzioni — la pagina non deve mai apparire vuota se JS fallisce.
 L'obiettivo è un prototipo interattivo immediato, non un engine completo.`,
         },
         defaultTags: {

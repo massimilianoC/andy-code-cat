@@ -35,21 +35,21 @@ const FALLBACK_MODELS: Partial<Record<PipelineModelRole, string>> = {
  */
 const SUPPLEMENTAL_MODELS: Array<{ id: string; capabilities: string[] }> = [
     // Google — Gemma 4
-    { id: "google/gemma-4-31B-it",      capabilities: ["chat"] },
-    { id: "google/gemma-4-26B-A4B-it",  capabilities: ["chat"] },
+    { id: "google/gemma-4-31B-it", capabilities: ["chat"] },
+    { id: "google/gemma-4-26B-A4B-it", capabilities: ["chat"] },
     // Qwen — extra reasoning / large models
-    { id: "Qwen/QwQ-32B",               capabilities: ["chat"] },
-    { id: "Qwen/Qwen3-32B",             capabilities: ["chat"] },
+    { id: "Qwen/QwQ-32B", capabilities: ["chat"] },
+    { id: "Qwen/Qwen3-32B", capabilities: ["chat"] },
     { id: "Qwen/Qwen3-235B-A22B-Instruct-2507", capabilities: ["chat"] },
     // DeepSeek — R1 reasoning
-    { id: "deepseek-ai/DeepSeek-R1",    capabilities: ["chat"] },
+    { id: "deepseek-ai/DeepSeek-R1", capabilities: ["chat"] },
     // Moonshot / Kimi — extra large
     { id: "moonshotai/Kimi-K2-Instruct", capabilities: ["chat"] },
     // Tencent Hunyuan
     { id: "tencent/Hunyuan-A13B-Instruct", capabilities: ["chat"] },
     // OpenAI OSS (hosted on SiliconFlow)
-    { id: "openai/gpt-oss-120b",        capabilities: ["chat"] },
-    { id: "openai/gpt-oss-20b",         capabilities: ["chat"] },
+    { id: "openai/gpt-oss-120b", capabilities: ["chat"] },
+    { id: "openai/gpt-oss-20b", capabilities: ["chat"] },
 ];
 
 function inferCapabilities(role: PipelineModelRole): string[] {
