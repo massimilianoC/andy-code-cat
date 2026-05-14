@@ -339,7 +339,7 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
 
 // ─── Structured brief builder ─────────────────────────────────────────────────
 
-function buildStructuredBrief(form: ExtendedForm, projectName: string): string {
+function buildStructuredBrief(form: ExtendedForm, projectName: string, docNames?: string[]): string {
     const siteTypeLabels: Record<string, string> = {
         landing_page: "Landing Page",
         business_site: "Business Site",
@@ -403,6 +403,12 @@ function buildStructuredBrief(form: ExtendedForm, projectName: string): string {
             .map((cf) => `- **${cf.key.trim()}:** ${cf.value.trim()}`)
             .join("\n");
         sections.push(`## [CONTATTI] Informazioni di contatto e dati salienti\n\n${contactLines}`);
+    }
+
+    // ── [ALLEGATI] ──────────────────────────────────────────────────────────
+    if (docNames && docNames.length > 0) {
+        const docList = docNames.map((d) => `- ${d}`).join("\n");
+        sections.push(`## [ALLEGATI] Documenti analizzati per il brief\n\n${docList}`);
     }
 
     const footer = `\n---\n*Brief strutturato Zero Effort · ${siteLabel} · Sezioni: ${sections.length - 1}*`;
@@ -518,6 +524,12 @@ export default function ZeroEffortLaunchPage() {
                         .map((c) => ({ id: `cf-${c.key}`, key: c.key, value: c.value }))
                     : [],
             });
+            // Restore the names of documents that the AI used to generate this brief
+            if (Array.isArray(draft.attachedDocuments)) {
+                setAttachedFiles(
+                    (draft.attachedDocuments as unknown[]).filter((d): d is string => typeof d === "string"),
+                );
+            }
             setCompletedSteps(new Set([1, 2, 3]));
             setAiPrefilled(true);
         } catch {
@@ -604,7 +616,7 @@ export default function ZeroEffortLaunchPage() {
             setResult(briefResult);
             // Build the structured brief client-side from the full form data
             // so every section and long-text field is included verbatim.
-            setEditedBrief(buildStructuredBrief(form, project?.name ?? ""));
+            setEditedBrief(buildStructuredBrief(form, project?.name ?? "", attachedFiles));
             setPipelineConfig(configResult);
             setCompletedSteps(new Set([1, 2, 3]));
             setPhase("review");
@@ -669,14 +681,25 @@ export default function ZeroEffortLaunchPage() {
                 launchZeroEffort(token, projectId, payload),
                 getZeroEffortConfig(token, projectId).catch(() => null),
             ]);
-            const brief = buildStructuredBrief(form, project?.name ?? "");
-            const optimizeRes = await optimizePrompt(token, projectId, {
-                rawPrompt: brief,
-                conversationId: briefResult.conversationId,
-            });
-            const finalPrompt = optimizeRes.optimizedPrompt;
+            const brief = buildStructuredBrief(form, project?.name ?? "", attachedFiles);
+
+            // When the brief was AI-prefilled, it is already well-structured — skip the extra
+            // optimizePrompt pass to avoid over-compressing the content through a second LLM pass.
+            // The workspace autoOptimize toggle will also be turned off via skipAutoOptimize=1.
+            let finalPrompt: string;
+            if (aiPrefilled) {
+                finalPrompt = brief;
+            } else {
+                const optimizeRes = await optimizePrompt(token, projectId, {
+                    rawPrompt: brief,
+                    conversationId: briefResult.conversationId,
+                });
+                finalPrompt = optimizeRes.optimizedPrompt;
+            }
+
+            const skipParam = aiPrefilled ? "&skipAutoOptimize=1" : "";
             router.push(
-                `/workspace/${projectId}?conv=${briefResult.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`,
+                `/workspace/${projectId}?conv=${briefResult.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}${skipParam}`,
             );
         } catch (e) {
             const message = e instanceof Error ? e.message : "Impossibile avviare la generazione.";

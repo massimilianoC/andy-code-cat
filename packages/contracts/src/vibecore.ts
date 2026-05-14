@@ -54,6 +54,8 @@ export interface ZeroEffortDraft {
     styleHint?: string;
     contactInfo?: Array<{ key: string; value: string }>;
     styleAttributes?: string[];
+    /** Filenames of project documents that were analysed to generate this draft (informational only). */
+    attachedDocuments?: string[];
 }
 
 export interface VibePrefillResponse {

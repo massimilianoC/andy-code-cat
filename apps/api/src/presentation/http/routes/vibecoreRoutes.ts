@@ -98,6 +98,7 @@ export function createVibecoreRoutes(): Router {
 
                 const userId = req.auth!.userId;
                 let layerDContext: string | undefined;
+                const layerDocNames: string[] = [];
 
                 // Layer D injection: when projectId is provided, verify ownership and build document context
                 if (parsed.data.projectId) {
@@ -120,6 +121,10 @@ export function createVibecoreRoutes(): Router {
 
                     if (enrichedLayerD) {
                         layerDContext = enrichedLayerD;
+                        assets
+                            .filter((a) => a.enrichmentTrace?.provenance.enrichmentStatus === "ready" && a.originalName)
+                            .slice(0, 3)
+                            .forEach((a) => layerDocNames.push(a.originalName));
                     } else if (assets.length > 0) {
                         // Second pass: inline text extraction for document assets not yet enriched
                         const docAssets = assets
@@ -138,8 +143,8 @@ export function createVibecoreRoutes(): Router {
                                     stream.on("error", reject);
                                 });
                                 const buffer = Buffer.concat(chunks);
-                                const parsed = await parser.parse(buffer, asset.mimeType);
-                                const snippet = parsed.rawText.slice(0, 2500).trim();
+                                const parsedDoc = await parser.parse(buffer, asset.mimeType);
+                                const snippet = parsedDoc.rawText.slice(0, 2500).trim();
                                 return snippet ? `--- ${asset.originalName} ---\n${snippet}` : null;
                             }),
                         );
@@ -151,6 +156,7 @@ export function createVibecoreRoutes(): Router {
 
                         if (blocks.length > 0) {
                             layerDContext = `[DOCUMENT CONTEXT — use to enrich the brief fields]\n${blocks.join("\n\n")}`;
+                            docAssets.forEach((a) => layerDocNames.push(a.originalName));
                         }
                     }
                 }
@@ -162,6 +168,11 @@ export function createVibecoreRoutes(): Router {
                     templateId: parsed.data.templateId ?? null,
                     formatHint: (parsed.data.formatHint ?? null) as import("@andy-code-cat/contracts").FormatHint | null,
                 });
+
+                // Attach document names that contributed to the brief (informational, shown to user)
+                if (layerDocNames.length > 0) {
+                    result.draft.attachedDocuments = layerDocNames;
+                }
 
                 res.json(result);
             } catch (error) {

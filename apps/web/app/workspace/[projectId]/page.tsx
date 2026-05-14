@@ -444,7 +444,9 @@ export default function WorkspacePage() {
     const [chatAttachedFiles, setChatAttachedFiles] = useState<{ id: string; name: string; mimeType: string }[]>([]);
     const [isDragOverChat, setIsDragOverChat] = useState(false);
     const chatFileInputRef = useRef<HTMLInputElement>(null);
-    const [autoOptimize, setAutoOptimize] = useState(true);
+    // When coming from the Zero Effort flow the brief is already structured — skip auto-optimize
+    // to avoid a second LLM compression pass on content that was pre-optimized upstream.
+    const [autoOptimize, setAutoOptimize] = useState(() => searchParams?.get("skipAutoOptimize") !== "1");
 
     const [leftWidth, setLeftWidth] = useState(40);
     
