@@ -7,9 +7,11 @@ import type {
     PagedCostTransactionsDto,
     CostRatesDto,
     ResourceTypeCostPolicyDto,
+    CostTypeBreakdownDto,
+    CostTransactionDto,
 } from "@andy-code-cat/contracts";
 
-export type { ProjectCostSummaryDto, UserCostSummaryDto, AdminCostDashboardDto, PagedCostTransactionsDto, CostRatesDto, ResourceTypeCostPolicyDto };
+export type { ProjectCostSummaryDto, UserCostSummaryDto, AdminCostDashboardDto, PagedCostTransactionsDto, CostRatesDto, ResourceTypeCostPolicyDto, CostTypeBreakdownDto, CostTransactionDto };
 
 function authHeader(): Record<string, string> {
     const token = getAccessToken();
