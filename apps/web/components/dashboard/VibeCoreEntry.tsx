@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload } from "lucide-react";
+import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useSpeechDictation } from "@/hooks/useSpeechDictation";
 import { cn } from "@/lib/utils";
 import { ModeSelector, type VibeMode } from "./ModeSelector";
 import { VibeCoreBackground } from "./VibeCoreBackground";
@@ -261,6 +262,18 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const phaseKey = PHASE_LABEL_KEYS[phase];
     const phaseLabel = phaseKey ? t(phaseKey, phase) : "";
 
+    // Voice dictation — browser Speech-to-Text, language follows i18n selection
+    const {
+        listening: voiceListening,
+        supported: voiceSupported,
+        error: voiceError,
+        toggle: toggleVoice,
+    } = useSpeechDictation(prompt, setPrompt, {
+        notSupported: t("workspace.ui.voiceOnlyChrome"),
+        micError:     t("workspace.ui.voiceMicError"),
+        unavailable:  (code) => t("workspace.ui.voiceUnavailable", { error: code }),
+    });
+
     return (
         <section
             className="relative flex flex-col items-center justify-center w-full h-full"
@@ -374,7 +387,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     {/* Divider */}
                     <div className="border-t mt-2 mb-3" style={{ borderColor: "rgba(255,255,255,0.07)" }} />
 
-                    {/* Bottom row: attach (click or drag) · status · send */}
+                    {/* Bottom row: attach · mic · status · send */}
                     <div className="flex items-center justify-between gap-2">
                         {/* Attach — dashed drop zone with dual click / drag functionality */}
                         <label
@@ -423,6 +436,39 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             />
                         </label>
 
+                        {/* Mic button — voice dictation (hidden when browser does not support Web Speech API) */}
+                        {voiceSupported && (
+                            <button
+                                type="button"
+                                onClick={toggleVoice}
+                                disabled={isLoading}
+                                aria-label={voiceListening
+                                    ? t("workspace.ui.voiceListeningLabel")
+                                    : t("workspace.ui.voiceStartLabel")}
+                                title={voiceListening
+                                    ? t("workspace.ui.voiceListeningTitle")
+                                    : t("workspace.ui.voiceStartTitle")}
+                                className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150 shrink-0"
+                                style={{
+                                    border: `1px solid ${
+                                        voiceListening
+                                            ? "rgba(248,113,113,0.5)"
+                                            : "rgba(255,255,255,0.15)"
+                                    }`,
+                                    background: voiceListening
+                                        ? "rgba(248,113,113,0.15)"
+                                        : "transparent",
+                                    color: voiceListening
+                                        ? "#f87171"
+                                        : "rgba(255,255,255,0.38)",
+                                }}
+                            >
+                                {voiceListening
+                                    ? <Square className="h-3.5 w-3.5" />
+                                    : <Mic className="h-3.5 w-3.5" />}
+                            </button>
+                        )}
+
                         {/* Phase status */}
                         <span
                             aria-live="polite"
@@ -466,6 +512,24 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     >
                         {error}
                     </p>
+                )}
+
+                {/* Voice status / error */}
+                {(voiceListening || voiceError) && (
+                    <div className="mt-2 flex items-center justify-center gap-2 text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
+                        {voiceListening && (
+                            <span className="flex items-center gap-1">
+                                <span
+                                    className="inline-block w-1.5 h-1.5 rounded-full animate-pulse"
+                                    style={{ background: "#f87171" }}
+                                />
+                                {t("workspace.ui.voiceListening")}
+                            </span>
+                        )}
+                        {voiceError && (
+                            <span style={{ color: "#f87171" }}>{voiceError}</span>
+                        )}
+                    </div>
                 )}
             </div>
 
