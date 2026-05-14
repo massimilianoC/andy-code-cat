@@ -90,6 +90,15 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 256,
         systemTemplate: "",
     },
+    // VibeCore — Zero Effort LLM prefill (brief field extraction)
+    vibe_intent_prefill: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "Qwen/Qwen3-8B",
+        temperature: 0.3,
+        maxCompletionTokens: 768,
+        systemTemplate: "",
+    },
 };
 
 export interface ProductInjectionConfig {
