@@ -417,7 +417,36 @@
             "prefilling": "Pre-filling fields with AI…",
             "creating": "Creating workspace…",
             "uploading": "Uploading files…",
-            "redirecting": "Opening…"
+            "redirecting": "Opening…",
+            "hints": {
+                "classifying": [
+                    "Reading your idea…",
+                    "Detecting project type…",
+                    "Classifying intent…",
+                    "Identifying output format…"
+                ],
+                "prefilling": [
+                    "Extracting key details…",
+                    "Structuring your brief…",
+                    "Analysing tone and style…",
+                    "Identifying your audience…",
+                    "Building project fields…",
+                    "Processing document context…"
+                ],
+                "creating": [
+                    "Initialising workspace…",
+                    "Setting up your project…"
+                ],
+                "uploading": [
+                    "Uploading your files…",
+                    "Processing documents…",
+                    "Starting enrichment pipeline…"
+                ],
+                "redirecting": [
+                    "Almost ready…",
+                    "Opening your workspace…"
+                ]
+            }
         },
         "tokenCounter": "~ {{count}} tokens",
         "prefillBanner": "✦ Pre-filled by AI · Review and generate",

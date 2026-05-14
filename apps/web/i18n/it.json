@@ -417,7 +417,36 @@
             "prefilling": "Pre-compilazione campi AI…",
             "creating": "Creazione del workspace…",
             "uploading": "Carico i file…",
-            "redirecting": "Apertura…"
+            "redirecting": "Apertura…",
+            "hints": {
+                "classifying": [
+                    "Leggo la tua idea…",
+                    "Rilevo il tipo di progetto…",
+                    "Classifico l'intento…",
+                    "Identifico il formato…"
+                ],
+                "prefilling": [
+                    "Estraggo le informazioni chiave…",
+                    "Struttura il brief…",
+                    "Analizzo tono e stile…",
+                    "Identifico il pubblico target…",
+                    "Genero i campi del progetto…",
+                    "Processo il contesto documentale…"
+                ],
+                "creating": [
+                    "Inizializzo il workspace…",
+                    "Configuro il progetto…"
+                ],
+                "uploading": [
+                    "Carico i tuoi file…",
+                    "Processo i documenti…",
+                    "Avvio la pipeline di arricchimento…"
+                ],
+                "redirecting": [
+                    "Quasi pronto…",
+                    "Apertura workspace…"
+                ]
+            }
         },
         "tokenCounter": "~ {{count}} token",
         "prefillBanner": "✦ Pre-compilato dall'AI · Rivedi e genera",

@@ -80,19 +80,26 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const [prompt, setPrompt] = useState("");
     const [files, setFiles] = useState<FilePill[]>([]);
     const [phase, setPhase] = useState<EntryPhase>("idle");
-    const [tokenCount, setTokenCount] = useState(0);
+    // Cycling hint index — advances every 2.3s with a short fade-out/-in transition
+    const [hintIndex, setHintIndex] = useState(0);
+    const [hintVisible, setHintVisible] = useState(true);
 
-    // Animate fake token counter during LLM prefill pass
     useEffect(() => {
-        if (phase !== "prefilling") {
-            setTokenCount(0);
+        if (phase === "idle") {
+            setHintIndex(0);
+            setHintVisible(true);
             return;
         }
-        const interval = setInterval(() => {
-            setTokenCount((prev) => prev + Math.floor(Math.random() * 38) + 8);
-        }, 80);
-        return () => clearInterval(interval);
+        const timer = setInterval(() => {
+            setHintVisible(false);
+            setTimeout(() => {
+                setHintIndex((prev) => prev + 1);
+                setHintVisible(true);
+            }, 280);
+        }, 2300);
+        return () => clearInterval(timer);
     }, [phase]);
+
     const [error, setError] = useState<string | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
 
@@ -535,18 +542,47 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     </div>
                 </form>
 
-                {/* Token counter — visible during LLM prefill pass */}
-                {phase === "prefilling" && (
-                    <p
-                        aria-live="polite"
-                        className="mt-2 text-center"
-                        style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.28)", letterSpacing: "0.02em" }}
-                    >
-                        {t("vibecore.tokenCounter", "~ {{count}} token", {
-                            count: tokenCount.toLocaleString(),
-                        })}
-                    </p>
-                )}
+                {/* Loading hints — 3 pulsing dots + cycling keyword phrase */}
+                {isLoading && (() => {
+                    const rawHints = t(`vibecore.phase.hints.${phase}`, { returnObjects: true });
+                    const arr: string[] = Array.isArray(rawHints) ? rawHints as string[] : [];
+                    const hint = arr.length > 0 ? arr[hintIndex % arr.length] : "";
+                    return (
+                        <div className="mt-3 flex flex-col items-center gap-1.5">
+                            {/* Staggered pulsing dots */}
+                            <div className="flex items-center gap-1">
+                                {[0, 1, 2].map((i) => (
+                                    <span
+                                        key={i}
+                                        className="inline-block w-1.5 h-1.5 rounded-full animate-pulse"
+                                        style={{
+                                            background: glowColor,
+                                            animationDelay: `${i * 0.22}s`,
+                                            animationDuration: "1.2s",
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                            {/* Cycling hint text */}
+                            {hint && (
+                                <p
+                                    aria-live="polite"
+                                    className="text-center"
+                                    style={{
+                                        fontSize: "0.72rem",
+                                        color: `${glowColor}cc`,
+                                        letterSpacing: "0.025em",
+                                        opacity: hintVisible ? 1 : 0,
+                                        transform: hintVisible ? "translateY(0)" : "translateY(5px)",
+                                        transition: "opacity 280ms ease, transform 280ms ease",
+                                    }}
+                                >
+                                    {hint}
+                                </p>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {/* Error */}
                 {error && (
