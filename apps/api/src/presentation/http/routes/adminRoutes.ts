@@ -186,11 +186,8 @@ export function createAdminRoutes(): Router {
 
     router.get("/admin/llm-registry", async (_req, res, next) => {
         try {
-            const providers = await llmCatalogRepo.listAllProviders();
-            res.json({
-                source: providers.length > 0 ? "mongo" : env.LLM_CATALOG_SOURCE,
-                providers,
-            });
+            const result = await getLlmCatalog.execute();
+            res.json(result);
         } catch (err) {
             next(err);
         }
