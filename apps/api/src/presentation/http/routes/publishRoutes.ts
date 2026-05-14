@@ -302,7 +302,7 @@ export function createPublishRoutes() {
     // This overrides helmet's restrictive default-src 'self' for public static sites.
     const PUBLISHED_PAGE_CSP =
         "default-src 'self' https:; " +
-        "script-src 'self' https: 'unsafe-inline'; " +
+        "script-src 'self' https: 'unsafe-inline' 'unsafe-eval'; " +
         "style-src 'self' https: 'unsafe-inline'; " +
         "img-src 'self' data: https: blob:; " +
         "font-src 'self' data: https:; " +

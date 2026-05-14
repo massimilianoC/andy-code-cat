@@ -42,6 +42,22 @@ const PROMPT_TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
         maxCompletionTokens: 1800,
         systemTemplate: "",
     },
+    enrich_document: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "Qwen/Qwen2.5-72B-Instruct",
+        temperature: 0.1,
+        maxCompletionTokens: 800,
+        systemTemplate: "",
+    },
+    enrich_image: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "Qwen/Qwen2.5-VL-72B-Instruct",
+        temperature: 0.1,
+        maxCompletionTokens: 600,
+        systemTemplate: "",
+    },
 };
 
 /** Supported locales shown in the cookie banner and legal pages editors. */

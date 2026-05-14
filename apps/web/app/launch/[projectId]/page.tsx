@@ -7,6 +7,7 @@ import { launchZeroEffort, getZeroEffortConfig, type ZeroEffortLaunchInput, type
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
 import { optimizePrompt } from "../../../lib/api/llm";
+import { uploadProjectAsset } from "../../../lib/api/assets";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import {
     Sparkles,
     Target,
     Trash2,
+    Upload,
     Wand2,
 } from "lucide-react";
 
@@ -452,6 +454,12 @@ export default function ZeroEffortLaunchPage() {
     const [optimizedPrompt, setOptimizedPrompt] = useState("");
     const [editedOptimizedPrompt, setEditedOptimizedPrompt] = useState("");
 
+    // document upload zone
+    const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
+    const [uploadingFiles, setUploadingFiles] = useState(false);
+    const [isDragOver, setIsDragOver] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const [form, setForm] = useState<ExtendedForm>({
         businessName: "",
         siteType: "landing_page",
@@ -518,6 +526,20 @@ export default function ZeroEffortLaunchPage() {
             const cur = prev.styleAttributes ?? [];
             return { ...prev, styleAttributes: cur.includes(attr) ? cur.filter((a) => a !== attr) : [...cur, attr] };
         });
+    }
+
+    async function handleFiles(files: FileList | File[]) {
+        if (!token || !projectId) return;
+        setUploadingFiles(true);
+        for (const file of Array.from(files)) {
+            try {
+                await uploadProjectAsset(token, projectId, file, { useInProject: true });
+                setAttachedFiles((prev) => [...prev, file.name]);
+            } catch {
+                // continue uploading remaining files even if one fails
+            }
+        }
+        setUploadingFiles(false);
     }
 
     async function handleSubmit() {
@@ -732,6 +754,57 @@ export default function ZeroEffortLaunchPage() {
                         );
                     })}
                 </div>
+
+                {/* ── Document upload zone ── */}
+                <Card className={cn(
+                    "transition-all border-dashed",
+                    isDragOver ? "border-primary bg-primary/5" : "border-border",
+                )}>
+                    <CardContent className="p-0">
+                        <div
+                            className="flex flex-col items-center gap-3 p-6 cursor-pointer select-none"
+                            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                            onDragLeave={() => setIsDragOver(false)}
+                            onDrop={(e) => { e.preventDefault(); setIsDragOver(false); void handleFiles(e.dataTransfer.files); }}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <div className={cn(
+                                "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+                                isDragOver ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground",
+                            )}>
+                                {uploadingFiles
+                                    ? <Loader2 className="h-5 w-5 animate-spin" />
+                                    : <Upload className="h-5 w-5" />
+                                }
+                            </div>
+                            <div className="text-center">
+                                <p className="text-sm font-medium">
+                                    {uploadingFiles ? "Caricamento in corso..." : "Allega documenti di contesto"}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    PDF, DOCX, TXT, MD, immagini — trascinali qui o clicca per sfogliare
+                                </p>
+                            </div>
+                            {attachedFiles.length > 0 && (
+                                <div className="flex flex-wrap justify-center gap-1.5 mt-1">
+                                    {attachedFiles.map((name, i) => (
+                                        <Badge key={i} variant="secondary" className="text-xs font-normal max-w-[180px] truncate">
+                                            {name}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            className="hidden"
+                            multiple
+                            accept=".pdf,.docx,.doc,.txt,.md,image/*"
+                            onChange={(e) => { if (e.target.files) void handleFiles(e.target.files); e.target.value = ""; }}
+                        />
+                    </CardContent>
+                </Card>
 
                 {/* ── Step 4 — Generazione automatica (appare dopo API success) ── */}
                 {result && (

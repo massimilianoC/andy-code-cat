@@ -87,6 +87,20 @@ export interface AssetGenerationMetadataDto {
     providerResponse?: Record<string, unknown>;
 }
 
+export type EnrichmentStatusDto = "pending" | "ready" | "failed" | "skipped";
+
+export interface AssetEnrichmentTraceDto {
+    provenance: {
+        enrichmentStatus: EnrichmentStatusDto;
+        enrichedAt?: string | null;
+        errorMessage?: string | null;
+    };
+    distilledTitle?: string;
+    distilledSummary?: string;
+    distilledTags?: string[];
+    distilledColors?: string[];
+}
+
 export interface ProjectAssetDto {
     id: string;
     projectId: string;
@@ -108,6 +122,7 @@ export interface ProjectAssetDto {
     generationPrompt?: string;
     generationMetadata?: AssetGenerationMetadataDto;
     semanticMetadata?: AssetSemanticMetadataDto;
+    enrichmentTrace?: AssetEnrichmentTraceDto | null;
     createdAt: string;
 }
 

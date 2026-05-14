@@ -723,6 +723,8 @@ Pensa come un art director: impatto visivo → chiarezza → completezza.`,
             printReady: false,
             systemPromptModule: `FORMATO OUTPUT — VIDEOGAME WEB:
 Crea una vera esperienza giocabile browser-first in HTML/CSS/JS.
+CDN APPROVATA PER QUESTO PRESET (solo se necessaria):
+- Phaser: <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 STRUTTURA RICHIESTA:
 1. Start screen con titolo, obiettivo e bottone Play.
 2. Game area principale con canvas o stage dedicato.
@@ -757,6 +759,8 @@ Usa meccaniche semplici ma complete. Nessun backend richiesto. Il gioco deve ess
             printReady: false,
             systemPromptModule: `FORMATO OUTPUT — FREE RUNNER:
 Costruisci un endless runner o free runner leggero per browser.
+CDN APPROVATA PER QUESTO PRESET (solo se necessaria):
+- Phaser: <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 VINCOLI:
 - Il personaggio si muove automaticamente avanti.
 - Il giocatore può saltare, scivolare o cambiare corsia.
@@ -823,6 +827,8 @@ Il divertimento deve sostenere l'apprendimento, non distrarlo.`,
             printReady: false,
             systemPromptModule: `FORMATO OUTPUT — GIOCO 3D WEB:
 Crea una demo giocabile con resa 3D leggera o pseudo-3D adatta al browser.
+CDN APPROVATA PER QUESTO PRESET (solo se necessaria):
+- Three.js: <script src="https://cdn.jsdelivr.net/npm/three@0.174/build/three.min.js"></script>
 REGOLE:
 - Nessuna pipeline complessa o build tool esterni.
 - Prediligi canvas, CSS transforms o librerie CDN leggere solo se davvero utili.
@@ -855,6 +861,8 @@ L'obiettivo è un prototipo interattivo immediato, non un engine completo.`,
             printReady: false,
             systemPromptModule: `FORMATO OUTPUT — VR EXPERIENCE CON A-FRAME:
 Genera una pagina con una scena VR A-Frame funzionante via CDN.
+CDN APPROVATA PER QUESTO PRESET:
+- A-Frame: <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 OBBLIGATORIO:
 - Usa <a-scene> con asset minimi e componenti chiari.
 - Camera, cursore/gaze o controller-friendly fallback.

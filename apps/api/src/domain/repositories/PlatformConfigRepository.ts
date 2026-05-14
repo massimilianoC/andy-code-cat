@@ -1,5 +1,6 @@
 import type { PlatformConfig } from "../entities/PlatformConfig";
 import type { ProductGovernanceConfig } from "../entities/PlatformConfig";
+import type { PlatformCostRates } from "../entities/PlatformConfig";
 import type { UserLimits } from "../entities/User";
 
 export interface UpdatePlatformConfigInput {
@@ -15,6 +16,7 @@ export interface UpdatePlatformConfigInput {
         nginx: Partial<ProductGovernanceConfig["nginx"]>;
     }>>;
     updatedByUserId?: string;
+    costRates?: Partial<Omit<PlatformCostRates, "updatedAt" | "updatedByUserId">> & { updatedByUserId?: string };
 }
 
 export interface PlatformConfigRepository {

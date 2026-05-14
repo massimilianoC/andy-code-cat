@@ -1,0 +1,239 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - button "← Dashboard" [ref=e5] [cursor=pointer]
+        - generic "DCL Test Project" [ref=e6]
+        - button "Configura progetto" [ref=e7] [cursor=pointer]
+      - generic "Costo totale progetto (chat LLM + optimizer)" [ref=e11]: €0.011
+    - generic [ref=e12]:
+      - complementary [ref=e13]:
+        - generic [ref=e14]:
+          - generic [ref=e15]:
+            - generic [ref=e16]: DCL Test Project
+            - button "Configura progetto" [ref=e17] [cursor=pointer]:
+              - img [ref=e18]
+          - generic [ref=e21]:
+            - generic [ref=e22]: Chat di Progetto
+            - combobox [ref=e23] [cursor=pointer]:
+              - option "siliconflow" [selected]
+              - option "lmstudio"
+              - option "openrouter"
+            - combobox [ref=e24] [cursor=pointer]:
+              - option "€ FLUX.1-dev"
+              - option "€ FLUX.1-schnell"
+              - option "€€€ Seed-OSS-36B-Instruct"
+              - option "€€€€ DeepSeek-R1"
+              - option "€€€ DeepSeek-V3"
+              - option "€€€ DeepSeek-V3.1"
+              - option "€€€ DeepSeek-V3.1-Terminus"
+              - option "€€€ DeepSeek-V3.2"
+              - option "€€€ DeepSeek-V3.2-Exp"
+              - option "€€ DeepSeek-V4-Flash"
+              - option "€€€€ DeepSeek-V4-Pro"
+              - option "fish-speech-1.5"
+              - option "CosyVoice2-0.5B"
+              - option "€ gemma-4-26B-A4B-it"
+              - option "€€ gemma-4-31B-it"
+              - option "€€ Ling-flash-2.0"
+              - option "€€ Ring-flash-2.0"
+              - option "IndexTTS-2"
+              - option "€€€€ MiniMax-M2.5" [selected]
+              - option "€€€€ Kimi-K2-Instruct"
+              - option "€€€€ Kimi-K2-Instruct-0905"
+              - option "€€€ Kimi-K2.5"
+              - option "€€€€ Kimi-K2.6"
+              - option "€€€ DeepSeek-V3.1-Nex-N1"
+              - option "€ gpt-oss-120b"
+              - option "€ gpt-oss-20b"
+              - option "€€€€ Qwen2.5-72B-Instruct"
+              - option "€ Qwen2.5-7B-Instruct"
+              - option "€ Qwen3-14B"
+              - option "€ Qwen3-235B-A22B-Instruct-2507"
+              - option "€ Qwen3-30B-A3B-Instruct-2507"
+              - option "€ Qwen3-30B-A3B-Thinking-2507"
+              - option "€€ Qwen3-32B"
+              - option "€ Qwen3-8B"
+              - option "€ Qwen3-Coder-30B-A3B-Instruct"
+              - option "€ Qwen3-Embedding-4B"
+              - option "€ Qwen3-Embedding-8B"
+              - option "Qwen3-Reranker-0.6B"
+              - option "Qwen3-Reranker-8B"
+              - option "€€€ Qwen3-VL-30B-A3B-Instruct"
+              - option "€€€ Qwen3-VL-30B-A3B-Thinking"
+              - option "€€ Qwen3-VL-32B-Instruct"
+              - option "€€ Qwen3-VL-32B-Thinking"
+              - option "€€ Qwen3-VL-8B-Instruct"
+              - option "Qwen3.5-122B-A10B"
+              - option "Qwen3.5-27B"
+              - option "Qwen3.5-35B-A3B"
+              - option "Qwen3.5-397B-A17B"
+              - option "Qwen3.5-9B"
+              - option "Qwen3.6-27B"
+              - option "Qwen3.6-35B-A3B"
+              - option "€€ Step-3.5-Flash"
+              - option "€€ Hunyuan-A13B-Instruct"
+              - option "€€ Hy3-preview"
+              - option "€€ GLM-4.5-Air"
+              - option "€€€€ GLM-4.6"
+              - option "€€€€ GLM-4.6V"
+              - option "€€€€ GLM-4.7"
+              - option "€€€€ GLM-5"
+              - option "€€€€ GLM-5.1"
+              - option "€€€€ GLM-5V-Turbo"
+              - option "── 🆓 Free models ──" [disabled]
+              - option "bge-large-en-v1.5"
+              - option "bge-m3"
+              - option "Qwen3-Embedding-0.6B"
+          - paragraph [ref=e25]: Optimize prompt usa siliconflow · MiniMax-M2.5
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - generic [ref=e29]:
+                - button "Copia messaggio": Copia
+                - text: "# BRIEF DI PROGETTO — DCL Test Project ## [IDENTITÀ] Brand e tipo sito - **Brand:** DCL Test Project - **Tipo sito:** business website ## [OBIETTIVO] Descrizione e obiettivo principale Andy Code Cat è una piattaforma AI per la generazione automatica di siti web. - Obiettivo: generare siti professionali in pochi minuti - Pubblico: sviluppatori e designer - Punto di forza: enrichment automatico dei documenti tramite DCL ## [AUDIENCE] Target e pubblico di riferimento Sviluppatori e designer professionisti tra 25-45 anni, italiani e internazionali, interessati a strumenti AI per la creazione rapida di siti web professionali ## [STILE] Attributi visivi, tono e CTA - **Attributi visivi:** dark, tech - **Tono di voce:** Professionale, innovativo, diretto - **CTA principale:** Inizia ora - **Note stilistiche aggiuntive:** Colori scuri, accenti cyan/teal, tipografia moderna sans-serif --- *Brief strutturato Zero Effort · business website · Sezioni: 3*"
+              - generic [ref=e30]: user
+            - generic [ref=e31]:
+              - generic [ref=e32]:
+                - button "Copia messaggio": Copia
+                - text: "# BRIEF DI PROGETTO — DCL Test Project ## [IDENTITÀ] Brand e tipo sito - **Brand:** DCL Test Project - **Brand positioning:** Piattaforma AI innovativa per la generazione automatica di siti web - **Tipo sito:** Business Website — Landing page / Sito vetrina ## [OBIETTIVO] Descrizione e obiettivo principale **Andy Code Cat** è una piattaforma AI all'avanguardia che rivoluziona il processo di creazione di siti web professionali. - **Obiettivo primario:** Consentire agli utenti di generare siti web completi e professionali in pochi minuti, grazie alla potenza dell'intelligenza artificiale - **Proposta di valore unica:** Enrichment automatico dei documenti tramite tecnologia DCL — trasformazione instantanea di contenuti in strutture web pronte all'uso - **Beneficio chiave:** Eliminazione delle complessità tecniche, risparmio di tempo significativo, risultati immediatamente professionali ## [AUDIENCE] Target e pubblico di riferimento **Pubblico primario:** - Sviluppatori web professionisti (frontend/backend/full-stack) - Designer UX/UI e web designer - Professionisti digitali italiani e internazionali - Età: 25-45 anni - Livello esperienza: intermedio-avanzato **Profilo psicografico:** - Orientati alla tecnologia e all'innovazione - Cercano strumenti che ottimizzino i workflow di sviluppo - Apprezzano soluzioni eleganti che combinino velocità e qualità - Valutano il rapporto tempo/risultato nelle scelte tecnologiche **Bisogni e pain points:** - Necessità di accelerare i tempi di sviluppo - Frustrazione con processi ripetitivi e manuali - Desiderio di mantenere standard qualitativi elevati senza sacrificare velocità ## [MESSAGGIO] Storytelling e tono **Tono di voce:** - **Professionale:** Linguaggio chiaro, competente, autorevole - **Innovativo:** Visione futuristica, posizionamento all'avanguardia - **Diretto:** Messaggi concisi, senza fronzoli, orientati ai risultati **Claim chiave da comunicare:** - \"Genera siti professionali in minuti, non in ore\" - L'AI che trasforma i tuoi documenti in siti web completi **Struttura narrativa suggerita:** 1. Hook: Il problema — creare siti web richiede troppo tempo 2. Soluzione: Andy Code Cat e la potenza dell'AI 3. Differenziatore: L'enrichment automatico DCL 4. Prova sociale / Dimostrazione 5. CTA: Inizia ora ## [STILE] Attributi visivi, tono e CTA **Palette cromatica:** - **Primaria:** Colori scuri (nero profondo, grigio antracite, blu notte) - **Accenti:** Cyan e teal — vivaci, tecnologici, distintivi - **Contrasto:** Zone scure con elementi luminosity alta per massimizzare leggibilità e impatto visivo **Tipografia:** - Font moderni sans-serif - Clean, geometriche, leggibili - Hierarchy chiara: titoli bold, body leggero **Atmosfera visiva:** - Dark mode dominante - Estetica tech/futuristica - Elementi di profondità (gradients, shadows, glassmorphism sottile) - Accenti luminosi che suggeriscono innovazione e potenza AI **Layout e composizione:** - Struttura pulita e organizzata - Ampio uso di spazio negativo - Elementi visivi che evocano tecnologia (pattern geometrici, linee, dati) - Sezioni ben definite con transizioni fluide **CTA (Call to Action):** - **Primario:** \"Inizia ora\" - **Secondario:** \"Scopri come funziona\" / \"Demo gratuita\" - Stile: Bottone prominente, colore accent cyan/teal, contrasto elevato ## [STRUTTURA] Sezioni del sito Il sito dovrà includere le seguenti sezioni principali: 1. **Hero Section** — Headline d'impatto, sottotitolo chiaro, CTA principale, visual evocativo 2. **Feature/Benefit** — Presentazione dei punti di forza (generazione rapida, enrichment DCL, qualità professionale) 3. **Come funziona** — Spiegazione semplice e visiva del processo 4. **CTA finale** — Invito all'azione per conversions --- *Brief ottimizzato per generazione — DCL Test Project · Business Website · Target: Sviluppatori e Designer 25-45 · Tono: Professionale, Innovativo, Diretto · Style: Dark, Tech, Cyan/Teal accents*"
+              - generic [ref=e33]: user
+            - generic [ref=e34]:
+              - generic [ref=e35]:
+                - button "Copia messaggio": Copia
+                - generic [ref=e36]:
+                  - paragraph [ref=e37]: Generated a dark tech business website for DCL Test Project with hero, features, how-it-works, and CTA sections using Tailwind CSS, GSAP animations, and Lucide icons.
+                  - list [ref=e38]:
+                    - listitem [ref=e39]: "Created 4-section landing page: Hero, Features, How It Works, Final CTA"
+                    - listitem [ref=e40]: "Used dark theme (#0a0a0f, #111118) with cyan/teal accents (#06b6d4, #14b8a6)"
+                    - listitem [ref=e41]: Added GSAP entrance animations for visual impact
+                    - listitem [ref=e42]: Included Lucide icons for feature cards and process steps
+                  - generic [ref=e43]:
+                    - generic [ref=e44]: Prossimi passi
+                    - list [ref=e45]:
+                      - listitem [ref=e46]: Review the generated website
+                      - listitem [ref=e47]: Test responsiveness across breakpoints
+                      - listitem [ref=e48]: Consider adding more sections or interactive elements
+              - generic [ref=e49]: assistant
+              - button "Dettagli richiesta" [ref=e51] [cursor=pointer]: ℹ 10.515 tok · 59.5s · €0.0087
+          - separator "Ridimensiona input chat" [ref=e52]
+          - generic [ref=e53]:
+            - generic [ref=e54]:
+              - button "Choose File" [ref=e55]
+              - textbox "Scrivi cosa vuoi realizzare..." [ref=e56]
+              - button "Allega file" [ref=e57] [cursor=pointer]
+              - button "Avvia dettatura" [ref=e59] [cursor=pointer]
+            - generic [ref=e63]: "Chrome: dettatura vocale pronta"
+            - generic [ref=e64]:
+              - generic [ref=e65]:
+                - button "Dettagli ultima richiesta" [ref=e67] [cursor=pointer]: ℹ 10.515 tok · 59.5s · €0.0087
+                - generic [ref=e68]: "optimizer: 2 runs · €0.011"
+              - generic [ref=e69]:
+                - button "Optimize · MiniMax-M2.5" [disabled]
+                - button "Invia" [disabled] [ref=e70]
+      - separator "Ridimensiona pannelli" [ref=e71]
+      - generic [ref=e72]:
+        - generic [ref=e73]:
+          - generic [ref=e74]:
+            - generic [ref=e75]: format v2
+            - generic [ref=e76]: siliconflow
+            - generic [ref=e77]: MiniMaxAI/MiniMax-M2.5
+            - generic [ref=e78]: injected
+          - generic [ref=e79]:
+            - button "⬇ ZIP" [ref=e80] [cursor=pointer]
+            - button "📷" [ref=e82] [cursor=pointer]
+            - button "🌐 Pubblica" [ref=e83] [cursor=pointer]
+            - button "v1 MiniMax-M2.5 ▾" [ref=e86] [cursor=pointer]:
+              - generic [ref=e87]: v1
+              - generic [ref=e88]: MiniMax-M2.5
+              - generic [ref=e89]: ▾
+        - generic [ref=e90]:
+          - button "PREVIEW" [ref=e91] [cursor=pointer]
+          - button "HTML" [ref=e92] [cursor=pointer]
+          - button "CSS" [ref=e93] [cursor=pointer]
+          - button "JS" [ref=e94] [cursor=pointer]
+          - button "🔍 PROMPT" [ref=e95] [cursor=pointer]
+          - button "◎ Inspect" [ref=e96] [cursor=pointer]
+          - button "✎ EDIT" [ref=e97] [cursor=pointer]
+        - generic [ref=e98]:
+          - button "🖥 Desktop full · 13\"+" [ref=e99] [cursor=pointer]:
+            - generic [ref=e100]: 🖥
+            - generic [ref=e101]: Desktop
+            - generic [ref=e102]: full · 13"+
+          - button "🪟 Tablet 820×1180 · 10.9\"" [ref=e103] [cursor=pointer]:
+            - generic [ref=e104]: 🪟
+            - generic [ref=e105]: Tablet
+            - generic [ref=e106]: 820×1180 · 10.9"
+          - button "📱 Mobile 390×844 · 6.7\"" [ref=e107] [cursor=pointer]:
+            - generic [ref=e108]: 📱
+            - generic [ref=e109]: Mobile
+            - generic [ref=e110]: 390×844 · 6.7"
+        - iframe [ref=e115]:
+          - generic [active] [ref=f3e1]:
+            - banner [ref=f3e2]:
+              - link "Andy Code Cat" [ref=f3e4] [cursor=pointer]:
+                - /url: "#"
+                - img [ref=f3e6]
+                - generic [ref=f3e9]: Andy Code Cat
+            - main [ref=f3e10]:
+              - generic [ref=f3e11]:
+                - generic [ref=f3e15]:
+                  - generic [ref=f3e18]: AI-Powered Website Generation
+                  - heading "Crea siti web professionali in pochi minuti" [level=1] [ref=f3e19]
+                  - paragraph [ref=f3e20]: La piattaforma AI che trasforma i tuoi documenti in siti web completi tramite enrichment automatico DCL
+                  - generic [ref=f3e21]:
+                    - link "Inizia ora" [ref=f3e22] [cursor=pointer]:
+                      - /url: "#cta"
+                    - link "Scopri come funziona" [ref=f3e23] [cursor=pointer]:
+                      - /url: "#how-it-works"
+                      - img [ref=f3e24]
+                      - text: Scopri come funziona
+                - img [ref=f3e28]
+              - generic [ref=f3e31]:
+                - generic [ref=f3e32]:
+                  - heading "Funzionalità principali" [level=2] [ref=f3e33]
+                  - paragraph [ref=f3e34]: Tutto ciò che ti serve per generare siti web professionali senza scrivere codice
+                - generic [ref=f3e35]:
+                  - generic [ref=f3e36]:
+                    - img [ref=f3e38]
+                    - heading "Generazione Rapida" [level=3] [ref=f3e40]
+                    - paragraph [ref=f3e41]: Trasforma le tue idee in siti web completi in pochi minuti. Nessuna configurazione, nessun setup complesso.
+                  - generic [ref=f3e42]:
+                    - img [ref=f3e44]
+                    - heading "Enrichment DCL" [level=3] [ref=f3e49]
+                    - paragraph [ref=f3e50]: Tecnologia proprietaria di arricchimento automatico dei documenti. Il tuo contenuto diventa struttura web.
+                  - generic [ref=f3e51]:
+                    - img [ref=f3e53]
+                    - heading "Qualità Professionale" [level=3] [ref=f3e56]
+                    - paragraph [ref=f3e57]: Ogni sito generato è ottimizzato, responsive e conforme agli standard web moderni.
+              - generic [ref=f3e59]:
+                - generic [ref=f3e60]:
+                  - heading "Come funziona" [level=2] [ref=f3e61]
+                  - paragraph [ref=f3e62]: Tre semplici passi per il tuo sito web professionale
+                - generic [ref=f3e63]:
+                  - generic [ref=f3e64]:
+                    - generic [ref=f3e65]: "1"
+                    - heading "Inserisci il contenuto" [level=3] [ref=f3e66]
+                    - paragraph [ref=f3e67]: Carica i tuoi documenti, testi o descrizioni. La piattaforma accetta qualsiasi formato.
+                  - generic [ref=f3e68]:
+                    - generic [ref=f3e69]: "2"
+                    - heading "AI elabora e arricchisce" [level=3] [ref=f3e70]
+                    - paragraph [ref=f3e71]: Il motore DCL analizza e trasforma automaticamente il contenuto in struttura web.
+                  - generic [ref=f3e72]:
+                    - generic [ref=f3e73]: "3"
+                    - heading "Sito pronto all'uso" [level=3] [ref=f3e74]
+                    - paragraph [ref=f3e75]: Scarica o pubblica il tuo sito web professionale immediatamente.
+              - generic [ref=f3e80]:
+                - heading "Pronto a rivoluzionare il tuo workflow?" [level=2] [ref=f3e81]
+                - paragraph [ref=f3e82]: Unisci alla community di sviluppatori e designer che stanno già creando siti web con Andy Code Cat.
+                - link "Inizia ora — È gratuito" [ref=f3e84] [cursor=pointer]:
+                  - /url: "#"
+                  - img [ref=f3e85]
+                  - text: Inizia ora — È gratuito
+            - contentinfo [ref=f3e90]:
+              - generic [ref=f3e91]:
+                - generic [ref=f3e92]:
+                  - img [ref=f3e94]
+                  - generic [ref=f3e97]: Andy Code Cat
+                - paragraph [ref=f3e98]: © 2024 DCL Test Project. Tutti i diritti riservati.
+  - alert [ref=e116]

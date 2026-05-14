@@ -3,16 +3,17 @@
 ## What To Read Before Coding
 
 1. `AGENTS.md` — non-negotiable rules, layer boundaries, isolation model
-2. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (R1→R4 active)
-3. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — current codebase structure
-4. `docs/architecture/PIPELINE_LAYERS.md` — 2-layer architecture and transition mechanism
-5. `docs/security/SECURITY_BASELINE.md` — auth and isolation baseline
-6. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
-7. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
-8. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
-9. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 9 typed presets with `outputSpec` and `systemPromptModule`
-10. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
-11. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
+2. `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md` — layer ownership map, frozen zones, PP-NNN rule IDs, and collision-prevention checklist for all agents touching the prompting pipeline
+3. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (R1→R4 active)
+4. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — current codebase structure
+5. `docs/architecture/PIPELINE_LAYERS.md` — 2-layer architecture and transition mechanism
+6. `docs/security/SECURITY_BASELINE.md` — auth and isolation baseline
+7. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
+8. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
+9. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
+10. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 9 typed presets with `outputSpec` and `systemPromptModule`
+11. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
+12. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
 
 ---
 

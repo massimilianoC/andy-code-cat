@@ -55,6 +55,17 @@ export interface ProjectAssetDto {
         classifierModel: string;
         classifiedAt: string;
     };
+    enrichmentTrace?: {
+        provenance: {
+            enrichmentStatus: "pending" | "ready" | "failed" | "skipped";
+            enrichedAt?: string | null;
+            errorMessage?: string | null;
+        };
+        distilledTitle?: string;
+        distilledSummary?: string;
+        distilledTags?: string[];
+        distilledColors?: string[];
+    } | null;
     createdAt: string;
 }
 
@@ -291,6 +302,12 @@ export async function downloadProjectAssetDataUrl(token: string, projectId: stri
         reader.onloadend = () => resolve(String(reader.result ?? ""));
         reader.readAsDataURL(blob);
     });
+}
+
+/** Returns a public (no-auth) URL for serving an asset file inline. */
+export function getPublicAssetUrl(assetId: string): string {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    return `${baseUrl}/p/media/${assetId}`;
 }
 
 /** Returns the download URL for an asset (use with fetch + Authorization header). */

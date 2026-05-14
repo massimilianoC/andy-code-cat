@@ -25,6 +25,7 @@ import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { OptimizeImagePrompt } from "../../../application/prompting/OptimizeImagePrompt";
 import { SuggestProjectImageIdea } from "../../../application/prompting/SuggestProjectImageIdea";
 import { buildImagePromptContextPacket } from "../../../application/prompting/buildImagePromptContext";
+import { AssetEnrichmentPipeline } from "../../../application/documents/enrichment/AssetEnrichmentPipeline";
 import { env } from "../../../config";
 
 // In-memory storage: the use case writes to disk itself after validation.
@@ -69,6 +70,7 @@ function toDto(asset: {
         providerResponse?: Record<string, unknown>;
     };
     semanticMetadata?: { title: string; summary: string; description: string; tags: string[]; colors: string[]; mediaKind: string; classifierProvider: string; classifierModel: string; classifiedAt: Date };
+    enrichmentTrace?: { provenance: { enrichmentStatus: string; enrichedAt: Date | null; errorMessage: string | null }; distilledTitle: string; distilledSummary: string; distilledTags: string[]; distilledColors: string[] } | null;
     createdAt: Date;
 }): ProjectAssetDto {
     return {
@@ -95,6 +97,17 @@ function toDto(asset: {
             ...asset.semanticMetadata,
             mediaKind: asset.semanticMetadata.mediaKind as NonNullable<ProjectAssetDto["semanticMetadata"]>["mediaKind"],
             classifiedAt: asset.semanticMetadata.classifiedAt.toISOString(),
+        } : undefined,
+        enrichmentTrace: asset.enrichmentTrace ? {
+            provenance: {
+                enrichmentStatus: asset.enrichmentTrace.provenance.enrichmentStatus as NonNullable<ProjectAssetDto["enrichmentTrace"]>["provenance"]["enrichmentStatus"],
+                enrichedAt: asset.enrichmentTrace.provenance.enrichedAt?.toISOString() ?? null,
+                errorMessage: asset.enrichmentTrace.provenance.errorMessage,
+            },
+            distilledTitle: asset.enrichmentTrace.distilledTitle,
+            distilledSummary: asset.enrichmentTrace.distilledSummary,
+            distilledTags: asset.enrichmentTrace.distilledTags,
+            distilledColors: asset.enrichmentTrace.distilledColors,
         } : undefined,
         createdAt: asset.createdAt.toISOString(),
     };
@@ -179,6 +192,26 @@ export function createProjectAssetRoutes(): Router {
                 });
 
                 res.status(201).json({ asset: toDto(asset) });
+
+                // Fire-and-forget enrichment — never blocks the HTTP response
+                if (env.enrichmentEnabled) {
+                    const fileBuffer = req.file.buffer;
+                    setImmediate(async () => {
+                        try {
+                            const platformConfig = await platformConfigRepository.get().catch(() => null);
+                            const pipeline = new AssetEnrichmentPipeline();
+                            await pipeline.enrich({
+                                asset,
+                                fileBuffer,
+                                getLlmCatalog,
+                                assetRepository,
+                                platformConfig,
+                            });
+                        } catch (err) {
+                            console.error(`[upload] enrichment pipeline failed for asset ${asset.id}:`, err);
+                        }
+                    });
+                }
             } catch (error) {
                 next(error);
             }

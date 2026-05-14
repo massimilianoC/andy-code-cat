@@ -1,0 +1,71 @@
+- generic [active] [ref=e1]:
+  - main [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - generic [ref=e8]: Zero Effort
+        - heading "Generazione guidata" [level=1] [ref=e9]
+        - paragraph [ref=e10]: DCL Test Project · Compila i 3 step e avvia la generazione automatica.
+      - generic [ref=e11]:
+        - button "Dashboard" [ref=e12] [cursor=pointer]
+        - button "GodMode" [ref=e13] [cursor=pointer]
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - button "1" [ref=e16] [cursor=pointer]
+        - generic [ref=e17]: Descrizione
+        - img [ref=e18]
+      - generic [ref=e20]:
+        - button "2" [ref=e21]
+        - generic [ref=e22]: Target & Dati
+        - img [ref=e23]
+      - generic [ref=e25]:
+        - button "3" [ref=e26]
+        - generic [ref=e27]: Stile visivo
+    - generic [ref=e28]:
+      - generic [ref=e29]:
+        - button "Step 1 — Descrizione Brand, tipo sito e obiettivo principale" [ref=e30] [cursor=pointer]:
+          - img [ref=e32]
+          - generic [ref=e35]:
+            - paragraph [ref=e36]: Step 1 — Descrizione
+            - paragraph [ref=e37]: Brand, tipo sito e obiettivo principale
+          - img [ref=e38]
+        - generic [ref=e42]:
+          - generic [ref=e43]:
+            - generic [ref=e44]: Nome del brand o dell'azienda
+            - textbox "Nome del brand o dell'azienda" [ref=e45]:
+              - /placeholder: Es. KTM Machina Style
+              - text: DCL Test Project
+          - generic [ref=e46]:
+            - generic [ref=e47]: Tipo di sito
+            - generic [ref=e48]:
+              - button "Landing" [ref=e49] [cursor=pointer]
+              - button "Business" [ref=e50] [cursor=pointer]
+              - button "Portfolio" [ref=e51] [cursor=pointer]
+              - button "Showcase" [ref=e52] [cursor=pointer]
+          - generic [ref=e53]:
+            - generic [ref=e54]: Descrizione e obiettivo principale
+            - paragraph [ref=e55]: Descrivi liberamente il progetto. Puoi usare elenchi puntati (- elemento), grassetto (**testo**) o incollare da Word.
+            - textbox "Descrizione e obiettivo principale" [ref=e56]:
+              - /placeholder: "Es. KTM Machina Style è un brand di accessori premium per motociclisti.\n- Obiettivo: aumentare le vendite online\n- Pubblico: appassionati di moto tra 25-45 anni\n- Punto di forza: materiali innovativi e design austriaco"
+          - generic [ref=e57]:
+            - button "Avanti" [disabled]:
+              - text: Avanti
+              - img
+      - button "Step 2 — Target & Dati Audience, contatti e info salienti" [ref=e59] [cursor=pointer]:
+        - img [ref=e61]
+        - generic [ref=e65]:
+          - paragraph [ref=e66]: Step 2 — Target & Dati
+          - paragraph [ref=e67]: Audience, contatti e info salienti
+        - img [ref=e68]
+      - button "Step 3 — Stile visivo Attributi estetici, tono e CTA" [ref=e71] [cursor=pointer]:
+        - img [ref=e73]
+        - generic [ref=e79]:
+          - paragraph [ref=e80]: Step 3 — Stile visivo
+          - paragraph [ref=e81]: Attributi estetici, tono e CTA
+        - img [ref=e82]
+    - generic [ref=e86] [cursor=pointer]:
+      - img [ref=e94]
+      - generic [ref=e91]:
+        - paragraph [ref=e92]: Allega documenti di contesto
+        - paragraph [ref=e93]: PDF, DOCX, TXT, MD, immagini — trascinali qui o clicca per sfogliare
+      - generic [ref=e98]: test-dcl-document.txt
+  - alert [ref=e4]

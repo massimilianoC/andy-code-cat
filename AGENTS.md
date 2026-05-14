@@ -35,6 +35,7 @@ Architecture goals:
 - Environment contract: .env.example and apps/api/src/config.ts
 - Documentation index: docs/INDEX.md
 - Agent navigation docs: docs/agents/CODE_AGENT_INDEX.md
+- Prompting pipeline guardrails: docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md
 
 When conflicts exist, apply this priority:
 

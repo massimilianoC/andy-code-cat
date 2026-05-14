@@ -8,6 +8,8 @@ import { buildDraftProjectTemplateRequest } from "../prompting/draftProjectTempl
 import { estimateCost, type CostEstimate } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { env } from "../../config";
+import { CostTransactionService } from "../cost/CostTransactionService";
+import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "draft_template_model";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -220,6 +222,26 @@ export class DraftProjectTemplate {
         }).catch(() => undefined);
 
         this.userRepository.incrementTokensConsumed(input.userId, usage.totalTokens).catch(() => undefined);
+
+        // Cost ledger (fire-and-forget)
+        CostTransactionService.instance.record({
+            userId: input.userId,
+            projectId: INTERNAL_PROJECT_ID,
+            resourceType: ResourceType.LLM_TEMPLATE_DRAFT,
+            resourceSubtype: modelId,
+            precomputedTotalEur: costEstimate.amount,
+            units: {
+                promptTokens: usage.promptTokens,
+                completionTokens: usage.completionTokens,
+                totalTokens: usage.totalTokens,
+            },
+            meta: {
+                taskKey: TASK_KEY,
+                provider: providerCatalog.provider,
+                model: modelId,
+                category: input.category,
+            },
+        });
 
         return {
             draft,

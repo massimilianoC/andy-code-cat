@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { AiUsageAnalyticsDto } from "@/lib/api/assets";
+import CostBadge from "@/components/cost/CostBadge";
 
 interface AiUsageSummaryPanelProps {
     title?: string;
@@ -11,6 +12,8 @@ interface AiUsageSummaryPanelProps {
     analytics: AiUsageAnalyticsDto | null;
     loading?: boolean;
     compact?: boolean;
+    /** When provided, the "Total cost" KPI becomes a clickable CostBadge opening the ledger drawer. */
+    projectId?: string;
 }
 
 function formatMoney(amount: number | undefined): string {
@@ -34,6 +37,7 @@ export default function AiUsageSummaryPanel({
     analytics,
     loading = false,
     compact = false,
+    projectId,
 }: AiUsageSummaryPanelProps) {
     return (
         <Card>
@@ -51,7 +55,18 @@ export default function AiUsageSummaryPanel({
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                             <div className="rounded-md border border-border bg-muted/20 p-3">
                                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Total cost</p>
-                                <p className="mt-1 text-lg font-semibold text-foreground">{formatMoney(analytics.totals.totalCost)}</p>
+                                <p className="mt-1 text-lg font-semibold text-foreground">
+                                    {projectId ? (
+                                        <CostBadge
+                                            amount={analytics.totals.totalCost ?? 0}
+                                            projectId={projectId}
+                                            scope="project"
+                                            variant="kpi"
+                                        />
+                                    ) : (
+                                        formatMoney(analytics.totals.totalCost)
+                                    )}
+                                </p>
                             </div>
                             <div className="rounded-md border border-border bg-muted/20 p-3">
                                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Image gen</p>

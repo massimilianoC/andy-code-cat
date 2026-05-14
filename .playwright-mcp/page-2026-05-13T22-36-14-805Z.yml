@@ -1,0 +1,183 @@
+- generic [ref=e1]:
+  - alert [ref=e35]
+  - generic [ref=e564]:
+    - alert
+    - alert
+  - generic [ref=e648]:
+    - banner [ref=e649]:
+      - generic [ref=e650]:
+        - button "← Dashboard" [ref=e651] [cursor=pointer]
+        - generic "DCL Test Project" [ref=e652]
+        - button "Configura progetto" [ref=e653] [cursor=pointer]
+      - generic "Costo totale progetto (chat LLM + optimizer)" [ref=e657]: €0.0019
+      - button "1" [ref=e659] [cursor=pointer]:
+        - img [ref=e660]
+        - generic [ref=e662]: "1"
+    - generic [ref=e663]:
+      - complementary [ref=e664]:
+        - generic [ref=e665]:
+          - generic [ref=e666]:
+            - generic [ref=e667]: DCL Test Project
+            - button "Configura progetto" [ref=e668] [cursor=pointer]:
+              - img [ref=e669]
+          - generic [ref=e672]:
+            - generic [ref=e673]: Chat di Progetto
+            - combobox [disabled] [ref=e674] [cursor=pointer]:
+              - option "siliconflow" [selected]
+              - option "lmstudio"
+              - option "openrouter"
+            - combobox [disabled] [ref=e675] [cursor=pointer]:
+              - option "€ FLUX.1-dev"
+              - option "€ FLUX.1-schnell"
+              - option "€€€ Seed-OSS-36B-Instruct"
+              - option "€€€€ DeepSeek-R1"
+              - option "€€€ DeepSeek-V3"
+              - option "€€€ DeepSeek-V3.1"
+              - option "€€€ DeepSeek-V3.1-Terminus"
+              - option "€€€ DeepSeek-V3.2"
+              - option "€€€ DeepSeek-V3.2-Exp"
+              - option "€€ DeepSeek-V4-Flash"
+              - option "€€€€ DeepSeek-V4-Pro"
+              - option "fish-speech-1.5"
+              - option "CosyVoice2-0.5B"
+              - option "€ gemma-4-26B-A4B-it"
+              - option "€€ gemma-4-31B-it"
+              - option "€€ Ling-flash-2.0"
+              - option "€€ Ring-flash-2.0"
+              - option "IndexTTS-2"
+              - option "€€€€ MiniMax-M2.5" [selected]
+              - option "€€€€ Kimi-K2-Instruct"
+              - option "€€€€ Kimi-K2-Instruct-0905"
+              - option "€€€ Kimi-K2.5"
+              - option "€€€€ Kimi-K2.6"
+              - option "€€€ DeepSeek-V3.1-Nex-N1"
+              - option "€ gpt-oss-120b"
+              - option "€ gpt-oss-20b"
+              - option "€€€€ Qwen2.5-72B-Instruct"
+              - option "€ Qwen2.5-7B-Instruct"
+              - option "€ Qwen3-14B"
+              - option "€ Qwen3-235B-A22B-Instruct-2507"
+              - option "€ Qwen3-30B-A3B-Instruct-2507"
+              - option "€ Qwen3-30B-A3B-Thinking-2507"
+              - option "€€ Qwen3-32B"
+              - option "€ Qwen3-8B"
+              - option "€ Qwen3-Coder-30B-A3B-Instruct"
+              - option "€ Qwen3-Embedding-4B"
+              - option "€ Qwen3-Embedding-8B"
+              - option "Qwen3-Reranker-0.6B"
+              - option "Qwen3-Reranker-8B"
+              - option "€€€ Qwen3-VL-30B-A3B-Instruct"
+              - option "€€€ Qwen3-VL-30B-A3B-Thinking"
+              - option "€€ Qwen3-VL-32B-Instruct"
+              - option "€€ Qwen3-VL-32B-Thinking"
+              - option "€€ Qwen3-VL-8B-Instruct"
+              - option "Qwen3.5-122B-A10B"
+              - option "Qwen3.5-27B"
+              - option "Qwen3.5-35B-A3B"
+              - option "Qwen3.5-397B-A17B"
+              - option "Qwen3.5-9B"
+              - option "Qwen3.6-27B"
+              - option "Qwen3.6-35B-A3B"
+              - option "€€ Step-3.5-Flash"
+              - option "€€ Hunyuan-A13B-Instruct"
+              - option "€€ Hy3-preview"
+              - option "€€ GLM-4.5-Air"
+              - option "€€€€ GLM-4.6"
+              - option "€€€€ GLM-4.6V"
+              - option "€€€€ GLM-4.7"
+              - option "€€€€ GLM-5"
+              - option "€€€€ GLM-5.1"
+              - option "€€€€ GLM-5V-Turbo"
+              - option "── 🆓 Free models ──" [disabled]
+              - option "bge-large-en-v1.5"
+              - option "bge-m3"
+              - option "Qwen3-Embedding-0.6B"
+          - paragraph [ref=e676]: Optimize prompt usa siliconflow · MiniMax-M2.5
+        - generic [ref=e677]:
+          - generic [ref=e678]:
+            - generic [ref=e679]:
+              - generic [ref=e680]:
+                - button "Copia messaggio": Copia
+                - text: "# BRIEF DI PROGETTO — DCL Test Project ## [IDENTITÀ] Brand e tipo sito - **Brand:** DCL Test Project - **Tipo sito:** business website ## [OBIETTIVO] Descrizione e obiettivo principale Andy Code Cat è una piattaforma AI per la generazione automatica di siti web. - Obiettivo: generare siti professionali in pochi minuti - Pubblico: sviluppatori e designer - Punto di forza: enrichment automatico dei documenti tramite DCL ## [AUDIENCE] Target e pubblico di riferimento Sviluppatori e designer professionisti tra 25-45 anni, italiani e internazionali, interessati a strumenti AI per la creazione rapida di siti web professionali ## [STILE] Attributi visivi, tono e CTA - **Attributi visivi:** dark, tech - **Tono di voce:** Professionale, innovativo, diretto - **CTA principale:** Inizia ora - **Note stilistiche aggiuntive:** Colori scuri, accenti cyan/teal, tipografia moderna sans-serif --- *Brief strutturato Zero Effort · business website · Sezioni: 3*"
+              - generic [ref=e681]: user
+            - generic [ref=e682]:
+              - generic [ref=e683]:
+                - button "Copia messaggio": Copia
+                - text: "# BRIEF DI PROGETTO — DCL Test Project ## [IDENTITÀ] Brand e tipo sito - **Brand:** DCL Test Project - **Brand positioning:** Piattaforma AI innovativa per la generazione automatica di siti web - **Tipo sito:** Business Website — Landing page / Sito vetrina ## [OBIETTIVO] Descrizione e obiettivo principale **Andy Code Cat** è una piattaforma AI all'avanguardia che rivoluziona il processo di creazione di siti web professionali. - **Obiettivo primario:** Consentire agli utenti di generare siti web completi e professionali in pochi minuti, grazie alla potenza dell'intelligenza artificiale - **Proposta di valore unica:** Enrichment automatico dei documenti tramite tecnologia DCL — trasformazione instantanea di contenuti in strutture web pronte all'uso - **Beneficio chiave:** Eliminazione delle complessità tecniche, risparmio di tempo significativo, risultati immediatamente professionali ## [AUDIENCE] Target e pubblico di riferimento **Pubblico primario:** - Sviluppatori web professionisti (frontend/backend/full-stack) - Designer UX/UI e web designer - Professionisti digitali italiani e internazionali - Età: 25-45 anni - Livello esperienza: intermedio-avanzato **Profilo psicografico:** - Orientati alla tecnologia e all'innovazione - Cercano strumenti che ottimizzino i workflow di sviluppo - Apprezzano soluzioni eleganti che combinino velocità e qualità - Valutano il rapporto tempo/risultato nelle scelte tecnologiche **Bisogni e pain points:** - Necessità di accelerare i tempi di sviluppo - Frustrazione con processi ripetitivi e manuali - Desiderio di mantenere standard qualitativi elevati senza sacrificare velocità ## [MESSAGGIO] Storytelling e tono **Tono di voce:** - **Professionale:** Linguaggio chiaro, competente, autorevole - **Innovativo:** Visione futuristica, posizionamento all'avanguardia - **Diretto:** Messaggi concisi, senza fronzoli, orientati ai risultati **Claim chiave da comunicare:** - \"Genera siti professionali in minuti, non in ore\" - L'AI che trasforma i tuoi documenti in siti web completi **Struttura narrativa suggerita:** 1. Hook: Il problema — creare siti web richiede troppo tempo 2. Soluzione: Andy Code Cat e la potenza dell'AI 3. Differenziatore: L'enrichment automatico DCL 4. Prova sociale / Dimostrazione 5. CTA: Inizia ora ## [STILE] Attributi visivi, tono e CTA **Palette cromatica:** - **Primaria:** Colori scuri (nero profondo, grigio antracite, blu notte) - **Accenti:** Cyan e teal — vivaci, tecnologici, distintivi - **Contrasto:** Zone scure con elementi luminosity alta per massimizzare leggibilità e impatto visivo **Tipografia:** - Font moderni sans-serif - Clean, geometriche, leggibili - Hierarchy chiara: titoli bold, body leggero **Atmosfera visiva:** - Dark mode dominante - Estetica tech/futuristica - Elementi di profondità (gradients, shadows, glassmorphism sottile) - Accenti luminosi che suggeriscono innovazione e potenza AI **Layout e composizione:** - Struttura pulita e organizzata - Ampio uso di spazio negativo - Elementi visivi che evocano tecnologia (pattern geometrici, linee, dati) - Sezioni ben definite con transizioni fluide **CTA (Call to Action):** - **Primario:** \"Inizia ora\" - **Secondario:** \"Scopri come funziona\" / \"Demo gratuita\" - Stile: Bottone prominente, colore accent cyan/teal, contrasto elevato ## [STRUTTURA] Sezioni del sito Il sito dovrà includere le seguenti sezioni principali: 1. **Hero Section** — Headline d'impatto, sottotitolo chiaro, CTA principale, visual evocativo 2. **Feature/Benefit** — Presentazione dei punti di forza (generazione rapida, enrichment DCL, qualità professionale) 3. **Come funziona** — Spiegazione semplice e visiva del processo 4. **CTA finale** — Invito all'azione per conversions --- *Brief ottimizzato per generazione — DCL Test Project · Business Website · Target: Sviluppatori e Designer 25-45 · Tono: Professionale, Innovativo, Diretto · Style: Dark, Tech, Cyan/Teal accents*"
+              - generic [ref=e684]: user
+            - generic [ref=e685]:
+              - generic [ref=e686]: Risposta in corso...
+              - generic [ref=e687]: "The user wants me to generate a business website for \"DCL Test Project\" - a platform called \"Andy Code Cat\" that uses AI to automatically generate websites. Key requirements: - Dark, tech style - Professional, innovative, direct tone - CTA: \"Inizia ora\" - Colors: dark backgrounds with cyan/teal accents - Modern sans-serif typography - 3 main sections: Hero, Features/Benefits, How it works, Final CTA Let me create a complete, self-contained HTML page with CSS and JS files. I'll use: - Tailwind CSS for styling - GSAP for animations - Lucide for icons - Dark theme with cyan accents Let me plan the structure: 1. Header with logo and navigation 2. Hero section with headline, subtitle, CTA 3. Features section (3 cards) 4. How it works section (3 steps) 5. Final CTA section 6. Footer I'll create a dark, tech-looking website with the specified color palette."
+              - generic [ref=e723]: "{\"chat\":{\"summary\":\"Generated a dark tech business website for DCL Test Project with hero, features, how-it-works, and CTA sections using Tailwind CSS, GSAP animations, and Lucide icons.\",\"bullets\":[\"Created 4-section landing page: Hero, Features, How It Works, Final CTA\",\"Used dark theme (#0a0a0f, #111118) with cyan/teal accents (#06b6d4, #14b8a6)\",\"Added GSAP entrance animations for visual impact\",\"Included Lucide icons for feature cards and process steps\"],\"nextActions\":[\"Review the generated website\",\"Test responsiveness across breakpoints\",\"Consider adding more sections or interactive elements\"]},\"artifacts\":{\"html\":\"<html lang='it'>\\n<head>\\n <meta charset='UTF-8'>\\n <meta name='viewport' content='width=device-width, initial-scale=1.0'>\\n <title>Andy Code Cat — Generazione AI di Siti Web Professionali</title>\\n <meta name='description' content='Piattaforma AI per la generazione automatica di siti web professionali in pochi minuti. Enrichment automatico tramite tecnologia DCL.'>\\n <script src='https://cdn.tailwindcss.com'></script>\\n <link rel='stylesheet' href='app.css'>\\n <script src='https://unpkg.com/lucide@latest/dist/umd/lucide.min.js'></script>\\n</head>\\n<body class='bg-dark-950 text-white font-sans antialiased'>\\n <header class='fixed top-0 left-0 right-0 z-50 bg-dark-950/80 backdrop-blur-md border-b border-dark-800'>\\n <div class='max-w-7xl mx-auto px-6 py-4 flex items-center justify-between'>\\n <a href='#' class='flex items-center gap-2'>\\n <div class='w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center'>\\n <i data-lucide='cat' class='w-5 h-5 text-dark-950'></i>\\n </div>\\n <span class='font-bold text-xl tracking-tight'>Andy Code Cat</span>\\n </a>\\n <nav class='hidden md:flex items-center gap-8'>\\n <a href='#features' class='text-dark-300 hover:text-cyan-400 transition-colors text-sm'>Funzionalità</a>\\n <a href='#how-it-works' class='text-dark-300 hover:text-cyan-400 transition-colors text-sm'>Come funziona</a>\\n <a href='#cta' class='px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-dark-950 font-semibold rounded-lg transition-all text-sm'>Inizia ora</a>\\n </nav>\\n </div>\\n </header>\\n\\n <main>\\n <section class='min-h-screen flex items-center justify-center relative overflow-hidden pt-20'>\\n <div class='absolute inset-0 bg-gradient-to-b from-cyan-500/5 via-transparent to-transparent'></div>\\n <div class='absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl'></div>\\n <div class='absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl'></div>\\n \\n <div class='max-w-4xl mx-auto px-6 text-center relative z-10'>\\n <div class='gsap-hero-badge opacity-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-dark-800 border border-dark-700 mb-8'>\\n <span class='w-2 h-2 rounded-full bg-cyan-400 animate-pulse'></span>\\n <span class='text-dark-400 text-sm'>AI-Powered Website Generation</span>\\n </div>\\n <h1 class='gsap-hero-title opacity-0 text-5xl md:text-7xl font-bold tracking-tight mb-6 leading-tight'>\\n Crea siti web <span class='text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-teal-400'>professionali</span> in pochi minuti\\n </h1>\\n <p class='gsap-hero-subtitle opacity-0 text-xl md:text-2xl text-dark-400 mb-10 max-w-2xl mx-auto'>\\n La piattaforma AI che trasforma i tuoi documenti in siti web completi tramite enrichment automatico DCL\\n </p>\\n <div class='gsap-hero-cta opacity-0 flex flex-col sm:flex-row items-center justify-center gap-4'>\\n <a href='#cta' class='px-8 py-4 bg-gradient-to-r from-cyan-500 to-teal-500 text-dark-950 font-bold rounded-xl hover:shadow-lg hover:shadow-cyan-500/25 transition-all text-lg'>\\n Inizia ora\\n </a>\\n <a href='#how-it-works' class='px-8 py-4 border border-dark-700 text-dark-300 hover:border-cyan-500 hover:text-cyan-400 rounded-xl transition-all text-lg flex items-center gap-2'>\\n <i data-lucide='play-circle' class='w-5 h-5'></i>\\n Scopri come funziona\\n </a>\\n </div>\\n </div>\\n\\n <div class='absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce'>\\n <i data-lucide='chevron-down' class='w-6 h-6 text-dark-500'></i>\\n </div>\\n </section>\\n\\n <section id='features' class='py-24 bg-dark-900'>\\n <div class='max-w-7xl mx-auto px-6'>\\n <div class='text-center mb-16'>\\n <h2 class='gsap-section-title opacity-0 text-4xl md:text-5xl font-bold mb-4'>Funzionalità <span class='text-cyan-400'>principali</span></h2>\\n <p class='text-dark-400 text-lg max-w-2xl mx-auto'>Tutto ciò che ti serve per generare siti web professionali senza scrivere codice</p>\\n </div>\\n\\n <div class='grid md:grid-cols-3 gap-8'>\\n <div class='gsap-feature-card opacity-0 p-8 rounded-2xl bg-dark-800 border border-dark-700 hover:border-cyan-500/50 transition-all group'>\\n <div class='w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform'>\\n <i data-lucide='zap' class='w-7 h-7 text-cyan-400'></i>\\n </div>\\n <h3 class='text-xl font-bold mb-3'>Generazione Rapida</h3>\\n <p class='text-dark-400 leading-relaxed'>Trasforma le tue idee in siti web completi in pochi minuti. Nessuna configurazione, nessun setup complesso.</p>\\n </div>\\n\\n <div class='gsap-feature-card opacity-0 p-8 rounded-2xl bg-dark-800 border border-dark-700 hover:border-teal-500/50 transition-all group'>\\n <div class='w-14 h-14 rounded-xl bg-gradient-to-br from-teal-500/20 to-teal-500/5 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform'>\\n <i data-lucide='file-code' class='w-7 h-7 text-teal-400'></i>\\n </div>\\n <h3 class='text-xl font-bold mb-3'>Enrichment DCL</h3>\\n <p class='text-dark-400 leading-relaxed'>Tecnologia proprietaria di arricchimento automatico dei documenti. Il tuo contenuto diventa struttura web.</p>\\n </div>\\n\\n <div class='gsap-feature-card opacity-0 p-8 rounded-2xl bg-dark-800 border border-dark-700 hover:border-cyan-500/50 transition-all group'>\\n <div class='w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform'>\\n <i data-lucide='sparkles' class='w-7 h-7 text-cyan-400'></i>\\n </div>\\n <h3 class='text-xl font-bold mb-3'>Qualità Professionale</h3>\\n <p class='text-dark-400 leading-relaxed'>Ogni sito generato è ottimizzato, responsive e conforme agli standard web moderni.</p>\\n </div>\\n </div>\\n </div>\\n </section>\\n\\n <section id='how-it-works' class='py-24 bg-dark-950'>\\n <div class='max-w-7xl mx-auto px-6'>\\n <div class='text-center mb-16'>\\n <h2 class='gsap-section-title opacity-0 text-4xl md:text-5xl font-bold mb-4'>Come <span class='text-teal-400'>funziona</span></h2>\\n <p class='text-dark-400 text-lg max-w-2xl mx-auto'>Tre semplici passi per il tuo sito web professionale</p>\\n </div>\\n\\n <div class='grid md:grid-cols-3 gap-12 relative'>\\n <div class='gsap-step-card opacity-0 text-center relative'>\\n <div class='w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-600 to-cyan-500 flex items-center justify-center mx-auto mb-6 text-dark-950 font-bold text-2xl'>1</div>\\n <h3 class='text-xl font-bold mb-3'>Inserisci il contenuto</h3>\\n <p class='text-dark-400'>Carica i tuoi documenti, testi o descrizioni. La piattaforma accetta qualsiasi formato.</p>\\n </div>\\n\\n <div class='gsap-step-card opacity-0 text-center relative'>\\n <div class='w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-600 to-teal-500 flex items-center justify-center mx-auto mb-6 text-dark-950 font-bold text-2xl'>2</div>\\n <h3 class='text-xl font-bold mb-3'>AI elabora e arricchisce</h3>\\n <p class='text-dark-400'>Il motore DCL analizza e trasforma automaticamente il contenuto in struttura web.</p>\\n </div>\\n\\n <div class='gsap-step-card opacity-0 text-center relative'>\\n <div class='w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-600 to-teal-500 flex items-center justify-center mx-auto mb-6 text-dark-950 font-bold text-2xl'>3</div>\\n <h3 class='text-xl font-bold mb-3'>Sito pronto all'uso</h3>\\n <p class='text-dark-400'>Scarica o pubblica il tuo sito web professionale immediatamente.</p>\\n </div>\\n\\n <div class='hidden md:block absolute top-8 left-1/6 right-1/6 h-0.5 bg-gradient-to-r from-cyan-500 via-teal-500 to-cyan-500 opacity-30'></div>\\n </div>\\n </div>\\n </section>\\n\\n <section id='cta' class='py-24 bg-dark-900 relative overflow-hidden'>\\n <div class='absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-teal-500/10'></div>\\n <div class='absolute top-0 left-1/4 w-64 h-64 bg-cyan-500/20 rounded-full blur-3xl'></div>\\n <div class='absolute bottom-0 right-1/4 w-64 h-64 bg-teal-500/20 rounded-full blur-3xl'></div>\\n \\n <div class='max-w-3xl mx-auto px-6 text-center relative z-10'>\\n <h2 class='gsap-cta-title opacity-0 text-4xl md:text-5xl font-bold mb-6'>Pronto a <span class='text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-teal-400'>rivoluzionare</span> il tuo workflow?</h2>\\n <p class='gsap-cta-subtitle opacity-0 text-dark-400 text-lg mb-10'>Unisci alla community di sviluppatori e designer che stanno già creando siti web con Andy Code Cat.</p>\\n <div class='gsap-cta-button opacity-0'>\\n <a href='#' class='inline-flex items-center gap-3 px-10 py-5 bg-gradient-to-r from-cyan-500 to-teal-500 text-dark-950 font-bold rounded-xl hover:shadow-xl hover:shadow-cyan-500/30 transition-all text-xl'>\\n <i data-lucide='rocket' class='w-6 h-6'></i>\\n Inizia ora — È gratuito\\n </a>\\n </div>\\n </div>\\n </section>\\n </main>\\n\\n <footer class='py-12 bg-dark-950 border-t border-dark-800'>\\n <div class='max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6'>\\n <div class='flex items-center gap-2'>\\n <div class='w-"
+              - generic [ref=e688]:
+                - generic [ref=e689]: sto pensando...
+                - generic [ref=e691]: ~2874 tok gen · ~3864 tok
+          - separator "Ridimensiona input chat" [ref=e692]
+          - generic [ref=e693]:
+            - generic [ref=e694]:
+              - button "Choose File" [disabled] [ref=e695]
+              - textbox "Scrivi cosa vuoi realizzare..." [disabled] [ref=e696]
+              - button "Allega file" [disabled]
+              - button "Avvia dettatura" [disabled]
+            - generic [ref=e698]: "Chrome: dettatura vocale pronta"
+            - generic [ref=e699]:
+              - generic [ref=e701]: "optimizer: 1 run · €0.0019"
+              - generic [ref=e702]:
+                - button "Optimize · MiniMax-M2.5" [disabled]
+                - button "⏹ Stop" [ref=e703] [cursor=pointer]
+                - button "Invio..." [disabled] [ref=e704]
+      - separator "Ridimensiona pannelli" [ref=e705]
+      - generic [ref=e706]:
+        - generic [ref=e709]: format v2
+        - generic [ref=e710]:
+          - button "PREVIEW" [ref=e711] [cursor=pointer]
+          - button "HTML" [ref=e712] [cursor=pointer]
+          - button "CSS" [ref=e713] [cursor=pointer]
+          - button "JS" [ref=e714] [cursor=pointer]
+          - button "🔍 PROMPT" [active] [ref=e715] [cursor=pointer]
+          - generic [ref=e724]: Nessuna selezione
+        - generic [ref=e717]:
+          - generic [ref=e718]:
+            - generic [ref=e719]: ⬡
+            - heading "Nessun codice generato" [level=2] [ref=e720]
+            - paragraph [ref=e721]: Il centro mostra solo artifacts HTML/CSS/JS generati dal backend. Invia un prompt per popolare la preview.
+          - generic:
+            - generic [ref=e725]:
+              - generic [ref=e726]: "System prompt composto passato all'LLM — sola lettura~3034 token · preset: nessuno"
+              - button "↻ Ricarica" [ref=e727] [cursor=pointer]
+            - generic [ref=e728]:
+              - generic [ref=e729]:
+                - generic [ref=e730] [cursor=pointer]:
+                  - generic [ref=e731]: ▼
+                  - generic [ref=e732]: LAYER A — Vincoli base
+                  - generic [ref=e733]: sempre attivo
+                  - generic [ref=e734]: Costante del sistema
+                - generic [ref=e735]: "## LAYER A — BASE ARCHITECTURAL CONSTRAINTS You are a static web page generator for the Andy Code Cat platform. Your output must always be a complete, self-contained page that can be served by nginx without modifications. Non-negotiable rules for ALL output types: - Produce exactly 1 HTML file + 1 CSS file + 1 JS file — standalone and executable without a build step. - All external dependencies (libraries, fonts, icons) via CDN only (<script src>, <link rel=stylesheet>) — never import via npm or require(). - Mobile-first responsive design: optimize for 375px (mobile), 768px (tablet), 1280px (desktop). - Semantic HTML5: use <header>, <nav>, <main>, <section>, <article>, <footer> where semantically appropriate. - Accessibility baseline: meaningful alt text on images, sufficient color contrast (WCAG AA), keyboard-navigable focus. - Performance: no render-blocking resources above the fold, use loading=\"lazy\" on below-the-fold images. - No JavaScript framework (React, Vue, Angular, Svelte) — vanilla JS only. - CSS strategy: choose Tailwind CDN OR vanilla CSS — never both in the same output. - artifacts.css and artifacts.js must be plain strings without <style> or <script> wrappers. - All JavaScript MUST go exclusively in artifacts.js. Never embed script logic inline in the HTML artifact — not in <script> tags, not as event attributes. In the HTML, reference JS only with: <script src=\"app.js\"></script>. HTML compactness rules (mandatory): - Target HTML under 30 KB (approx 30 000 chars). Aim for the minimum markup that achieves the design. - Use 2-space indentation — never 4-space or tabs. - Do NOT add HTML comments in the output. - Never duplicate a structural pattern — extract repeating markup into reusable CSS classes instead. - Avoid inline style= attributes; put all styling in artifacts.css. - Do not repeat identical class lists across sibling elements — factor them into a shared parent or CSS rule."
+              - generic [ref=e736]:
+                - generic [ref=e737] [cursor=pointer]:
+                  - generic [ref=e738]: ▼
+                  - generic [ref=e739]: LAYER B — Modulo preset
+                  - generic [ref=e740]: nessun preset
+                  - generic [ref=e741]: Configurazione progetto (⚙ rotella)
+                - generic [ref=e742]: (vuoto — nessun preset assegnato al progetto)
+              - generic [ref=e743]:
+                - generic [ref=e744] [cursor=pointer]:
+                  - generic [ref=e745]: ▼
+                  - generic [ref=e746]: LAYER C — Contesto stile
+                  - generic [ref=e747]: moodboard + profilo utente
+                  - generic [ref=e748]: Profilo utente (profilazione iniziale) + Moodboard progetto (⚙ rotella)
+                - generic [ref=e749]: "## STYLE CONTEXT Project brief: # BRIEF DI PROGETTO — DCL Test Project ## [IDENTITÀ] Brand e tipo sito - **Brand:** DCL Test Project - **Tipo sito:** business website ## [OBIETTIVO] Descrizione e obiettivo principale Andy Code Cat è una piattaforma AI per la generazione automatica di siti web. - Obiettivo: generare siti professionali in pochi minuti - Pubblico: sviluppatori e designer - Punto di forza: enrichment automatico dei documenti tramite DCL ## [AUDIENCE] Target e pubblico di riferimento Sviluppatori e designer professionisti tra 25-45 anni, italiani e internazionali, interessati a strumenti AI per la creazione rapida di siti web professionali ## [STILE] Attributi visivi, tono e CTA - **Attributi visivi:** dark, tech - **Tono di voce:** Professionale, innovativo, diretto - **CTA principale:** Inizia ora - **Note stilistiche aggiuntive:** Colori scuri, accenti cyan/teal, tipografia moderna sans-serif --- *Brief strutturato Zero Effort · business website · Sezioni: 3* Target audience: DCL Test Project — Sviluppatori e designer professionisti tra 25-45 anni, italiani e internazionali, interessati a strumenti AI per la creazione rapida di siti web professionali Style notes: Tone: Professionale, innovativo, diretto • CTA: Inizia ora • Style: Colori scuri, accenti cyan/teal, tipografia moderna sans-serif Use the style context above as a mandatory design constraint when generating or modifying the site. Do not ignore these preferences even if the user message doesn't explicitly reference them."
+              - generic [ref=e750]:
+                - generic [ref=e751] [cursor=pointer]:
+                  - generic [ref=e752]: ▼
+                  - generic [ref=e753]: LAYER D — Template personalizzato
+                  - generic [ref=e754]: dormiente
+                  - generic [ref=e755]: Configurazione avanzata progetto (non attiva)
+                - generic [ref=e756]: (vuoto — nessun template personalizzato configurato)
+              - generic [ref=e757]:
+                - generic [ref=e758] [cursor=pointer]:
+                  - generic [ref=e759]: ▼
+                  - generic [ref=e760]: POLICY — Budget output
+                  - generic [ref=e761]: sistema
+                  - generic [ref=e762]: Configurazione automatica token/output
+                - generic [ref=e763]: "## OUTPUT BUDGET POLICY Keep outputs compact and parse-safe. - Return ONLY one raw JSON object — no markdown fences, no prose before or after the JSON. - Required keys: chat (with summary, bullets, nextActions) and artifacts (with html, css, js). - TOTAL OUTPUT MUST stay under 167,000 tokens. Target 8000–32000 tokens for typical requests, up to budget for large/complex outputs. Never repeat the entire artifact if only a small change is needed. - HTML target: under 30 KB. Factor repeated visual blocks into CSS classes rather than duplicating markup. - Keep artifacts concise and functional; avoid unnecessary boilerplate. - artifacts.css and artifacts.js must be plain code strings without <style> or <script> wrappers. - Use standard single-backslash JSON escaping: \\\" for quotes inside HTML, \\n for newlines. Never double-escape. ## REASONING / THINKING BUDGET (critical) - Do NOT over-analyze the task. Keep internal reasoning/thinking under 2000 tokens. - Skip exploratory analysis and enumeration of rejected alternatives. - For code generation: plan briefly (under 300 words), then produce the JSON output immediately. - Never restate the entire user request in your reasoning. Summarize intent in one sentence, then code."

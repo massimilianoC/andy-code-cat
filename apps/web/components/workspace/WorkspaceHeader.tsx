@@ -4,19 +4,14 @@ import { Bell, Loader2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNotifications } from "@/lib/notifications";
-
-function formatCostEur(amount: number): string {
-    if (!amount || amount <= 0) return "";
-    if (amount < 0.0001) return "<€0.0001";
-    if (amount < 0.01) return `€${amount.toFixed(4)}`;
-    if (amount < 1) return `€${amount.toFixed(3)}`;
-    return `€${amount.toFixed(2)}`;
-}
+import CostBadge from "@/components/cost/CostBadge";
 
 interface WorkspaceHeaderProps {
     projectName: string;
     /** Combined cost across chat + optimizer (in EUR) */
     totalCostEur: number;
+    /** Project ID used to open the cost ledger drawer when the badge is clicked. */
+    projectId?: string;
     onConfigOpen: () => void;
     onDashboard: () => void;
 }
@@ -24,6 +19,7 @@ interface WorkspaceHeaderProps {
 export function WorkspaceHeader({
     projectName,
     totalCostEur,
+    projectId,
     onConfigOpen,
     onDashboard,
 }: WorkspaceHeaderProps) {
@@ -32,7 +28,6 @@ export function WorkspaceHeader({
     const runningCount = notifications.filter((n) => n.status === "running").length;
     const errorCount = notifications.filter((n) => n.status === "error").length;
     const hasAny = notifications.length > 0;
-    const costLabel = formatCostEur(totalCostEur);
 
     return (
         <header className="workspace-header">
@@ -64,13 +59,14 @@ export function WorkspaceHeader({
 
             {/* CENTER — total project cost */}
             <div className="workspace-header-center">
-                {costLabel ? (
-                    <span
+                {totalCostEur > 0 ? (
+                    <CostBadge
+                        amount={totalCostEur}
+                        projectId={projectId}
+                        scope="project"
+                        label="Costo progetto"
                         className="workspace-header-cost"
-                        title="Costo totale progetto (chat LLM + optimizer)"
-                    >
-                        {costLabel}
-                    </span>
+                    />
                 ) : (
                     <span className="workspace-header-cost-empty">—</span>
                 )}

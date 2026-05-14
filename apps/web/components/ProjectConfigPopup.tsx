@@ -165,6 +165,15 @@ function AssetThumb({
                 {asset.generationStatus === "queued" ? (
                     <Badge variant="secondary" className="text-[9px] uppercase tracking-wide">queued</Badge>
                 ) : null}
+                {asset.enrichmentTrace?.provenance.enrichmentStatus === "pending" && (
+                    <Badge variant="secondary" className="text-[9px] uppercase tracking-wide animate-pulse">analyzing</Badge>
+                )}
+                {asset.enrichmentTrace?.provenance.enrichmentStatus === "ready" && (
+                    <Badge variant="outline" className="text-[9px] uppercase tracking-wide text-green-600 border-green-500">enriched</Badge>
+                )}
+                {asset.enrichmentTrace?.provenance.enrichmentStatus === "failed" && (
+                    <Badge variant="destructive" className="text-[9px] uppercase tracking-wide" title={asset.enrichmentTrace.provenance.errorMessage ?? undefined}>enrichment failed</Badge>
+                )}
             </div>
 
             {/* Always-visible bottom bar: useInProject toggle + delete */}
@@ -582,7 +591,7 @@ export default function ProjectConfigPopup({
                                             ref={fileInputRef}
                                             type="file"
                                             className="hidden"
-                                            accept="image/*,application/pdf,text/*,application/json"
+                                            accept="image/*,application/pdf,text/*,application/json,.docx,.doc,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                             onChange={handleFileUpload}
                                         />
                                     </div>

@@ -18,3 +18,4 @@ export * from "./pipelines";
 // ApiError is part of the public surface
 export { ApiError } from "./call";
 export * from "./admin";
+export * from "./cost";

@@ -54,9 +54,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
-    "esbuild": "^0.28.0"
+    "esbuild": "0.27.7"
   },
   "optionalDependencies": {
-    "@esbuild/win32-x64": "^0.28.0"
+    "@esbuild/win32-x64": "0.27.7"
   }
 }

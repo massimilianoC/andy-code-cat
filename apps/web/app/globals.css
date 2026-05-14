@@ -699,11 +699,33 @@ a.link:hover {
     flex-direction: column;
     gap: 0.55rem;
     background: rgba(26, 29, 39, 0.94);
-    padding-top: 0.35rem;
+    padding: 0.4rem 0.5rem 0.5rem;
     border-top: 1px solid var(--border);
-    flex: 1;
-    min-height: 100px;
+    flex-shrink: 0;
+    min-height: 120px;
+    max-height: 50vh;
     overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.workspace-input-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.workspace-input-textarea {
+    flex: 1;
+    min-width: 0;
+}
+
+.workspace-input-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    flex-shrink: 0;
+    align-self: flex-start;
 }
 
 /* ── Request meta info tooltip ─────────────────────────────────────────────── */

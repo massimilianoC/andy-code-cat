@@ -1,0 +1,160 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e35]
+  - generic [ref=e36]:
+    - banner [ref=e37]:
+      - generic [ref=e38]:
+        - generic [ref=e39]: 🐱
+        - generic [ref=e40]: ANDY
+      - generic [ref=e41]:
+        - group "Language selector" [ref=e42]:
+          - button "Italiano" [pressed] [ref=e43] [cursor=pointer]: 🇮🇹
+          - button "English" [ref=e44] [cursor=pointer]: 🇬🇧
+        - button "Superadmin" [ref=e45] [cursor=pointer]
+        - button "Zero Effort" [ref=e46] [cursor=pointer]:
+          - img [ref=e47]
+          - text: Zero Effort
+        - button "Nuovo progetto" [ref=e52] [cursor=pointer]:
+          - img [ref=e53]
+          - text: Nuovo progetto
+        - button "Logout" [ref=e54] [cursor=pointer]
+    - main [ref=e55]:
+      - generic [ref=e56]:
+        - heading "Dashboard Progetti" [level=1] [ref=e57]
+        - paragraph [ref=e58]: 1 progetti nel workspace
+      - button "Guarda il tutorial" [ref=e60] [cursor=pointer]:
+        - generic [ref=e61]:
+          - img [ref=e63]
+          - generic [ref=e65]:
+            - paragraph [ref=e66]: Come iniziare con ANDY
+            - paragraph [ref=e67]: Guarda la guida rapida e crea il tuo primo sito in pochi minuti.
+          - generic [ref=e68]: Guarda il tutorial →
+      - generic [ref=e69]:
+        - heading "Nuovo progetto da preset" [level=2] [ref=e71]
+        - button "Vuoto / Neutro Parti da una tela bianca" [ref=e72] [cursor=pointer]:
+          - generic [ref=e73]:
+            - img [ref=e75]
+            - generic [ref=e78]:
+              - generic [ref=e79]: Vuoto / Neutro
+              - generic [ref=e80]: Parti da una tela bianca
+        - generic [ref=e81]:
+          - button "Web Sites & forms (3)" [ref=e83] [cursor=pointer]:
+            - generic [ref=e84]:
+              - heading "Web" [level=3] [ref=e85]
+              - generic [ref=e86]: Sites & forms
+              - generic [ref=e87]: (3)
+            - img [ref=e88]
+          - button "Print & Graphic Poster, print, visual (3)" [ref=e91] [cursor=pointer]:
+            - generic [ref=e92]:
+              - heading "Print & Graphic" [level=3] [ref=e93]
+              - generic [ref=e94]: Poster, print, visual
+              - generic [ref=e95]: (3)
+            - img [ref=e96]
+          - button "Presentation Slides & pitch (2)" [ref=e99] [cursor=pointer]:
+            - generic [ref=e100]:
+              - heading "Presentation" [level=3] [ref=e101]
+              - generic [ref=e102]: Slides & pitch
+              - generic [ref=e103]: (2)
+            - img [ref=e104]
+          - button "Game & XR Playable experiences (6)" [ref=e107] [cursor=pointer]:
+            - generic [ref=e108]:
+              - heading "Game & XR" [level=3] [ref=e109]
+              - generic [ref=e110]: Playable experiences
+              - generic [ref=e111]: (6)
+            - img [ref=e112]
+      - generic [ref=e114]:
+        - heading "I tuoi progetti (1)" [level=2] [ref=e115]:
+          - text: I tuoi progetti
+          - generic [ref=e116]: (1)
+        - generic [ref=e118]:
+          - button "Apri Default Project" [ref=e119] [cursor=pointer]:
+            - generic [ref=e121]: D
+            - generic [ref=e122]:
+              - generic: Apri workspace →
+          - generic [ref=e123]:
+            - generic [ref=e124]:
+              - button "Default Project" [ref=e125] [cursor=pointer]
+              - button "Opzioni progetto" [ref=e126] [cursor=pointer]:
+                - img [ref=e127]
+            - generic [ref=e130]: adesso
+    - contentinfo [ref=e132]:
+      - generic [ref=e133]: 1 progetti
+    - button "Apri consigli e novità" [ref=e134] [cursor=pointer]:
+      - img [ref=e135]
+      - generic [ref=e137]: "10"
+    - dialog "Consigli & Novità" [ref=e138]:
+      - generic [ref=e139]:
+        - generic [ref=e140]:
+          - generic [ref=e141]: Consigli & Novità
+          - button "Chiudi pannello" [ref=e142] [cursor=pointer]:
+            - img [ref=e143]
+        - generic [ref=e145]:
+          - generic [ref=e147]:
+            - generic [ref=e148]: 🎨
+            - generic [ref=e149]:
+              - generic [ref=e151]: Consiglio
+              - paragraph [ref=e152]: Completa il profilo stile
+              - paragraph [ref=e153]: Seleziona i tag di stile nell'onboarding per ottenere generazioni AI coerenti con la tua identità visiva.
+              - button "Segna come letto" [ref=e154] [cursor=pointer]
+          - generic [ref=e156]:
+            - generic [ref=e157]: 📋
+            - generic [ref=e158]:
+              - generic [ref=e160]: Consiglio
+              - paragraph [ref=e161]: Duplica prima di sperimentare
+              - paragraph [ref=e162]: Usa 'Duplica' dal menu progetto per conservare una copia sicura prima di grandi modifiche.
+              - button "Segna come letto" [ref=e163] [cursor=pointer]
+          - generic [ref=e165]:
+            - generic [ref=e166]: 💬
+            - generic [ref=e167]:
+              - generic [ref=e169]: Consiglio
+              - paragraph [ref=e170]: Riutilizza i tuoi prompt migliori
+              - paragraph [ref=e171]: Usa 'Copia prompt' per trasferire il tuo sistema di istruzioni in un nuovo progetto senza riscriverlo.
+              - button "Segna come letto" [ref=e172] [cursor=pointer]
+          - generic [ref=e174]:
+            - generic [ref=e175]: 🔄
+            - generic [ref=e176]:
+              - generic [ref=e178]: Consiglio
+              - paragraph [ref=e179]: Descrivi le modifiche in modo naturale
+              - paragraph [ref=e180]: "Dì all'AI cosa cambiare: 'Rendilo più minimal', 'Aggiungi una CTA', 'Usa colori più caldi'. Nessun codice necessario."
+              - button "Segna come letto" [ref=e181] [cursor=pointer]
+          - generic [ref=e183]:
+            - generic [ref=e184]: 🗂️
+            - generic [ref=e185]:
+              - generic [ref=e187]: Consiglio
+              - paragraph [ref=e188]: Organizza i progetti per workspace
+              - paragraph [ref=e189]: Crea workspace separati per ogni cliente o brand per mantenere prompt e stili isolati.
+              - button "Segna come letto" [ref=e190] [cursor=pointer]
+          - generic [ref=e192]:
+            - generic [ref=e193]: ⚡
+            - generic [ref=e194]:
+              - generic [ref=e196]: Novità
+              - paragraph [ref=e197]: Streaming AI in tempo reale
+              - paragraph [ref=e198]: Le risposte appaiono progressivamente mentre vengono generate — niente più attesa per l'output completo.
+              - button "Segna come letto" [ref=e199] [cursor=pointer]
+          - generic [ref=e201]:
+            - generic [ref=e202]: 🚀
+            - generic [ref=e203]:
+              - generic [ref=e205]: Novità
+              - paragraph [ref=e206]: Pubblica il tuo sito con un click
+              - paragraph [ref=e207]: Progetto pronto? Premi 'Pubblica' nell'editor per renderlo live istantaneamente sul tuo sottodominio.
+              - button "Segna come letto" [ref=e208] [cursor=pointer]
+          - generic [ref=e210]:
+            - generic [ref=e211]: 🤖
+            - generic [ref=e212]:
+              - generic [ref=e214]: Consiglio
+              - paragraph [ref=e215]: Scegli il modello AI giusto
+              - paragraph [ref=e216]: Modelli diversi si adattano a compiti diversi. Usa un modello veloce per iterare e uno più potente per la qualità finale.
+              - button "Segna come letto" [ref=e217] [cursor=pointer]
+          - generic [ref=e219]:
+            - generic [ref=e220]: ⌨️
+            - generic [ref=e221]:
+              - generic [ref=e223]: Scorciatoia
+              - paragraph [ref=e224]: Salva uno snapshot con Ctrl+S
+              - paragraph [ref=e225]: Premi Ctrl+S nell'editor per salvare uno snapshot a cui puoi tornare in qualsiasi momento.
+              - button "Segna come letto" [ref=e226] [cursor=pointer]
+          - generic [ref=e228]:
+            - generic [ref=e229]: ↩️
+            - generic [ref=e230]:
+              - generic [ref=e232]: Consiglio
+              - paragraph [ref=e233]: Torna a qualsiasi snapshot
+              - paragraph [ref=e234]: Apri il pannello cronologia per vedere tutti gli snapshot salvati e ripristinare qualsiasi versione precedente del progetto.
+              - button "Segna come letto" [ref=e235] [cursor=pointer]
