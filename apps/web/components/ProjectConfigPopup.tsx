@@ -220,9 +220,9 @@ function AssetThumb({
                 ⚙
             </Button>
 
-            {/* Meta dropdown — role + description only */}
+            {/* Meta dropdown — role + description + enrichment preview */}
             {showMeta && (
-                <div className="absolute z-20 top-full left-0 w-52 bg-card border border-border rounded-md shadow-xl p-2.5 space-y-2 mt-1">
+                <div className="absolute z-20 top-full left-0 w-52 bg-card border border-border rounded-md shadow-xl p-2.5 space-y-2 mt-1 overflow-y-auto max-h-64">
                     <select
                         className="w-full text-xs bg-muted border border-border rounded px-1.5 py-1 text-foreground"
                         value={asset.styleRole ?? ""}
@@ -244,6 +244,31 @@ function AssetThumb({
                         onBlur={handleDescBlur}
                         className="text-xs h-7"
                     />
+                    {asset.enrichmentTrace?.provenance.enrichmentStatus === "ready" && asset.enrichmentTrace.documentBrief && (
+                        <div className="space-y-1 pt-1 border-t border-border">
+                            <p className="text-[9px] uppercase text-muted-foreground tracking-wide">{t("config.media.assetBriefHeading")}</p>
+                            <p className="text-[10px] text-foreground leading-tight">{asset.enrichmentTrace.documentBrief.purposeSentence}</p>
+                            <p className="text-[10px] text-muted-foreground leading-tight line-clamp-4">{asset.enrichmentTrace.documentBrief.contentSummary}</p>
+                            {asset.enrichmentTrace.documentBrief.keyMessages.length > 0 && (
+                                <ul className="space-y-0.5">
+                                    {asset.enrichmentTrace.documentBrief.keyMessages.slice(0, 4).map((msg, i) => (
+                                        <li key={i} className="text-[10px] text-muted-foreground leading-tight">· {msg}</li>
+                                    ))}
+                                </ul>
+                            )}
+                            <Badge variant="secondary" className="text-[9px] px-1 py-0">{asset.enrichmentTrace.documentBrief.suggestedStyleRole}</Badge>
+                        </div>
+                    )}
+                    {asset.enrichmentTrace?.designSignals && (
+                        <div className="space-y-1 pt-1 border-t border-border">
+                            <p className="text-[9px] uppercase text-muted-foreground tracking-wide">{t("config.media.assetDesignSignalsHeading")}</p>
+                            <Badge variant="secondary" className="text-[9px] px-1 py-0">{asset.enrichmentTrace.designSignals.imageCategory}</Badge>
+                            {asset.enrichmentTrace.designSignals.suggestedWebUse.length > 0 && (
+                                <p className="text-[10px] text-muted-foreground leading-tight">{asset.enrichmentTrace.designSignals.suggestedWebUse.join(", ")}</p>
+                            )}
+                            <Badge variant="secondary" className="text-[9px] px-1 py-0">{asset.enrichmentTrace.designSignals.suggestedStyleRole}</Badge>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
@@ -591,7 +616,7 @@ export default function ProjectConfigPopup({
                                             ref={fileInputRef}
                                             type="file"
                                             className="hidden"
-                                            accept="image/*,application/pdf,text/*,application/json,.docx,.doc,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                            accept="image/*,application/pdf,text/*,application/json,.docx,.doc,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.pptx,.ppt,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
                                             onChange={handleFileUpload}
                                         />
                                     </div>

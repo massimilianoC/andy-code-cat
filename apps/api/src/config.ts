@@ -99,6 +99,9 @@ const envSchema = z.object({
     ENRICHMENT_INJECT_LAYER_D: z.string().default("true"),
     ENRICHMENT_LAYER_D_MAX_CHARS: z.coerce.number().int().positive().default(21000),
     ENRICHMENT_LAYER_D_MAX_ASSETS: z.coerce.number().int().positive().default(5),
+    // ── VibeCore pipeline flags ───────────────────────────────────────────────
+    VIBE_CLASSIFIER_ENABLED: z.string().default("true"),
+    VIBE_OPTIMIZER_ENABLED: z.string().default("true"),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -158,4 +161,6 @@ export const env = {
     enrichmentDocumentLlmPass: parsed.data.ENRICHMENT_DOCUMENT_LLM_PASS === "true",
     enrichmentImageAnalysis: parsed.data.ENRICHMENT_IMAGE_ANALYSIS === "true",
     enrichmentInjectLayerD: parsed.data.ENRICHMENT_INJECT_LAYER_D === "true",
+    vibeClassifierEnabled: parsed.data.VIBE_CLASSIFIER_ENABLED === "true",
+    vibeOptimizerEnabled: parsed.data.VIBE_OPTIMIZER_ENABLED === "true",
 };

@@ -13,6 +13,10 @@ import { extractDocumentBrief } from "./DocumentBriefExtractor";
 import { analyzeImage } from "../image/ImageAnalyzer";
 import { prepareImageBuffer } from "../image/ImageResizeGuard";
 import type { DocumentTextLayer } from "../../../domain/entities/AssetEnrichmentTrace";
+import { CostTransactionService } from "../../cost/CostTransactionService";
+import { ResourceType } from "../../../domain/entities/CostTransaction";
+import { estimateCost } from "../../llm/costPolicy";
+import { getSiliconFlowPrice } from "../../llm/siliconflowPricing";
 
 export interface EnrichmentInput {
     asset: ProjectAsset;
@@ -50,6 +54,65 @@ function resolveProvider(catalog: Awaited<ReturnType<GetLlmCatalog["execute"]>>,
     return catalog.providers.find(p => p.provider === providerKey && p.isActive)
         ?? catalog.providers.find(p => p.provider === providerKey)
         ?? catalog.providers.find(p => p.isActive);
+}
+
+/**
+ * Record an enrichment LLM call in the cost ledger.
+ *
+ * Every asset always carries (userId, projectId) so the double-sandbox
+ * is enforced upstream — we just attribute the spend here. Fire-and-forget;
+ * never blocks the enrichment pipeline.
+ */
+function recordEnrichmentCost(params: {
+    asset: ProjectAsset;
+    providerKey: string;
+    modelId: string;
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number };
+    taskKey: "enrich_document" | "enrich_image";
+}): number | null {
+    if (!params.usage.totalTokens) return null;
+
+    let providerCostUsd: number | undefined;
+    if (params.providerKey === "siliconflow") {
+        const sfPrice = getSiliconFlowPrice(params.modelId);
+        if (sfPrice && sfPrice.priceUnit === "per_m_tokens") {
+            providerCostUsd =
+                (params.usage.promptTokens / 1_000_000) * sfPrice.input +
+                (params.usage.completionTokens / 1_000_000) * sfPrice.output;
+        }
+    }
+
+    const costEstimate = estimateCost(
+        {
+            capability: "chat",
+            tokenUsage: params.usage,
+            providerCostUsd,
+        },
+        {
+            textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
+            imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
+            videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
+            usdToEurRate: env.COST_POLICY_USD_TO_EUR_RATE,
+            providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
+        },
+    );
+
+    CostTransactionService.instance.record({
+        userId: params.asset.userId,
+        projectId: params.asset.projectId,
+        resourceType: ResourceType.LLM_BACKGROUND,
+        resourceSubtype: params.modelId,
+        providerCostUsd,
+        precomputedTotalEur: costEstimate.amount,
+        units: params.usage,
+        meta: {
+            taskKey: params.taskKey,
+            provider: params.providerKey,
+            assetId: params.asset.id,
+        },
+    });
+
+    return costEstimate.amount;
 }
 
 export class AssetEnrichmentPipeline {
@@ -156,10 +219,44 @@ export class AssetEnrichmentPipeline {
             fullTextStored: false,
         };
 
+        // Build the structuredData payload from parser output (available before LLM call)
+        const earlyStructuredData = parsed.sheets && parsed.sheets.length > 0
+            ? ({ kind: "spreadsheet" as const, sheets: parsed.sheets })
+            : parsed.slides && parsed.slides.length > 0
+                ? ({ kind: "presentation" as const, slides: parsed.slides })
+                : null;
+
+        // Save textLayer + structuredData immediately so Layer D can inject them
+        // even while the LLM brief is still in flight (timing gap fix).
+        await input.assetRepository.saveEnrichmentTrace(
+            input.asset.id,
+            input.asset.projectId,
+            buildEnrichmentTrace({
+                asset: input.asset,
+                assetKind,
+                provenance: {
+                    ...pendingProvenance(parsed.parserName),
+                    parserVersion: parsed.parserVersion,
+                },
+                textLayer,
+                documentBrief: null,
+                structuredData: earlyStructuredData,
+                colorPalette: null,
+                visualAnalysis: null,
+                designSignals: null,
+            }),
+        );
+
         let documentBrief = null;
+        let structuredData: import("../../../domain/entities/AssetEnrichmentTrace").StructuredDataPayload | null = earlyStructuredData;
         let llmProvider: string | null = null;
         let llmModel: string | null = null;
         let llmTokensUsed: number | null = null;
+        let llmCostEur: number | null = null;
+        // When the brief LLM fails the parsed data (textLayer + structuredData) is
+        // already valuable enough for Layer D — record the failure on the trace but
+        // keep the asset marked "ready" so it is still injected downstream.
+        let briefErrorMessage: string | null = null;
 
         if (env.enrichmentDocumentLlmPass && parsed.rawText.length >= 50) {
             const taskSetting = resolvePromptTaskSettingFromConfig(input.platformConfig, "default", "enrich_document");
@@ -169,16 +266,41 @@ export class AssetEnrichmentPipeline {
             const provider = resolveProvider(catalog, textProviderKey);
             if (provider) {
                 const authHeader = resolveAuthHeader(provider.provider, provider.authType);
-                const result = await extractDocumentBrief({
-                    textSnippet: parsed.rawText,
-                    baseUrl: provider.baseUrl,
-                    model: textModel,
-                    authHeader,
-                });
-                documentBrief = result.brief;
-                llmProvider = provider.provider;
-                llmModel = textModel;
-                llmTokensUsed = result.tokensUsed;
+                try {
+                    const result = await extractDocumentBrief({
+                        textSnippet: parsed.rawText,
+                        assetKind,
+                        sheets: parsed.sheets,
+                        slides: parsed.slides,
+                        baseUrl: provider.baseUrl,
+                        model: textModel,
+                        authHeader,
+                    });
+                    documentBrief = result.brief;
+                    structuredData = result.structuredData ?? earlyStructuredData;
+                    llmProvider = provider.provider;
+                    llmModel = textModel;
+                    llmTokensUsed = result.tokensUsed;
+
+                    // ── Cost ledger: attribute LLM call to (user, project) ──
+                    if (result.usage) {
+                        llmCostEur = recordEnrichmentCost({
+                            asset: input.asset,
+                            providerKey: provider.provider,
+                            modelId: textModel,
+                            usage: result.usage,
+                            taskKey: "enrich_document",
+                        });
+                    }
+                } catch (briefErr) {
+                    briefErrorMessage = briefErr instanceof Error ? briefErr.message : String(briefErr);
+                    console.warn(
+                        `[AssetEnrichmentPipeline] brief extraction failed for asset ${input.asset.id} — keeping parsed textLayer/structuredData. Reason:`,
+                        briefErrorMessage,
+                    );
+                    // structuredData stays = earlyStructuredData (sheets/slides from parser)
+                    // documentBrief stays null
+                }
             }
         }
 
@@ -187,6 +309,8 @@ export class AssetEnrichmentPipeline {
             assetKind,
             provenance: {
                 traceVersion: CURRENT_TRACE_VERSION,
+                // Parsing succeeded; brief is optional. Layer D can render the asset
+                // from textLayer + structuredData alone — see renderAssetLayerDFragment.
                 enrichmentStatus: "ready",
                 enrichedAt: new Date(),
                 processingMs: Date.now() - startMs,
@@ -195,11 +319,12 @@ export class AssetEnrichmentPipeline {
                 llmProvider,
                 llmModel,
                 llmTokensUsed,
-                llmCostEur: null,
-                errorMessage: null,
+                llmCostEur,
+                errorMessage: briefErrorMessage,
             },
             textLayer,
             documentBrief,
+            structuredData,
             colorPalette: null,
             visualAnalysis: null,
             designSignals: null,
@@ -228,16 +353,32 @@ export class AssetEnrichmentPipeline {
             }));
         }
 
-        const { buffer: safeBuffer } = await prepareImageBuffer(input.fileBuffer);
+        // prepareImageBuffer transcodes HEIC/HEIF/AVIF/TIFF/BMP → JPEG so the vision
+        // provider receives a format it accepts, and resizes oversized images.
+        const { buffer: safeBuffer, mimeType: safeMime } = await prepareImageBuffer(
+            input.fileBuffer,
+            input.asset.mimeType,
+        );
         const authHeader = resolveAuthHeader(provider.provider, provider.authType);
 
-        const { colorPalette, visualAnalysis, designSignals, tokensUsed } = await analyzeImage({
+        const { colorPalette, visualAnalysis, designSignals, tokensUsed, usage } = await analyzeImage({
             buffer: safeBuffer,
-            mimeType: input.asset.mimeType,
+            mimeType: safeMime,
             baseUrl: provider.baseUrl,
             model: visionModel,
             authHeader,
         });
+
+        // ── Cost ledger: attribute vision call to (user, project) ──
+        const llmCostEur = usage
+            ? recordEnrichmentCost({
+                asset: input.asset,
+                providerKey: provider.provider,
+                modelId: visionModel,
+                usage,
+                taskKey: "enrich_image",
+            })
+            : null;
 
         const trace = buildEnrichmentTrace({
             asset: input.asset,
@@ -252,7 +393,7 @@ export class AssetEnrichmentPipeline {
                 llmProvider: provider.provider,
                 llmModel: visionModel,
                 llmTokensUsed: tokensUsed,
-                llmCostEur: null,
+                llmCostEur,
                 errorMessage: null,
             },
             textLayer: null,
@@ -299,7 +440,8 @@ export class AssetEnrichmentPipeline {
 
     private toMediaKind(kind: AssetEnrichmentTrace["assetKind"]): "image" | "background" | "logo" | "icon" | "document" | "reference" {
         if (kind === "image_raster" || kind === "image_svg") return "image";
-        if (kind === "pdf" || kind === "docx" || kind === "txt" || kind === "md") return "document";
+        if (kind === "pdf" || kind === "docx" || kind === "txt" || kind === "md"
+            || kind === "html" || kind === "xlsx" || kind === "csv") return "document";
         return "reference";
     }
 

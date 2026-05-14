@@ -81,6 +81,42 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 600,
         systemTemplate: "",
     },
+    // VibeCore — Layer Φ: pre-run intent & format classifier
+    vibe_intent_classify: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "Qwen/Qwen3-8B",
+        temperature: 0.0,
+        maxCompletionTokens: 256,
+        systemTemplate: "",
+    },
+    // VibeCore — Zero Effort LLM prefill (brief field extraction)
+    vibe_intent_prefill: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "Qwen/Qwen3-8B",
+        temperature: 0.3,
+        maxCompletionTokens: 768,
+        systemTemplate: "",
+    },
+    // Vibe Mode — final generation step (workspace model when arriving from Vibe Mode expert path)
+    vibe_mode_generate: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 14000,
+        systemTemplate: "",
+    },
+    // God Mode — default model for standalone God Mode workspace generation
+    god_mode_generate: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.5,
+        maxCompletionTokens: 14000,
+        systemTemplate: "",
+    },
 };
 
 export interface ProductInjectionConfig {

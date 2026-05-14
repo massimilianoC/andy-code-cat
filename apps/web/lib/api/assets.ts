@@ -1,5 +1,35 @@
 import { call, ApiError } from "./call";
 
+export interface DocumentBriefDto {
+    documentType: string;
+    detectedTitle: string | null;
+    detectedBrandName: string | null;
+    purposeSentence: string;
+    contentSummary: string;
+    mainArgumentOrValue: string | null;
+    structureSummary: string | null;
+    keyMessages: string[];
+    toneLabel: string;
+    targetAudience: string | null;
+    ctaText: string | null;
+    primaryTopics: string[];
+    contentLanguage: string;
+    suggestedStyleRole: string;
+}
+
+export interface ImageDesignSignalsDto {
+    imageCategory: string;
+    hasText: boolean;
+    detectedTextSnippet: string | null;
+    hasLogo: boolean;
+    hasPeople: boolean;
+    hasProduct: boolean;
+    layoutStyle: string | null;
+    aspectRatioLabel: string | null;
+    suggestedWebUse: string[];
+    suggestedStyleRole: string;
+}
+
 export interface ProjectAssetDto {
     id: string;
     projectId: string;
@@ -65,6 +95,8 @@ export interface ProjectAssetDto {
         distilledSummary?: string;
         distilledTags?: string[];
         distilledColors?: string[];
+        documentBrief?: DocumentBriefDto | null;
+        designSignals?: ImageDesignSignalsDto | null;
     } | null;
     createdAt: string;
 }
@@ -192,6 +224,15 @@ export function listProjectAssets(token: string, projectId: string) {
     return call<{ assets: ProjectAssetDto[] }>(
         "GET",
         `/v1/projects/${projectId}/assets`,
+        undefined,
+        { Authorization: `Bearer ${token}`, "x-project-id": projectId }
+    );
+}
+
+export function getProjectAsset(token: string, projectId: string, assetId: string) {
+    return call<{ asset: ProjectAssetDto }>(
+        "GET",
+        `/v1/projects/${projectId}/assets/${assetId}`,
         undefined,
         { Authorization: `Bearer ${token}`, "x-project-id": projectId }
     );

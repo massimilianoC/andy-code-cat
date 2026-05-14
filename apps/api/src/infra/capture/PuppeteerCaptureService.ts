@@ -54,38 +54,40 @@ export async function captureHtml(
             timeout: 30_000,
         });
 
-        // Wait for readyState + images (skip broken/external images)
+        // Wait for readyState + images (skip broken/external images).
+        // NOTE: callbacks are passed as strings to avoid esbuild (tsx) injecting
+        // __name() helpers that are defined only in the Node.js module scope and
+        // would cause ReferenceError inside Puppeteer's browser context.
         await page.waitForFunction(
-            () => {
-                if (document.readyState !== "complete") return false;
-                const imgs = Array.from(document.images);
-                return !imgs.some((img) => !img.complete && img.naturalWidth === 0 && img.src);
-            },
+            `document.readyState === "complete" &&
+             !Array.from(document.images).some(
+               function(img){ return !img.complete && img.naturalWidth === 0 && img.src; }
+             )`,
             { timeout: 15_000 }
         );
 
         // Wait for web fonts
-        await page.evaluate(() => document.fonts.ready);
+        await page.evaluate(`document.fonts.ready`);
 
         // Auto-scroll to trigger IntersectionObserver / lazy-load sections.
         // Half-viewport steps with 300ms per step allows CSS transitions to settle.
-        await page.evaluate(async () => {
-            const step = Math.floor(window.innerHeight / 2);
-            const pauseMs = 300;
-
-            const scrollAndWait = (y: number) =>
-                new Promise<void>((r) => {
+        await page.evaluate(`(async function() {
+            var step = Math.floor(window.innerHeight / 2);
+            var pauseMs = 300;
+            function scrollAndWait(y) {
+                return new Promise(function(r) {
                     window.scrollTo(0, y);
                     setTimeout(r, pauseMs);
                 });
-
-            let pos = 0;
+            }
+            var pos = 0;
             while (pos < document.body.scrollHeight) {
                 pos += step;
                 await scrollAndWait(pos);
             }
             await scrollAndWait(0);
-        });
+        })()`);
+
 
         // Final settle for any scroll-up reveals / sticky elements
         await new Promise<void>((r) => setTimeout(r, 800));

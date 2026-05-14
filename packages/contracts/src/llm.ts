@@ -106,6 +106,8 @@ export const optimizePromptSchema = z.object({
     sessionId: z.string().min(1).max(120).optional(),
     provider: z.string().min(1).max(80).optional(),
     model: z.string().min(1).max(200).optional(),
+    /** Override the task key used to resolve platform task settings (e.g. "zero_effort_optimize"). */
+    taskKey: z.string().min(1).max(80).optional(),
 });
 
 export type LlmChatPreviewInput = z.infer<typeof llmChatPreviewSchema>;

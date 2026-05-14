@@ -12,6 +12,20 @@ const ALLOWED_MIME_EXACT = new Set([
     "application/json",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    // Excel
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    // PowerPoint
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    // XML
+    "application/xml",
+    // JavaScript
+    "application/javascript",
+    // CSV
+    "application/csv",
+    // XHTML
+    "application/xhtml+xml",
 ]);
 const QUOTA_TOTAL_BYTES = 100 * 1024 * 1024; // 100 MB
 const QUOTA_MAX_FILES = 50;

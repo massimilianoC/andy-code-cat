@@ -382,7 +382,9 @@
             "styleRole": "Ruolo stile…",
             "descriptionPlaceholder": "Descrizione…",
             "confirmDelete": "Eliminare \"{{name}}\"?",
-            "uploadError": "Errore durante il caricamento."
+            "uploadError": "Errore durante il caricamento.",
+            "assetBriefHeading": "Brief",
+            "assetDesignSignalsHeading": "Analisi immagine"
         },
         "tagCategories": {
             "era": "Era / Movimento",
@@ -399,6 +401,59 @@
         "cancel": "Annulla",
         "save": "Salva",
         "saving": "Salvataggio…"
+    },
+    "vibecore": {
+        "heading": "Cosa vuoi realizzare oggi?",
+        "subtitle": "Descrivi la tua idea — l'AI fa il resto",
+        "placeholder": "Es. una landing page per un salone di bellezza, tono elegante, palette neutra…",
+        "cta": "Crea con AI",
+        "scrollHint": "scorri per i tuoi progetti",
+        "attach": "Allega",
+        "attachHint": "Trascina file o clicca per allegare — PDF, DOCX, immagini, max 10 MB",
+        "dropHere": "Rilascia qui",
+        "newProject": "Nuovo progetto",
+        "error": "Si è verificato un errore. Riprova.",
+        "removeFile": "Rimuovi",
+        "phase": {
+            "classifying": "Analisi della richiesta…",
+            "prefilling": "Pre-compilazione campi AI…",
+            "creating": "Creazione del workspace…",
+            "uploading": "Carico i file…",
+            "redirecting": "Apertura…",
+            "hints": {
+                "classifying": [
+                    "Leggo la tua idea…",
+                    "Rilevo il tipo di progetto…",
+                    "Classifico l'intento…",
+                    "Identifico il formato…"
+                ],
+                "prefilling": [
+                    "Estraggo le informazioni chiave…",
+                    "Struttura il brief…",
+                    "Analizzo tono e stile…",
+                    "Identifico il pubblico target…",
+                    "Genero i campi del progetto…",
+                    "Processo il contesto documentale…"
+                ],
+                "creating": [
+                    "Inizializzo il workspace…",
+                    "Configuro il progetto…"
+                ],
+                "uploading": [
+                    "Carico i tuoi file…",
+                    "Processo i documenti…",
+                    "Avvio la pipeline di arricchimento…"
+                ],
+                "redirecting": [
+                    "Quasi pronto…",
+                    "Apertura workspace…"
+                ]
+            }
+        },
+        "tokenCounter": "~ {{count}} token",
+        "prefillBanner": "✦ Pre-compilato dall'AI · Rivedi e genera",
+        "prefillEdit": "Modifica manualmente",
+        "prefillCta": "God Mode — Genera"
     },
     "workspace": {
         "selectionNone": "Nessuna selezione",
@@ -568,6 +623,10 @@
             "removeAttachment": "Rimuovi allegato",
             "uploading": "Caricamento in corso…",
             "uploadSuccess": "Allegato al progetto",
+            "imageSuggestionLogo": "Usa come logo",
+            "imageSuggestionBackground": "Usa come sfondo",
+            "imageSuggestionIcon": "Usa come icona",
+            "imageSuggestionDismiss": "Ignora",
             "autoOptimizeOn": "Auto-ottimizza ON",
             "autoOptimizeOff": "Auto-ottimizza OFF",
             "autoOptimizeOnTitle": "Auto-ottimizzazione attiva: il prompt verrà ottimizzato automaticamente prima dell'invio",

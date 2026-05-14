@@ -5,6 +5,7 @@ import {
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson } from "../../../application/llm/llmParser";
 import { injectStableIds, normalizeStoredHtml } from "../../../application/llm/htmlIdInjector";
+import { repairArtifactsForVisibility } from "../../../application/llm/artifactSafetyRepair";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import type { RequestWithContext } from "../types";
@@ -100,9 +101,32 @@ export function createPreviewSnapshotRoutes(): Router {
                 // Normalise then inject stable IDs before storing.
                 // normalizeStoredHtml removes comments, collapses blank lines, and strips
                 // empty style= attributes — typically saves 10–17% on LLM output.
+                // repairArtifactsForVisibility patches the highest-impact recurrent
+                // failure modes (orphan AOS, CSS literal escapes, Phaser parent on
+                // <canvas>) so the preview is never blank because of a known bug.
                 // injectStableIds tags every block element with data-pf-id for focused edits.
                 if (artifacts.html) {
-                    artifacts = { ...artifacts, html: injectStableIds(normalizeStoredHtml(artifacts.html)) };
+                    const repaired = repairArtifactsForVisibility({
+                        html: artifacts.html,
+                        css: artifacts.css ?? "",
+                        js: artifacts.js ?? "",
+                    });
+                    if (repaired.repairs.length > 0) {
+                        ExecutionLogger.instance.emit({
+                            projectId: req.sandbox!.projectId,
+                            conversationId: body.conversationId,
+                            domain: "snapshot",
+                            eventType: "artifact_repaired",
+                            level: "info",
+                            status: "success",
+                            metadata: { repairs: repaired.repairs },
+                        });
+                    }
+                    artifacts = {
+                        html: injectStableIds(normalizeStoredHtml(repaired.html)),
+                        css: repaired.css,
+                        js: repaired.js,
+                    };
                 }
 
                 const snapshot = await createPreviewSnapshot.execute({

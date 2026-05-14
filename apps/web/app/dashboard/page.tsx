@@ -24,6 +24,8 @@ import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { VibeCoreEntry } from "@/components/dashboard/VibeCoreEntry";
+import type { VibeMode } from "@/components/dashboard/ModeSelector";
 import {
     Dialog,
     DialogContent,
@@ -36,6 +38,19 @@ import {
 const RECENT_KEY = "pf_recent_projects";
 const MAX_RECENTS = 3;
 const ACCORDION_KEY = "pf_preset_accordion";
+const VIBE_MODE_KEY = "vibe_mode";
+
+function loadMode(): VibeMode {
+    try {
+        const saved = localStorage.getItem(VIBE_MODE_KEY);
+        if (saved === "easy" || saved === "medium" || saved === "hard") return saved;
+    } catch { /* ignore */ }
+    return "easy";
+}
+
+function saveMode(mode: VibeMode) {
+    try { localStorage.setItem(VIBE_MODE_KEY, mode); } catch { /* ignore */ }
+}
 
 function loadAccordionState(): Record<string, boolean> {
     try {
@@ -91,6 +106,8 @@ export default function DashboardPage() {
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
     const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
     const [canAccessSuperadmin, setCanAccessSuperadmin] = useState(false);
+    // VibeCore mode: lifted here so MEDIUM opens dialog overlay, HARD resets on return
+    const [vibeMode, setVibeMode] = useState<VibeMode>("easy");
     const createInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -103,6 +120,7 @@ export default function DashboardPage() {
         setToken(tok);
         setRecentIds(getRecentIds());
         setAccordionOpen(loadAccordionState());
+        setVibeMode(loadMode());
         const roles = getRoles();
         setCanAccessSuperadmin(roles.includes("admin") || roles.includes("superadmin"));
         setPasswordChangeRequiredState(isPasswordChangeRequired());
@@ -210,6 +228,20 @@ export default function DashboardPage() {
         router.replace("/login");
     }
 
+    function handleVibeModeChange(next: VibeMode) {
+        if (next === "medium") {
+            // MEDIUM: open Zero Effort dialog as overlay — VibeCore stays visible behind
+            setVibeMode("medium");
+            setCreateDestination("launch");
+            setCreateOpen(true);
+            return;
+        }
+        // EASY: save to storage
+        setVibeMode(next);
+        saveMode(next);
+        // HARD mode is handled internally by VibeCoreEntry (navigates to workspace)
+    }
+
     if (checkingAuth) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
@@ -251,7 +283,7 @@ export default function DashboardPage() {
         .filter((group) => group.presets.length > 0);
 
     return (
-        <div className="min-h-screen bg-background flex flex-col">
+        <div className="min-h-screen bg-background">
             {token ? (
                 <PasswordChangeDialog
                     open={passwordChangeRequired}
@@ -260,8 +292,8 @@ export default function DashboardPage() {
                 />
             ) : null}
 
-            {/* Navbar */}
-            <header className="bg-card border-b border-border px-6 py-3 flex items-center justify-between sticky top-0 z-20">
+            {/* Fixed header — always above everything (z-50) */}
+            <header className="fixed top-0 left-0 right-0 z-50 h-[56px] bg-card border-b border-border px-6 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <span className="text-xl leading-none">🐱</span>
                     <span className="font-bold text-foreground text-sm tracking-tight">{t("brand.name")}</span>
@@ -300,8 +332,27 @@ export default function DashboardPage() {
                 </div>
             </header>
 
-            {/* Main content */}
-            <main className="flex-1 px-10 py-12 pb-24 w-full max-w-screen-2xl mx-auto">
+            {/* Page body — push below fixed header */}
+            <div className="pt-[56px]">
+                {/* VibeCore — sticky: stays pinned as legacy dashboard scrolls over it */}
+                {token ? (
+                    <div
+                        className="sticky top-[56px] overflow-hidden"
+                        style={{ height: "calc(100dvh - 56px)", zIndex: 0 }}
+                    >
+                        <VibeCoreEntry
+                            token={token}
+                            mode={vibeMode}
+                            onModeChange={handleVibeModeChange}
+                        />
+                    </div>
+                ) : null}
+
+                {/* Legacy dashboard — slides over the VibeCore as user scrolls */}
+                <main
+                    className="relative bg-background px-10 py-12 pb-24 w-full max-w-screen-2xl mx-auto"
+                    style={{ zIndex: 10, minHeight: "calc(100dvh - 56px)" }}
+                >
                 {/* Hero */}
                 <section className="mb-12">
                     <h1 className="text-3xl font-bold text-foreground mb-2">{t("dashboard.hero.title")}</h1>
@@ -443,6 +494,7 @@ export default function DashboardPage() {
                     )}
                 </section>
             </main>
+            </div>{/* end pt-[56px] */}
 
             {/* Footer bar */}
             <footer className="fixed bottom-0 left-0 right-0 z-30 bg-card/90 backdrop-blur-sm border-t border-border h-12 flex items-center px-8 gap-4">
@@ -460,6 +512,11 @@ export default function DashboardPage() {
             <Dialog open={createOpen} onOpenChange={(open) => {
                 setCreateOpen(open);
                 if (!open) {
+                    // If MEDIUM mode (Zero Effort dialog) was dismissed, return to EASY
+                    if (createDestination === "launch") {
+                        setVibeMode("easy");
+                        saveMode("easy");
+                    }
                     setSelectedPresetId(undefined);
                     setCreateDestination("workspace");
                 }
@@ -480,6 +537,7 @@ export default function DashboardPage() {
                             placeholder={t("dashboard.modal.placeholder")}
                             value={newProjectName}
                             onChange={(e) => setNewProjectName(e.target.value)}
+                            onInput={(e) => setNewProjectName((e.target as HTMLInputElement).value)}
                             minLength={3}
                             required
                         />

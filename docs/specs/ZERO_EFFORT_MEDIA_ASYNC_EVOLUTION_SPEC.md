@@ -537,7 +537,7 @@ Al completamento del job (backend):
 │                                                             │
 │  Ti notificheremo quando è pronto.                          │
 │                                                             │
-│  Notifica via:  [✓] Email (massimiliano@...)                │
+│  Notifica via:  [✓] Email (user@example.com)                │
 │                 [ ] Telegram (configura →)                  │
 │                                                             │
 │  [Chiudi e torna più tardi]   [Segui in diretta]            │

@@ -1178,3 +1178,99 @@ a.link:hover {
         min-height: 55vh;
     }
 }
+
+/* ── VibeCore Dashboard Entry — CSS-only blob animations ──────────────── */
+:root {
+    --vc-glow-easy: #8b5cf6;
+    --vc-glow-medium: #3b82f6;
+    --vc-glow-hard: #10b981;
+}
+
+@keyframes vc-blob-drift {
+
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    33% {
+        transform: translate(12px, -8px) scale(1.03);
+    }
+
+    66% {
+        transform: translate(-8px, 10px) scale(0.97);
+    }
+}
+
+.vc-blob-1 {
+    animation: vc-blob-drift 45s ease-in-out infinite;
+}
+
+.vc-blob-2 {
+    animation: vc-blob-drift 60s ease-in-out infinite 10s;
+}
+
+.vc-blob-3 {
+    animation: vc-blob-drift 50s ease-in-out infinite 5s;
+}
+
+.vc-blob-4 {
+    animation: vc-blob-drift 55s ease-in-out infinite 20s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .vc-blob-1,
+    .vc-blob-2,
+    .vc-blob-3,
+    .vc-blob-4 {
+        animation: none;
+    }
+}
+
+/* === VibeCore — spinning-orb background (technique by Louis Hoebregts) === */
+@keyframes vc-orb-spin {
+    100% {
+        transform: translate3d(0, 0, 1px) rotate(360deg);
+    }
+}
+
+.vc-orb {
+    width: 35vmin;
+    height: 35vmin;
+    border-radius: 50%;
+    backface-visibility: hidden;
+    position: absolute;
+    animation: vc-orb-spin linear infinite;
+    opacity: 0.65;
+    will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .vc-orb {
+        animation: none;
+    }
+}
+
+@keyframes vc-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.vc-entry-animate {
+    animation: vc-fade-in 400ms ease-out 100ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .vc-entry-animate {
+        animation: none;
+        opacity: 1;
+    }
+}

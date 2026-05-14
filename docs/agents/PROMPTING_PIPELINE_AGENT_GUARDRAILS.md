@@ -184,7 +184,42 @@ Answer each question before committing. A single "yes" is a blocker.
 | Layer E default (DEFAULT_PRE_PROMPT) | `apps/api/src/application/use-cases/GetLlmPromptConfig.ts` |
 | Budget policy (dynamic from env) | `apps/api/src/application/llm/llmMessageBuilder.ts` |
 | Pipeline assembly (resolveContext) | `apps/api/src/presentation/http/routes/llmRoutes.ts` |
+| Deterministic artifact safety repair | `apps/api/src/application/llm/artifactSafetyRepair.ts` |
 | Layer D spec (document context) | `docs/specs/DOCUMENT_CONTEXT_LAYER_SPEC.md` |
 | Preset structure spec | `apps/api/src/domain/entities/ProjectPreset.ts` |
 | Moodboard entity (Layer C/D data) | `apps/api/src/domain/entities/ProjectMoodboard.ts` |
 | Model guidance (Layer G) | `apps/api/src/application/llm/modelRegistryPresets.ts` |
+
+---
+
+## 7. Deterministic Post-Generation Safety Layer
+
+In addition to the prompt-side rules above, the pipeline runs a deterministic
+defense-in-depth pass on every generated artifact triple before it is stored as
+a snapshot. This layer is owned by the **infra agent** and lives in
+`apps/api/src/application/llm/artifactSafetyRepair.ts` (`repairArtifactsForVisibility`).
+
+It must remain:
+
+- **Idempotent** — re-running on a repaired artifact is a no-op.
+- **No-LLM** — pure string transformations only; no second model call.
+- **Conservative** — every repair triggers only on a verified failing pattern,
+  never on borderline structures.
+
+Current repairs (extend by adding a new `R-N` block plus a tag in the `repairs`
+array; never remove an existing repair without consensus):
+
+| Tag | Trigger | Action |
+|---|---|---|
+| `aos-script-injected` | `data-aos="..."` present, `aos.js` script tag missing | Inject the official AOS script tag before `</body>` |
+| `aos-init-injected` | `data-aos` present, no `AOS.init()` call anywhere | Append a guarded `AOS.init()` to `artifacts.js` |
+| `aos-orphan-css-stripped` | AOS stylesheet linked but no markers and no script | Remove the orphan stylesheet link |
+| `aos-css-opacity-neutralized` | Inline `[data-aos]{opacity:0}` rule with no AOS JS at all | Remove the `opacity:0` declaration |
+| `css-literal-escapes-unescaped` | Literal `\n` / `\t` / `\r` inside the CSS artifact | Convert to real whitespace |
+| `phaser-parent-canvas-rewritten` | Phaser `parent: 'X'` while `<canvas id='X'>` exists | Rewrite that `<canvas>` element to a `<div>` with the same id |
+
+When a repair fires, the route emits an `artifact_repaired` execution-log event
+containing the list of triggered tags. Use those events as the canary metric for
+prompt regressions: a sustained rise in any tag means the corresponding prompt
+directive is losing effectiveness and should be revisited at the prompt layer
+first, then strengthened in the repair if necessary.

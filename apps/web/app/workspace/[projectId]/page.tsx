@@ -64,7 +64,8 @@ import MediaInspectorPanel from "../../../components/MediaInspectorPanel";
 import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
 import { MediaGrid, type MediaItem } from "@/components/media";
 import { ChevronDown, FileText, ImageIcon, Loader2, Mic, Paperclip, Settings, Square, X } from "lucide-react";
-import { uploadProjectAsset, deleteProjectAsset } from "../../../lib/api/assets";
+import { uploadProjectAsset, deleteProjectAsset, getProjectAsset } from "../../../lib/api/assets";
+import { useSpeechDictation } from "@/hooks/useSpeechDictation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
@@ -439,18 +440,23 @@ export default function WorkspacePage() {
             })));
     }, [providersCatalog]);
     const presetRecommendationAppliedRef = useRef<string | null>(null);
-    const [voiceSupported, setVoiceSupported] = useState(false);
-    const [voiceListening, setVoiceListening] = useState(false);
-    const [voiceError, setVoiceError] = useState<string | null>(null);
+    // Preferred provider/model passed as URL params from Zero Effort / Vibe pipeline redirects.
+    // Read once on mount so they survive the router.replace that clears autoPrompt.
+    const preferredProviderRef = useRef(searchParams?.get("preferredProvider") ?? "");
+    const preferredModelRef = useRef(searchParams?.get("preferredModel") ?? "");
+    const preferredModelAppliedRef = useRef(false);
+    // voiceListening, voiceSupported, voiceError are provided by useSpeechDictation below
     const [chatAttachedFiles, setChatAttachedFiles] = useState<{ id: string; name: string; mimeType: string }[]>([]);
     const [isDragOverChat, setIsDragOverChat] = useState(false);
     const chatFileInputRef = useRef<HTMLInputElement>(null);
-    const [autoOptimize, setAutoOptimize] = useState(true);
+    const [pendingEnrichmentPolling, setPendingEnrichmentPolling] = useState<string[]>([]);
+    const [imageSuggestions, setImageSuggestions] = useState<{ assetId: string; name: string; suggestion: "logo" | "background" | "icon"; dismissed: boolean }[]>([]);
+    // When coming from the Zero Effort flow the brief is already structured — skip auto-optimize
+    // to avoid a second LLM compression pass on content that was pre-optimized upstream.
+    const [autoOptimize, setAutoOptimize] = useState(() => searchParams?.get("skipAutoOptimize") !== "1");
 
     const [leftWidth, setLeftWidth] = useState(40);
-    const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-    const speechBasePromptRef = useRef("");
-    const speechCommittedTranscriptRef = useRef("");
+    
     const [isDragging, setIsDragging] = useState(false);
     const [chatVSplit, setChatVSplit] = useState(65);
     const chatVSplitRef = useRef<number>(65);
@@ -990,6 +996,32 @@ export default function WorkspacePage() {
         setSelectedModel(model.id);
         presetRecommendationAppliedRef.current = projectPresetId;
     }, [projectPresetId, presetCatalog, providersCatalog]);
+
+    // ── Zero Effort / Vibe pipeline: apply preferred model from URL params ────
+    // Runs after the catalog and preset recommendation have been applied so that
+    // the pipeline-configured model always wins over the preset default.
+    useEffect(() => {
+        if (preferredModelAppliedRef.current) return;
+        const prefProvider = preferredProviderRef.current;
+        const prefModel = preferredModelRef.current;
+        if (!prefProvider && !prefModel) return;
+        if (providersCatalog.length === 0) return;
+
+        const provider = prefProvider
+            ? providersCatalog.find((p) => p.provider === prefProvider)
+            : providersCatalog.find((p) => p.models.some((m) => m.isActive && m.id === prefModel));
+        if (!provider) return;
+
+        const model = prefModel
+            ? provider.models.find((m) => m.isActive && m.id === prefModel)
+            : provider.models.find((m) => m.isActive && m.isDefault) ?? provider.models.find((m) => m.isActive);
+        if (!model) return;
+
+        setSelectedProvider(provider.provider);
+        setSelectedModel(model.id);
+        preferredModelAppliedRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [providersCatalog]);
 
     // Auto-load prompt preview when user opens the prompt tab
     useEffect(() => {
@@ -2744,6 +2776,9 @@ export default function WorkspacePage() {
                 try {
                     const { asset } = await uploadProjectAsset(tok, projectId, file, { useInProject: true });
                     setChatAttachedFiles((prev) => [...prev, { id: asset.id, name: file.name, mimeType: file.type }]);
+                    if (file.type.startsWith("image/")) {
+                        setPendingEnrichmentPolling((prev) => [...prev, asset.id]);
+                    }
                     updateNotification(notifId, { status: "done", message: t("workspace.ui.uploadSuccess") });
                 } catch (err) {
                     const msg = (err as { body?: { error?: string } })?.body?.error;
@@ -2766,84 +2801,63 @@ export default function WorkspacePage() {
         }
     }, [projectId]);
 
+    // Poll enrichment status for recently uploaded images
     useEffect(() => {
-        if (typeof window === "undefined") return;
-        setVoiceSupported(Boolean(window.SpeechRecognition || window.webkitSpeechRecognition));
+        if (pendingEnrichmentPolling.length === 0) return;
+        const tok = getToken();
+        if (!tok) return;
 
-        return () => {
-            speechRecognitionRef.current?.abort();
-            speechRecognitionRef.current = null;
-        };
-    }, []);
+        const interval = setInterval(() => {
+            void Promise.all(
+                pendingEnrichmentPolling.map(async (assetId) => {
+                    try {
+                        const { asset } = await getProjectAsset(tok, projectId, assetId);
+                        const status = asset.enrichmentTrace?.provenance?.enrichmentStatus;
+                        if (status === "ready" || status === "failed" || status === "skipped") {
+                            setPendingEnrichmentPolling((prev) => prev.filter((id) => id !== assetId));
+                            if (status === "ready" && asset.enrichmentTrace?.designSignals) {
+                                const ds = asset.enrichmentTrace.designSignals;
+                                let suggestion: "logo" | "background" | "icon" = "icon";
+                                if (ds.imageCategory === "logo" || ds.hasLogo) {
+                                    suggestion = "logo";
+                                } else if (
+                                    ds.imageCategory === "photograph" ||
+                                    ds.imageCategory === "illustration" ||
+                                    ds.suggestedWebUse.includes("background") ||
+                                    ds.suggestedStyleRole === "background"
+                                ) {
+                                    suggestion = "background";
+                                }
+                                const attachedFile = chatAttachedFiles.find((f) => f.id === assetId);
+                                setImageSuggestions((prev) => {
+                                    if (prev.some((s) => s.assetId === assetId)) return prev;
+                                    return [...prev, { assetId, name: attachedFile?.name ?? asset.originalName, suggestion, dismissed: false }];
+                                });
+                            }
+                        }
+                    } catch {
+                        setPendingEnrichmentPolling((prev) => prev.filter((id) => id !== assetId));
+                    }
+                })
+            );
+        }, 3000);
 
-    const handleToggleVoiceInput = useCallback(() => {
-        if (voiceListening) {
-            speechRecognitionRef.current?.stop();
-            return;
-        }
+        return () => clearInterval(interval);
+    }, [pendingEnrichmentPolling, projectId, chatAttachedFiles]);
 
-        if (typeof window === "undefined") return;
-
-        const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!RecognitionCtor) {
-            setVoiceSupported(false);
-            setVoiceError(t("workspace.ui.voiceOnlyChrome"));
-            return;
-        }
-
-        const recognition = speechRecognitionRef.current ?? new RecognitionCtor();
-        speechRecognitionRef.current = recognition;
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = document.documentElement.lang?.trim() || navigator.languages?.[0] || navigator.language || "it-IT";
-
-        recognition.onstart = () => {
-            speechBasePromptRef.current = prompt;
-            speechCommittedTranscriptRef.current = "";
-            setVoiceListening(true);
-            setVoiceError(null);
-        };
-
-        recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
-            // Only append on FINAL results — interim results are discarded so
-            // the textarea never overwrites / flickers during recognition.
-            let finalTranscript = "";
-            for (let i = event.resultIndex; i < event.results.length; i += 1) {
-                if (event.results[i]?.isFinal) {
-                    finalTranscript += event.results[i]?.[0]?.transcript ?? "";
-                }
-            }
-
-            if (finalTranscript) {
-                speechCommittedTranscriptRef.current = appendPromptSegment(
-                    speechCommittedTranscriptRef.current,
-                    finalTranscript
-                );
-                setPrompt(appendPromptSegment(speechBasePromptRef.current, speechCommittedTranscriptRef.current));
-            }
-        };
-
-        recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
-            if (event.error && event.error !== "aborted" && event.error !== "no-speech") {
-                setVoiceError(t("workspace.ui.voiceUnavailable", { error: event.error }));
-            }
-            setVoiceListening(false);
-        };
-
-        recognition.onend = () => {
-            setVoiceListening(false);
-        };
-
-        try {
-            recognition.start();
-        } catch {
-            setVoiceError(t("workspace.ui.voiceMicError"));
-            setVoiceListening(false);
-        }
-    }, [prompt, voiceListening]);
+    // Voice dictation — browser Web Speech API, language follows i18n selection
+    const {
+        listening: voiceListening,
+        supported: voiceSupported,
+        error: voiceError,
+        toggle: handleToggleVoiceInput,
+    } = useSpeechDictation(prompt, setPrompt, {
+        notSupported:  t("workspace.ui.voiceOnlyChrome"),
+        micError:      t("workspace.ui.voiceMicError"),
+        unavailable:   (code) => t("workspace.ui.voiceUnavailable", { error: code }),
+    });
 
     function handleStop() {
-        speechRecognitionRef.current?.stop();
         abortControllerRef.current?.abort();
     }
 
@@ -3051,7 +3065,7 @@ export default function WorkspacePage() {
                         ref={chatFileInputRef}
                         type="file"
                         style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-                        accept=".pdf,.docx,.doc,.txt,.md,image/*"
+                        accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
                         multiple
                         disabled={sending || attachingFile || optimizingPrompt}
                         onChange={(e) => {
@@ -3069,6 +3083,7 @@ export default function WorkspacePage() {
                             value={prompt}
                             autoFocus
                             onChange={(e) => setPrompt(e.target.value)}
+                            onInput={(e) => setPrompt((e.target as HTMLTextAreaElement).value)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" && !e.shiftKey) {
                                     e.preventDefault();
@@ -3135,9 +3150,11 @@ export default function WorkspacePage() {
                                     className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 py-1 text-xs"
                                     title={f.name}
                                 >
-                                    {f.mimeType.startsWith("image/")
-                                        ? <ImageIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
-                                        : <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                    {pendingEnrichmentPolling.includes(f.id)
+                                        ? <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                                        : f.mimeType.startsWith("image/")
+                                            ? <ImageIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                            : <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
                                     }
                                     <span className="max-w-[120px] truncate text-muted-foreground">{f.name}</span>
                                     <button
@@ -3146,6 +3163,37 @@ export default function WorkspacePage() {
                                         title={t("workspace.ui.removeAttachment")}
                                         aria-label={t("workspace.ui.removeAttachment")}
                                         onClick={() => void handleRemoveChatFile(f.id)}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Image enrichment suggestion chips */}
+                    {imageSuggestions.some((s) => !s.dismissed) && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                            {imageSuggestions.filter((s) => !s.dismissed).map((s) => (
+                                <div
+                                    key={s.assetId}
+                                    className="flex shrink-0 items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300"
+                                >
+                                    <span className="truncate max-w-[110px]" title={s.name}>{s.name}</span>
+                                    <span className="text-amber-500/70">·</span>
+                                    <span>
+                                        {s.suggestion === "logo"
+                                            ? t("workspace.ui.imageSuggestionLogo")
+                                            : s.suggestion === "background"
+                                                ? t("workspace.ui.imageSuggestionBackground")
+                                                : t("workspace.ui.imageSuggestionIcon")}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="ml-0.5 shrink-0 text-amber-500/60 hover:text-amber-700 dark:hover:text-amber-200"
+                                        title={t("workspace.ui.imageSuggestionDismiss")}
+                                        aria-label={t("workspace.ui.imageSuggestionDismiss")}
+                                        onClick={() => setImageSuggestions((prev) => prev.map((x) => x.assetId === s.assetId ? { ...x, dismissed: true } : x))}
                                     >
                                         <X className="h-3 w-3" />
                                     </button>

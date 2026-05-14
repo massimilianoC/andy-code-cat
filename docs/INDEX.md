@@ -112,6 +112,22 @@ Read in this order before making changes:
 | [docs/specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md](specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md) | Multi-domain deployment implementation plan — R3.1–R3.4, nginx vhost generation, SSL automation, domain admin API/UI |
 | [docs/specs/USER_SETTINGS_AND_API_KEYS_SPEC.md](specs/USER_SETTINGS_AND_API_KEYS_SPEC.md) | R3.5 — User-owned API keys (programmatic access) and unified role-scoped settings panel |
 | [docs/specs/DASHBOARD_LOVABLE_CHAT_SPEC.md](specs/DASHBOARD_LOVABLE_CHAT_SPEC.md) | Dashboard Lovable Chat — ChatPanel reusable component, entry-point chat, and LLM intent-to-template classifier |
+| [docs/specs/ZERO_EFFORT_PREFILL_SPEC.md](specs/ZERO_EFFORT_PREFILL_SPEC.md) | Zero Effort LLM Prefill — one-pass LLM pre-population of all Zero Effort wizard fields, token counter, AI review card, God Mode one-click generation |
+
+## VibeCore Components (feat/dashboard-lovable-chat)
+
+| Path | Description |
+|---|---|
+| `apps/web/components/dashboard/VibeCoreEntry.tsx` | Full-screen glass card entry — textarea, file drag-drop, mode selector, phase state machine, Layer Φ classify → createProject → upload → redirect |
+| `apps/web/components/dashboard/VibeCoreBackground.tsx` | CSS-only SVG blob background (4 ellipses, 45–60 s drift, feGaussianBlur) |
+| `apps/web/components/dashboard/ModeSelector.tsx` | Segmented EASY / MEDIUM / HARD pill with per-mode glow ring |
+| `apps/web/components/dashboard/ScrollBlurOverlay.tsx` | Fixed overlay that fades + blurs the VibeCore section as user scrolls down |
+| `apps/web/hooks/useScrollRatio.ts` | Hook returning scroll progress ratio (0–1) between two pixel offsets |
+| `apps/web/lib/api/vibecore.ts` | Web client for `POST /v1/vibecore/classify` and `POST /v1/vibecore/prefill` |
+| `packages/contracts/src/vibecore.ts` | Shared VibeCore types: `FormatHint`, `AttachmentMeta`, `VibeClassifyRequest/Response` |
+| `apps/api/src/application/use-cases/VibeClassify.ts` | Layer Φ intent + format classifier use-case (LLM call, confidence threshold, graceful skip) |
+| `apps/api/src/application/prompting/formatHintRules.ts` | Format hint catalog (7 categories) and template list block builder |
+| `apps/api/src/presentation/http/routes/vibecoreRoutes.ts` | `POST /v1/vibecore/classify` — auth-protected, no sandbox (pre-project) |
 
 ---
 
