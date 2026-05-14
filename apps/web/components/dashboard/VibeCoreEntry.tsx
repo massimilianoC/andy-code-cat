@@ -10,7 +10,7 @@ import { ModeSelector, type VibeMode } from "./ModeSelector";
 import { VibeCoreBackground } from "./VibeCoreBackground";
 import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
 import { classifyVibeIntent, prefillZeroEffort } from "@/lib/api/vibecore";
-import { createProject, uploadProjectAsset } from "@/lib/api";
+import { createProject, uploadProjectAsset, renameProject } from "@/lib/api";
 
 /** Max file size accepted via the VibeCore drag-and-drop zone (10 MB). */
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -265,6 +265,12 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             // Store prefill draft in sessionStorage for launch page
             const hasPrefill = prefillResult && !prefillResult.skipped;
             if (hasPrefill) {
+                // Rename the project with the AI-extracted business name so the launch
+                // page and brief prompt start with a clean, meaningful title.
+                const aiName = prefillResult.draft.businessName?.trim();
+                if (aiName && aiName.length >= 2) {
+                    renameProject(token, projectId, aiName.slice(0, 120)).catch(() => { });
+                }
                 try {
                     sessionStorage.setItem(
                         `ze_prefill_${projectId}`,
