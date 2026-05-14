@@ -110,10 +110,16 @@ export function buildProjectKnowledgeLayer(
     const maxChars = opts?.maxChars ?? env.ENRICHMENT_LAYER_D_MAX_CHARS;
     const maxAssets = opts?.maxAssets ?? env.ENRICHMENT_LAYER_D_MAX_ASSETS;
 
-    // Filter: only ready traces, only assets the user opted in or has a styleRole
+    // Filter: ready traces, OR pending traces that already have textLayer/structuredData
+    // (the pipeline saves these immediately after parsing, before the LLM brief is done).
     const ready = assets.filter(a => {
         const trace = a.enrichmentTrace;
-        if (!trace || trace.provenance.enrichmentStatus !== "ready") return false;
+        if (!trace) return false;
+        const status = trace.provenance.enrichmentStatus;
+        const hasContent =
+            status === "ready" ||
+            (status === "pending" && (trace.textLayer !== null || trace.structuredData !== null));
+        if (!hasContent) return false;
         if (a.useInProject === false && !a.styleRole) return false;
         return true;
     });
@@ -152,13 +158,19 @@ export function buildProjectKnowledgeLayer(
         const brief = trace.documentBrief;
         if (brief) {
             if (brief.purposeSentence) lines.push(`Purpose: ${brief.purposeSentence}`);
+            if (brief.contentSummary) lines.push(`Content: ${brief.contentSummary}`);
             if (brief.detectedBrandName) lines.push(`Brand: ${brief.detectedBrandName}`);
             if (brief.toneLabel) lines.push(`Tone: ${brief.toneLabel}`);
+            if (brief.targetAudience) lines.push(`Audience: ${brief.targetAudience}`);
+            if (brief.mainArgumentOrValue) lines.push(`Main value: ${brief.mainArgumentOrValue}`);
             if (brief.keyMessages.length > 0) {
                 lines.push("Key messages:");
                 brief.keyMessages.forEach(m => lines.push(`- ${m}`));
             }
             if (brief.ctaText) lines.push(`Call to action: ${brief.ctaText}`);
+        } else if (trace.textLayer?.extractedTextSnippet) {
+            // Enrichment still pending — emit raw text snippet as fallback
+            lines.push(`Text preview (analysis pending): ${trace.textLayer.extractedTextSnippet.slice(0, 1500)}`);
         }
 
         const palette = trace.colorPalette;

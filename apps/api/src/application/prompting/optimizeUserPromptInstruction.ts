@@ -38,6 +38,8 @@ export function buildOptimizeUserPromptRequest(input: {
     userProfile?: UserStyleProfile | null;
     assets?: ProjectAsset[];
     taskSettings?: PromptTaskSetting;
+    /** Pre-built Layer D block — injected verbatim to give the optimizer full document context. */
+    layerDContext?: string;
 }): { systemPrompt: string; userPrompt: string } {
     const moodboardLines = [
         formatTagLine("Project tone tags", input.moodboard?.toneTags),
@@ -76,6 +78,7 @@ export function buildOptimizeUserPromptRequest(input: {
         moodboardLines ? `\nProject context\n${moodboardLines}` : "",
         userProfileLines ? `\nUser style profile\n${userProfileLines}` : "",
         assetLines ? `\nRelevant assets\n${assetLines}` : "",
+        input.layerDContext ? `\nDocument knowledge extracted from project files\n${input.layerDContext}` : "",
         `\nOriginal user prompt\n${input.rawPrompt}`,
         "\nRewrite it so it becomes richer, clearer, and more actionable while staying faithful to the original intent.",
     ].filter(Boolean).join("\n\n");

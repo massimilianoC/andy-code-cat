@@ -219,8 +219,36 @@ export class AssetEnrichmentPipeline {
             fullTextStored: false,
         };
 
+        // Build the structuredData payload from parser output (available before LLM call)
+        const earlyStructuredData = parsed.sheets && parsed.sheets.length > 0
+            ? ({ kind: "spreadsheet" as const, sheets: parsed.sheets })
+            : parsed.slides && parsed.slides.length > 0
+                ? ({ kind: "presentation" as const, slides: parsed.slides })
+                : null;
+
+        // Save textLayer + structuredData immediately so Layer D can inject them
+        // even while the LLM brief is still in flight (timing gap fix).
+        await input.assetRepository.saveEnrichmentTrace(
+            input.asset.id,
+            input.asset.projectId,
+            buildEnrichmentTrace({
+                asset: input.asset,
+                assetKind,
+                provenance: {
+                    ...pendingProvenance(parsed.parserName),
+                    parserVersion: parsed.parserVersion,
+                },
+                textLayer,
+                documentBrief: null,
+                structuredData: earlyStructuredData,
+                colorPalette: null,
+                visualAnalysis: null,
+                designSignals: null,
+            }),
+        );
+
         let documentBrief = null;
-        let structuredData = null;
+        let structuredData: import("../../../domain/entities/AssetEnrichmentTrace").StructuredDataPayload | null = earlyStructuredData;
         let llmProvider: string | null = null;
         let llmModel: string | null = null;
         let llmTokensUsed: number | null = null;

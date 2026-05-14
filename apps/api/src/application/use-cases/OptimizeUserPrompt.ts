@@ -11,6 +11,7 @@ import { estimateCost, type CostEstimate } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { env } from "../../config";
 import { buildOptimizeUserPromptRequest } from "../prompting/optimizeUserPromptInstruction";
+import { buildProjectKnowledgeLayer } from "../llm/systemPromptLayers";
 import { resolvePromptTaskSettingFromConfig, type PromptTaskSetting } from "../../domain/entities/PlatformConfig";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
@@ -305,6 +306,10 @@ export class OptimizeUserPrompt {
             ? allAssets.filter((asset) => input.assetIds!.includes(asset.id))
             : allAssets.filter((asset) => asset.useInProject || Boolean(asset.descriptionText)).slice(0, 6);
 
+        const layerDContext = env.enrichmentInjectLayerD
+            ? buildProjectKnowledgeLayer(selectedAssets, { maxChars: 6000, maxAssets: 3 })
+            : "";
+
         const { systemPrompt, userPrompt } = buildOptimizeUserPromptRequest({
             rawPrompt: input.rawPrompt,
             projectName: project.name,
@@ -313,6 +318,7 @@ export class OptimizeUserPrompt {
             userProfile,
             assets: selectedAssets,
             taskSettings,
+            layerDContext: layerDContext || undefined,
         });
 
         const messages: Array<{ role: "system" | "user"; content: string }> = [
