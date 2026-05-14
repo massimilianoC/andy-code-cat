@@ -208,10 +208,12 @@ export class VibePrefill {
 
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta, input.templateId, input.formatHint);
 
-        // Extend system prompt with Layer D document context when available
+        // Use custom systemTemplate from platform config if set; fall back to hardcoded SYSTEM_PROMPT
+        const basePrompt = taskSettings.systemTemplate?.trim() || SYSTEM_PROMPT;
+        // Extend with Layer D document context when available
         const systemPrompt = input.layerDContext
-            ? `${SYSTEM_PROMPT}\n\n${input.layerDContext}`
-            : SYSTEM_PROMPT;
+            ? `${basePrompt}\n\n${input.layerDContext}`
+            : basePrompt;
 
         try {
             const response = await fetch(`${providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {

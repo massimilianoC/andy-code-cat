@@ -96,7 +96,11 @@ export class VibeClassify {
             PRESET_CATALOG.map((p) => ({ id: p.id, label: p.label, hint: p.hint ?? "" })),
         );
 
-        const systemPrompt = buildSystemPrompt(templateListBlock);
+        // If a custom systemTemplate is set in platform config, use it as template
+        // ({{TEMPLATE_LIST}} is substituted with the live catalog block).
+        const systemPrompt = taskSettings.systemTemplate?.trim()
+            ? taskSettings.systemTemplate.replace("{{TEMPLATE_LIST}}", templateListBlock)
+            : buildSystemPrompt(templateListBlock);
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta);
 
         const catalog = await this.getLlmCatalog.execute();

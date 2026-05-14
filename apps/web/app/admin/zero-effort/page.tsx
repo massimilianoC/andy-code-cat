@@ -22,6 +22,79 @@ const PREFILL_TASK_KEY   = "vibe_intent_prefill";
 const OPTIMIZE_TASK_KEY  = "zero_effort_optimize";
 const GENERATE_TASK_KEY  = "zero_effort_generate";
 
+// ── Default system prompts (mirrors API hardcoded prompts) ─────────────────
+// These are shown in the "System template override" textarea.
+// Override is honoured by the API only when non-empty.
+
+const CLASSIFY_DEFAULT_PROMPT =
+`You are a document-type and template classifier.
+Given a user prompt and optional file metadata, return a JSON object:
+{
+  "templateId": "<id from catalog or null>",
+  "formatHint": "<one of: one_pager, a3_document, ratio_1_1, ratio_16_9, interactive_form, portfolio, brochure or null>",
+  "confidence": <number 0.0–1.0>,
+  "reasoning": "<one sentence>"
+}
+
+Rules:
+- Set templateId only if confidence >= 0.65 against the template catalog below.
+- Set formatHint independently of templateId; it can be non-null even when templateId is null.
+- If neither signal is clear, return both as null.
+- Return valid JSON only — no markdown fences, no extra text.
+
+Available templates:
+{{TEMPLATE_LIST}}`;
+
+const PREFILL_DEFAULT_PROMPT =
+`You are a web project brief extractor.
+Given a user's free-form description of a website project, return a JSON object that
+populates a structured project brief.
+
+Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
+{
+  "businessName": "brand or project name (string, required)",
+  "siteType": "landing_page|portfolio|showcase|business_site (string, required)",
+  "primaryGoal": "full project description and main objective — at least 20 chars (string, required)",
+  "audience": "target audience description — at least 10 chars (string, required)",
+  "tone": "communication tone, e.g. professional, playful (string or null)",
+  "primaryCta": "main call-to-action button text (string or null)",
+  "styleHint": "visual style notes (string or null)",
+  "contactInfo": [{"key": "Email", "value": "..."}],
+  "styleAttributes": ["minimal"]
+}
+
+Rules:
+- businessName: extract from the prompt; fall back to "Progetto" if unclear.
+- siteType: infer from context; default "landing_page".
+- primaryGoal: expand the user's text into a detailed project description.
+- audience: infer who the site is for; describe age group, interests, needs.
+- contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
+- styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
+- Return ONLY the JSON object.`;
+
+const OPTIMIZE_DEFAULT_PROMPT =
+`You rewrite a user's raw creative brief into a stronger, richer, production-ready content prompt for the current project.
+
+GOAL
+- Preserve the user's original intent, meaning, domain, and explicit preferences.
+- Enrich the brief so the platform can generate a better result with less effort from the user.
+- Expand the brief coherently with stronger guidance about message, audience, tone, content priorities, visual mood, and calls to action.
+
+STYLE POLICY
+- Keep the result modern, fresh, vivid, and professional.
+- Respect the script, style, sector, and preferences already expressed by the user.
+- If the user already provided a detailed brief, refine it lightly instead of rewriting aggressively.
+
+IMPORTANT BOUNDARIES
+- Do NOT mention technical output architecture.
+- Do NOT mention HTML, CSS, JS, JSON, single-file output, embedding, implementation details, or code constraints.
+- Focus only on business intent, content direction, storytelling quality, brand feel, and creative guidance.
+
+OUTPUT RULES
+- Return only the optimized prompt text.
+- Write in the same language as the user's input.
+- Make it directly usable as the next user prompt in a generation workflow.`;
+
 const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
     [CLASSIFY_TASK_KEY]: {
         enabled: true,
@@ -29,7 +102,7 @@ const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
         model: "Qwen/Qwen3-8B",
         temperature: 0.0,
         maxCompletionTokens: 256,
-        systemTemplate: "",
+        systemTemplate: CLASSIFY_DEFAULT_PROMPT,
     },
     [PREFILL_TASK_KEY]: {
         enabled: true,
@@ -37,7 +110,7 @@ const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
         model: "Qwen/Qwen3-8B",
         temperature: 0.3,
         maxCompletionTokens: 768,
-        systemTemplate: "",
+        systemTemplate: PREFILL_DEFAULT_PROMPT,
     },
     [OPTIMIZE_TASK_KEY]: {
         enabled: true,
@@ -45,7 +118,7 @@ const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
         model: "MiniMaxAI/MiniMax-M2.5",
         temperature: 0.7,
         maxCompletionTokens: 1200,
-        systemTemplate: "",
+        systemTemplate: OPTIMIZE_DEFAULT_PROMPT,
     },
     [GENERATE_TASK_KEY]: {
         enabled: true,
@@ -83,10 +156,16 @@ export default function ZeroEffortAdminPage() {
             getAdminLlmRegistry(t),
         ]).then(([cfg, registry]) => {
             const productSettings = cfg.governanceByProduct?.[DEFAULT_PRODUCT_KEY]?.promptTaskSettings ?? {};
-            setClassifyTask({ ...TASK_DEFAULTS[CLASSIFY_TASK_KEY],  ...productSettings[CLASSIFY_TASK_KEY] });
-            setPrefillTask({  ...TASK_DEFAULTS[PREFILL_TASK_KEY],   ...productSettings[PREFILL_TASK_KEY] });
-            setOptimizeTask({ ...TASK_DEFAULTS[OPTIMIZE_TASK_KEY],  ...productSettings[OPTIMIZE_TASK_KEY] });
-            setGenerateTask({ ...TASK_DEFAULTS[GENERATE_TASK_KEY],  ...productSettings[GENERATE_TASK_KEY] });
+            // Merge: prefer saved values, but don't override non-empty defaults with empty string
+            const mergeTask = (key: string, saved?: Partial<PromptTaskSettingDto>): PromptTaskSettingDto => ({
+                ...TASK_DEFAULTS[key],
+                ...(saved ?? {}),
+                systemTemplate: saved?.systemTemplate || TASK_DEFAULTS[key].systemTemplate,
+            });
+            setClassifyTask(mergeTask(CLASSIFY_TASK_KEY, productSettings[CLASSIFY_TASK_KEY]));
+            setPrefillTask(mergeTask(PREFILL_TASK_KEY, productSettings[PREFILL_TASK_KEY]));
+            setOptimizeTask(mergeTask(OPTIMIZE_TASK_KEY, productSettings[OPTIMIZE_TASK_KEY]));
+            setGenerateTask(mergeTask(GENERATE_TASK_KEY, productSettings[GENERATE_TASK_KEY]));
             setProviders(registry.providers ?? []);
         })
         .catch(() => setError("Unable to load config."))
