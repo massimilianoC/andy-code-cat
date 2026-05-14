@@ -27,6 +27,31 @@ const FALLBACK_MODELS: Partial<Record<PipelineModelRole, string>> = {
     embeddings: "BAAI/bge-large-en-v1.5"
 };
 
+/**
+ * Additional selectable models exposed in the superadmin UI.
+ * Not assigned to a specific pipeline role; they are offered as manual overrides
+ * for task-level configuration (e.g. vibe_intent_classify, zero_effort_optimize).
+ * IDs are deduplicated against DEFAULT_MODELS + FALLBACK_MODELS at build time.
+ */
+const SUPPLEMENTAL_MODELS: Array<{ id: string; capabilities: string[] }> = [
+    // Google — Gemma 4
+    { id: "google/gemma-4-31B-it", capabilities: ["chat"] },
+    { id: "google/gemma-4-26B-A4B-it", capabilities: ["chat"] },
+    // Qwen — extra reasoning / large models
+    { id: "Qwen/QwQ-32B", capabilities: ["chat"] },
+    { id: "Qwen/Qwen3-32B", capabilities: ["chat"] },
+    { id: "Qwen/Qwen3-235B-A22B-Instruct-2507", capabilities: ["chat"] },
+    // DeepSeek — R1 reasoning
+    { id: "deepseek-ai/DeepSeek-R1", capabilities: ["chat"] },
+    // Moonshot / Kimi — extra large
+    { id: "moonshotai/Kimi-K2-Instruct", capabilities: ["chat"] },
+    // Tencent Hunyuan
+    { id: "tencent/Hunyuan-A13B-Instruct", capabilities: ["chat"] },
+    // OpenAI OSS (hosted on SiliconFlow)
+    { id: "openai/gpt-oss-120b", capabilities: ["chat"] },
+    { id: "openai/gpt-oss-20b", capabilities: ["chat"] },
+];
+
 function inferCapabilities(role: PipelineModelRole): string[] {
     if (role === "vision" || role === "vision_fast") {
         return ["vision", "chat"];
@@ -82,6 +107,28 @@ export function buildDefaultSiliconFlowCatalog(baseUrl: string): LlmProviderCata
                 } : {})
             }));
         }
+    }
+
+    // Append supplemental models (deduplicated against role-assigned models above)
+    const existingIds = new Set(models.map((m) => m.id));
+    for (const m of SUPPLEMENTAL_MODELS) {
+        if (existingIds.has(m.id)) continue;
+        const sfPrice = SILICONFLOW_MODEL_PRICES[m.id];
+        models.push(decorateSeedModel({
+            id: m.id,
+            provider: "siliconflow",
+            role: "dialogue",
+            capabilities: m.capabilities,
+            isDefault: false,
+            isFallback: false,
+            isActive: true,
+            ...(sfPrice ? {
+                priceInputUsdPerM: sfPrice.input,
+                priceOutputUsdPerM: sfPrice.output,
+                priceTier: computePriceTier(sfPrice),
+            } : {}),
+        }));
+        existingIds.add(m.id);
     }
 
     return {

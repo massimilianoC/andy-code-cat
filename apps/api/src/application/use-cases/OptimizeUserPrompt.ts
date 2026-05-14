@@ -11,7 +11,10 @@ import { estimateCost, type CostEstimate } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { env } from "../../config";
 import { buildOptimizeUserPromptRequest } from "../prompting/optimizeUserPromptInstruction";
+import { buildProjectKnowledgeLayer } from "../llm/systemPromptLayers";
 import { resolvePromptTaskSettingFromConfig, type PromptTaskSetting } from "../../domain/entities/PlatformConfig";
+import { CostTransactionService } from "../cost/CostTransactionService";
+import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "optimize_user_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -59,6 +62,7 @@ type PreparedExecutionContext = {
     providerCatalog: Awaited<ReturnType<GetLlmCatalog["execute"]>>["providers"][number];
     modelId: string;
     authHeader?: string;
+    effectiveTaskKey: string;
 };
 
 function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none") {
@@ -141,7 +145,7 @@ export class OptimizeUserPrompt {
     }): OptimizePromptResponse {
         const usage = input.usage ?? estimateTokens({ messages: input.context.messages, outputText: input.optimizedPrompt });
         return {
-            taskKey: TASK_KEY,
+            taskKey: input.context.effectiveTaskKey,
             optimizedPrompt: input.optimizedPrompt,
             provider: input.context.providerCatalog.provider,
             model: input.context.modelId,
@@ -183,7 +187,7 @@ export class OptimizeUserPrompt {
         }
 
         await this.promptExecutionLogRepository.create({
-            taskKey: TASK_KEY,
+            taskKey: context.effectiveTaskKey,
             projectId: request.projectId,
             userId: request.userId,
             conversationId: request.conversationId,
@@ -207,6 +211,31 @@ export class OptimizeUserPrompt {
             status: "succeeded",
             durationMs: result.durationMs,
         });
+
+        // Cost ledger (fire-and-forget)
+        if (result.usage && !result.skipped) {
+            CostTransactionService.instance.record({
+                userId: request.userId,
+                projectId: request.projectId,
+                resourceType: ResourceType.LLM_PROMPT_OPT,
+                resourceSubtype: result.model,
+                precomputedTotalEur: result.costEstimate?.amount,
+                units: {
+                    promptTokens: result.usage.promptTokens,
+                    completionTokens: result.usage.completionTokens,
+                    totalTokens: result.usage.totalTokens,
+                },
+                sourceRef: {
+                    conversationId: request.conversationId,
+                    sessionId: request.sessionId,
+                },
+                meta: {
+                    taskKey: context.effectiveTaskKey,
+                    provider: result.provider,
+                    model: result.model,
+                },
+            });
+        }
     }
 
     private async persistFailureLog(input: {
@@ -225,7 +254,7 @@ export class OptimizeUserPrompt {
     }) {
         const { request, context, error, startedAt } = input;
         await this.promptExecutionLogRepository.create({
-            taskKey: TASK_KEY,
+            taskKey: context?.effectiveTaskKey ?? TASK_KEY,
             projectId: request.projectId,
             userId: request.userId,
             conversationId: request.conversationId,
@@ -255,6 +284,7 @@ export class OptimizeUserPrompt {
         assetIds?: string[];
         provider?: string;
         model?: string;
+        taskKey?: string;
     }): Promise<{ context: PreparedExecutionContext } | { skippedResult: OptimizePromptResponse }> {
         const project = await this.projectRepository.findByIdForUser(input.projectId, input.userId);
         if (!project) {
@@ -269,11 +299,16 @@ export class OptimizeUserPrompt {
             this.platformConfigRepository.get().catch(() => null),
         ]);
 
-        const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, productKey, TASK_KEY);
+        const effectiveTaskKey = input.taskKey ?? TASK_KEY;
+        const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, productKey, effectiveTaskKey);
         const allAssets = await this.assetRepository.listByProject(input.projectId, input.userId).catch(() => []);
         const selectedAssets = input.assetIds?.length
             ? allAssets.filter((asset) => input.assetIds!.includes(asset.id))
             : allAssets.filter((asset) => asset.useInProject || Boolean(asset.descriptionText)).slice(0, 6);
+
+        const layerDContext = env.enrichmentInjectLayerD
+            ? buildProjectKnowledgeLayer(selectedAssets, { maxChars: 6000, maxAssets: 3 })
+            : "";
 
         const { systemPrompt, userPrompt } = buildOptimizeUserPromptRequest({
             rawPrompt: input.rawPrompt,
@@ -283,6 +318,7 @@ export class OptimizeUserPrompt {
             userProfile,
             assets: selectedAssets,
             taskSettings,
+            layerDContext: layerDContext || undefined,
         });
 
         const messages: Array<{ role: "system" | "user"; content: string }> = [
@@ -320,7 +356,7 @@ export class OptimizeUserPrompt {
         if (!taskSettings.enabled) {
             return {
                 skippedResult: {
-                    taskKey: TASK_KEY,
+                    taskKey: effectiveTaskKey,
                     optimizedPrompt: input.rawPrompt,
                     provider: providerCatalog.provider,
                     model: modelId,
@@ -358,6 +394,7 @@ export class OptimizeUserPrompt {
                 providerCatalog,
                 modelId,
                 authHeader,
+                effectiveTaskKey,
             },
         };
     }
@@ -371,6 +408,7 @@ export class OptimizeUserPrompt {
         sessionId?: string;
         provider?: string;
         model?: string;
+        taskKey?: string;
     }): Promise<OptimizePromptResponse> {
         const startedAt = Date.now();
         let preparedContext: PreparedExecutionContext | undefined;
@@ -448,6 +486,7 @@ export class OptimizeUserPrompt {
         sessionId?: string;
         provider?: string;
         model?: string;
+        taskKey?: string;
     }, handlers?: {
         onThinking?: (chunk: string) => void;
         onAnswer?: (chunk: string) => void;

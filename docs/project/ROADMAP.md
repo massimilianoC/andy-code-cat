@@ -136,6 +136,45 @@ See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.m
 
 ---
 
+## R3.5 — User Settings Panel & API Key Management
+
+**Status: 🔲 Planned — prerequisite for R4 BaaS integrations.**
+
+Introduces user-owned API keys for programmatic/server-to-server access, and a unified `/settings` panel where both regular users and superadmins manage configuration within their own data domain — no duplicate interfaces, role-scoped tabs.
+
+See [docs/specs/USER_SETTINGS_AND_API_KEYS_SPEC.md](../specs/USER_SETTINGS_AND_API_KEYS_SPEC.md) for the full spec.
+
+### Phase 1 — API Key Backend
+
+- [ ] `ApiKey` entity + `MongoApiKeyRepository`
+- [ ] Auth middleware extension: detects `acc_` prefix, validates key, populates `req.auth` identically to JWT path
+- [ ] `POST /v1/me/api-keys` — create key (full key returned once)
+- [ ] `GET /v1/me/api-keys` — list own keys (prefix only, never hash)
+- [ ] `PATCH /v1/me/api-keys/:id` — rename, change expiry, suspend/unsuspend
+- [ ] `DELETE /v1/me/api-keys/:id` — revoke (irreversible)
+- [ ] `GET /v1/admin/api-keys` — superadmin list all keys with filters
+- [ ] `DELETE /v1/admin/api-keys/:id` — superadmin revoke any key + audit log
+
+### Phase 2 — Settings Panel Shell + API Keys Tab
+
+- [ ] `/settings` route and tabbed shell (Next.js)
+- [ ] Profile tab, API Keys tab (list, create with copy-once modal, revoke, suspend)
+- [ ] Tab visibility matrix enforced by role
+- [ ] i18n keys IT + EN
+
+### Phase 3 — Superadmin Tabs in Settings Shell
+
+- [ ] Superadmin-only tabs in settings: All API Keys, Users & Roles, Platform Config, LLM Models
+- [ ] Legacy `/admin` routes kept alive (not removed) — parallel transition period
+
+### Why this release exists
+
+- API keys unlock clean server-to-server integrations without exposing user passwords or managing JWT refresh flows in client services.
+- The settings panel establishes the "one URL, role-scoped data" governance pattern that prevents interface proliferation as the platform grows.
+- API keys are a prerequisite for R4 BaaS BYOK secrets model.
+
+---
+
 ## R4 — BaaS Services Layer
 
 **Status: ⏸ Postponed until observability and publishing are fully stabilized.**

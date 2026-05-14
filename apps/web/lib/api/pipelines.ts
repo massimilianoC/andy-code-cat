@@ -38,6 +38,8 @@ export interface ZeroEffortTaskConfig {
 export interface ZeroEffortPipelineConfig {
     optimize: ZeroEffortTaskConfig;
     generate: ZeroEffortTaskConfig;
+    vibeGenerate: ZeroEffortTaskConfig;
+    godModeGenerate: ZeroEffortTaskConfig;
 }
 
 export function launchZeroEffort(

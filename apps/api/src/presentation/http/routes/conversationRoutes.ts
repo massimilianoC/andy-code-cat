@@ -15,6 +15,8 @@ import { GetConversations } from "../../../application/use-cases/GetConversation
 import { GetConversation } from "../../../application/use-cases/GetConversation";
 import { GetOrCreateProjectConversation } from "../../../application/use-cases/GetOrCreateProjectConversation";
 import { LogBackgroundTask } from "../../../application/use-cases/LogBackgroundTask";
+import { CostTransactionService } from "../../../application/cost/CostTransactionService";
+import { ResourceType } from "../../../domain/entities/CostTransaction";
 import type { RequestWithContext } from "../types";
 
 export function createConversationRoutes(): Router {
@@ -183,6 +185,28 @@ export function createConversationRoutes(): Router {
                             : undefined,
                     }
                 );
+
+                // ── Cost ledger: record background task LLM cost when task completes ──
+                if (body.status === "completed" && body.costEstimate) {
+                    CostTransactionService.instance.record({
+                        userId: req.auth!.userId,
+                        projectId: req.sandbox!.projectId,
+                        resourceType: ResourceType.LLM_BACKGROUND,
+                        precomputedTotalEur: body.costEstimate.amount,
+                        units: body.tokenUsage ? {
+                            promptTokens: body.tokenUsage.promptTokens,
+                            completionTokens: body.tokenUsage.completionTokens,
+                            totalTokens: body.tokenUsage.totalTokens,
+                        } : {},
+                        sourceRef: { backgroundTaskId: req.params.taskId },
+                        meta: {
+                            conversationId: req.params.conversationId,
+                            messageId: req.params.messageId,
+                        },
+                    });
+                }
+                // ── end cost ledger ───────────────────────────────────────────────
+
                 res.json({ message: "Task updated" });
             } catch (error) {
                 next(error);

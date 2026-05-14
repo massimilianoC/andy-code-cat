@@ -1,4 +1,5 @@
 import type { AssetScope, AssetSource, AssetStyleRole, ProjectAsset, AssetSemanticMetadata, AssetGenerationStatus, AssetGenerationMetadata, AssetGenerationUsageSummary } from "../entities/ProjectAsset";
+import type { AssetEnrichmentTrace } from "../entities/AssetEnrichmentTrace";
 
 export interface ProjectAssetRepository {
     create(input: {
@@ -28,6 +29,9 @@ export interface ProjectAssetRepository {
 
     findById(id: string, projectId: string, userId: string): Promise<ProjectAsset | null>;
 
+    /** Lookup by ID only — no ownership check. Used exclusively by the public media serve route. */
+    findByIdPublic(id: string): Promise<ProjectAsset | null>;
+
     delete(id: string, projectId: string, userId: string): Promise<boolean>;
 
     /** Total size in bytes for all assets in the project (user uploads only, for quota). */
@@ -45,6 +49,13 @@ export interface ProjectAssetRepository {
     summarizeGenerationAll(): Promise<AssetGenerationUsageSummary>;
 
     listRecentGeneratedAll(limit?: number): Promise<ProjectAsset[]>;
+
+    /** Persists an enrichment trace produced by the Document Context Layer pipeline. Ownership enforced via projectId. */
+    saveEnrichmentTrace(
+        id: string,
+        projectId: string,
+        trace: AssetEnrichmentTrace,
+    ): Promise<ProjectAsset | null>;
 
     /** Partial update of user-editable metadata fields. Enforces ownership via projectId/userId. */
     update(

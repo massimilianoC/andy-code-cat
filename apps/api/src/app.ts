@@ -15,11 +15,14 @@ import { createGenerationWorkspaceRoutes } from "./presentation/http/routes/gene
 import { createWysiwygRoutes } from "./presentation/http/routes/wysiwygRoutes";
 import { createExecutionLogRoutes } from "./presentation/http/routes/executionLogRoutes";
 import { createPublishRoutes } from "./presentation/http/routes/publishRoutes";
+import { createPublicMediaRoutes } from "./presentation/http/routes/publicMediaRoutes";
 import { createUserProfileRoutes } from "./presentation/http/routes/userProfileRoutes";
 import { createPresetRoutes } from "./presentation/http/routes/presetRoutes";
 import { errorHandler } from "./presentation/http/middlewares/errorHandler";
 import { createAdminRoutes } from "./presentation/http/routes/adminRoutes";
 import { createPipelineRoutes } from "./presentation/http/routes/pipelineRoutes";
+import { createCostRoutes } from "./presentation/http/routes/costRoutes";
+import { createVibecoreRoutes } from "./presentation/http/routes/vibecoreRoutes";
 
 export function createApp() {
     const app = express();
@@ -69,11 +72,16 @@ export function createApp() {
     app.use("/v1", createPipelineRoutes());
     app.use("/v1", createWysiwygRoutes());
     app.use("/v1", createExecutionLogRoutes());
+    app.use("/v1", createCostRoutes());
+    app.use("/v1", createVibecoreRoutes());
 
     // Publish: API routes (auth-protected) + static serving (public)
     const { apiRouter: publishApi, staticRouter: publishStatic } = createPublishRoutes();
     app.use("/v1", publishApi);
     app.use("/p", publishStatic);
+
+    // Public media serving — no auth, immutable URLs for project assets
+    app.use("/p", createPublicMediaRoutes());
 
     // Super admin routes — auth + requireSuperAdmin guard applied inside the router
     app.use("/v1", createAdminRoutes());

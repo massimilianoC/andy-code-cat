@@ -129,7 +129,9 @@ export function createPipelineRoutes(): Router {
                 const productKey = "default";
                 const optimize = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "zero_effort_optimize");
                 const generate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "zero_effort_generate");
-                res.json({ optimize, generate });
+                const vibeGenerate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "vibe_mode_generate");
+                const godModeGenerate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "god_mode_generate");
+                res.json({ optimize, generate, vibeGenerate, godModeGenerate });
             } catch (error) {
                 next(error);
             }

@@ -16,8 +16,10 @@ import {
     buildMessagesWithHistory,
 } from "../../../application/llm/llmMessageBuilder";
 import { buildStyleContextBlock } from "../../../application/llm/styleContextBuilder";
+import { resolveImagesInHtml } from "../../../application/llm/imageUrlRewriter";
+import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
 import { composeSystemPrompt, composeSystemPromptWithLayers } from "../../../application/llm/systemPromptComposer";
-import { buildPresetLayerFromPreset } from "../../../application/llm/systemPromptLayers";
+import { buildPresetLayerFromPreset, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
 import { estimateCost } from "../../../application/llm/costPolicy";
 import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
 import { env } from "../../../config";
@@ -26,6 +28,8 @@ import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmC
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
+import { CostTransactionService } from "../../../application/cost/CostTransactionService";
+import { ResourceType } from "../../../domain/entities/CostTransaction";
 import { MongoUserStyleProfileRepository } from "../../../infra/repositories/MongoUserStyleProfileRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
@@ -226,6 +230,7 @@ export function createLlmRoutes(): Router {
     const presetRepository = new MongoProjectPresetRepository();
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
     const snapshotRepository = new MongoPreviewSnapshotRepository();
+    const serviceKeyRepo = new MongoServiceApiKeyRepository();
 
     router.use(authMiddleware);
 
@@ -460,11 +465,12 @@ export function createLlmRoutes(): Router {
     }): Promise<LlmRuntimeContext> {
         const catalog = await getLlmCatalog.execute();
         const promptConfig = await getLlmPromptConfig.execute(input.projectId);
-        const [moodboard, userProfile, project, platformConfig] = await Promise.all([
+        const [moodboard, userProfile, project, platformConfig, projectAssets] = await Promise.all([
             moodboardRepository.findByProjectId(input.projectId),
             userStyleProfileRepository.findByUserId(input.userId),
             projectRepository.findByIdForUser(input.projectId, input.userId),
             platformConfigRepo.get().catch(() => null),
+            assetRepository.listByProject(input.projectId, input.userId).catch(() => [] as Awaited<ReturnType<typeof assetRepository.listByProject>>),
         ]);
         const preset = project?.presetId
             ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
@@ -478,6 +484,7 @@ export function createLlmRoutes(): Router {
 
         const styleBlock = buildStyleContextBlock(userProfile, moodboard);
         const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
+        const documentContextLayer = buildProjectKnowledgeLayer(projectAssets);
 
         const providerCatalog =
             (input.provider
@@ -515,6 +522,7 @@ export function createLlmRoutes(): Router {
             presetId: project?.presetId,
             presetLayer,
             styleBlock,
+            documentContextLayer: documentContextLayer || undefined,
             prePromptTemplate: effectivePrePromptTemplate || undefined,
             outputBudgetPolicy: buildOutputBudgetPolicy(),
             requestSystemPrompt: input.systemPrompt,
@@ -649,6 +657,7 @@ export function createLlmRoutes(): Router {
                 sessionId: body.sessionId,
                 provider: body.provider,
                 model: body.model,
+                taskKey: body.taskKey,
             });
 
             ExecutionLogger.instance.emit({
@@ -710,6 +719,7 @@ export function createLlmRoutes(): Router {
                 sessionId: body.sessionId,
                 provider: body.provider,
                 model: body.model,
+                taskKey: body.taskKey,
             }, {
                 onThinking: (chunk) => sendSse(res, { type: "thinking", content: String(chunk) }),
                 onAnswer: (chunk) => sendSse(res, { type: "answer", content: String(chunk) }),
@@ -786,10 +796,13 @@ export function createLlmRoutes(): Router {
             const styleBlock = buildStyleContextBlock(userProfile, moodboard);
             const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
             const governanceSystemPrompt = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates?.generationSystem || undefined;
+            const previewAssets = await assetRepository.listByProject(req.sandbox!.projectId, req.auth!.userId).catch(() => []);
+            const documentContextLayer = buildProjectKnowledgeLayer(previewAssets) || undefined;
             const layers = composeSystemPromptWithLayers({
                 presetId: project?.presetId,
                 presetLayer,
                 styleBlock,
+                documentContextLayer,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 outputBudgetPolicy: buildOutputBudgetPolicy(),
                 governanceSystemPrompt,
@@ -800,8 +813,9 @@ export function createLlmRoutes(): Router {
                     a_baseConstraints: layers.layerA,
                     b_presetModule: layers.layerB,
                     c_styleContext: layers.layerC,
-                    d_prePromptTemplate: layers.layerD,
-                    e_governance: layers.layerE,
+                    d_documentContext: layers.layerD,
+                    e_prePromptTemplate: layers.layerE,
+                    f_governance: layers.layerF,
                     budgetPolicy: layers.budgetPolicy,
                 },
                 composed: layers.composed,
@@ -1028,6 +1042,13 @@ export function createLlmRoutes(): Router {
                     }
                 }
             }
+            // Post-process: resolve placeholder image URLs via API connector chain (Pexels → Pixabay → Unsplash → LoremFlickr)
+            if (structured.artifacts?.html) {
+                structured = {
+                    ...structured,
+                    artifacts: { ...structured.artifacts, html: await resolveImagesInHtml(structured.artifacts.html, serviceKeyRepo) },
+                };
+            }
             const reply = (parsed.parseValid || focusPatchParseError) ? buildFormattedReply(structured) : rawReply;
             const resolvedUsage = resolveUsageWithFallback({
                 usage: sfJson?.usage
@@ -1150,6 +1171,29 @@ export function createLlmRoutes(): Router {
                 durationMs: result.durationMs,
             }).catch(() => { });
             // ── end cost accounting ───────────────────────────────────────────
+
+            // ── Cost ledger: append-only transaction record ───────────────────
+            CostTransactionService.instance.record({
+                userId: req.auth!.userId,
+                projectId: req.sandbox!.projectId,
+                resourceType: ResourceType.LLM_CHAT,
+                resourceSubtype: context.modelId,
+                providerCostUsd: providerCostUsd,
+                precomputedTotalEur: result.costEstimate?.amount,
+                units: result.usage ? {
+                    promptTokens: result.usage.promptTokens,
+                    completionTokens: result.usage.completionTokens,
+                    totalTokens: result.usage.totalTokens,
+                } : {},
+                sourceRef: { conversationId: body.conversationId },
+                meta: {
+                    provider: result.provider,
+                    model: result.model,
+                    finishReason: result.finishReason,
+                    isFocusedMode,
+                },
+            });
+            // ── end cost ledger ───────────────────────────────────────────────
 
             res.json(result);
         } catch (error) {
@@ -1510,6 +1554,13 @@ export function createLlmRoutes(): Router {
                     }
                 }
             }
+            // Post-process: resolve placeholder image URLs via API connector chain (Pexels → Pixabay → Unsplash → LoremFlickr)
+            if (structured.artifacts?.html) {
+                structured = {
+                    ...structured,
+                    artifacts: { ...structured.artifacts, html: await resolveImagesInHtml(structured.artifacts.html, serviceKeyRepo) },
+                };
+            }
             const reply = (parsed.parseValid || focusPatchParseErrorStream) ? buildFormattedReply(structured) : trimmedRaw;
             const resolvedUsage = resolveUsageWithFallback({
                 usage,
@@ -1610,6 +1661,30 @@ export function createLlmRoutes(): Router {
                 durationMs: result.durationMs,
             }).catch(() => { });
             // ── end cost accounting ───────────────────────────────────────────
+
+            // ── Cost ledger: append-only transaction record ───────────────────
+            CostTransactionService.instance.record({
+                userId: req.auth!.userId,
+                projectId: req.sandbox!.projectId,
+                resourceType: ResourceType.LLM_CHAT,
+                resourceSubtype: context.modelId,
+                providerCostUsd: providerCostUsdStream,
+                precomputedTotalEur: result.costEstimate?.amount,
+                units: result.usage ? {
+                    promptTokens: result.usage.promptTokens,
+                    completionTokens: result.usage.completionTokens,
+                    totalTokens: result.usage.totalTokens,
+                } : {},
+                sourceRef: { conversationId: body.conversationId },
+                meta: {
+                    provider: result.provider,
+                    model: result.model,
+                    finishReason: result.finishReason,
+                    isFocusedMode,
+                    streaming: true,
+                },
+            });
+            // ── end cost ledger ───────────────────────────────────────────────
 
             sendSse(res, { type: "done", result });
             res.end();

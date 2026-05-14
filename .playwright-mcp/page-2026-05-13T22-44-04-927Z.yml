@@ -1,0 +1,197 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button "← Dashboard" [ref=e6] [cursor=pointer]
+        - generic "DCL Test Project" [ref=e7]
+        - button "Configura progetto" [ref=e8] [cursor=pointer]
+      - generic "Costo totale progetto (chat LLM + optimizer)" [ref=e12]: €0.011
+    - generic [ref=e13]:
+      - complementary [ref=e14]:
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - generic [ref=e17]: DCL Test Project
+            - button "Configura progetto" [ref=e18] [cursor=pointer]:
+              - img [ref=e19]
+          - generic [ref=e22]:
+            - generic [ref=e23]: Chat di Progetto
+            - combobox [ref=e24] [cursor=pointer]:
+              - option "siliconflow" [selected]
+              - option "lmstudio"
+              - option "openrouter"
+            - combobox [ref=e25] [cursor=pointer]:
+              - option "€ FLUX.1-dev"
+              - option "€ FLUX.1-schnell"
+              - option "€€€ Seed-OSS-36B-Instruct"
+              - option "€€€€ DeepSeek-R1"
+              - option "€€€ DeepSeek-V3"
+              - option "€€€ DeepSeek-V3.1"
+              - option "€€€ DeepSeek-V3.1-Terminus"
+              - option "€€€ DeepSeek-V3.2"
+              - option "€€€ DeepSeek-V3.2-Exp"
+              - option "€€ DeepSeek-V4-Flash"
+              - option "€€€€ DeepSeek-V4-Pro"
+              - option "fish-speech-1.5"
+              - option "CosyVoice2-0.5B"
+              - option "€ gemma-4-26B-A4B-it"
+              - option "€€ gemma-4-31B-it"
+              - option "€€ Ling-flash-2.0"
+              - option "€€ Ring-flash-2.0"
+              - option "IndexTTS-2"
+              - option "€€€€ MiniMax-M2.5" [selected]
+              - option "€€€€ Kimi-K2-Instruct"
+              - option "€€€€ Kimi-K2-Instruct-0905"
+              - option "€€€ Kimi-K2.5"
+              - option "€€€€ Kimi-K2.6"
+              - option "€€€ DeepSeek-V3.1-Nex-N1"
+              - option "€ gpt-oss-120b"
+              - option "€ gpt-oss-20b"
+              - option "€€€€ Qwen2.5-72B-Instruct"
+              - option "€ Qwen2.5-7B-Instruct"
+              - option "€ Qwen3-14B"
+              - option "€ Qwen3-235B-A22B-Instruct-2507"
+              - option "€ Qwen3-30B-A3B-Instruct-2507"
+              - option "€ Qwen3-30B-A3B-Thinking-2507"
+              - option "€€ Qwen3-32B"
+              - option "€ Qwen3-8B"
+              - option "€ Qwen3-Coder-30B-A3B-Instruct"
+              - option "€ Qwen3-Embedding-4B"
+              - option "€ Qwen3-Embedding-8B"
+              - option "Qwen3-Reranker-0.6B"
+              - option "Qwen3-Reranker-8B"
+              - option "€€€ Qwen3-VL-30B-A3B-Instruct"
+              - option "€€€ Qwen3-VL-30B-A3B-Thinking"
+              - option "€€ Qwen3-VL-32B-Instruct"
+              - option "€€ Qwen3-VL-32B-Thinking"
+              - option "€€ Qwen3-VL-8B-Instruct"
+              - option "Qwen3.5-122B-A10B"
+              - option "Qwen3.5-27B"
+              - option "Qwen3.5-35B-A3B"
+              - option "Qwen3.5-397B-A17B"
+              - option "Qwen3.5-9B"
+              - option "Qwen3.6-27B"
+              - option "Qwen3.6-35B-A3B"
+              - option "€€ Step-3.5-Flash"
+              - option "€€ Hunyuan-A13B-Instruct"
+              - option "€€ Hy3-preview"
+              - option "€€ GLM-4.5-Air"
+              - option "€€€€ GLM-4.6"
+              - option "€€€€ GLM-4.6V"
+              - option "€€€€ GLM-4.7"
+              - option "€€€€ GLM-5"
+              - option "€€€€ GLM-5.1"
+              - option "€€€€ GLM-5V-Turbo"
+              - option "── 🆓 Free models ──" [disabled]
+              - option "bge-large-en-v1.5"
+              - option "bge-m3"
+              - option "Qwen3-Embedding-0.6B"
+          - paragraph [ref=e26]: Optimize prompt usa siliconflow · MiniMax-M2.5
+        - generic [ref=e27]:
+          - generic [ref=e28]:
+            - generic [ref=e29]:
+              - generic [ref=e30]:
+                - button "Copia messaggio": Copia
+                - text: "# BRIEF DI PROGETTO — DCL Test Project ## [IDENTITÀ] Brand e tipo sito - **Brand:** DCL Test Project - **Tipo sito:** business website ## [OBIETTIVO] Descrizione e obiettivo principale Andy Code Cat è una piattaforma AI per la generazione automatica di siti web. - Obiettivo: generare siti professionali in pochi minuti - Pubblico: sviluppatori e designer - Punto di forza: enrichment automatico dei documenti tramite DCL ## [AUDIENCE] Target e pubblico di riferimento Sviluppatori e designer professionisti tra 25-45 anni, italiani e internazionali, interessati a strumenti AI per la creazione rapida di siti web professionali ## [STILE] Attributi visivi, tono e CTA - **Attributi visivi:** dark, tech - **Tono di voce:** Professionale, innovativo, diretto - **CTA principale:** Inizia ora - **Note stilistiche aggiuntive:** Colori scuri, accenti cyan/teal, tipografia moderna sans-serif --- *Brief strutturato Zero Effort · business website · Sezioni: 3*"
+              - generic [ref=e31]: user
+            - generic [ref=e32]:
+              - generic [ref=e33]:
+                - button "Copia messaggio": Copia
+                - text: "# BRIEF DI PROGETTO — DCL Test Project ## [IDENTITÀ] Brand e tipo sito - **Brand:** DCL Test Project - **Brand positioning:** Piattaforma AI innovativa per la generazione automatica di siti web - **Tipo sito:** Business Website — Landing page / Sito vetrina ## [OBIETTIVO] Descrizione e obiettivo principale **Andy Code Cat** è una piattaforma AI all'avanguardia che rivoluziona il processo di creazione di siti web professionali. - **Obiettivo primario:** Consentire agli utenti di generare siti web completi e professionali in pochi minuti, grazie alla potenza dell'intelligenza artificiale - **Proposta di valore unica:** Enrichment automatico dei documenti tramite tecnologia DCL — trasformazione instantanea di contenuti in strutture web pronte all'uso - **Beneficio chiave:** Eliminazione delle complessità tecniche, risparmio di tempo significativo, risultati immediatamente professionali ## [AUDIENCE] Target e pubblico di riferimento **Pubblico primario:** - Sviluppatori web professionisti (frontend/backend/full-stack) - Designer UX/UI e web designer - Professionisti digitali italiani e internazionali - Età: 25-45 anni - Livello esperienza: intermedio-avanzato **Profilo psicografico:** - Orientati alla tecnologia e all'innovazione - Cercano strumenti che ottimizzino i workflow di sviluppo - Apprezzano soluzioni eleganti che combinino velocità e qualità - Valutano il rapporto tempo/risultato nelle scelte tecnologiche **Bisogni e pain points:** - Necessità di accelerare i tempi di sviluppo - Frustrazione con processi ripetitivi e manuali - Desiderio di mantenere standard qualitativi elevati senza sacrificare velocità ## [MESSAGGIO] Storytelling e tono **Tono di voce:** - **Professionale:** Linguaggio chiaro, competente, autorevole - **Innovativo:** Visione futuristica, posizionamento all'avanguardia - **Diretto:** Messaggi concisi, senza fronzoli, orientati ai risultati **Claim chiave da comunicare:** - \"Genera siti professionali in minuti, non in ore\" - L'AI che trasforma i tuoi documenti in siti web completi **Struttura narrativa suggerita:** 1. Hook: Il problema — creare siti web richiede troppo tempo 2. Soluzione: Andy Code Cat e la potenza dell'AI 3. Differenziatore: L'enrichment automatico DCL 4. Prova sociale / Dimostrazione 5. CTA: Inizia ora ## [STILE] Attributi visivi, tono e CTA **Palette cromatica:** - **Primaria:** Colori scuri (nero profondo, grigio antracite, blu notte) - **Accenti:** Cyan e teal — vivaci, tecnologici, distintivi - **Contrasto:** Zone scure con elementi luminosity alta per massimizzare leggibilità e impatto visivo **Tipografia:** - Font moderni sans-serif - Clean, geometriche, leggibili - Hierarchy chiara: titoli bold, body leggero **Atmosfera visiva:** - Dark mode dominante - Estetica tech/futuristica - Elementi di profondità (gradients, shadows, glassmorphism sottile) - Accenti luminosi che suggeriscono innovazione e potenza AI **Layout e composizione:** - Struttura pulita e organizzata - Ampio uso di spazio negativo - Elementi visivi che evocano tecnologia (pattern geometrici, linee, dati) - Sezioni ben definite con transizioni fluide **CTA (Call to Action):** - **Primario:** \"Inizia ora\" - **Secondario:** \"Scopri come funziona\" / \"Demo gratuita\" - Stile: Bottone prominente, colore accent cyan/teal, contrasto elevato ## [STRUTTURA] Sezioni del sito Il sito dovrà includere le seguenti sezioni principali: 1. **Hero Section** — Headline d'impatto, sottotitolo chiaro, CTA principale, visual evocativo 2. **Feature/Benefit** — Presentazione dei punti di forza (generazione rapida, enrichment DCL, qualità professionale) 3. **Come funziona** — Spiegazione semplice e visiva del processo 4. **CTA finale** — Invito all'azione per conversions --- *Brief ottimizzato per generazione — DCL Test Project · Business Website · Target: Sviluppatori e Designer 25-45 · Tono: Professionale, Innovativo, Diretto · Style: Dark, Tech, Cyan/Teal accents*"
+              - generic [ref=e34]: user
+            - generic [ref=e35]:
+              - generic [ref=e36]:
+                - button "Copia messaggio": Copia
+                - generic [ref=e37]:
+                  - paragraph [ref=e38]: Generated a dark tech business website for DCL Test Project with hero, features, how-it-works, and CTA sections using Tailwind CSS, GSAP animations, and Lucide icons.
+                  - list [ref=e39]:
+                    - listitem [ref=e40]: "Created 4-section landing page: Hero, Features, How It Works, Final CTA"
+                    - listitem [ref=e41]: "Used dark theme (#0a0a0f, #111118) with cyan/teal accents (#06b6d4, #14b8a6)"
+                    - listitem [ref=e42]: Added GSAP entrance animations for visual impact
+                    - listitem [ref=e43]: Included Lucide icons for feature cards and process steps
+                  - generic [ref=e44]:
+                    - generic [ref=e45]: Prossimi passi
+                    - list [ref=e46]:
+                      - listitem [ref=e47]: Review the generated website
+                      - listitem [ref=e48]: Test responsiveness across breakpoints
+                      - listitem [ref=e49]: Consider adding more sections or interactive elements
+              - generic [ref=e50]: assistant
+              - button "Dettagli richiesta" [ref=e52] [cursor=pointer]: ℹ 10.515 tok · 59.5s · €0.0087
+          - separator "Ridimensiona input chat" [ref=e53]
+          - generic [ref=e54]:
+            - generic [ref=e55]:
+              - button "Choose File" [ref=e56]
+              - textbox "Scrivi cosa vuoi realizzare..." [ref=e57]
+              - button "Allega file" [ref=e58] [cursor=pointer]
+              - button "Avvia dettatura" [ref=e60] [cursor=pointer]
+            - generic [ref=e64]: "Chrome: dettatura vocale pronta"
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - button "Dettagli ultima richiesta" [ref=e68] [cursor=pointer]: ℹ 10.515 tok · 59.5s · €0.0087
+                - generic [ref=e69]: "optimizer: 2 runs · €0.011"
+              - generic [ref=e70]:
+                - button "Optimize · MiniMax-M2.5" [disabled]
+                - button "Invia" [disabled] [ref=e71]
+      - separator "Ridimensiona pannelli" [ref=e72]
+      - generic [ref=e73]:
+        - generic [ref=e74]:
+          - generic [ref=e75]:
+            - generic [ref=e76]: format v2
+            - generic [ref=e77]: siliconflow
+            - generic [ref=e78]: MiniMaxAI/MiniMax-M2.5
+            - generic [ref=e79]: injected
+          - generic [ref=e80]:
+            - button "⬇ ZIP" [ref=e81] [cursor=pointer]
+            - button "📷" [ref=e83] [cursor=pointer]
+            - button "🌐 Pubblica" [ref=e84] [cursor=pointer]
+            - button "v1 MiniMax-M2.5 ▾" [ref=e87] [cursor=pointer]:
+              - generic [ref=e88]: v1
+              - generic [ref=e89]: MiniMax-M2.5
+              - generic [ref=e90]: ▾
+        - generic [ref=e91]:
+          - button "PREVIEW" [ref=e92] [cursor=pointer]
+          - button "HTML" [ref=e93] [cursor=pointer]
+          - button "CSS" [ref=e94] [cursor=pointer]
+          - button "JS" [ref=e95] [cursor=pointer]
+          - button "🔍 PROMPT" [active] [ref=e96] [cursor=pointer]
+          - generic [ref=e117]: Nessuna selezione
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - generic [ref=e120]: "System prompt composto passato all'LLM — sola lettura~3444 token · preset: nessuno"
+            - button "↻ Ricarica" [ref=e121] [cursor=pointer]
+          - generic [ref=e122]:
+            - generic [ref=e123]:
+              - generic [ref=e124] [cursor=pointer]:
+                - generic [ref=e125]: ▼
+                - generic [ref=e126]: LAYER A — Vincoli base
+                - generic [ref=e127]: sempre attivo
+                - generic [ref=e128]: Costante del sistema
+              - generic [ref=e129]: "## LAYER A — BASE ARCHITECTURAL CONSTRAINTS You are a static web page generator for the Andy Code Cat platform. Your output must always be a complete, self-contained page that can be served by nginx without modifications. Non-negotiable rules for ALL output types: - Produce exactly 1 HTML file + 1 CSS file + 1 JS file — standalone and executable without a build step. - All external dependencies (libraries, fonts, icons) via CDN only (<script src>, <link rel=stylesheet>) — never import via npm or require(). - Mobile-first responsive design: optimize for 375px (mobile), 768px (tablet), 1280px (desktop). - Semantic HTML5: use <header>, <nav>, <main>, <section>, <article>, <footer> where semantically appropriate. - Accessibility baseline: meaningful alt text on images, sufficient color contrast (WCAG AA), keyboard-navigable focus. - Performance: no render-blocking resources above the fold, use loading=\"lazy\" on below-the-fold images. - No JavaScript framework (React, Vue, Angular, Svelte) — vanilla JS only. - CSS strategy: choose Tailwind CDN OR vanilla CSS — never both in the same output. - artifacts.css and artifacts.js must be plain strings without <style> or <script> wrappers. - All JavaScript MUST go exclusively in artifacts.js. Never embed script logic inline in the HTML artifact — not in <script> tags, not as event attributes. In the HTML, reference JS only with: <script src=\"app.js\"></script>. HTML compactness rules (mandatory): - Target HTML under 30 KB (approx 30 000 chars). Aim for the minimum markup that achieves the design. - Use 2-space indentation — never 4-space or tabs. - Do NOT add HTML comments in the output. - Never duplicate a structural pattern — extract repeating markup into reusable CSS classes instead. - Avoid inline style= attributes; put all styling in artifacts.css. - Do not repeat identical class lists across sibling elements — factor them into a shared parent or CSS rule."
+            - generic [ref=e130]:
+              - generic [ref=e131] [cursor=pointer]:
+                - generic [ref=e132]: ▼
+                - generic [ref=e133]: LAYER B — Modulo preset
+                - generic [ref=e134]: nessun preset
+                - generic [ref=e135]: Configurazione progetto (⚙ rotella)
+              - generic [ref=e136]: (vuoto — nessun preset assegnato al progetto)
+            - generic [ref=e137]:
+              - generic [ref=e138] [cursor=pointer]:
+                - generic [ref=e139]: ▼
+                - generic [ref=e140]: LAYER C — Contesto stile
+                - generic [ref=e141]: moodboard + profilo utente
+                - generic [ref=e142]: Profilo utente (profilazione iniziale) + Moodboard progetto (⚙ rotella)
+              - generic [ref=e143]: "## STYLE CONTEXT Project brief: # BRIEF DI PROGETTO — DCL Test Project ## [IDENTITÀ] Brand e tipo sito - **Brand:** DCL Test Project - **Tipo sito:** business website ## [OBIETTIVO] Descrizione e obiettivo principale Andy Code Cat è una piattaforma AI per la generazione automatica di siti web. - Obiettivo: generare siti professionali in pochi minuti - Pubblico: sviluppatori e designer - Punto di forza: enrichment automatico dei documenti tramite DCL ## [AUDIENCE] Target e pubblico di riferimento Sviluppatori e designer professionisti tra 25-45 anni, italiani e internazionali, interessati a strumenti AI per la creazione rapida di siti web professionali ## [STILE] Attributi visivi, tono e CTA - **Attributi visivi:** dark, tech - **Tono di voce:** Professionale, innovativo, diretto - **CTA principale:** Inizia ora - **Note stilistiche aggiuntive:** Colori scuri, accenti cyan/teal, tipografia moderna sans-serif --- *Brief strutturato Zero Effort · business website · Sezioni: 3* Target audience: DCL Test Project — Sviluppatori e designer professionisti tra 25-45 anni, italiani e internazionali, interessati a strumenti AI per la creazione rapida di siti web professionali Style notes: Tone: Professionale, innovativo, diretto • CTA: Inizia ora • Style: Colori scuri, accenti cyan/teal, tipografia moderna sans-serif Use the style context above as a mandatory design constraint when generating or modifying the site. Do not ignore these preferences even if the user message doesn't explicitly reference them."
+            - generic [ref=e144]:
+              - generic [ref=e145] [cursor=pointer]:
+                - generic [ref=e146]: ▼
+                - generic [ref=e147]: LAYER D — Template personalizzato
+                - generic [ref=e148]: dormiente
+                - generic [ref=e149]: Configurazione avanzata progetto (non attiva)
+              - generic [ref=e150]: (vuoto — nessun template personalizzato configurato)
+            - generic [ref=e151]:
+              - generic [ref=e152] [cursor=pointer]:
+                - generic [ref=e153]: ▼
+                - generic [ref=e154]: POLICY — Budget output
+                - generic [ref=e155]: sistema
+                - generic [ref=e156]: Configurazione automatica token/output
+              - generic [ref=e157]: "## OUTPUT BUDGET POLICY Keep outputs compact and parse-safe. - Return ONLY one raw JSON object — no markdown fences, no prose before or after the JSON. - Required keys: chat (with summary, bullets, nextActions) and artifacts (with html, css, js). - TOTAL OUTPUT MUST stay under 167,000 tokens. Target 8000–32000 tokens for typical requests, up to budget for large/complex outputs. Never repeat the entire artifact if only a small change is needed. - HTML target: under 30 KB. Factor repeated visual blocks into CSS classes rather than duplicating markup. - Keep artifacts concise and functional; avoid unnecessary boilerplate. - artifacts.css and artifacts.js must be plain code strings without <style> or <script> wrappers. - Use standard single-backslash JSON escaping: \\\" for quotes inside HTML, \\n for newlines. Never double-escape. ## REASONING / THINKING BUDGET (critical) - Do NOT over-analyze the task. Keep internal reasoning/thinking under 2000 tokens. - Skip exploratory analysis and enumeration of rejected alternatives. - For code generation: plan briefly (under 300 words), then produce the JSON output immediately. - Never restate the entire user request in your reasoning. Summarize intent in one sentence, then code."
+  - alert [ref=e3]

@@ -146,6 +146,8 @@ export interface OptimizePromptInput {
     sessionId?: string;
     provider?: string;
     model?: string;
+    /** Task key to resolve platform task settings (e.g. "zero_effort_optimize"). Defaults to "optimize_user_prompt". */
+    taskKey?: string;
 }
 
 export interface OptimizePromptResult {
@@ -253,7 +255,9 @@ export interface LlmPromptPreviewDto {
         a_baseConstraints: string;
         b_presetModule: string;
         c_styleContext: string;
-        d_prePromptTemplate: string;
+        d_documentContext: string;
+        e_prePromptTemplate: string;
+        f_governance?: string;
         budgetPolicy: string;
     };
     composed: string;

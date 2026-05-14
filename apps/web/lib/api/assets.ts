@@ -1,5 +1,35 @@
 import { call, ApiError } from "./call";
 
+export interface DocumentBriefDto {
+    documentType: string;
+    detectedTitle: string | null;
+    detectedBrandName: string | null;
+    purposeSentence: string;
+    contentSummary: string;
+    mainArgumentOrValue: string | null;
+    structureSummary: string | null;
+    keyMessages: string[];
+    toneLabel: string;
+    targetAudience: string | null;
+    ctaText: string | null;
+    primaryTopics: string[];
+    contentLanguage: string;
+    suggestedStyleRole: string;
+}
+
+export interface ImageDesignSignalsDto {
+    imageCategory: string;
+    hasText: boolean;
+    detectedTextSnippet: string | null;
+    hasLogo: boolean;
+    hasPeople: boolean;
+    hasProduct: boolean;
+    layoutStyle: string | null;
+    aspectRatioLabel: string | null;
+    suggestedWebUse: string[];
+    suggestedStyleRole: string;
+}
+
 export interface ProjectAssetDto {
     id: string;
     projectId: string;
@@ -55,6 +85,19 @@ export interface ProjectAssetDto {
         classifierModel: string;
         classifiedAt: string;
     };
+    enrichmentTrace?: {
+        provenance: {
+            enrichmentStatus: "pending" | "ready" | "failed" | "skipped";
+            enrichedAt?: string | null;
+            errorMessage?: string | null;
+        };
+        distilledTitle?: string;
+        distilledSummary?: string;
+        distilledTags?: string[];
+        distilledColors?: string[];
+        documentBrief?: DocumentBriefDto | null;
+        designSignals?: ImageDesignSignalsDto | null;
+    } | null;
     createdAt: string;
 }
 
@@ -186,6 +229,15 @@ export function listProjectAssets(token: string, projectId: string) {
     );
 }
 
+export function getProjectAsset(token: string, projectId: string, assetId: string) {
+    return call<{ asset: ProjectAssetDto }>(
+        "GET",
+        `/v1/projects/${projectId}/assets/${assetId}`,
+        undefined,
+        { Authorization: `Bearer ${token}`, "x-project-id": projectId }
+    );
+}
+
 export async function uploadProjectAsset(
     token: string,
     projectId: string,
@@ -291,6 +343,12 @@ export async function downloadProjectAssetDataUrl(token: string, projectId: stri
         reader.onloadend = () => resolve(String(reader.result ?? ""));
         reader.readAsDataURL(blob);
     });
+}
+
+/** Returns a public (no-auth) URL for serving an asset file inline. */
+export function getPublicAssetUrl(assetId: string): string {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    return `${baseUrl}/p/media/${assetId}`;
 }
 
 /** Returns the download URL for an asset (use with fetch + Authorization header). */

@@ -505,6 +505,7 @@ export interface AdminProjectActiveDeploymentDto {
     publishId: string;
     customSlug?: string;
     url: string;
+    subdomainUrl?: string | null;
     isAdminBlocked: boolean;
 }
 
@@ -549,4 +550,82 @@ export function adminListProjects(token: string, params?: AdminListProjectsParam
 
 export function adminDeleteProject(token: string, projectId: string): Promise<{ deleted: boolean }> {
     return call("DELETE", `/v1/admin/projects/${projectId}`, undefined, auth(token));
+}
+
+// ── Service API keys ──────────────────────────────────────────────────────────
+
+export type ServiceCategory = "image" | "video" | "llm" | "other";
+
+export interface ServiceApiKeyDto {
+    id: string;
+    service: string;
+    label: string;
+    category: ServiceCategory;
+    ownerType: "platform" | "user";
+    enabled: boolean;
+    supportsVideo: boolean;
+    isDefault: boolean;
+    /** Masked plain-text: first 4 + *** + last 4 chars */
+    maskedKey: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface EnvKeyStatusDto {
+    pexels: boolean;
+    pixabay: boolean;
+    unsplash: boolean;
+    siliconflow: boolean;
+    openrouter: boolean;
+}
+
+export function getServiceKeyEnvStatus(token: string): Promise<EnvKeyStatusDto> {
+    return call<EnvKeyStatusDto>("GET", "/v1/admin/service-keys/env-status", undefined, auth(token));
+}
+
+export function listServiceKeys(token: string): Promise<{ keys: ServiceApiKeyDto[] }> {
+    return call<{ keys: ServiceApiKeyDto[] }>("GET", "/v1/admin/service-keys", undefined, auth(token));
+}
+
+export function createServiceKey(
+    token: string,
+    body: {
+        service: string;
+        label: string;
+        category: ServiceCategory;
+        plaintextKey: string;
+        enabled?: boolean;
+        supportsVideo?: boolean;
+        isDefault?: boolean;
+    },
+): Promise<ServiceApiKeyDto> {
+    return call<ServiceApiKeyDto>("POST", "/v1/admin/service-keys", body, auth(token));
+}
+
+export function updateServiceKey(
+    token: string,
+    id: string,
+    body: {
+        label?: string;
+        enabled?: boolean;
+        supportsVideo?: boolean;
+        isDefault?: boolean;
+        plaintextKey?: string;
+    },
+): Promise<ServiceApiKeyDto> {
+    return call<ServiceApiKeyDto>("PATCH", `/v1/admin/service-keys/${id}`, body, auth(token));
+}
+
+export function deleteServiceKey(token: string, id: string): Promise<{ ok: boolean }> {
+    return call<{ ok: boolean }>("DELETE", `/v1/admin/service-keys/${id}`, undefined, auth(token));
+}
+
+export interface SeedFromEnvResultDto {
+    ok: boolean;
+    seeded: string[];
+    skipped: string[];
+}
+
+export function seedServiceKeysFromEnv(token: string): Promise<SeedFromEnvResultDto> {
+    return call<SeedFromEnvResultDto>("POST", "/v1/admin/service-keys/seed-from-env", undefined, auth(token));
 }

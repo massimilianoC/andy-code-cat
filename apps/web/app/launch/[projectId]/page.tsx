@@ -2,11 +2,12 @@
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { launchZeroEffort, getZeroEffortConfig, type ZeroEffortLaunchInput, type ZeroEffortPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
 import { optimizePrompt } from "../../../lib/api/llm";
+import { uploadProjectAsset } from "../../../lib/api/assets";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import {
     Sparkles,
     Target,
     Trash2,
+    Upload,
     Wand2,
 } from "lucide-react";
 
@@ -52,7 +54,7 @@ interface ExtendedForm {
 type GenerationPhase =
     | "review"       // show normalized brief, Avvia Generazione button
     | "optimizing"   // calling optimize API
-    | "optimized";   // show optimized prompt — redirect to GodMode to generate
+    | "optimized";   // show optimized prompt — redirect to Guided Mode to generate
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -337,7 +339,7 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
 
 // ─── Structured brief builder ─────────────────────────────────────────────────
 
-function buildStructuredBrief(form: ExtendedForm, projectName: string): string {
+function buildStructuredBrief(form: ExtendedForm, projectName: string, docNames?: string[]): string {
     const siteTypeLabels: Record<string, string> = {
         landing_page: "Landing Page",
         business_site: "Business Site",
@@ -403,7 +405,13 @@ function buildStructuredBrief(form: ExtendedForm, projectName: string): string {
         sections.push(`## [CONTATTI] Informazioni di contatto e dati salienti\n\n${contactLines}`);
     }
 
-    const footer = `\n---\n*Brief strutturato Zero Effort · ${siteLabel} · Sezioni: ${sections.length - 1}*`;
+    // ── [ALLEGATI] ──────────────────────────────────────────────────────────
+    if (docNames && docNames.length > 0) {
+        const docList = docNames.map((d) => `- ${d}`).join("\n");
+        sections.push(`## [ALLEGATI] Documenti analizzati per il brief\n\n${docList}`);
+    }
+
+    const footer = `\n---\n*Brief strutturato Guided Mode · ${siteLabel} · Sezioni: ${sections.length - 1}*`;
     return sections.join("\n\n") + footer;
 }
 
@@ -421,7 +429,7 @@ function phaseLabel(phase: GenerationPhase): string {
     switch (phase) {
         case "review": return "Pronto per la generazione";
         case "optimizing": return "Ottimizzazione prompt...";
-        case "optimized": return "Prompt ottimizzato — continua in GodMode per generare";
+        case "optimized": return "Prompt ottimizzato — continua in Guided Mode per generare";
     }
 }
 
@@ -430,6 +438,7 @@ function phaseLabel(phase: GenerationPhase): string {
 export default function ZeroEffortLaunchPage() {
     const params = useParams<{ projectId: string }>();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const projectId = params?.projectId ?? "";
     const step4Ref = useRef<HTMLDivElement>(null);
 
@@ -443,6 +452,9 @@ export default function ZeroEffortLaunchPage() {
     const [currentStep, setCurrentStep] = useState(1);
     const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
 
+    // AI-prefilled review mode
+    const [aiPrefilled, setAiPrefilled] = useState(false);
+
     // brief editor
     const [editedBrief, setEditedBrief] = useState("");
 
@@ -451,6 +463,12 @@ export default function ZeroEffortLaunchPage() {
     const [genError, setGenError] = useState<string | null>(null);
     const [optimizedPrompt, setOptimizedPrompt] = useState("");
     const [editedOptimizedPrompt, setEditedOptimizedPrompt] = useState("");
+
+    // document upload zone
+    const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
+    const [uploadingFiles, setUploadingFiles] = useState(false);
+    const [isDragOver, setIsDragOver] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [form, setForm] = useState<ExtendedForm>({
         businessName: "",
@@ -480,6 +498,45 @@ export default function ZeroEffortLaunchPage() {
             .catch(() => setError("Unable to load the project."))
             .finally(() => setLoading(false));
     }, [projectId, router]);
+
+    // On mount: read sessionStorage prefill draft if ?prefilled=1 is present
+    useEffect(() => {
+        if (searchParams?.get("prefilled") !== "1" || !projectId) return;
+        try {
+            const raw = sessionStorage.getItem(`ze_prefill_${projectId}`);
+            if (!raw) return;
+            sessionStorage.removeItem(`ze_prefill_${projectId}`);
+            const draft = JSON.parse(raw) as Record<string, unknown>;
+            patch({
+                businessName:    typeof draft.businessName === "string" ? draft.businessName : "",
+                siteType:        (["landing_page","portfolio","showcase","business_site"].includes(String(draft.siteType))
+                    ? draft.siteType as ZeroEffortLaunchInput["siteType"]
+                    : "landing_page"),
+                primaryGoal:     typeof draft.primaryGoal === "string" ? draft.primaryGoal : "",
+                audience:        typeof draft.audience    === "string" ? draft.audience    : "",
+                tone:            typeof draft.tone        === "string" ? draft.tone        : undefined,
+                primaryCta:      typeof draft.primaryCta  === "string" ? draft.primaryCta  : undefined,
+                styleHint:       typeof draft.styleHint   === "string" ? draft.styleHint   : undefined,
+                styleAttributes: Array.isArray(draft.styleAttributes) ? draft.styleAttributes as string[] : [],
+                contactFields:   Array.isArray(draft.contactInfo)
+                    ? (draft.contactInfo as Array<{key:string;value:string}>)
+                        .filter((c) => c && typeof c.key === "string" && typeof c.value === "string")
+                        .map((c) => ({ id: `cf-${c.key}`, key: c.key, value: c.value }))
+                    : [],
+            });
+            // Restore the names of documents that the AI used to generate this brief
+            if (Array.isArray(draft.attachedDocuments)) {
+                setAttachedFiles(
+                    (draft.attachedDocuments as unknown[]).filter((d): d is string => typeof d === "string"),
+                );
+            }
+            setCompletedSteps(new Set([1, 2, 3]));
+            setAiPrefilled(true);
+        } catch {
+            // ignore parse errors — fall back to manual wizard
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectId, searchParams]);
 
     useEffect(() => {
         if (result && step4Ref.current) {
@@ -520,6 +577,20 @@ export default function ZeroEffortLaunchPage() {
         });
     }
 
+    async function handleFiles(files: FileList | File[]) {
+        if (!token || !projectId) return;
+        setUploadingFiles(true);
+        for (const file of Array.from(files)) {
+            try {
+                await uploadProjectAsset(token, projectId, file, { useInProject: true });
+                setAttachedFiles((prev) => [...prev, file.name]);
+            } catch {
+                // continue uploading remaining files even if one fails
+            }
+        }
+        setUploadingFiles(false);
+    }
+
     async function handleSubmit() {
         if (!token || !step1Valid || !step2Valid) return;
         setSubmitting(true);
@@ -545,7 +616,7 @@ export default function ZeroEffortLaunchPage() {
             setResult(briefResult);
             // Build the structured brief client-side from the full form data
             // so every section and long-text field is included verbatim.
-            setEditedBrief(buildStructuredBrief(form, project?.name ?? ""));
+            setEditedBrief(buildStructuredBrief(form, project?.name ?? "", attachedFiles));
             setPipelineConfig(configResult);
             setCompletedSteps(new Set([1, 2, 3]));
             setPhase("review");
@@ -565,6 +636,9 @@ export default function ZeroEffortLaunchPage() {
             const optimizeRes = await optimizePrompt(token, projectId, {
                 rawPrompt: editedBrief,
                 conversationId: result.conversationId,
+                taskKey: "zero_effort_optimize",
+                provider: pipelineConfig?.optimize.provider,
+                model: pipelineConfig?.optimize.model,
             });
             setOptimizedPrompt(optimizeRes.optimizedPrompt);
             setEditedOptimizedPrompt(optimizeRes.optimizedPrompt);
@@ -578,8 +652,71 @@ export default function ZeroEffortLaunchPage() {
     function handleGoToGodMode() {
         if (!result) return;
         const finalPrompt = editedOptimizedPrompt || optimizedPrompt;
-        const url = `/workspace/${projectId}?conv=${result.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`;
+        let url = `/workspace/${projectId}?conv=${result.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`;
+        if (pipelineConfig?.vibeGenerate?.provider) {
+            url += `&preferredProvider=${encodeURIComponent(pipelineConfig.vibeGenerate!.provider)}`;
+        }
+        if (pipelineConfig?.vibeGenerate?.model) {
+            url += `&preferredModel=${encodeURIComponent(pipelineConfig.vibeGenerate!.model)}`;
+        }
         router.push(url);
+    }
+
+    /**
+     * Guided Mode one-click flow (from AI prefill card):
+     * 1. launchZeroEffort → get brief + conversationId
+     * 2. optimizePrompt   → get optimized prompt
+     * 3. navigate         → /workspace with autoPrompt
+     */
+    async function handleGodModeGenerate() {
+        if (!token) return;
+        setSubmitting(true);
+        setError(null);
+        const payload: ZeroEffortLaunchInput = {
+            businessName:   form.businessName,
+            siteType:       form.siteType,
+            primaryGoal:    form.primaryGoal,
+            audience:       form.audience,
+            tone:           form.tone,
+            primaryCta:     form.primaryCta,
+            styleHint:      form.styleHint,
+            contactInfo:    form.contactFields
+                .filter((cf) => cf.key.trim() && cf.value.trim())
+                .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
+            styleAttributes: form.styleAttributes,
+        };
+        try {
+            const [briefResult, configResult] = await Promise.all([
+                launchZeroEffort(token, projectId, payload),
+                getZeroEffortConfig(token, projectId).catch(() => null),
+            ]);
+            const localConfig = configResult;
+            const brief = buildStructuredBrief(form, project?.name ?? "", attachedFiles);
+
+            // Always run one optimization pass — the structured brief (AI-prefilled or manual)
+            // needs to be rewritten with system-layer context before entering Guided Mode.
+            // When AI-prefilled, skipAutoOptimize=1 prevents a second pass in the workspace.
+            const optimizeRes = await optimizePrompt(token, projectId, {
+                rawPrompt: brief,
+                conversationId: briefResult.conversationId,
+                taskKey: "zero_effort_optimize",
+                provider: localConfig?.optimize.provider,
+                model: localConfig?.optimize.model,
+            });
+            const finalPrompt = optimizeRes.optimizedPrompt;
+
+            const skipParam = aiPrefilled ? "&skipAutoOptimize=1" : "";
+            const modelParams = localConfig?.vibeGenerate
+                ? `&preferredProvider=${encodeURIComponent(localConfig.vibeGenerate!.provider)}&preferredModel=${encodeURIComponent(localConfig.vibeGenerate!.model)}`
+                : "";
+            router.push(
+                `/workspace/${projectId}?conv=${briefResult.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}${skipParam}${modelParams}`,
+            );
+        } catch (e) {
+            const message = e instanceof Error ? e.message : "Impossibile avviare la generazione.";
+            setError(message);
+            setSubmitting(false);
+        }
     }
 
     if (loading) {
@@ -597,7 +734,7 @@ export default function ZeroEffortLaunchPage() {
                 {/* Header */}
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <Badge variant="accent" className="mb-2">Zero Effort</Badge>
+                        <Badge variant="accent" className="mb-2">Guided Mode</Badge>
                         <h1 className="text-2xl font-semibold tracking-tight">
                             Generazione guidata
                         </h1>
@@ -611,49 +748,150 @@ export default function ZeroEffortLaunchPage() {
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => router.push(
                             result ? `/workspace/${projectId}?conv=${result.conversationId}` : `/workspace/${projectId}`
-                        )}>
-                            GodMode
-                        </Button>
+                        )}>Guided Mode</Button>
                     </div>
                 </div>
 
-                {/* Step progress bar */}
-                <div className="flex items-center gap-2">
-                    {STEPS.map((step, index) => (
-                        <div key={step.number} className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (completedSteps.has(step.number) || step.number <= currentStep) {
-                                        setCurrentStep(step.number);
-                                    }
-                                }}
-                                className={cn(
-                                    "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors",
-                                    completedSteps.has(step.number)
-                                        ? "bg-primary text-primary-foreground cursor-pointer"
-                                        : step.number === currentStep
-                                        ? "bg-primary/20 border border-primary text-primary cursor-pointer"
-                                        : "bg-muted text-muted-foreground cursor-default",
+                {/* ── AI Prefill review card ── */}
+                {aiPrefilled && !result && (
+                    <Card className="border-primary/40 bg-primary/[0.03]">
+                        <CardHeader className="pb-3">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+                                    <Sparkles className="h-4 w-4" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <span>✦ Pre-compilato dall&apos;AI</span>
+                                        <Badge variant="accent" className="text-xs font-normal">Rivedi e genera</Badge>
+                                    </CardTitle>
+                                    <CardDescription className="text-xs mt-0.5">
+                                        L&apos;AI ha estratto i dati dalla tua richiesta. Genera subito oppure modifica prima i campi.
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3 pt-0">
+                            {/* Summary grid */}
+                            <div className="rounded-md border border-border bg-background/60 p-3 space-y-2 text-sm">
+                                <div className="flex items-baseline gap-2 flex-wrap">
+                                    <span className="text-muted-foreground text-xs w-24 shrink-0">Brand</span>
+                                    <span className="font-medium text-foreground truncate">{form.businessName || "—"}</span>
+                                    <Badge variant="secondary" className="text-xs font-normal capitalize ml-auto">
+                                        {form.siteType.replace("_", " ")}
+                                    </Badge>
+                                </div>
+                                {form.primaryGoal && (
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">Obiettivo</span>
+                                        <p className="text-xs text-foreground line-clamp-3 flex-1">{form.primaryGoal}</p>
+                                    </div>
                                 )}
-                            >
-                                {completedSteps.has(step.number) ? <Check className="h-3.5 w-3.5" /> : step.number}
-                            </button>
-                            <span className={cn(
-                                "hidden text-xs font-medium sm:block",
-                                step.number === currentStep ? "text-foreground" : "text-muted-foreground",
-                            )}>
-                                {step.title}
-                            </span>
-                            {index < STEPS.length - 1 && (
-                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-1" />
-                            )}
-                        </div>
-                    ))}
-                </div>
+                                {form.audience && (
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">Audience</span>
+                                        <p className="text-xs text-foreground line-clamp-2 flex-1">{form.audience}</p>
+                                    </div>
+                                )}
+                                {(form.styleAttributes?.length ?? 0) > 0 && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0">Stile</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {form.styleAttributes.map((a) => (
+                                                <Badge key={a} variant="outline" className="text-xs font-normal capitalize">{a}</Badge>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {form.contactFields.length > 0 && (
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">Contatti</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {form.contactFields.slice(0, 4).map((cf) => (
+                                                <Badge key={cf.id} variant="secondary" className="text-xs font-normal">
+                                                    {cf.key}: {cf.value.slice(0, 30)}{cf.value.length > 30 ? "…" : ""}
+                                                </Badge>
+                                            ))}
+                                            {form.contactFields.length > 4 && (
+                                                <Badge variant="outline" className="text-xs text-muted-foreground">
+                                                    +{form.contactFields.length - 4}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
 
-                {/* Accordion steps */}
-                <div className="space-y-3">
+                            {error && (
+                                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                                    {error}
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-between pt-1 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setAiPrefilled(false)}
+                                    disabled={submitting}
+                                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                                >
+                                    Modifica manualmente
+                                </button>
+                                <Button
+                                    onClick={() => void handleGodModeGenerate()}
+                                    disabled={submitting}
+                                    className="gap-2"
+                                >
+                                    {submitting ? (
+                                        <><Loader2 className="h-4 w-4 animate-spin" /> Generazione in corso…</>
+                                    ) : (
+                                        <><Rocket className="h-4 w-4" /> Guided Mode — Genera</>
+                                    )}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Step progress bar + Accordion steps — hidden in AI prefill mode */}
+                {!aiPrefilled && (
+                    <>
+                        <div className="flex items-center gap-2">
+                            {STEPS.map((step, index) => (
+                                <div key={step.number} className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (completedSteps.has(step.number) || step.number <= currentStep) {
+                                                setCurrentStep(step.number);
+                                            }
+                                        }}
+                                        className={cn(
+                                            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors",
+                                            completedSteps.has(step.number)
+                                                ? "bg-primary text-primary-foreground cursor-pointer"
+                                                : step.number === currentStep
+                                                ? "bg-primary/20 border border-primary text-primary cursor-pointer"
+                                                : "bg-muted text-muted-foreground cursor-default",
+                                        )}
+                                    >
+                                        {completedSteps.has(step.number) ? <Check className="h-3.5 w-3.5" /> : step.number}
+                                    </button>
+                                    <span className={cn(
+                                        "hidden text-xs font-medium sm:block",
+                                        step.number === currentStep ? "text-foreground" : "text-muted-foreground",
+                                    )}>
+                                        {step.title}
+                                    </span>
+                                    {index < STEPS.length - 1 && (
+                                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-1" />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Accordion steps */}
+                        <div className="space-y-3">
                     {STEPS.map((step) => {
                         const isOpen = currentStep === step.number;
                         const isDone = completedSteps.has(step.number);
@@ -731,7 +969,60 @@ export default function ZeroEffortLaunchPage() {
                             </Card>
                         );
                     })}
-                </div>
+                        </div>
+                    </>
+                )}
+
+                {/* ── Document upload zone ── */}
+                <Card className={cn(
+                    "transition-all border-dashed",
+                    isDragOver ? "border-primary bg-primary/5" : "border-border",
+                )}>
+                    <CardContent className="p-0">
+                        <div
+                            className="flex flex-col items-center gap-3 p-6 cursor-pointer select-none"
+                            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                            onDragLeave={() => setIsDragOver(false)}
+                            onDrop={(e) => { e.preventDefault(); setIsDragOver(false); void handleFiles(e.dataTransfer.files); }}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <div className={cn(
+                                "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+                                isDragOver ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground",
+                            )}>
+                                {uploadingFiles
+                                    ? <Loader2 className="h-5 w-5 animate-spin" />
+                                    : <Upload className="h-5 w-5" />
+                                }
+                            </div>
+                            <div className="text-center">
+                                <p className="text-sm font-medium">
+                                    {uploadingFiles ? "Caricamento in corso..." : "Allega documenti di contesto"}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    PDF, DOCX, TXT, MD, immagini — trascinali qui o clicca per sfogliare
+                                </p>
+                            </div>
+                            {attachedFiles.length > 0 && (
+                                <div className="flex flex-wrap justify-center gap-1.5 mt-1">
+                                    {attachedFiles.map((name, i) => (
+                                        <Badge key={i} variant="secondary" className="text-xs font-normal max-w-[180px] truncate">
+                                            {name}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            className="hidden"
+                            multiple
+                            accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
+                            onChange={(e) => { if (e.target.files) void handleFiles(e.target.files); e.target.value = ""; }}
+                        />
+                    </CardContent>
+                </Card>
 
                 {/* ── Step 4 — Generazione automatica (appare dopo API success) ── */}
                 {result && (
@@ -756,7 +1047,7 @@ export default function ZeroEffortLaunchPage() {
                                     </CardDescription>
                                 </div>
                                 <Badge variant={phase === "optimized" ? "success" : "secondary"} className="ml-auto text-xs">
-                                    {phase === "optimized" ? "Prompt pronto" : `${pipelineConfig?.generate?.model ?? "MiniMax-M2.5"}`}
+                                    {phase === "optimized" ? "Prompt pronto" : `${pipelineConfig?.vibeGenerate?.model ?? "MiniMax-M2.5"}`}
                                 </Badge>
                             </div>
                         </CardHeader>
@@ -860,7 +1151,7 @@ export default function ZeroEffortLaunchPage() {
                                         <div className="flex items-start gap-3">
                                             <Sparkles className="mt-0.5 h-4 w-4 text-primary shrink-0" />
                                             <p className="text-xs text-muted-foreground">
-                                                Il prompt è pronto. Clicca <strong className="text-foreground">Continua in GodMode</strong> per generare il sito con salvataggio completo dell&apos;artefatto, preview e strumenti di modifica.
+                                                Il prompt è pronto. Clicca <strong className="text-foreground">Continua in Guided Mode</strong> per generare il sito con salvataggio completo dell&apos;artefatto, preview e strumenti di modifica.
                                             </p>
                                         </div>
                                     </div>
@@ -875,7 +1166,7 @@ export default function ZeroEffortLaunchPage() {
                                             </Button>
                                             <Button size="sm" onClick={handleGoToGodMode} className="gap-2">
                                                 <Rocket className="h-3.5 w-3.5" />
-                                                Continua in GodMode
+                                                Continua in Guided Mode
                                             </Button>
                                         </div>
                                     </div>

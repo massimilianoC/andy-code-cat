@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type { Collection, Filter } from "mongodb";
 import { getDb } from "../db/mongo";
 import type { AssetGenerationMetadata, AssetGenerationStatus, AssetScope, AssetSemanticMetadata, AssetSource, AssetStyleRole, ProjectAsset, AssetGenerationUsageSummary, AssetGenerationModelSummary } from "../../domain/entities/ProjectAsset";
+import type { AssetEnrichmentTrace } from "../../domain/entities/AssetEnrichmentTrace";
 import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAssetRepository";
 
 const COLLECTION = "project_assets";
@@ -25,6 +26,7 @@ interface ProjectAssetDocument {
     generationPrompt?: string;
     generationMetadata?: AssetGenerationMetadata;
     semanticMetadata?: AssetSemanticMetadata;
+    enrichmentTrace?: AssetEnrichmentTrace | null;
     createdAt: Date;
 }
 
@@ -176,6 +178,12 @@ export class MongoProjectAssetRepository implements ProjectAssetRepository {
         return doc ? toEntity(doc) : null;
     }
 
+    async findByIdPublic(id: string): Promise<ProjectAsset | null> {
+        const col = await this.col();
+        const doc = await col.findOne({ _id: id });
+        return doc ? toEntity(doc) : null;
+    }
+
     async delete(id: string, projectId: string, userId: string): Promise<boolean> {
         const col = await this.col();
         const result = await col.deleteOne(buildAccessibleAssetFilter(projectId, userId, id));
@@ -239,6 +247,20 @@ export class MongoProjectAssetRepository implements ProjectAssetRepository {
             .limit(limit)
             .toArray();
         return docs.map(toEntity);
+    }
+
+    async saveEnrichmentTrace(
+        id: string,
+        projectId: string,
+        trace: AssetEnrichmentTrace,
+    ): Promise<ProjectAsset | null> {
+        const col = await this.col();
+        await col.updateOne(
+            { _id: id, projectId },
+            { $set: { enrichmentTrace: trace } },
+        );
+        const doc = await col.findOne({ _id: id, projectId });
+        return doc ? toEntity(doc) : null;
     }
 
     /** Call once at startup to ensure indexes exist. */

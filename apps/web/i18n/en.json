@@ -382,7 +382,9 @@
             "styleRole": "Style role…",
             "descriptionPlaceholder": "Description…",
             "confirmDelete": "Delete \"{{name}}\"?",
-            "uploadError": "Upload error."
+            "uploadError": "Upload error.",
+            "assetBriefHeading": "Brief",
+            "assetDesignSignalsHeading": "Image analysis"
         },
         "tagCategories": {
             "era": "Era / Movement",
@@ -399,6 +401,59 @@
         "cancel": "Cancel",
         "save": "Save",
         "saving": "Saving…"
+    },
+    "vibecore": {
+        "heading": "What do you want to build today?",
+        "subtitle": "Describe your idea — the AI handles the rest",
+        "placeholder": "E.g. a landing page for a beauty salon, elegant tone, neutral palette…",
+        "cta": "Create with AI",
+        "scrollHint": "scroll to your projects",
+        "attach": "Attach",
+        "attachHint": "Drag files or click to attach — PDF, DOCX, images, max 10 MB",
+        "dropHere": "Drop here",
+        "newProject": "New project",
+        "error": "An error occurred. Please try again.",
+        "removeFile": "Remove",
+        "phase": {
+            "classifying": "Analysing request…",
+            "prefilling": "Pre-filling fields with AI…",
+            "creating": "Creating workspace…",
+            "uploading": "Uploading files…",
+            "redirecting": "Opening…",
+            "hints": {
+                "classifying": [
+                    "Reading your idea…",
+                    "Detecting project type…",
+                    "Classifying intent…",
+                    "Identifying output format…"
+                ],
+                "prefilling": [
+                    "Extracting key details…",
+                    "Structuring your brief…",
+                    "Analysing tone and style…",
+                    "Identifying your audience…",
+                    "Building project fields…",
+                    "Processing document context…"
+                ],
+                "creating": [
+                    "Initialising workspace…",
+                    "Setting up your project…"
+                ],
+                "uploading": [
+                    "Uploading your files…",
+                    "Processing documents…",
+                    "Starting enrichment pipeline…"
+                ],
+                "redirecting": [
+                    "Almost ready…",
+                    "Opening your workspace…"
+                ]
+            }
+        },
+        "tokenCounter": "~ {{count}} tokens",
+        "prefillBanner": "✦ Pre-filled by AI · Review and generate",
+        "prefillEdit": "Edit manually",
+        "prefillCta": "God Mode — Generate"
     },
     "workspace": {
         "selectionNone": "No selection",
@@ -561,6 +616,21 @@
             "voiceStartTitle": "Start dictation with microphone",
             "voiceListeningLabel": "Stop dictation",
             "voiceStartLabel": "Start dictation",
+            "attachError": "File attachment failed. Supported formats: PDF, DOCX, DOC, TXT, MD, images.",
+            "attachTitle": "Attach document or image",
+            "attachLabel": "Attach file",
+            "dropToAttach": "Drop files to attach",
+            "removeAttachment": "Remove attachment",
+            "uploading": "Uploading…",
+            "uploadSuccess": "Attached to project",
+            "imageSuggestionLogo": "Use as logo",
+            "imageSuggestionBackground": "Use as background",
+            "imageSuggestionIcon": "Use as icon",
+            "imageSuggestionDismiss": "Dismiss",
+            "autoOptimizeOn": "Auto-optimize ON",
+            "autoOptimizeOff": "Auto-optimize OFF",
+            "autoOptimizeOnTitle": "Auto-optimize is ON: Send will optimize the prompt automatically before sending",
+            "autoOptimizeOffTitle": "Auto-optimize is OFF: prompt will be sent as-is",
             "voiceListening": "🎙️ Listening...",
             "voiceReady": "Chrome: voice dictation ready",
             "inspectElementLabel": "Element: ",
@@ -588,6 +658,7 @@
             "optimizeWith": "Optimize · {{model}}",
             "optimizePrompt": "Optimize prompt",
             "restoreOriginal": "Restore original",
+            "clearPrompt": "Clear",
             "stopGeneration": "Stop the current generation",
             "sending": "Sending...",
             "send": "Send",
@@ -661,10 +732,13 @@
                 "layerCBadgeEmpty": "empty",
                 "layerCSource": "User profile (initial profiling) + Project moodboard (⚙ gear)",
                 "layerCEmpty": "(empty — no user profiling data or moodboard configured)",
-                "layerD": "LAYER D — Custom template",
-                "layerDBadge": "dormant",
-                "layerDSource": "Advanced project configuration (not active)",
-                "layerDEmpty": "(empty — no custom template configured)",
+                "layerD": "LAYER D — Document context",
+                "layerDBadge": "enriched assets",
+                "layerDSource": "Uploaded assets enriched by DCL pipeline",
+                "layerDEmpty": "(empty — no enriched assets)",
+                "layerE": "LAYER E — Custom template",
+                "layerEBadge": "active",
+                "layerESource": "Advanced project configuration (⚙ gear)",
                 "policy": "POLICY — Output budget",
                 "policyBadge": "system",
                 "policySource": "Automatic token/output configuration"

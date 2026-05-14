@@ -30,7 +30,7 @@ export function createWysiwygEditSession(
 ) {
     return call<{ session: WysiwygEditSessionDto; resumed: boolean }>(
         "POST",
-        `/projects/${projectId}/wysiwyg/sessions`,
+        `/v1/projects/${projectId}/wysiwyg/sessions`,
         input,
         { Authorization: `Bearer ${token}`, "x-project-id": projectId }
     );
@@ -44,7 +44,7 @@ export function saveWysiwygEditState(
 ) {
     return call<{ session: WysiwygEditSessionDto }>(
         "PATCH",
-        `/projects/${projectId}/wysiwyg/sessions/${sessionId}/state`,
+        `/v1/projects/${projectId}/wysiwyg/sessions/${sessionId}/state`,
         input,
         { Authorization: `Bearer ${token}`, "x-project-id": projectId }
     );
@@ -58,7 +58,7 @@ export function commitWysiwygSession(
 ) {
     return call<{ snapshot: PreviewSnapshot; session: WysiwygEditSessionDto }>(
         "POST",
-        `/projects/${projectId}/wysiwyg/sessions/${sessionId}/commit`,
+        `/v1/projects/${projectId}/wysiwyg/sessions/${sessionId}/commit`,
         input ?? {},
         { Authorization: `Bearer ${token}`, "x-project-id": projectId }
     );
@@ -71,7 +71,7 @@ export function getWysiwygEditSession(
 ) {
     return call<{ session: WysiwygEditSessionDto }>(
         "GET",
-        `/projects/${projectId}/wysiwyg/sessions/${sessionId}`,
+        `/v1/projects/${projectId}/wysiwyg/sessions/${sessionId}`,
         undefined,
         { Authorization: `Bearer ${token}`, "x-project-id": projectId }
     );

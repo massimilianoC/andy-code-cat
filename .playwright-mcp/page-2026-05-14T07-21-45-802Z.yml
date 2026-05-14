@@ -1,0 +1,30 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - link "🐱 ANDY" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: 🐱
+        - generic [ref=e6]: ANDY
+      - generic [ref=e7]:
+        - group "Language selector" [ref=e8]:
+          - button "Italiano" [pressed] [ref=e9] [cursor=pointer]: 🇮🇹
+          - button "English" [ref=e10] [cursor=pointer]: 🇬🇧
+        - button "Stato API" [ref=e11] [cursor=pointer]
+        - link "Accedi" [ref=e13] [cursor=pointer]:
+          - /url: /login
+        - link "Crea account" [ref=e14] [cursor=pointer]:
+          - /url: /register
+    - main [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - generic [ref=e19]: 🐱
+          - generic [ref=e20]:
+            - heading "ANDY" [level=1] [ref=e21]
+            - paragraph [ref=e22]: Il gatto che programma per te.
+            - paragraph [ref=e23]: Crea siti straordinari con l'intelligenza artificiale.
+        - generic [ref=e24]:
+          - link "Accedi" [ref=e25] [cursor=pointer]:
+            - /url: /login
+          - link "Inizia ora" [ref=e26] [cursor=pointer]:
+            - /url: /register
+  - alert [ref=e27]

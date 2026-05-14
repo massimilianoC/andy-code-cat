@@ -1,12 +1,13 @@
-import { buildBaseConstraintsLayer, buildPresetLayer } from "./systemPromptLayers";
+import { buildBaseConstraintsLayer, buildLayerT, buildPresetLayer, type TemplateResolution } from "./systemPromptLayers";
 
 const LAYER_SEPARATOR = "\n\n---\n\n";
 
 /**
- * Compose the full system prompt from the 4 architectural layers + budget policy.
+ * Compose the full system prompt from the architectural layers + budget policy.
  *
  * Layer A — Base constraints (always present)
  * Layer B — Preset output format (only when presetId is set)
+ * Layer T — Template resolution slot (Layer Φ output: formatHint or userTemplate preprompt)
  * Layer C — Style context block (from buildStyleContextBlock)
  * Layer D — Pre-prompt template (user-configurable per project)
  * Layer E — Governance system prompt (operator-injected via platform config)
@@ -18,16 +19,22 @@ const LAYER_SEPARATOR = "\n\n---\n\n";
 export function composeSystemPrompt(opts: {
     presetId?: string | null;
     presetLayer?: string;
+    templateResolution?: TemplateResolution | null;
+    userTemplatePreprompt?: string;
     styleBlock?: string;
+    documentContextLayer?: string;
     prePromptTemplate?: string;
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
     governanceSystemPrompt?: string;
 }): string {
+    const layerT = buildLayerT(opts.templateResolution, { userTemplatePreprompt: opts.userTemplatePreprompt });
     return [
         buildBaseConstraintsLayer(),
         opts.presetLayer ?? buildPresetLayer(opts.presetId),
+        layerT,
         opts.styleBlock ?? "",
+        opts.documentContextLayer ?? "",
         opts.prePromptTemplate ?? "",
         opts.governanceSystemPrompt ?? "",
         opts.outputBudgetPolicy ?? "",
@@ -41,9 +48,11 @@ export function composeSystemPrompt(opts: {
 export interface ResolvedPromptLayers {
     layerA: string;
     layerB: string;
+    layerT: string;
     layerC: string;
     layerD: string;
     layerE: string;
+    layerF: string;
     budgetPolicy: string;
     composed: string;
 }
@@ -55,7 +64,10 @@ export interface ResolvedPromptLayers {
 export function composeSystemPromptWithLayers(opts: {
     presetId?: string | null;
     presetLayer?: string;
+    templateResolution?: TemplateResolution | null;
+    userTemplatePreprompt?: string;
     styleBlock?: string;
+    documentContextLayer?: string;
     prePromptTemplate?: string;
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
@@ -63,15 +75,17 @@ export function composeSystemPromptWithLayers(opts: {
 }): ResolvedPromptLayers {
     const layerA = buildBaseConstraintsLayer();
     const layerB = opts.presetLayer ?? buildPresetLayer(opts.presetId);
+    const layerT = buildLayerT(opts.templateResolution, { userTemplatePreprompt: opts.userTemplatePreprompt });
     const layerC = opts.styleBlock ?? "";
-    const layerD = opts.prePromptTemplate ?? "";
-    const layerE = opts.governanceSystemPrompt ?? "";
+    const layerD = opts.documentContextLayer ?? "";
+    const layerE = opts.prePromptTemplate ?? "";
+    const layerF = opts.governanceSystemPrompt ?? "";
     const budgetPolicy = opts.outputBudgetPolicy ?? "";
 
-    const composed = [layerA, layerB, layerC, layerD, layerE, budgetPolicy, opts.requestSystemPrompt ?? ""]
+    const composed = [layerA, layerB, layerT, layerC, layerD, layerE, layerF, budgetPolicy, opts.requestSystemPrompt ?? ""]
         .filter(Boolean)
         .join(LAYER_SEPARATOR)
         .trim();
 
-    return { layerA, layerB, layerC, layerD, layerE, budgetPolicy, composed };
+    return { layerA, layerB, layerT, layerC, layerD, layerE, layerF, budgetPolicy, composed };
 }

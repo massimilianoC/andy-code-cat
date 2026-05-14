@@ -1,3 +1,5 @@
+import type { AssetEnrichmentTrace } from "./AssetEnrichmentTrace";
+
 /**
  * Who created this asset:
  * - 'user_upload'       → user-uploaded via multipart/form-data HTTP route
@@ -103,5 +105,7 @@ export interface ProjectAsset {
     generationMetadata?: AssetGenerationMetadata;
     /** Optional semantic classifier output used for later prompt enrichment. */
     semanticMetadata?: AssetSemanticMetadata;
+    /** Full enrichment trace produced by the Document Context Layer pipeline. Null until async enrichment has run. */
+    enrichmentTrace?: AssetEnrichmentTrace | null;
     createdAt: Date;
 }

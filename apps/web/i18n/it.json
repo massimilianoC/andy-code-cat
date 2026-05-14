@@ -382,7 +382,9 @@
             "styleRole": "Ruolo stile…",
             "descriptionPlaceholder": "Descrizione…",
             "confirmDelete": "Eliminare \"{{name}}\"?",
-            "uploadError": "Errore durante il caricamento."
+            "uploadError": "Errore durante il caricamento.",
+            "assetBriefHeading": "Brief",
+            "assetDesignSignalsHeading": "Analisi immagine"
         },
         "tagCategories": {
             "era": "Era / Movimento",
@@ -399,6 +401,59 @@
         "cancel": "Annulla",
         "save": "Salva",
         "saving": "Salvataggio…"
+    },
+    "vibecore": {
+        "heading": "Cosa vuoi realizzare oggi?",
+        "subtitle": "Descrivi la tua idea — l'AI fa il resto",
+        "placeholder": "Es. una landing page per un salone di bellezza, tono elegante, palette neutra…",
+        "cta": "Crea con AI",
+        "scrollHint": "scorri per i tuoi progetti",
+        "attach": "Allega",
+        "attachHint": "Trascina file o clicca per allegare — PDF, DOCX, immagini, max 10 MB",
+        "dropHere": "Rilascia qui",
+        "newProject": "Nuovo progetto",
+        "error": "Si è verificato un errore. Riprova.",
+        "removeFile": "Rimuovi",
+        "phase": {
+            "classifying": "Analisi della richiesta…",
+            "prefilling": "Pre-compilazione campi AI…",
+            "creating": "Creazione del workspace…",
+            "uploading": "Carico i file…",
+            "redirecting": "Apertura…",
+            "hints": {
+                "classifying": [
+                    "Leggo la tua idea…",
+                    "Rilevo il tipo di progetto…",
+                    "Classifico l'intento…",
+                    "Identifico il formato…"
+                ],
+                "prefilling": [
+                    "Estraggo le informazioni chiave…",
+                    "Struttura il brief…",
+                    "Analizzo tono e stile…",
+                    "Identifico il pubblico target…",
+                    "Genero i campi del progetto…",
+                    "Processo il contesto documentale…"
+                ],
+                "creating": [
+                    "Inizializzo il workspace…",
+                    "Configuro il progetto…"
+                ],
+                "uploading": [
+                    "Carico i tuoi file…",
+                    "Processo i documenti…",
+                    "Avvio la pipeline di arricchimento…"
+                ],
+                "redirecting": [
+                    "Quasi pronto…",
+                    "Apertura workspace…"
+                ]
+            }
+        },
+        "tokenCounter": "~ {{count}} token",
+        "prefillBanner": "✦ Pre-compilato dall'AI · Rivedi e genera",
+        "prefillEdit": "Modifica manualmente",
+        "prefillCta": "God Mode — Genera"
     },
     "workspace": {
         "selectionNone": "Nessuna selezione",
@@ -561,6 +616,21 @@
             "voiceStartTitle": "Detta il prompt con il microfono",
             "voiceListeningLabel": "Ferma dettatura",
             "voiceStartLabel": "Avvia dettatura",
+            "attachError": "Allegato non riuscito. Formati supportati: PDF, DOCX, DOC, TXT, MD, immagini.",
+            "attachTitle": "Allega documento o immagine",
+            "attachLabel": "Allega file",
+            "dropToAttach": "Trascina qui per allegare",
+            "removeAttachment": "Rimuovi allegato",
+            "uploading": "Caricamento in corso…",
+            "uploadSuccess": "Allegato al progetto",
+            "imageSuggestionLogo": "Usa come logo",
+            "imageSuggestionBackground": "Usa come sfondo",
+            "imageSuggestionIcon": "Usa come icona",
+            "imageSuggestionDismiss": "Ignora",
+            "autoOptimizeOn": "Auto-ottimizza ON",
+            "autoOptimizeOff": "Auto-ottimizza OFF",
+            "autoOptimizeOnTitle": "Auto-ottimizzazione attiva: il prompt verrà ottimizzato automaticamente prima dell'invio",
+            "autoOptimizeOffTitle": "Auto-ottimizzazione disattiva: il prompt verrà inviato così com'è",
             "voiceListening": "🎙️ Ascolto in corso…",
             "voiceReady": "Chrome: dettatura vocale pronta",
             "inspectElementLabel": "Elemento: ",
@@ -588,6 +658,7 @@
             "optimizeWith": "Optimize · {{model}}",
             "optimizePrompt": "Optimize prompt",
             "restoreOriginal": "Ripristina originale",
+            "clearPrompt": "Cancella",
             "stopGeneration": "Interrompi la generazione in corso",
             "sending": "Invio...",
             "send": "Invia",
@@ -661,10 +732,13 @@
                 "layerCBadgeEmpty": "vuoto",
                 "layerCSource": "Profilo utente (profilazione iniziale) + Moodboard progetto (⚙ rotella)",
                 "layerCEmpty": "(vuoto — nessun dato di profilazione utente o moodboard configurato)",
-                "layerD": "LAYER D — Template personalizzato",
-                "layerDBadge": "dormiente",
-                "layerDSource": "Configurazione avanzata progetto (non attiva)",
-                "layerDEmpty": "(vuoto — nessun template personalizzato configurato)",
+                "layerD": "LAYER D — Contesto documenti",
+                "layerDBadge": "asset arricchiti",
+                "layerDSource": "Asset caricati arricchiti dalla pipeline DCL",
+                "layerDEmpty": "(vuoto — nessun asset arricchito)",
+                "layerE": "LAYER E — Template personalizzato",
+                "layerEBadge": "attivo",
+                "layerESource": "Configurazione avanzata progetto (⚙ rotella)",
                 "policy": "POLICY — Budget output",
                 "policyBadge": "sistema",
                 "policySource": "Configurazione automatica token/output"

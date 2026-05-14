@@ -44,6 +44,7 @@ Read in this order before making changes:
 |---|---|
 | [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) | Primary entry point for coding agents |
 | [docs/agents/LLM_PROVIDER_HANDOFF_RECAP.md](agents/LLM_PROVIDER_HANDOFF_RECAP.md) | LLM provider and chat-preview implementation notes |
+| [docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md](agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md) | Layer ownership map and collision-prevention rules for parallel agents |
 
 ---
 
@@ -72,6 +73,8 @@ Read in this order before making changes:
 |---|---|
 | [docs/specs/SPEC.md](specs/SPEC.md) | Backend API platform and MVP architecture |
 | [docs/specs/DB_PLATFORM_SPEC.md](specs/DB_PLATFORM_SPEC.md) | MongoDB schema design, publication model, and credit system |
+| [docs/specs/COST_TRANSACTION_LEDGER_SPEC.md](specs/COST_TRANSACTION_LEDGER_SPEC.md) | Centralized cost-transaction ledger — atomic per-event billing, configurable rates, policy enforcement, and SuperAdmin cost UI |
+| [docs/specs/COST_ANALYTICS_DASHBOARDS_SPEC.md](specs/COST_ANALYTICS_DASHBOARDS_SPEC.md) | User Usage tab and Admin Cost Intelligence dashboard — multi-dimensional cost explorer across providers, models, users, and projects |
 | [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
 | [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | Preprompt engine service and composition flow |
 | [docs/specs/WORKFLOWS.md](specs/WORKFLOWS.md) | Automated workflow definitions WF-01 to WF-10 |
@@ -86,16 +89,20 @@ Read in this order before making changes:
 | Document | Description |
 |---|---|
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
+| [docs/specs/I18N_ARTIFACTS_SPEC.md](specs/I18N_ARTIFACTS_SPEC.md) | Multilingual support for LLM-generated artifact websites — post-publication translation pipeline |
 | [docs/specs/UX_REVIEW_AND_PUBLISH_SPEC.md](specs/UX_REVIEW_AND_PUBLISH_SPEC.md) | Review workspace and publish flow |
 | [docs/specs/WYSIWYG_EDIT_MODE_SPEC.md](specs/WYSIWYG_EDIT_MODE_SPEC.md) | WYSIWYG editor architecture and milestones |
 | [docs/specs/ONBOARDING_AND_STYLE_PROFILING_SPEC.md](specs/ONBOARDING_AND_STYLE_PROFILING_SPEC.md) | Onboarding, style profiling, and Layer 0 context |
 | [docs/specs/PRESET_TYPED_SPECS.md](specs/PRESET_TYPED_SPECS.md) | Preset catalog, output contracts, and prompt modules |
+| [docs/specs/IMAGE_PICKER_SPEC.md](specs/IMAGE_PICKER_SPEC.md) | Edit-mode image picker: refresh + save icons on images, API connector chain, asset persistence |
 | [docs/specs/SECTION_CONTEXT_OPT_SPEC.md](specs/SECTION_CONTEXT_OPT_SPEC.md) | Section-aware context optimization |
 | [docs/specs/PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX and guardrails |
 | [docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md](specs/PROMPTING_SERVICE_PLATFORM_SPEC.md) | Internal prompting platform and audit model |
 | [docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md](specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md) | Ultra-operational MVP spec for Zero Effort + GodMode, shared orchestration, and parallel implementation waves |
 | [docs/specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md](specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md) | Evoluzione Zero Effort: media upload step, Layer F media context nel prompt, async job tracking, notifiche email/Telegram |
 | [docs/specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md](specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md) | Asset-aware prompt enrichment plan |
+| [docs/specs/DOCUMENT_CONTEXT_LAYER_SPEC.md](specs/DOCUMENT_CONTEXT_LAYER_SPEC.md) | Document Context Layer — PDF/DOCX parsing, image vision analysis, AssetEnrichmentTrace envelope, and Layer D prompt injection |
+| [docs/specs/EXTERNAL_API_KEYS_PLATFORM_SPEC.md](specs/EXTERNAL_API_KEYS_PLATFORM_SPEC.md) | External API Key Management — ServiceApiKey collection, AES-256-GCM encryption, image service fallback policy, admin UI Integration Hub, BYOK-ready architecture |
 | [docs/specs/IMAGE_PROMPTING_PIPELINE_SPEC.md](specs/IMAGE_PROMPTING_PIPELINE_SPEC.md) | Structured image prompting, context enrichment, and versioning-aligned pipeline |
 | [docs/specs/BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | Backend-as-a-service extension layer |
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
@@ -103,6 +110,32 @@ Read in this order before making changes:
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin controls and platform governance |
 | [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](specs/FIRST_INSTALL_SETUP_SPEC.md) | First-install wizard, guided server config, superadmin seed, emergency DB promotion |
 | [docs/specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md](specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md) | Multi-domain deployment implementation plan — R3.1–R3.4, nginx vhost generation, SSL automation, domain admin API/UI |
+| [docs/specs/USER_SETTINGS_AND_API_KEYS_SPEC.md](specs/USER_SETTINGS_AND_API_KEYS_SPEC.md) | R3.5 — User-owned API keys (programmatic access) and unified role-scoped settings panel |
+| [docs/specs/DASHBOARD_LOVABLE_CHAT_SPEC.md](specs/DASHBOARD_LOVABLE_CHAT_SPEC.md) | Dashboard Lovable Chat — ChatPanel reusable component, entry-point chat, and LLM intent-to-template classifier |
+| [docs/specs/ZERO_EFFORT_PREFILL_SPEC.md](specs/ZERO_EFFORT_PREFILL_SPEC.md) | Zero Effort LLM Prefill — one-pass LLM pre-population of all Zero Effort wizard fields, token counter, AI review card, God Mode one-click generation |
+
+## VibeCore Components (feat/dashboard-lovable-chat)
+
+| Path | Description |
+|---|---|
+| `apps/web/components/dashboard/VibeCoreEntry.tsx` | Full-screen glass card entry — textarea, file drag-drop, mode selector, phase state machine, Layer Φ classify → createProject → upload → redirect |
+| `apps/web/components/dashboard/VibeCoreBackground.tsx` | CSS-only SVG blob background (4 ellipses, 45–60 s drift, feGaussianBlur) |
+| `apps/web/components/dashboard/ModeSelector.tsx` | Segmented EASY / MEDIUM / HARD pill with per-mode glow ring |
+| `apps/web/components/dashboard/ScrollBlurOverlay.tsx` | Fixed overlay that fades + blurs the VibeCore section as user scrolls down |
+| `apps/web/hooks/useScrollRatio.ts` | Hook returning scroll progress ratio (0–1) between two pixel offsets |
+| `apps/web/lib/api/vibecore.ts` | Web client for `POST /v1/vibecore/classify` and `POST /v1/vibecore/prefill` |
+| `packages/contracts/src/vibecore.ts` | Shared VibeCore types: `FormatHint`, `AttachmentMeta`, `VibeClassifyRequest/Response` |
+| `apps/api/src/application/use-cases/VibeClassify.ts` | Layer Φ intent + format classifier use-case (LLM call, confidence threshold, graceful skip) |
+| `apps/api/src/application/prompting/formatHintRules.ts` | Format hint catalog (7 categories) and template list block builder |
+| `apps/api/src/presentation/http/routes/vibecoreRoutes.ts` | `POST /v1/vibecore/classify` — auth-protected, no sandbox (pre-project) |
+
+---
+
+## Test Reports
+
+| Document | Description |
+|---|---|
+| [docs/reports/E2E_DCL_REPORT_2026-05-14.md](reports/E2E_DCL_REPORT_2026-05-14.md) | Autonomous E2E session — DCL pipeline, Zero Effort flow, Layer D verification, 5 bugs found and fixed |
 
 ---
 

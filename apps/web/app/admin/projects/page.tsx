@@ -389,6 +389,19 @@ export default function AdminProjectsPage() {
                                                     <span>{selectedProject.presetId ?? <span className="text-muted-foreground">none</span>}</span>
                                                     <span className="text-muted-foreground">Created</span>
                                                     <span>{new Date(selectedProject.createdAt).toLocaleString()}</span>
+                                                    {selectedProject.activeDeployment && (
+                                                        <>
+                                                            <span className="text-muted-foreground">Live URL</span>
+                                                            <a
+                                                                href={selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-primary hover:underline text-xs break-all"
+                                                            >
+                                                                {selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                            </a>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -430,12 +443,12 @@ export default function AdminProjectsPage() {
                                                     <div className="flex gap-2">
                                                         <span className="text-muted-foreground">URL:</span>
                                                         <a
-                                                            href={selectedProject.activeDeployment.url}
+                                                            href={selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
                                                             className="text-primary hover:underline text-xs break-all"
                                                         >
-                                                            {selectedProject.activeDeployment.url}
+                                                            {selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
                                                         </a>
                                                     </div>
                                                     <div className="pt-1">
