@@ -683,19 +683,14 @@ export default function ZeroEffortLaunchPage() {
             ]);
             const brief = buildStructuredBrief(form, project?.name ?? "", attachedFiles);
 
-            // When the brief was AI-prefilled, it is already well-structured — skip the extra
-            // optimizePrompt pass to avoid over-compressing the content through a second LLM pass.
-            // The workspace autoOptimize toggle will also be turned off via skipAutoOptimize=1.
-            let finalPrompt: string;
-            if (aiPrefilled) {
-                finalPrompt = brief;
-            } else {
-                const optimizeRes = await optimizePrompt(token, projectId, {
-                    rawPrompt: brief,
-                    conversationId: briefResult.conversationId,
-                });
-                finalPrompt = optimizeRes.optimizedPrompt;
-            }
+            // Always run one optimization pass — the structured brief (AI-prefilled or manual)
+            // needs to be rewritten with system-layer context before entering God Mode.
+            // When AI-prefilled, skipAutoOptimize=1 prevents a second pass in the workspace.
+            const optimizeRes = await optimizePrompt(token, projectId, {
+                rawPrompt: brief,
+                conversationId: briefResult.conversationId,
+            });
+            const finalPrompt = optimizeRes.optimizedPrompt;
 
             const skipParam = aiPrefilled ? "&skipAutoOptimize=1" : "";
             router.push(
