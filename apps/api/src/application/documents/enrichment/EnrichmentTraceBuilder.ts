@@ -4,6 +4,7 @@ import type {
     EnrichmentProvenance,
     DocumentTextLayer,
     DocumentBrief,
+    StructuredDataPayload,
     ImageColorPalette,
     ImageVisualAnalysis,
     ImageDesignSignals,
@@ -17,13 +18,14 @@ export interface TraceBuilderInput {
     provenance: EnrichmentProvenance;
     textLayer: DocumentTextLayer | null;
     documentBrief: DocumentBrief | null;
+    structuredData?: StructuredDataPayload | null;
     colorPalette: ImageColorPalette | null;
     visualAnalysis: ImageVisualAnalysis | null;
     designSignals: ImageDesignSignals | null;
 }
 
 export function buildEnrichmentTrace(input: TraceBuilderInput): AssetEnrichmentTrace {
-    const { asset, assetKind, provenance, textLayer, documentBrief, colorPalette, visualAnalysis, designSignals } = input;
+    const { asset, assetKind, provenance, textLayer, documentBrief, structuredData, colorPalette, visualAnalysis, designSignals } = input;
 
     // Distilled title: prefer detected title, then label, then originalName
     const distilledTitle =
@@ -59,6 +61,7 @@ export function buildEnrichmentTrace(input: TraceBuilderInput): AssetEnrichmentT
         provenance: { ...provenance, traceVersion: CURRENT_TRACE_VERSION },
         textLayer,
         documentBrief,
+        structuredData: structuredData ?? null,
         colorPalette,
         visualAnalysis,
         designSignals,

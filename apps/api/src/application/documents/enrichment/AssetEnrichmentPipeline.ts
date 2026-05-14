@@ -13,6 +13,10 @@ import { extractDocumentBrief } from "./DocumentBriefExtractor";
 import { analyzeImage } from "../image/ImageAnalyzer";
 import { prepareImageBuffer } from "../image/ImageResizeGuard";
 import type { DocumentTextLayer } from "../../../domain/entities/AssetEnrichmentTrace";
+import { CostTransactionService } from "../../cost/CostTransactionService";
+import { ResourceType } from "../../../domain/entities/CostTransaction";
+import { estimateCost } from "../../llm/costPolicy";
+import { getSiliconFlowPrice } from "../../llm/siliconflowPricing";
 
 export interface EnrichmentInput {
     asset: ProjectAsset;
@@ -50,6 +54,65 @@ function resolveProvider(catalog: Awaited<ReturnType<GetLlmCatalog["execute"]>>,
     return catalog.providers.find(p => p.provider === providerKey && p.isActive)
         ?? catalog.providers.find(p => p.provider === providerKey)
         ?? catalog.providers.find(p => p.isActive);
+}
+
+/**
+ * Record an enrichment LLM call in the cost ledger.
+ *
+ * Every asset always carries (userId, projectId) so the double-sandbox
+ * is enforced upstream — we just attribute the spend here. Fire-and-forget;
+ * never blocks the enrichment pipeline.
+ */
+function recordEnrichmentCost(params: {
+    asset: ProjectAsset;
+    providerKey: string;
+    modelId: string;
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number };
+    taskKey: "enrich_document" | "enrich_image";
+}): number | null {
+    if (!params.usage.totalTokens) return null;
+
+    let providerCostUsd: number | undefined;
+    if (params.providerKey === "siliconflow") {
+        const sfPrice = getSiliconFlowPrice(params.modelId);
+        if (sfPrice && sfPrice.priceUnit === "per_m_tokens") {
+            providerCostUsd =
+                (params.usage.promptTokens / 1_000_000) * sfPrice.input +
+                (params.usage.completionTokens / 1_000_000) * sfPrice.output;
+        }
+    }
+
+    const costEstimate = estimateCost(
+        {
+            capability: "chat",
+            tokenUsage: params.usage,
+            providerCostUsd,
+        },
+        {
+            textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
+            imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
+            videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
+            usdToEurRate: env.COST_POLICY_USD_TO_EUR_RATE,
+            providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
+        },
+    );
+
+    CostTransactionService.instance.record({
+        userId: params.asset.userId,
+        projectId: params.asset.projectId,
+        resourceType: ResourceType.LLM_BACKGROUND,
+        resourceSubtype: params.modelId,
+        providerCostUsd,
+        precomputedTotalEur: costEstimate.amount,
+        units: params.usage,
+        meta: {
+            taskKey: params.taskKey,
+            provider: params.providerKey,
+            assetId: params.asset.id,
+        },
+    });
+
+    return costEstimate.amount;
 }
 
 export class AssetEnrichmentPipeline {
@@ -157,9 +220,11 @@ export class AssetEnrichmentPipeline {
         };
 
         let documentBrief = null;
+        let structuredData = null;
         let llmProvider: string | null = null;
         let llmModel: string | null = null;
         let llmTokensUsed: number | null = null;
+        let llmCostEur: number | null = null;
 
         if (env.enrichmentDocumentLlmPass && parsed.rawText.length >= 50) {
             const taskSetting = resolvePromptTaskSettingFromConfig(input.platformConfig, "default", "enrich_document");
@@ -171,14 +236,29 @@ export class AssetEnrichmentPipeline {
                 const authHeader = resolveAuthHeader(provider.provider, provider.authType);
                 const result = await extractDocumentBrief({
                     textSnippet: parsed.rawText,
+                    assetKind,
+                    sheets: parsed.sheets,
+                    slides: parsed.slides,
                     baseUrl: provider.baseUrl,
                     model: textModel,
                     authHeader,
                 });
                 documentBrief = result.brief;
+                structuredData = result.structuredData ?? null;
                 llmProvider = provider.provider;
                 llmModel = textModel;
                 llmTokensUsed = result.tokensUsed;
+
+                // ── Cost ledger: attribute LLM call to (user, project) ──
+                if (result.usage) {
+                    llmCostEur = recordEnrichmentCost({
+                        asset: input.asset,
+                        providerKey: provider.provider,
+                        modelId: textModel,
+                        usage: result.usage,
+                        taskKey: "enrich_document",
+                    });
+                }
             }
         }
 
@@ -195,11 +275,12 @@ export class AssetEnrichmentPipeline {
                 llmProvider,
                 llmModel,
                 llmTokensUsed,
-                llmCostEur: null,
+                llmCostEur,
                 errorMessage: null,
             },
             textLayer,
             documentBrief,
+            structuredData,
             colorPalette: null,
             visualAnalysis: null,
             designSignals: null,
@@ -231,13 +312,24 @@ export class AssetEnrichmentPipeline {
         const { buffer: safeBuffer } = await prepareImageBuffer(input.fileBuffer);
         const authHeader = resolveAuthHeader(provider.provider, provider.authType);
 
-        const { colorPalette, visualAnalysis, designSignals, tokensUsed } = await analyzeImage({
+        const { colorPalette, visualAnalysis, designSignals, tokensUsed, usage } = await analyzeImage({
             buffer: safeBuffer,
             mimeType: input.asset.mimeType,
             baseUrl: provider.baseUrl,
             model: visionModel,
             authHeader,
         });
+
+        // ── Cost ledger: attribute vision call to (user, project) ──
+        const llmCostEur = usage
+            ? recordEnrichmentCost({
+                asset: input.asset,
+                providerKey: provider.provider,
+                modelId: visionModel,
+                usage,
+                taskKey: "enrich_image",
+            })
+            : null;
 
         const trace = buildEnrichmentTrace({
             asset: input.asset,
@@ -252,7 +344,7 @@ export class AssetEnrichmentPipeline {
                 llmProvider: provider.provider,
                 llmModel: visionModel,
                 llmTokensUsed: tokensUsed,
-                llmCostEur: null,
+                llmCostEur,
                 errorMessage: null,
             },
             textLayer: null,
@@ -299,7 +391,8 @@ export class AssetEnrichmentPipeline {
 
     private toMediaKind(kind: AssetEnrichmentTrace["assetKind"]): "image" | "background" | "logo" | "icon" | "document" | "reference" {
         if (kind === "image_raster" || kind === "image_svg") return "image";
-        if (kind === "pdf" || kind === "docx" || kind === "txt" || kind === "md") return "document";
+        if (kind === "pdf" || kind === "docx" || kind === "txt" || kind === "md"
+            || kind === "html" || kind === "xlsx" || kind === "csv") return "document";
         return "reference";
     }
 

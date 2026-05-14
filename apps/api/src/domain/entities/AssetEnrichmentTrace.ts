@@ -3,6 +3,10 @@ export type EnrichmentAssetKind =
     | "docx"
     | "txt"
     | "md"
+    | "html"
+    | "xlsx"
+    | "csv"
+    | "pptx"
     | "image_raster"
     | "image_svg"
     | "unknown";
@@ -55,7 +59,14 @@ export interface DocumentBrief {
     documentType: DocumentTypeHint;
     detectedTitle: string | null;
     detectedBrandName: string | null;
+    /** 2–3 sentence overview of what this document is and its main purpose. */
     purposeSentence: string;
+    /** 3–5 sentence analytical summary of the document's content and arguments. */
+    contentSummary: string;
+    /** The main argument, value proposition, or central thesis of the document. */
+    mainArgumentOrValue: string | null;
+    /** Description of the document's structure (sections, layout, flow). */
+    structureSummary: string | null;
     keyMessages: string[];
     toneLabel: string;
     targetAudience: string | null;
@@ -111,6 +122,29 @@ export interface ImageDesignSignals {
     suggestedStyleRole: string;
 }
 
+// ── Structured data (spreadsheets, presentations) ────────────────────────
+
+export interface StructuredSheetData {
+    name: string;
+    rowCount: number;
+    columnHeaders: string[];
+    columnTypes: string[];
+    sampleRows: string[][];
+    csvBlock: string;
+}
+
+export interface StructuredSlideData {
+    index: number;
+    title: string | null;
+    body: string;
+}
+
+export interface StructuredDataPayload {
+    kind: "spreadsheet" | "presentation" | "table";
+    sheets?: StructuredSheetData[];
+    slides?: StructuredSlideData[];
+}
+
 // ── Top-level trace ───────────────────────────────────────────────────────
 
 export interface AssetEnrichmentTrace {
@@ -123,6 +157,7 @@ export interface AssetEnrichmentTrace {
 
     textLayer: DocumentTextLayer | null;
     documentBrief: DocumentBrief | null;
+    structuredData: StructuredDataPayload | null;
 
     colorPalette: ImageColorPalette | null;
     visualAnalysis: ImageVisualAnalysis | null;

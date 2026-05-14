@@ -1,5 +1,20 @@
 import pdfParse from "pdf-parse";
 
+export interface ParsedDocumentSheet {
+    name: string;
+    rowCount: number;
+    columnHeaders: string[];
+    columnTypes: string[];
+    sampleRows: string[][];
+    csvBlock: string;
+}
+
+export interface ParsedDocumentSlide {
+    index: number;
+    title: string | null;
+    body: string;
+}
+
 export interface ParsedDocument {
     rawText: string;
     charCount: number;
@@ -8,6 +23,10 @@ export interface ParsedDocument {
     sectionCount: number | null;
     parserName: string;
     parserVersion: string;
+    /** Populated by tabular parsers (xlsx, csv). */
+    sheets?: ParsedDocumentSheet[];
+    /** Populated by presentation parsers (pptx). */
+    slides?: ParsedDocumentSlide[];
 }
 
 const MAX_CHARS = 120_000;

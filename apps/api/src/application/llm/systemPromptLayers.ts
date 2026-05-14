@@ -49,6 +49,21 @@ export function buildBaseConstraintsLayer(): string {
         "- Never duplicate a structural pattern — extract repeating markup into reusable CSS classes instead.",
         "- Avoid inline style= attributes; put all styling in artifacts.css.",
         "- Do not repeat identical class lists across sibling elements — factor them into a shared parent or CSS rule.",
+        "",
+        "Visibility-without-JS rules (mandatory — preview iframe runs allow-scripts only and external assets may fail):",
+        "- All primary content (text, images, sections) MUST be visible on initial render with CSS alone, before any JS executes.",
+        "- Never set `opacity:0`, `visibility:hidden`, or off-screen `transform` as the default state of content unless a CSS-only rule restores it (e.g. `@media (prefers-reduced-motion)` fallback or a pure-CSS animation that ends in the visible state).",
+        "- JavaScript may ENHANCE (animate, reveal, interact) but must never GATE the appearance of static content.",
+        "- If you include a CSS file/library that hides elements until a class is toggled (AOS, WOW, ScrollReveal-like patterns), you MUST also load the matching JS that toggles that class, and you MUST also provide a CSS-only fallback that leaves content visible if the script never runs.",
+        "- The HTML must reference exactly one external script: `<script src='app.js'></script>` placed immediately before `</body>`. Do not add `defer`, `async`, `type='module'`, or inline `<script>` blocks.",
+        "- The iframe sandbox is `allow-scripts` only: no `window.parent`/`top` access, no top-level navigation, no `localStorage` writes from the page logic that affect the parent. Persist game state to memory only.",
+        "",
+        "Canvas / game-engine container rules (mandatory when using Phaser, Three.js, A-Frame, p5.js, etc.):",
+        "- The mounting parent MUST be a `<div>` (or `<a-scene>` for A-Frame) with a non-empty id, explicit width/height in CSS, and visible by default.",
+        "- NEVER pass the id of a `<canvas>` element as the engine `parent` — engines create their own canvas inside the parent div.",
+        "- For Phaser: `new Phaser.Game({ parent: 'game-root', ... })` where `<div id='game-root'></div>` exists in the HTML with sized CSS.",
+        "- Loaders take URL strings only: `this.load.image('key', '<url>')`. Never pass a function call (e.g. a generated dataURL helper) as the URL argument; if you need a procedural texture, generate it inside `create()` via `this.textures.generate(...)` or `Graphics.generateTexture(...)`.",
+        "- Provide an HTML `<noscript>` fallback inside the game container describing the experience so the page is never visually empty when JS is disabled or fails to load.",
     ].join("\n");
 }
 
@@ -159,6 +174,33 @@ export function buildProjectKnowledgeLayer(
 
         if (trace.distilledTags.length > 0) {
             lines.push(`Tags: ${trace.distilledTags.join(", ")}`);
+        }
+
+        // Emit structured data blocks for spreadsheets and presentations
+        const sd = trace.structuredData;
+        if (sd?.sheets && sd.sheets.length > 0) {
+            lines.push(`Structured data (${sd.sheets.length} sheet${sd.sheets.length > 1 ? "s" : ""}):`);
+            for (const sheet of sd.sheets) {
+                const budget = maxChars - totalChars - lines.join("\n").length - 500;
+                if (budget < 100) break;
+                const colDesc = sheet.columnHeaders.map((h, i) => `${h}[${sheet.columnTypes[i] ?? "text"}]`).join(", ");
+                lines.push(`Sheet "${sheet.name}" — ${sheet.rowCount} rows — columns: ${colDesc}`);
+                const csvTruncated = sheet.csvBlock.length > budget
+                    ? `${sheet.csvBlock.slice(0, budget)}\n...(truncated)`
+                    : sheet.csvBlock;
+                lines.push("```csv");
+                lines.push(csvTruncated);
+                lines.push("```");
+            }
+        } else if (sd?.slides && sd.slides.length > 0) {
+            lines.push(`Presentation (${sd.slides.length} slides):`);
+            for (const slide of sd.slides.slice(0, 20)) {
+                const budget = maxChars - totalChars - lines.join("\n").length - 300;
+                if (budget < 50) break;
+                const title = slide.title ?? "(untitled)";
+                const body = slide.body.slice(0, Math.min(200, budget));
+                lines.push(`  Slide ${slide.index}: ${title}${body ? ` — ${body}` : ""}`);
+            }
         }
 
         const block = `---\n${lines.join("\n")}\n---`;

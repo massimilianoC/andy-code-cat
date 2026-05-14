@@ -15,32 +15,39 @@ export interface ImageAnalysisOutput {
     visualAnalysis: ImageVisualAnalysis;
     designSignals: ImageDesignSignals;
     tokensUsed: number | null;
+    /** Structured token breakdown when the provider exposes it. Optional for backward compat. */
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
 }
 
 const VISION_PROMPT = `You are an asset classification specialist for a web design platform.
-Analyze this image and return a JSON object with exactly the following fields.
+Analyze this image thoroughly and return a JSON object with exactly the following fields.
 Do not include any text before or after the JSON object.
+Be specific and detailed — generic descriptions like "a scene with objects" are not acceptable.
 
 {
-  "sceneDescription": "<1-3 sentence plain description>",
-  "detectedObjects": ["<object>"],
-  "detectedThemes": ["<theme>"],
-  "moodLabel": "<single word or short phrase>",
+  "sceneDescription": "<3-5 sentence description covering: (1) what the image depicts overall, (2) foreground subjects in detail, (3) background and setting, (4) spatial composition and layout, (5) overall context or narrative conveyed>",
+  "detectedObjects": ["<up to 20 specific objects, subjects, or elements visible — be precise, e.g. 'red ceramic mug', 'laptop keyboard', 'mountain range in background'>"],
+  "detectedThemes": ["<up to 8 conceptual themes or narratives, e.g. 'technology', 'wellness', 'urban lifestyle', 'minimalism'>"],
+  "moodLabel": "<detailed mood or emotional tone, e.g. 'energetic and bold', 'calm and professional', 'nostalgic and warm'>",
   "visualComplexity": "minimal|moderate|complex",
-  "compositionType": "<null or composition style>",
+  "compositionType": "<null or detailed composition style, e.g. 'rule of thirds with subject left', 'centered symmetrical', 'flat lay top-down', 'hero shot', 'split-panel', 'full bleed texture'>",
   "imageCategory": "photograph|illustration|logo|icon|screenshot|diagram|infographic|texture_pattern|typographic|abstract|unknown",
-  "hasText": true,
-  "detectedTextSnippet": "<null or up to 300 chars>",
+  "hasText": false,
+  "detectedTextSnippet": "<null or all legible text in the image, up to 500 chars — include headlines, labels, captions, UI text>",
   "hasLogo": false,
   "hasPeople": false,
   "hasProduct": false,
-  "layoutStyle": "<null or layout label>",
-  "suggestedWebUse": ["<use>"],
-  "dominantHex": ["#rrggbb"],
-  "dominantNames": ["<color name>"],
+  "layoutStyle": "<null or layout description, e.g. 'horizontal banner', 'square card', 'portrait hero', 'wide landscape', 'isometric grid'>",
+  "suggestedWebUse": ["<up to 6 specific web design use cases, e.g. 'hero background', 'product card image', 'team portrait', 'section divider', 'favicon', 'testimonial avatar'>"],
+  "dominantHex": ["#rrggbb — up to 8 dominant colors in descending frequency"],
+  "dominantNames": ["<descriptive color name for each hex, e.g. 'deep navy', 'warm coral', 'sage green'>"],
   "backgroundTone": "light|dark|mixed",
-  "accentColor": "<null or #rrggbb>",
-  "paletteLabel": "<short palette description>",
+  "accentColor": "<null or #rrggbb of the most visually prominent accent>",
+  "paletteLabel": "<creative palette label, e.g. 'earthy terracotta with sage accents', 'monochrome midnight blues'>",
   "moodScore": 0.8
 }`;
 
@@ -86,7 +93,7 @@ export async function analyzeImage(input: ImageAnalysisInput): Promise<ImageAnal
                 ],
             },
         ],
-        max_tokens: 1024,
+        max_tokens: 1800,
         temperature: 0,
     };
 
@@ -105,10 +112,13 @@ export async function analyzeImage(input: ImageAnalysisInput): Promise<ImageAnal
 
     const json = (await res.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
-        usage?: { total_tokens?: number };
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
 
     const raw = json.choices?.[0]?.message?.content ?? "";
+    const promptTokens = Number(json.usage?.prompt_tokens ?? 0);
+    const completionTokens = Number(json.usage?.completion_tokens ?? 0);
+    const totalTokens = Number(json.usage?.total_tokens ?? (promptTokens + completionTokens));
     const tokensUsed = json.usage?.total_tokens ?? null;
 
     let parsed: Record<string, unknown>;
@@ -131,8 +141,8 @@ export async function analyzeImage(input: ImageAnalysisInput): Promise<ImageAnal
 
     const visualAnalysis: ImageVisualAnalysis = {
         sceneDescription: typeof parsed["sceneDescription"] === "string" ? parsed["sceneDescription"] : "",
-        detectedObjects: strings(parsed["detectedObjects"], 10),
-        detectedThemes: strings(parsed["detectedThemes"], 6),
+        detectedObjects: strings(parsed["detectedObjects"], 20),
+        detectedThemes: strings(parsed["detectedThemes"], 8),
         moodLabel: typeof parsed["moodLabel"] === "string" ? parsed["moodLabel"] : "unknown",
         moodScore: typeof parsed["moodScore"] === "number" ? parsed["moodScore"] : null,
         visualComplexity: safeComplexity(parsed["visualComplexity"]),
@@ -143,16 +153,22 @@ export async function analyzeImage(input: ImageAnalysisInput): Promise<ImageAnal
         imageCategory: safeCategory(parsed["imageCategory"]),
         hasText: parsed["hasText"] === true,
         detectedTextSnippet: typeof parsed["detectedTextSnippet"] === "string"
-            ? parsed["detectedTextSnippet"].slice(0, 300)
+            ? parsed["detectedTextSnippet"].slice(0, 500)
             : null,
         hasLogo: parsed["hasLogo"] === true,
         hasPeople: parsed["hasPeople"] === true,
         hasProduct: parsed["hasProduct"] === true,
         layoutStyle: typeof parsed["layoutStyle"] === "string" ? parsed["layoutStyle"] : null,
         aspectRatioLabel: null,
-        suggestedWebUse: strings(parsed["suggestedWebUse"], 3),
+        suggestedWebUse: strings(parsed["suggestedWebUse"], 6),
         suggestedStyleRole: "inspiration",
     };
 
-    return { colorPalette, visualAnalysis, designSignals, tokensUsed };
+    return {
+        colorPalette,
+        visualAnalysis,
+        designSignals,
+        tokensUsed,
+        usage: { promptTokens, completionTokens, totalTokens },
+    };
 }
