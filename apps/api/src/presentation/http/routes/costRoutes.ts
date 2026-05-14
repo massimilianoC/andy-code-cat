@@ -14,7 +14,7 @@ import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { requireSuperAdmin } from "../middlewares/requireSuperAdmin";
-import type { RequestWithContext } from "../middlewares/authMiddleware";
+import type { RequestWithContext } from "../types";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoCostTransactionRepository } from "../../../infra/repositories/MongoCostTransactionRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
