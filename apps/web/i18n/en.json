@@ -400,6 +400,13 @@
         "save": "Save",
         "saving": "Saving…"
     },
+    "vibecore": {
+        "heading": "What do you want to build today?",
+        "subtitle": "Describe your idea — the AI handles the rest",
+        "placeholder": "E.g. a landing page for a beauty salon, elegant tone, neutral palette…",
+        "cta": "Create with AI",
+        "scrollHint": "scroll to your projects"
+    },
     "workspace": {
         "selectionNone": "No selection",
         "notifications": {

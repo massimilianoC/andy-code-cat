@@ -24,6 +24,8 @@ import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { VibeCoreEntry } from "@/components/dashboard/VibeCoreEntry";
+import { ScrollBlurOverlay } from "@/components/dashboard/ScrollBlurOverlay";
 import {
     Dialog,
     DialogContent,
@@ -91,6 +93,8 @@ export default function DashboardPage() {
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
     const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
     const [canAccessSuperadmin, setCanAccessSuperadmin] = useState(false);
+    // VibeCore: false = show Medium/ZeroEffort form instead
+    const [showVibeCore, setShowVibeCore] = useState(true);
     const createInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -258,6 +262,21 @@ export default function DashboardPage() {
                     token={token}
                     onCompleted={() => setPasswordChangeRequiredState(false)}
                 />
+            ) : null}
+
+            {/* VibeCore full-screen entry (EASY mode) — additive above the dashboard */}
+            {showVibeCore && token ? (
+                <>
+                    <ScrollBlurOverlay />
+                    <VibeCoreEntry
+                        token={token}
+                        onSwitchToMedium={() => {
+                            setShowVibeCore(false);
+                            setCreateDestination("launch");
+                            setCreateOpen(true);
+                        }}
+                    />
+                </>
             ) : null}
 
             {/* Navbar */}

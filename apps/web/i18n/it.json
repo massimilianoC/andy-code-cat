@@ -400,6 +400,13 @@
         "save": "Salva",
         "saving": "Salvataggio…"
     },
+    "vibecore": {
+        "heading": "Cosa vuoi realizzare oggi?",
+        "subtitle": "Descrivi la tua idea — l'AI fa il resto",
+        "placeholder": "Es. una landing page per un salone di bellezza, tono elegante, palette neutra…",
+        "cta": "Crea con AI",
+        "scrollHint": "scorri per i tuoi progetti"
+    },
     "workspace": {
         "selectionNone": "Nessuna selezione",
         "notifications": {

@@ -81,6 +81,15 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 600,
         systemTemplate: "",
     },
+    // VibeCore — Layer Φ: pre-run intent & format classifier
+    vibe_intent_classify: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "Qwen/Qwen3-8B",
+        temperature: 0.1,
+        maxCompletionTokens: 512,
+        systemTemplate: "",
+    },
 };
 
 export interface ProductInjectionConfig {

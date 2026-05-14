@@ -22,6 +22,7 @@ import { errorHandler } from "./presentation/http/middlewares/errorHandler";
 import { createAdminRoutes } from "./presentation/http/routes/adminRoutes";
 import { createPipelineRoutes } from "./presentation/http/routes/pipelineRoutes";
 import { createCostRoutes } from "./presentation/http/routes/costRoutes";
+import { createVibecoreRoutes } from "./presentation/http/routes/vibecoreRoutes";
 
 export function createApp() {
     const app = express();
@@ -72,6 +73,7 @@ export function createApp() {
     app.use("/v1", createWysiwygRoutes());
     app.use("/v1", createExecutionLogRoutes());
     app.use("/v1", createCostRoutes());
+    app.use("/v1", createVibecoreRoutes());
 
     // Publish: API routes (auth-protected) + static serving (public)
     const { apiRouter: publishApi, staticRouter: publishStatic } = createPublishRoutes();
