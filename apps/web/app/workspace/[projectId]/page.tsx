@@ -64,7 +64,7 @@ import MediaInspectorPanel from "../../../components/MediaInspectorPanel";
 import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
 import { MediaGrid, type MediaItem } from "@/components/media";
 import { ChevronDown, FileText, ImageIcon, Loader2, Mic, Paperclip, Settings, Square, X } from "lucide-react";
-import { uploadProjectAsset, deleteProjectAsset } from "../../../lib/api/assets";
+import { uploadProjectAsset, deleteProjectAsset, getProjectAsset } from "../../../lib/api/assets";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -440,10 +440,17 @@ export default function WorkspacePage() {
             })));
     }, [providersCatalog]);
     const presetRecommendationAppliedRef = useRef<string | null>(null);
+    // Preferred provider/model passed as URL params from Zero Effort / Vibe pipeline redirects.
+    // Read once on mount so they survive the router.replace that clears autoPrompt.
+    const preferredProviderRef = useRef(searchParams?.get("preferredProvider") ?? "");
+    const preferredModelRef = useRef(searchParams?.get("preferredModel") ?? "");
+    const preferredModelAppliedRef = useRef(false);
     // voiceListening, voiceSupported, voiceError are provided by useSpeechDictation below
     const [chatAttachedFiles, setChatAttachedFiles] = useState<{ id: string; name: string; mimeType: string }[]>([]);
     const [isDragOverChat, setIsDragOverChat] = useState(false);
     const chatFileInputRef = useRef<HTMLInputElement>(null);
+    const [pendingEnrichmentPolling, setPendingEnrichmentPolling] = useState<string[]>([]);
+    const [imageSuggestions, setImageSuggestions] = useState<{ assetId: string; name: string; suggestion: "logo" | "background" | "icon"; dismissed: boolean }[]>([]);
     // When coming from the Zero Effort flow the brief is already structured — skip auto-optimize
     // to avoid a second LLM compression pass on content that was pre-optimized upstream.
     const [autoOptimize, setAutoOptimize] = useState(() => searchParams?.get("skipAutoOptimize") !== "1");
@@ -989,6 +996,32 @@ export default function WorkspacePage() {
         setSelectedModel(model.id);
         presetRecommendationAppliedRef.current = projectPresetId;
     }, [projectPresetId, presetCatalog, providersCatalog]);
+
+    // ── Zero Effort / Vibe pipeline: apply preferred model from URL params ────
+    // Runs after the catalog and preset recommendation have been applied so that
+    // the pipeline-configured model always wins over the preset default.
+    useEffect(() => {
+        if (preferredModelAppliedRef.current) return;
+        const prefProvider = preferredProviderRef.current;
+        const prefModel = preferredModelRef.current;
+        if (!prefProvider && !prefModel) return;
+        if (providersCatalog.length === 0) return;
+
+        const provider = prefProvider
+            ? providersCatalog.find((p) => p.provider === prefProvider)
+            : providersCatalog.find((p) => p.models.some((m) => m.isActive && m.id === prefModel));
+        if (!provider) return;
+
+        const model = prefModel
+            ? provider.models.find((m) => m.isActive && m.id === prefModel)
+            : provider.models.find((m) => m.isActive && m.isDefault) ?? provider.models.find((m) => m.isActive);
+        if (!model) return;
+
+        setSelectedProvider(provider.provider);
+        setSelectedModel(model.id);
+        preferredModelAppliedRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [providersCatalog]);
 
     // Auto-load prompt preview when user opens the prompt tab
     useEffect(() => {
@@ -2743,6 +2776,9 @@ export default function WorkspacePage() {
                 try {
                     const { asset } = await uploadProjectAsset(tok, projectId, file, { useInProject: true });
                     setChatAttachedFiles((prev) => [...prev, { id: asset.id, name: file.name, mimeType: file.type }]);
+                    if (file.type.startsWith("image/")) {
+                        setPendingEnrichmentPolling((prev) => [...prev, asset.id]);
+                    }
                     updateNotification(notifId, { status: "done", message: t("workspace.ui.uploadSuccess") });
                 } catch (err) {
                     const msg = (err as { body?: { error?: string } })?.body?.error;
@@ -2764,6 +2800,50 @@ export default function WorkspacePage() {
             setChatAttachedFiles((prev) => prev.filter((f) => f.id !== assetId));
         }
     }, [projectId]);
+
+    // Poll enrichment status for recently uploaded images
+    useEffect(() => {
+        if (pendingEnrichmentPolling.length === 0) return;
+        const tok = getToken();
+        if (!tok) return;
+
+        const interval = setInterval(() => {
+            void Promise.all(
+                pendingEnrichmentPolling.map(async (assetId) => {
+                    try {
+                        const { asset } = await getProjectAsset(tok, projectId, assetId);
+                        const status = asset.enrichmentTrace?.provenance?.enrichmentStatus;
+                        if (status === "ready" || status === "failed" || status === "skipped") {
+                            setPendingEnrichmentPolling((prev) => prev.filter((id) => id !== assetId));
+                            if (status === "ready" && asset.enrichmentTrace?.designSignals) {
+                                const ds = asset.enrichmentTrace.designSignals;
+                                let suggestion: "logo" | "background" | "icon" = "icon";
+                                if (ds.imageCategory === "logo" || ds.hasLogo) {
+                                    suggestion = "logo";
+                                } else if (
+                                    ds.imageCategory === "photograph" ||
+                                    ds.imageCategory === "illustration" ||
+                                    ds.suggestedWebUse.includes("background") ||
+                                    ds.suggestedStyleRole === "background"
+                                ) {
+                                    suggestion = "background";
+                                }
+                                const attachedFile = chatAttachedFiles.find((f) => f.id === assetId);
+                                setImageSuggestions((prev) => {
+                                    if (prev.some((s) => s.assetId === assetId)) return prev;
+                                    return [...prev, { assetId, name: attachedFile?.name ?? asset.originalName, suggestion, dismissed: false }];
+                                });
+                            }
+                        }
+                    } catch {
+                        setPendingEnrichmentPolling((prev) => prev.filter((id) => id !== assetId));
+                    }
+                })
+            );
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [pendingEnrichmentPolling, projectId, chatAttachedFiles]);
 
     // Voice dictation — browser Web Speech API, language follows i18n selection
     const {
@@ -3080,6 +3160,37 @@ export default function WorkspacePage() {
                                         title={t("workspace.ui.removeAttachment")}
                                         aria-label={t("workspace.ui.removeAttachment")}
                                         onClick={() => void handleRemoveChatFile(f.id)}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Image enrichment suggestion chips */}
+                    {imageSuggestions.some((s) => !s.dismissed) && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                            {imageSuggestions.filter((s) => !s.dismissed).map((s) => (
+                                <div
+                                    key={s.assetId}
+                                    className="flex shrink-0 items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300"
+                                >
+                                    <span className="truncate max-w-[110px]" title={s.name}>{s.name}</span>
+                                    <span className="text-amber-500/70">·</span>
+                                    <span>
+                                        {s.suggestion === "logo"
+                                            ? t("workspace.ui.imageSuggestionLogo")
+                                            : s.suggestion === "background"
+                                                ? t("workspace.ui.imageSuggestionBackground")
+                                                : t("workspace.ui.imageSuggestionIcon")}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="ml-0.5 shrink-0 text-amber-500/60 hover:text-amber-700 dark:hover:text-amber-200"
+                                        title={t("workspace.ui.imageSuggestionDismiss")}
+                                        aria-label={t("workspace.ui.imageSuggestionDismiss")}
+                                        onClick={() => setImageSuggestions((prev) => prev.map((x) => x.assetId === s.assetId ? { ...x, dismissed: true } : x))}
                                     >
                                         <X className="h-3 w-3" />
                                     </button>

@@ -146,6 +146,8 @@ export interface OptimizePromptInput {
     sessionId?: string;
     provider?: string;
     model?: string;
+    /** Task key to resolve platform task settings (e.g. "zero_effort_optimize"). Defaults to "optimize_user_prompt". */
+    taskKey?: string;
 }
 
 export interface OptimizePromptResult {

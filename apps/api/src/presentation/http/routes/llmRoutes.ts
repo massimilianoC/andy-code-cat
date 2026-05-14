@@ -657,6 +657,7 @@ export function createLlmRoutes(): Router {
                 sessionId: body.sessionId,
                 provider: body.provider,
                 model: body.model,
+                taskKey: body.taskKey,
             });
 
             ExecutionLogger.instance.emit({
@@ -718,6 +719,7 @@ export function createLlmRoutes(): Router {
                 sessionId: body.sessionId,
                 provider: body.provider,
                 model: body.model,
+                taskKey: body.taskKey,
             }, {
                 onThinking: (chunk) => sendSse(res, { type: "thinking", content: String(chunk) }),
                 onAnswer: (chunk) => sendSse(res, { type: "answer", content: String(chunk) }),

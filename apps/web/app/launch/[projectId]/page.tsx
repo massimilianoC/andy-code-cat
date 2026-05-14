@@ -636,6 +636,9 @@ export default function ZeroEffortLaunchPage() {
             const optimizeRes = await optimizePrompt(token, projectId, {
                 rawPrompt: editedBrief,
                 conversationId: result.conversationId,
+                taskKey: "zero_effort_optimize",
+                provider: pipelineConfig?.optimize.provider,
+                model: pipelineConfig?.optimize.model,
             });
             setOptimizedPrompt(optimizeRes.optimizedPrompt);
             setEditedOptimizedPrompt(optimizeRes.optimizedPrompt);
@@ -649,7 +652,13 @@ export default function ZeroEffortLaunchPage() {
     function handleGoToGodMode() {
         if (!result) return;
         const finalPrompt = editedOptimizedPrompt || optimizedPrompt;
-        const url = `/workspace/${projectId}?conv=${result.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`;
+        let url = `/workspace/${projectId}?conv=${result.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`;
+        if (pipelineConfig?.generate.provider) {
+            url += `&preferredProvider=${encodeURIComponent(pipelineConfig.generate.provider)}`;
+        }
+        if (pipelineConfig?.generate.model) {
+            url += `&preferredModel=${encodeURIComponent(pipelineConfig.generate.model)}`;
+        }
         router.push(url);
     }
 
@@ -677,10 +686,11 @@ export default function ZeroEffortLaunchPage() {
             styleAttributes: form.styleAttributes,
         };
         try {
-            const [briefResult] = await Promise.all([
+            const [briefResult, configResult] = await Promise.all([
                 launchZeroEffort(token, projectId, payload),
                 getZeroEffortConfig(token, projectId).catch(() => null),
             ]);
+            const localConfig = configResult;
             const brief = buildStructuredBrief(form, project?.name ?? "", attachedFiles);
 
             // Always run one optimization pass — the structured brief (AI-prefilled or manual)
@@ -689,12 +699,18 @@ export default function ZeroEffortLaunchPage() {
             const optimizeRes = await optimizePrompt(token, projectId, {
                 rawPrompt: brief,
                 conversationId: briefResult.conversationId,
+                taskKey: "zero_effort_optimize",
+                provider: localConfig?.optimize.provider,
+                model: localConfig?.optimize.model,
             });
             const finalPrompt = optimizeRes.optimizedPrompt;
 
             const skipParam = aiPrefilled ? "&skipAutoOptimize=1" : "";
+            const modelParams = localConfig?.generate
+                ? `&preferredProvider=${encodeURIComponent(localConfig.generate.provider)}&preferredModel=${encodeURIComponent(localConfig.generate.model)}`
+                : "";
             router.push(
-                `/workspace/${projectId}?conv=${briefResult.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}${skipParam}`,
+                `/workspace/${projectId}?conv=${briefResult.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}${skipParam}${modelParams}`,
             );
         } catch (e) {
             const message = e instanceof Error ? e.message : "Impossibile avviare la generazione.";

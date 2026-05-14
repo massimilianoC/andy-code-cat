@@ -61,6 +61,7 @@ type PreparedExecutionContext = {
     providerCatalog: Awaited<ReturnType<GetLlmCatalog["execute"]>>["providers"][number];
     modelId: string;
     authHeader?: string;
+    effectiveTaskKey: string;
 };
 
 function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none") {
@@ -143,7 +144,7 @@ export class OptimizeUserPrompt {
     }): OptimizePromptResponse {
         const usage = input.usage ?? estimateTokens({ messages: input.context.messages, outputText: input.optimizedPrompt });
         return {
-            taskKey: TASK_KEY,
+            taskKey: input.context.effectiveTaskKey,
             optimizedPrompt: input.optimizedPrompt,
             provider: input.context.providerCatalog.provider,
             model: input.context.modelId,
@@ -185,7 +186,7 @@ export class OptimizeUserPrompt {
         }
 
         await this.promptExecutionLogRepository.create({
-            taskKey: TASK_KEY,
+            taskKey: context.effectiveTaskKey,
             projectId: request.projectId,
             userId: request.userId,
             conversationId: request.conversationId,
@@ -228,7 +229,7 @@ export class OptimizeUserPrompt {
                     sessionId: request.sessionId,
                 },
                 meta: {
-                    taskKey: TASK_KEY,
+                    taskKey: context.effectiveTaskKey,
                     provider: result.provider,
                     model: result.model,
                 },
@@ -252,7 +253,7 @@ export class OptimizeUserPrompt {
     }) {
         const { request, context, error, startedAt } = input;
         await this.promptExecutionLogRepository.create({
-            taskKey: TASK_KEY,
+            taskKey: context?.effectiveTaskKey ?? TASK_KEY,
             projectId: request.projectId,
             userId: request.userId,
             conversationId: request.conversationId,
@@ -282,6 +283,7 @@ export class OptimizeUserPrompt {
         assetIds?: string[];
         provider?: string;
         model?: string;
+        taskKey?: string;
     }): Promise<{ context: PreparedExecutionContext } | { skippedResult: OptimizePromptResponse }> {
         const project = await this.projectRepository.findByIdForUser(input.projectId, input.userId);
         if (!project) {
@@ -296,7 +298,8 @@ export class OptimizeUserPrompt {
             this.platformConfigRepository.get().catch(() => null),
         ]);
 
-        const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, productKey, TASK_KEY);
+        const effectiveTaskKey = input.taskKey ?? TASK_KEY;
+        const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, productKey, effectiveTaskKey);
         const allAssets = await this.assetRepository.listByProject(input.projectId, input.userId).catch(() => []);
         const selectedAssets = input.assetIds?.length
             ? allAssets.filter((asset) => input.assetIds!.includes(asset.id))
@@ -347,7 +350,7 @@ export class OptimizeUserPrompt {
         if (!taskSettings.enabled) {
             return {
                 skippedResult: {
-                    taskKey: TASK_KEY,
+                    taskKey: effectiveTaskKey,
                     optimizedPrompt: input.rawPrompt,
                     provider: providerCatalog.provider,
                     model: modelId,
@@ -385,6 +388,7 @@ export class OptimizeUserPrompt {
                 providerCatalog,
                 modelId,
                 authHeader,
+                effectiveTaskKey,
             },
         };
     }
@@ -398,6 +402,7 @@ export class OptimizeUserPrompt {
         sessionId?: string;
         provider?: string;
         model?: string;
+        taskKey?: string;
     }): Promise<OptimizePromptResponse> {
         const startedAt = Date.now();
         let preparedContext: PreparedExecutionContext | undefined;
@@ -475,6 +480,7 @@ export class OptimizeUserPrompt {
         sessionId?: string;
         provider?: string;
         model?: string;
+        taskKey?: string;
     }, handlers?: {
         onThinking?: (chunk: string) => void;
         onAnswer?: (chunk: string) => void;
