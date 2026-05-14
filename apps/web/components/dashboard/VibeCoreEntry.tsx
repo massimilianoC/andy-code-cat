@@ -332,11 +332,6 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             {/* Blur overlay — absolute inside sticky section */}
             <ScrollBlurOverlay />
 
-            {/* Mode selector — top right, above blur overlay (z-30) */}
-            <div className="absolute top-4 right-4 z-30">
-                <ModeSelector value={mode} onChange={handleModeChange} />
-            </div>
-
             {/* Main entry card */}
             <div className="vc-entry-animate relative z-10 w-full max-w-2xl px-4">
                 {/* Heading */}
