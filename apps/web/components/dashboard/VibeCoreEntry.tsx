@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { ModeSelector, type VibeMode } from "./ModeSelector";
 import { VibeCoreBackground } from "./VibeCoreBackground";
 import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
-import { classifyVibeIntent } from "@/lib/api/vibecore";
+import { classifyVibeIntent, prefillZeroEffort } from "@/lib/api/vibecore";
 import { createProject, uploadProjectAsset } from "@/lib/api";
 
 /** Max file size accepted via the VibeCore drag-and-drop zone (10 MB). */
@@ -23,12 +23,13 @@ const ACCEPTED_MIME_TYPES = [
     "image/svg+xml",
 ];
 
-type EntryPhase = "idle" | "classifying" | "creating" | "uploading" | "redirecting";
+type EntryPhase = "idle" | "classifying" | "prefilling" | "creating" | "uploading" | "redirecting";
 
 /** i18n keys for phase labels — translated at render time. */
 const PHASE_LABEL_KEYS: Record<EntryPhase, string> = {
     idle:        "",
     classifying: "vibecore.phase.classifying",
+    prefilling:  "vibecore.phase.prefilling",
     creating:    "vibecore.phase.creating",
     uploading:   "vibecore.phase.uploading",
     redirecting: "vibecore.phase.redirecting",
@@ -79,6 +80,19 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const [prompt, setPrompt] = useState("");
     const [files, setFiles] = useState<FilePill[]>([]);
     const [phase, setPhase] = useState<EntryPhase>("idle");
+    const [tokenCount, setTokenCount] = useState(0);
+
+    // Animate fake token counter during LLM prefill pass
+    useEffect(() => {
+        if (phase !== "prefilling") {
+            setTokenCount(0);
+            return;
+        }
+        const interval = setInterval(() => {
+            setTokenCount((prev) => prev + Math.floor(Math.random() * 38) + 8);
+        }, 80);
+        return () => clearInterval(interval);
+    }, [phase]);
     const [error, setError] = useState<string | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
 
@@ -200,13 +214,23 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
         try {
             // Layer Φ: classify intent
             setPhase("classifying");
+            const attachmentMeta = files.map((p) => ({
+                filename: p.file.name,
+                mimeType: p.file.type,
+                sizeBytes: p.file.size,
+            }));
             const classification = await classifyVibeIntent(token, {
                 prompt: prompt.trim(),
-                attachmentMeta: files.map((p) => ({
-                    filename: p.file.name,
-                    mimeType: p.file.type,
-                    sizeBytes: p.file.size,
-                })),
+                attachmentMeta,
+            }).catch(() => null);
+
+            // LLM prefill pass — extract structured ZeroEffortLaunchInput fields
+            setPhase("prefilling");
+            const prefillResult = await prefillZeroEffort(token, {
+                prompt: prompt.trim(),
+                attachmentMeta,
+                templateId: classification?.templateId ?? null,
+                formatHint: classification?.formatHint ?? null,
             }).catch(() => null);
 
             // Create project (with preset from classification if available)
@@ -229,21 +253,27 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 );
             }
 
-            // Redirect: templateId match → /launch (zero-effort runner), else → /workspace
+            // Store prefill draft in sessionStorage for launch page
+            const hasPrefill = prefillResult && !prefillResult.skipped;
+            if (hasPrefill) {
+                try {
+                    sessionStorage.setItem(
+                        `ze_prefill_${projectId}`,
+                        JSON.stringify(prefillResult.draft),
+                    );
+                } catch {
+                    // sessionStorage unavailable — launch page falls back to manual wizard
+                }
+            }
+
+            // Always navigate to launch page (zero-effort flow)
             setPhase("redirecting");
             const query = new URLSearchParams({
                 autoPrompt: prompt.trim().slice(0, 2000),
             });
-            if (classification?.formatHint) {
-                query.set("formatHint", classification.formatHint);
-            }
-            if (classification?.templateId) {
-                // Template matched: use launch runner which applies the preset preprompt
-                router.push(`/launch/${projectId}?${query.toString()}`);
-            } else {
-                // No template: open workspace for ad-hoc generation
-                router.push(`/workspace/${projectId}?${query.toString()}`);
-            }
+            if (classification?.formatHint) query.set("formatHint", classification.formatHint);
+            if (hasPrefill) query.set("prefilled", "1");
+            router.push(`/launch/${projectId}?${query.toString()}`);
         } catch {
             setError("Si è verificato un errore. Riprova.");
             setPhase("idle");
@@ -502,6 +532,19 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         </button>
                     </div>
                 </form>
+
+                {/* Token counter — visible during LLM prefill pass */}
+                {phase === "prefilling" && (
+                    <p
+                        aria-live="polite"
+                        className="mt-2 text-center"
+                        style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.28)", letterSpacing: "0.02em" }}
+                    >
+                        {t("vibecore.tokenCounter", "~ {{count}} token", {
+                            count: tokenCount.toLocaleString(),
+                        })}
+                    </p>
+                )}
 
                 {/* Error */}
                 {error && (

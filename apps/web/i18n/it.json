@@ -414,10 +414,15 @@
         "removeFile": "Rimuovi",
         "phase": {
             "classifying": "Analisi della richiesta…",
+            "prefilling": "Pre-compilazione campi AI…",
             "creating": "Creazione del workspace…",
             "uploading": "Carico i file…",
             "redirecting": "Apertura…"
-        }
+        },
+        "tokenCounter": "~ {{count}} token",
+        "prefillBanner": "✦ Pre-compilato dall'AI · Rivedi e genera",
+        "prefillEdit": "Modifica manualmente",
+        "prefillCta": "God Mode — Genera"
     },
     "workspace": {
         "selectionNone": "Nessuna selezione",

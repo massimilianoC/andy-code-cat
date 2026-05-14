@@ -1,5 +1,5 @@
 import { call } from "./call";
-import type { VibeClassifyResponse, AttachmentMeta } from "@andy-code-cat/contracts";
+import type { VibeClassifyResponse, AttachmentMeta, VibePrefillRequest, VibePrefillResponse } from "@andy-code-cat/contracts";
 
 export interface VibeClassifyInput {
     prompt: string;
@@ -14,3 +14,13 @@ export function classifyVibeIntent(
         Authorization: `Bearer ${token}`,
     });
 }
+
+export function prefillZeroEffort(
+    token: string,
+    input: VibePrefillRequest,
+): Promise<VibePrefillResponse> {
+    return call<VibePrefillResponse>("POST", "/v1/vibecore/prefill", input, {
+        Authorization: `Bearer ${token}`,
+    });
+}
+

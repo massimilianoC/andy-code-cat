@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { launchZeroEffort, getZeroEffortConfig, type ZeroEffortLaunchInput, type ZeroEffortPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
@@ -432,6 +432,7 @@ function phaseLabel(phase: GenerationPhase): string {
 export default function ZeroEffortLaunchPage() {
     const params = useParams<{ projectId: string }>();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const projectId = params?.projectId ?? "";
     const step4Ref = useRef<HTMLDivElement>(null);
 
@@ -444,6 +445,9 @@ export default function ZeroEffortLaunchPage() {
     const [pipelineConfig, setPipelineConfig] = useState<ZeroEffortPipelineConfig | null>(null);
     const [currentStep, setCurrentStep] = useState(1);
     const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+
+    // AI-prefilled review mode
+    const [aiPrefilled, setAiPrefilled] = useState(false);
 
     // brief editor
     const [editedBrief, setEditedBrief] = useState("");
@@ -488,6 +492,39 @@ export default function ZeroEffortLaunchPage() {
             .catch(() => setError("Unable to load the project."))
             .finally(() => setLoading(false));
     }, [projectId, router]);
+
+    // On mount: read sessionStorage prefill draft if ?prefilled=1 is present
+    useEffect(() => {
+        if (searchParams?.get("prefilled") !== "1" || !projectId) return;
+        try {
+            const raw = sessionStorage.getItem(`ze_prefill_${projectId}`);
+            if (!raw) return;
+            sessionStorage.removeItem(`ze_prefill_${projectId}`);
+            const draft = JSON.parse(raw) as Record<string, unknown>;
+            patch({
+                businessName:    typeof draft.businessName === "string" ? draft.businessName : "",
+                siteType:        (["landing_page","portfolio","showcase","business_site"].includes(String(draft.siteType))
+                    ? draft.siteType as ZeroEffortLaunchInput["siteType"]
+                    : "landing_page"),
+                primaryGoal:     typeof draft.primaryGoal === "string" ? draft.primaryGoal : "",
+                audience:        typeof draft.audience    === "string" ? draft.audience    : "",
+                tone:            typeof draft.tone        === "string" ? draft.tone        : undefined,
+                primaryCta:      typeof draft.primaryCta  === "string" ? draft.primaryCta  : undefined,
+                styleHint:       typeof draft.styleHint   === "string" ? draft.styleHint   : undefined,
+                styleAttributes: Array.isArray(draft.styleAttributes) ? draft.styleAttributes as string[] : [],
+                contactFields:   Array.isArray(draft.contactInfo)
+                    ? (draft.contactInfo as Array<{key:string;value:string}>)
+                        .filter((c) => c && typeof c.key === "string" && typeof c.value === "string")
+                        .map((c) => ({ id: `cf-${c.key}`, key: c.key, value: c.value }))
+                    : [],
+            });
+            setCompletedSteps(new Set([1, 2, 3]));
+            setAiPrefilled(true);
+        } catch {
+            // ignore parse errors — fall back to manual wizard
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectId, searchParams]);
 
     useEffect(() => {
         if (result && step4Ref.current) {
@@ -604,6 +641,50 @@ export default function ZeroEffortLaunchPage() {
         router.push(url);
     }
 
+    /**
+     * God Mode one-click flow (from AI prefill card):
+     * 1. launchZeroEffort → get brief + conversationId
+     * 2. optimizePrompt   → get optimized prompt
+     * 3. navigate         → /workspace with autoPrompt
+     */
+    async function handleGodModeGenerate() {
+        if (!token) return;
+        setSubmitting(true);
+        setError(null);
+        const payload: ZeroEffortLaunchInput = {
+            businessName:   form.businessName,
+            siteType:       form.siteType,
+            primaryGoal:    form.primaryGoal,
+            audience:       form.audience,
+            tone:           form.tone,
+            primaryCta:     form.primaryCta,
+            styleHint:      form.styleHint,
+            contactInfo:    form.contactFields
+                .filter((cf) => cf.key.trim() && cf.value.trim())
+                .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
+            styleAttributes: form.styleAttributes,
+        };
+        try {
+            const [briefResult] = await Promise.all([
+                launchZeroEffort(token, projectId, payload),
+                getZeroEffortConfig(token, projectId).catch(() => null),
+            ]);
+            const brief = buildStructuredBrief(form, project?.name ?? "");
+            const optimizeRes = await optimizePrompt(token, projectId, {
+                rawPrompt: brief,
+                conversationId: briefResult.conversationId,
+            });
+            const finalPrompt = optimizeRes.optimizedPrompt;
+            router.push(
+                `/workspace/${projectId}?conv=${briefResult.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`,
+            );
+        } catch (e) {
+            const message = e instanceof Error ? e.message : "Impossibile avviare la generazione.";
+            setError(message);
+            setSubmitting(false);
+        }
+    }
+
     if (loading) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -639,43 +720,146 @@ export default function ZeroEffortLaunchPage() {
                     </div>
                 </div>
 
-                {/* Step progress bar */}
-                <div className="flex items-center gap-2">
-                    {STEPS.map((step, index) => (
-                        <div key={step.number} className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (completedSteps.has(step.number) || step.number <= currentStep) {
-                                        setCurrentStep(step.number);
-                                    }
-                                }}
-                                className={cn(
-                                    "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors",
-                                    completedSteps.has(step.number)
-                                        ? "bg-primary text-primary-foreground cursor-pointer"
-                                        : step.number === currentStep
-                                        ? "bg-primary/20 border border-primary text-primary cursor-pointer"
-                                        : "bg-muted text-muted-foreground cursor-default",
+                {/* ── AI Prefill review card ── */}
+                {aiPrefilled && !result && (
+                    <Card className="border-primary/40 bg-primary/[0.03]">
+                        <CardHeader className="pb-3">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+                                    <Sparkles className="h-4 w-4" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <span>✦ Pre-compilato dall&apos;AI</span>
+                                        <Badge variant="accent" className="text-xs font-normal">Rivedi e genera</Badge>
+                                    </CardTitle>
+                                    <CardDescription className="text-xs mt-0.5">
+                                        L&apos;AI ha estratto i dati dalla tua richiesta. Genera subito oppure modifica prima i campi.
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3 pt-0">
+                            {/* Summary grid */}
+                            <div className="rounded-md border border-border bg-background/60 p-3 space-y-2 text-sm">
+                                <div className="flex items-baseline gap-2 flex-wrap">
+                                    <span className="text-muted-foreground text-xs w-24 shrink-0">Brand</span>
+                                    <span className="font-medium text-foreground truncate">{form.businessName || "—"}</span>
+                                    <Badge variant="secondary" className="text-xs font-normal capitalize ml-auto">
+                                        {form.siteType.replace("_", " ")}
+                                    </Badge>
+                                </div>
+                                {form.primaryGoal && (
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">Obiettivo</span>
+                                        <p className="text-xs text-foreground line-clamp-3 flex-1">{form.primaryGoal}</p>
+                                    </div>
                                 )}
-                            >
-                                {completedSteps.has(step.number) ? <Check className="h-3.5 w-3.5" /> : step.number}
-                            </button>
-                            <span className={cn(
-                                "hidden text-xs font-medium sm:block",
-                                step.number === currentStep ? "text-foreground" : "text-muted-foreground",
-                            )}>
-                                {step.title}
-                            </span>
-                            {index < STEPS.length - 1 && (
-                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-1" />
-                            )}
-                        </div>
-                    ))}
-                </div>
+                                {form.audience && (
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">Audience</span>
+                                        <p className="text-xs text-foreground line-clamp-2 flex-1">{form.audience}</p>
+                                    </div>
+                                )}
+                                {(form.styleAttributes?.length ?? 0) > 0 && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0">Stile</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {form.styleAttributes.map((a) => (
+                                                <Badge key={a} variant="outline" className="text-xs font-normal capitalize">{a}</Badge>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {form.contactFields.length > 0 && (
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">Contatti</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {form.contactFields.slice(0, 4).map((cf) => (
+                                                <Badge key={cf.id} variant="secondary" className="text-xs font-normal">
+                                                    {cf.key}: {cf.value.slice(0, 30)}{cf.value.length > 30 ? "…" : ""}
+                                                </Badge>
+                                            ))}
+                                            {form.contactFields.length > 4 && (
+                                                <Badge variant="outline" className="text-xs text-muted-foreground">
+                                                    +{form.contactFields.length - 4}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
 
-                {/* Accordion steps */}
-                <div className="space-y-3">
+                            {error && (
+                                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                                    {error}
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-between pt-1 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setAiPrefilled(false)}
+                                    disabled={submitting}
+                                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                                >
+                                    Modifica manualmente
+                                </button>
+                                <Button
+                                    onClick={() => void handleGodModeGenerate()}
+                                    disabled={submitting}
+                                    className="gap-2"
+                                >
+                                    {submitting ? (
+                                        <><Loader2 className="h-4 w-4 animate-spin" /> Generazione in corso…</>
+                                    ) : (
+                                        <><Rocket className="h-4 w-4" /> God Mode — Genera</>
+                                    )}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Step progress bar + Accordion steps — hidden in AI prefill mode */}
+                {!aiPrefilled && (
+                    <>
+                        <div className="flex items-center gap-2">
+                            {STEPS.map((step, index) => (
+                                <div key={step.number} className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (completedSteps.has(step.number) || step.number <= currentStep) {
+                                                setCurrentStep(step.number);
+                                            }
+                                        }}
+                                        className={cn(
+                                            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors",
+                                            completedSteps.has(step.number)
+                                                ? "bg-primary text-primary-foreground cursor-pointer"
+                                                : step.number === currentStep
+                                                ? "bg-primary/20 border border-primary text-primary cursor-pointer"
+                                                : "bg-muted text-muted-foreground cursor-default",
+                                        )}
+                                    >
+                                        {completedSteps.has(step.number) ? <Check className="h-3.5 w-3.5" /> : step.number}
+                                    </button>
+                                    <span className={cn(
+                                        "hidden text-xs font-medium sm:block",
+                                        step.number === currentStep ? "text-foreground" : "text-muted-foreground",
+                                    )}>
+                                        {step.title}
+                                    </span>
+                                    {index < STEPS.length - 1 && (
+                                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-1" />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Accordion steps */}
+                        <div className="space-y-3">
                     {STEPS.map((step) => {
                         const isOpen = currentStep === step.number;
                         const isDone = completedSteps.has(step.number);
@@ -753,7 +937,9 @@ export default function ZeroEffortLaunchPage() {
                             </Card>
                         );
                     })}
-                </div>
+                        </div>
+                    </>
+                )}
 
                 {/* ── Document upload zone ── */}
                 <Card className={cn(
