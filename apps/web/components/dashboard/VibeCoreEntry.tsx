@@ -24,10 +24,11 @@ type EntryPhase =
     | "uploading"
     | "redirecting";
 
+// Spec §B state labels
 const PHASE_LABELS: Record<EntryPhase, string> = {
     idle:        "",
-    classifying: "Analizzo la tua idea…",
-    creating:    "Creo il progetto…",
+    classifying: "Analisi della richiesta…",
+    creating:    "Creazione del workspace…",
     uploading:   "Carico i file…",
     redirecting: "Apertura…",
 };
@@ -191,7 +192,7 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
                 );
             }
 
-            // Redirect to launch page with the user prompt as autoPrompt
+            // Redirect: templateId match → /launch (zero-effort runner), else → /workspace
             setPhase("redirecting");
             const query = new URLSearchParams({
                 autoPrompt: prompt.trim().slice(0, 2000),
@@ -199,7 +200,13 @@ export function VibeCoreEntry({ token, onSwitchToMedium }: VibeCoreEntryProps) {
             if (classification?.formatHint) {
                 query.set("formatHint", classification.formatHint);
             }
-            router.push(`/launch/${projectId}?${query.toString()}`);
+            if (classification?.templateId) {
+                // Template matched: use launch runner which applies the preset preprompt
+                router.push(`/launch/${projectId}?${query.toString()}`);
+            } else {
+                // No template: open workspace for ad-hoc generation
+                router.push(`/workspace/${projectId}?${query.toString()}`);
+            }
         } catch {
             setError("Si è verificato un errore. Riprova.");
             setPhase("idle");

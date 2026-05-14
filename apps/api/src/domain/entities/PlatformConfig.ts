@@ -86,8 +86,8 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         enabled: true,
         provider: "siliconflow",
         model: "Qwen/Qwen3-8B",
-        temperature: 0.1,
-        maxCompletionTokens: 512,
+        temperature: 0.0,
+        maxCompletionTokens: 256,
         systemTemplate: "",
     },
 };
