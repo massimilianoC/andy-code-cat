@@ -11,6 +11,7 @@ import type {
 } from "../../../domain/entities/AssetEnrichmentTrace";
 import { CURRENT_TRACE_VERSION } from "../../../domain/entities/AssetEnrichmentTrace";
 import type { ProjectAsset } from "../../../domain/entities/ProjectAsset";
+import { renderAssetLayerDFragment } from "../../llm/systemPromptLayers";
 
 export interface TraceBuilderInput {
     asset: ProjectAsset;
@@ -53,7 +54,7 @@ export function buildEnrichmentTrace(input: TraceBuilderInput): AssetEnrichmentT
     // Colors: prefer normalized palette color names
     const distilledColors = (colorPalette?.dominantNames ?? []).slice(0, 5);
 
-    return {
+    const traceWithoutFragment: AssetEnrichmentTrace = {
         assetId: asset.id,
         projectId: asset.projectId,
         userId: asset.userId,
@@ -69,5 +70,13 @@ export function buildEnrichmentTrace(input: TraceBuilderInput): AssetEnrichmentT
         distilledSummary,
         distilledTags,
         distilledColors,
+        renderedFragment: null,
     };
+
+    // Pre-render the Layer D fragment once at build time. This is what every downstream
+    // injection point (VibePrefill, OptimizePrompt, God Mode generation) will read,
+    // guaranteeing deterministic single-pass analysis of the asset.
+    traceWithoutFragment.renderedFragment = renderAssetLayerDFragment(traceWithoutFragment);
+
+    return traceWithoutFragment;
 }

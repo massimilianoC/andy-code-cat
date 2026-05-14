@@ -119,6 +119,7 @@ function makeTrace(
         distilledSummary: "Artist catalog for 2026 event.",
         distilledTags: ["catalog", "artists"],
         distilledColors: [],
+        renderedFragment: null,
     };
 }
 

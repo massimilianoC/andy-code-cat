@@ -23,12 +23,17 @@ function inferColumnType(values: unknown[]): string {
     return "text";
 }
 
-export async function parseExcel(buffer: Buffer): Promise<ParsedDocument> {
+export async function parseExcel(buffer: Buffer, mimeType?: string): Promise<ParsedDocument> {
     const XLSX: typeof import("xlsx") = await import("xlsx").catch(() => {
         throw new Error("xlsx package is required for Excel parsing — run npm install xlsx");
     });
 
-    const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+    // CSV files don't have magic bytes — SheetJS needs the explicit "string" path
+    // to parse them deterministically. Excel files go through the buffer path.
+    const isCsv = mimeType === "text/csv" || mimeType === "application/csv";
+    const workbook = isCsv
+        ? XLSX.read(buffer.toString("utf8"), { type: "string", cellDates: true, raw: false })
+        : XLSX.read(buffer, { type: "buffer", cellDates: true });
 
     const textParts: string[] = [];
     const sheets: ParsedDocumentSheet[] = [];
@@ -86,8 +91,8 @@ export async function parseExcel(buffer: Buffer): Promise<ParsedDocument> {
         wordCount,
         pageCount: workbook.SheetNames.length,
         sectionCount: workbook.SheetNames.length,
-        parserName: "xlsx-sheetjs",
-        parserVersion: "1.0.0",
+        parserName: isCsv ? "csv-sheetjs" : "xlsx-sheetjs",
+        parserVersion: "1.1.0",
         sheets,
     };
 }

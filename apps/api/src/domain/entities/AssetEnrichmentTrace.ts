@@ -167,6 +167,18 @@ export interface AssetEnrichmentTrace {
     distilledSummary: string;
     distilledTags: string[];
     distilledColors: string[];
+
+    /**
+     * Pre-rendered Layer D fragment for this asset.
+     *
+     * Computed deterministically by `renderAssetLayerDFragment()` whenever the trace is
+     * built or updated, so every downstream injection point (VibePrefill, OptimizePrompt,
+     * God Mode generation) reuses the SAME text without recomputing per call.
+     *
+     * Treat as null when the trace is freshly built by an older code path that didn't
+     * populate this field — the renderer falls back to in-memory rendering in that case.
+     */
+    renderedFragment: string | null;
 }
 
-export const CURRENT_TRACE_VERSION = 1;
+export const CURRENT_TRACE_VERSION = 2;

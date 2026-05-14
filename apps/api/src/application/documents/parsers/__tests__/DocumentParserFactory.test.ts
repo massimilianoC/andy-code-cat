@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getParser } from "../DocumentParserFactory";
+import { parseExcel } from "../ExcelParser";
 
 describe("DocumentParserFactory", () => {
     it("returns a parser for application/pdf", () => {
@@ -70,5 +71,22 @@ describe("DocumentParserFactory", () => {
     it("handles mime with charset suffix", () => {
         expect(getParser("text/html; charset=utf-8")).not.toBeNull();
         expect(getParser("text/plain; charset=utf-8")).not.toBeNull();
+    });
+
+    it("routes CSV through ExcelParser (spreadsheet treatment, not flat text)", async () => {
+        const csv = "City,Population\nMilan,1400000\nRome,2800000\n";
+        const parser = getParser("text/csv");
+        expect(parser).not.toBeNull();
+        const result = await parser!.parse(Buffer.from(csv, "utf8"), "text/csv");
+        expect(result.parserName).toBe("csv-sheetjs");
+        expect(result.sheets).toBeDefined();
+        expect(result.sheets![0]!.columnHeaders).toEqual(["City", "Population"]);
+    });
+
+    it("uses the same ExcelParser path that direct invocation uses for CSV", async () => {
+        const csv = "a,b\n1,2\n";
+        const direct = await parseExcel(Buffer.from(csv, "utf8"), "text/csv");
+        expect(direct.parserName).toBe("csv-sheetjs");
+        expect(direct.sheets?.length).toBe(1);
     });
 });

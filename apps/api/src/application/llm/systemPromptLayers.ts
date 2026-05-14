@@ -1,7 +1,110 @@
 import { PRESET_MAP, type ProjectPreset } from "../../domain/entities/ProjectPreset";
 import type { ProjectAsset } from "../../domain/entities/ProjectAsset";
+import type { AssetEnrichmentTrace } from "../../domain/entities/AssetEnrichmentTrace";
 import { FORMAT_HINT_RULES } from "../prompting/formatHintRules";
 import { env } from "../../config";
+
+/** Default per-asset fragment budget. Tuned so 3 assets fit comfortably under the 50 KB Layer D max. */
+const ASSET_FRAGMENT_DEFAULT_BUDGET = 8_000;
+
+/**
+ * Render the per-asset Layer D fragment.
+ *
+ * This is the SINGLE source of truth for how an enriched asset is serialised into
+ * Layer D text. It is deterministic — same trace in → same fragment out — and
+ * intentionally has no global state. The output is cached on the trace itself
+ * (`AssetEnrichmentTrace.renderedFragment`) by `buildEnrichmentTrace()` so that
+ * every consumer (VibePrefill brief pass, OptimizePrompt, God Mode generation)
+ * uses the exact same text without recomputing.
+ *
+ * Output format:
+ *   ---
+ *   Asset: <distilledTitle>
+ *   Type: <assetKind>
+ *   Summary: <distilledSummary>
+ *   ...brief / palette / visual / signals / structured data...
+ *   ---
+ */
+export function renderAssetLayerDFragment(
+    trace: AssetEnrichmentTrace,
+    opts?: { maxChars?: number },
+): string {
+    const maxChars = opts?.maxChars ?? ASSET_FRAGMENT_DEFAULT_BUDGET;
+    const lines: string[] = [
+        `Asset: ${trace.distilledTitle}`,
+        `Type: ${trace.assetKind}`,
+    ];
+
+    if (trace.distilledSummary) {
+        lines.push(`Summary: ${trace.distilledSummary}`);
+    }
+
+    const brief = trace.documentBrief;
+    if (brief) {
+        if (brief.purposeSentence) lines.push(`Purpose: ${brief.purposeSentence}`);
+        if (brief.contentSummary) lines.push(`Content: ${brief.contentSummary}`);
+        if (brief.detectedBrandName) lines.push(`Brand: ${brief.detectedBrandName}`);
+        if (brief.toneLabel) lines.push(`Tone: ${brief.toneLabel}`);
+        if (brief.targetAudience) lines.push(`Audience: ${brief.targetAudience}`);
+        if (brief.mainArgumentOrValue) lines.push(`Main value: ${brief.mainArgumentOrValue}`);
+        if (brief.keyMessages.length > 0) {
+            lines.push("Key messages:");
+            brief.keyMessages.forEach((m) => lines.push(`- ${m}`));
+        }
+        if (brief.ctaText) lines.push(`Call to action: ${brief.ctaText}`);
+    } else if (trace.textLayer?.extractedTextSnippet) {
+        lines.push(`Text preview (analysis pending): ${trace.textLayer.extractedTextSnippet.slice(0, 1500)}`);
+    }
+
+    const palette = trace.colorPalette;
+    const visual = trace.visualAnalysis;
+    const signals = trace.designSignals;
+    if (palette && palette.dominantNames.length > 0) {
+        lines.push(`Color palette: ${palette.dominantNames.join(", ")}`);
+    }
+    if (visual?.moodLabel) lines.push(`Mood: ${visual.moodLabel}`);
+    if (visual?.sceneDescription) lines.push(`Scene: ${visual.sceneDescription}`);
+    if (signals?.suggestedWebUse && signals.suggestedWebUse.length > 0) {
+        lines.push(`Design signals: ${signals.suggestedWebUse.join(", ")}`);
+    }
+
+    if (trace.distilledTags.length > 0) {
+        lines.push(`Tags: ${trace.distilledTags.join(", ")}`);
+    }
+
+    // Structured data: spreadsheets and presentations.
+    // Truncation is per-fragment using its own budget — deterministic, independent of
+    // sibling assets present in the same Layer D render.
+    const sd = trace.structuredData;
+    if (sd?.sheets && sd.sheets.length > 0) {
+        lines.push(`Structured data (${sd.sheets.length} sheet${sd.sheets.length > 1 ? "s" : ""}):`);
+        for (const sheet of sd.sheets) {
+            const headerLine = `Sheet "${sheet.name}" — ${sheet.rowCount} rows — columns: ${sheet.columnHeaders
+                .map((h, i) => `${h}[${sheet.columnTypes[i] ?? "text"}]`)
+                .join(", ")}`;
+            lines.push(headerLine);
+            const current = lines.join("\n").length;
+            const csvBudget = Math.max(200, maxChars - current - 80);
+            const csvTruncated = sheet.csvBlock.length > csvBudget
+                ? `${sheet.csvBlock.slice(0, csvBudget)}\n...(truncated)`
+                : sheet.csvBlock;
+            lines.push("```csv");
+            lines.push(csvTruncated);
+            lines.push("```");
+            if (lines.join("\n").length >= maxChars) break;
+        }
+    } else if (sd?.slides && sd.slides.length > 0) {
+        lines.push(`Presentation (${sd.slides.length} slides):`);
+        for (const slide of sd.slides.slice(0, 20)) {
+            const title = slide.title ?? "(untitled)";
+            const body = slide.body.slice(0, 200);
+            lines.push(`  Slide ${slide.index}: ${title}${body ? ` — ${body}` : ""}`);
+            if (lines.join("\n").length >= maxChars) break;
+        }
+    }
+
+    return `---\n${lines.join("\n")}\n---`;
+}
 
 /**
  * TemplateResolution — the output of Layer Φ (VibeClassify) or an explicit user selection.
@@ -146,76 +249,10 @@ export function buildProjectKnowledgeLayer(
 
     for (const asset of selected) {
         const trace = asset.enrichmentTrace!;
-        const lines: string[] = [
-            `Asset: ${trace.distilledTitle}`,
-            `Type: ${trace.assetKind}`,
-        ];
-
-        if (trace.distilledSummary) {
-            lines.push(`Summary: ${trace.distilledSummary}`);
-        }
-
-        const brief = trace.documentBrief;
-        if (brief) {
-            if (brief.purposeSentence) lines.push(`Purpose: ${brief.purposeSentence}`);
-            if (brief.contentSummary) lines.push(`Content: ${brief.contentSummary}`);
-            if (brief.detectedBrandName) lines.push(`Brand: ${brief.detectedBrandName}`);
-            if (brief.toneLabel) lines.push(`Tone: ${brief.toneLabel}`);
-            if (brief.targetAudience) lines.push(`Audience: ${brief.targetAudience}`);
-            if (brief.mainArgumentOrValue) lines.push(`Main value: ${brief.mainArgumentOrValue}`);
-            if (brief.keyMessages.length > 0) {
-                lines.push("Key messages:");
-                brief.keyMessages.forEach(m => lines.push(`- ${m}`));
-            }
-            if (brief.ctaText) lines.push(`Call to action: ${brief.ctaText}`);
-        } else if (trace.textLayer?.extractedTextSnippet) {
-            // Enrichment still pending — emit raw text snippet as fallback
-            lines.push(`Text preview (analysis pending): ${trace.textLayer.extractedTextSnippet.slice(0, 1500)}`);
-        }
-
-        const palette = trace.colorPalette;
-        const visual = trace.visualAnalysis;
-        const signals = trace.designSignals;
-        if (palette && palette.dominantNames.length > 0) {
-            lines.push(`Color palette: ${palette.dominantNames.join(", ")}`);
-        }
-        if (visual?.moodLabel) lines.push(`Mood: ${visual.moodLabel}`);
-        if (signals?.suggestedWebUse && signals.suggestedWebUse.length > 0) {
-            lines.push(`Design signals: ${signals.suggestedWebUse.join(", ")}`);
-        }
-
-        if (trace.distilledTags.length > 0) {
-            lines.push(`Tags: ${trace.distilledTags.join(", ")}`);
-        }
-
-        // Emit structured data blocks for spreadsheets and presentations
-        const sd = trace.structuredData;
-        if (sd?.sheets && sd.sheets.length > 0) {
-            lines.push(`Structured data (${sd.sheets.length} sheet${sd.sheets.length > 1 ? "s" : ""}):`);
-            for (const sheet of sd.sheets) {
-                const budget = maxChars - totalChars - lines.join("\n").length - 500;
-                if (budget < 100) break;
-                const colDesc = sheet.columnHeaders.map((h, i) => `${h}[${sheet.columnTypes[i] ?? "text"}]`).join(", ");
-                lines.push(`Sheet "${sheet.name}" — ${sheet.rowCount} rows — columns: ${colDesc}`);
-                const csvTruncated = sheet.csvBlock.length > budget
-                    ? `${sheet.csvBlock.slice(0, budget)}\n...(truncated)`
-                    : sheet.csvBlock;
-                lines.push("```csv");
-                lines.push(csvTruncated);
-                lines.push("```");
-            }
-        } else if (sd?.slides && sd.slides.length > 0) {
-            lines.push(`Presentation (${sd.slides.length} slides):`);
-            for (const slide of sd.slides.slice(0, 20)) {
-                const budget = maxChars - totalChars - lines.join("\n").length - 300;
-                if (budget < 50) break;
-                const title = slide.title ?? "(untitled)";
-                const body = slide.body.slice(0, Math.min(200, budget));
-                lines.push(`  Slide ${slide.index}: ${title}${body ? ` — ${body}` : ""}`);
-            }
-        }
-
-        const block = `---\n${lines.join("\n")}\n---`;
+        // Prefer the fragment that was pre-rendered during enrichment (deterministic,
+        // single-pass). Fall back to on-the-fly rendering for legacy traces that
+        // predate the cache field.
+        const block = trace.renderedFragment ?? renderAssetLayerDFragment(trace);
         if (totalChars + block.length + 2 > maxChars) break;
         blocks.push(block);
         totalChars += block.length + 2;

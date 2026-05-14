@@ -20,7 +20,21 @@ describe("ExcelParser", () => {
         expect(result.rawText).toContain("Alice");
         expect(result.rawText).toContain("Bob");
         expect(result.parserName).toBe("xlsx-sheetjs");
-        expect(result.parserVersion).toBe("1.0.0");
+        expect(result.parserVersion).toBe("1.1.0");
+    });
+
+    it("parses a CSV buffer as a spreadsheet with structured payload", async () => {
+        const csv = "Name,Genre,City\nAlice,Jazz,Milano\nBob,Rock,Roma\nClara,Pop,Napoli\n";
+        const result = await parseExcel(Buffer.from(csv, "utf8"), "text/csv");
+
+        expect(result.parserName).toBe("csv-sheetjs");
+        expect(result.sheets).toBeDefined();
+        expect(result.sheets?.length).toBe(1);
+        const sheet = result.sheets![0]!;
+        expect(sheet.columnHeaders).toEqual(["Name", "Genre", "City"]);
+        expect(sheet.rowCount).toBe(3);
+        expect(sheet.csvBlock).toContain("Alice");
+        expect(sheet.csvBlock).toContain("Roma");
     });
 
     it("includes sheet names in text", async () => {

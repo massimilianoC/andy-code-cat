@@ -10,6 +10,7 @@ import { ModeSelector, type VibeMode } from "./ModeSelector";
 import { VibeCoreBackground } from "./VibeCoreBackground";
 import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
 import { classifyVibeIntent, prefillZeroEffort } from "@/lib/api/vibecore";
+import { getZeroEffortConfig } from "@/lib/api/pipelines";
 import { createProject, uploadProjectAsset, renameProject } from "@/lib/api";
 
 /** Max file size accepted via the VibeCore drag-and-drop zone (10 MB). */
@@ -42,6 +43,10 @@ const ACCEPTED_MIME_TYPES = [
     "image/svg+xml",
     "image/bmp",
     "image/tiff",
+    // Modern image formats — transcoded server-side before vision LLM
+    "image/heic",
+    "image/heif",
+    "image/avif",
 ];
 
 type EntryPhase = "idle" | "classifying" | "prefilling" | "creating" | "uploading" | "redirecting";
@@ -138,7 +143,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
     function handleModeChange(next: VibeMode) {
         if (next === "hard") {
-            // HARD: create blank project + enter God Mode with auto-templating engine.
+            // HARD: create blank project + enter Guided Mode (God Mode workspace) with auto-templating engine.
             // The parent resets the mode to "easy" so returning to dashboard shows EASY.
             void handleHardMode();
             return;
@@ -149,8 +154,9 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
     /**
      * HARD mode: creates a blank project (carrying current prompt + files if any),
-     * then navigates to God Mode with autoTemplating=true so the workspace's
+     * then navigates to Guided Mode (God Mode workspace) with autoTemplating=true so the workspace's
      * auto-templating engine can classify the intent on first generation.
+     * The god_mode_generate superadmin config determines which provider/model is used.
      */
     async function handleHardMode() {
         setPhase("creating");
@@ -176,6 +182,20 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             setPhase("redirecting");
             const query = new URLSearchParams({ autoTemplating: "true" });
             if (prompt.trim()) query.set("autoPrompt", prompt.trim().slice(0, 2000));
+
+            // Apply god_mode_generate model so workspace uses the superadmin-configured model.
+            try {
+                const pipelineConfig = await getZeroEffortConfig(token, projectId);
+                if (pipelineConfig?.godModeGenerate?.provider) {
+                    query.set("preferredProvider", pipelineConfig.godModeGenerate.provider);
+                }
+                if (pipelineConfig?.godModeGenerate?.model) {
+                    query.set("preferredModel", pipelineConfig.godModeGenerate.model);
+                }
+            } catch {
+                // Non-blocking: proceed without preferred model if config fetch fails
+            }
+
             router.push(`/workspace/${projectId}?${query.toString()}`);
         } catch {
             setError(t("vibecore.error", "Si è verificato un errore. Riprova."));

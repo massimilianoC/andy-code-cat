@@ -337,12 +337,17 @@ export class AssetEnrichmentPipeline {
             }));
         }
 
-        const { buffer: safeBuffer } = await prepareImageBuffer(input.fileBuffer);
+        // prepareImageBuffer transcodes HEIC/HEIF/AVIF/TIFF/BMP → JPEG so the vision
+        // provider receives a format it accepts, and resizes oversized images.
+        const { buffer: safeBuffer, mimeType: safeMime } = await prepareImageBuffer(
+            input.fileBuffer,
+            input.asset.mimeType,
+        );
         const authHeader = resolveAuthHeader(provider.provider, provider.authType);
 
         const { colorPalette, visualAnalysis, designSignals, tokensUsed, usage } = await analyzeImage({
             buffer: safeBuffer,
-            mimeType: input.asset.mimeType,
+            mimeType: safeMime,
             baseUrl: provider.baseUrl,
             model: visionModel,
             authHeader,
