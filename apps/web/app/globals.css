@@ -1246,6 +1246,16 @@ a.link:hover {
     will-change: transform;
 }
 
+/* Isolate the orb layer to avoid reflow/repaint propagation to the rest of the page */
+.vc-orb-layer {
+    contain: layout paint;
+}
+
+/* Pause all orb animations when the background is scrolled out of view */
+.vc-orb-paused .vc-orb {
+    animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .vc-orb {
         animation: none;
