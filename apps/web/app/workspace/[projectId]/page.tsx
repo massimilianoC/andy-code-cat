@@ -2761,6 +2761,11 @@ export default function WorkspacePage() {
         setPromptRestoreValue(null);
     }
 
+    function handleClearPrompt() {
+        setPrompt("");
+        setPromptRestoreValue(null);
+    }
+
     const handleChatFileAttach = useCallback(async (files: FileList | File[]) => {
         const tok = getToken();
         if (!tok) return;
@@ -3121,6 +3126,23 @@ export default function WorkspacePage() {
                             </label>
                             <button
                                 type="button"
+                                onClick={handleClearPrompt}
+                                disabled={!prompt.trim() || sending || optimizingPrompt}
+                                title={t("workspace.ui.clearPrompt")}
+                                aria-label={t("workspace.ui.clearPrompt")}
+                                style={{
+                                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                    width: "2.25rem", height: "2.25rem", borderRadius: "var(--radius)",
+                                    border: "1px solid var(--border)", background: "transparent",
+                                    color: "var(--text-muted)", cursor: (!prompt.trim() || sending || optimizingPrompt) ? "not-allowed" : "pointer",
+                                    opacity: (!prompt.trim() || sending || optimizingPrompt) ? 0.5 : 1,
+                                    flexShrink: 0,
+                                }}
+                            >
+                                <X style={{ width: "1rem", height: "1rem" }} />
+                            </button>
+                            <button
+                                type="button"
                                 onClick={handleToggleVoiceInput}
                                 disabled={sending || optimizingPrompt}
                                 title={voiceListening ? t("workspace.ui.voiceListeningTitle") : t("workspace.ui.voiceStartTitle")}
@@ -3369,7 +3391,7 @@ export default function WorkspacePage() {
                                 <button
                                     type="button"
                                     className="secondary"
-                                    onClick={() => { setPrompt(""); setPromptRestoreValue(null); }}
+                                    onClick={handleClearPrompt}
                                     title={t("workspace.ui.clearPrompt")}
                                     style={{ fontSize: "0.78rem" }}
                                 >
