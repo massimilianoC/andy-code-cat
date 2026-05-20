@@ -3124,23 +3124,18 @@ export default function WorkspacePage() {
                                     : <Paperclip className="h-4 w-4" />
                                 }
                             </label>
-                            <button
+                            <Button
                                 type="button"
+                                variant="outline"
+                                size="icon"
                                 onClick={handleClearPrompt}
                                 disabled={!prompt.trim() || sending || optimizingPrompt}
                                 title={t("workspace.ui.clearPrompt")}
                                 aria-label={t("workspace.ui.clearPrompt")}
-                                style={{
-                                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                                    width: "2.25rem", height: "2.25rem", borderRadius: "var(--radius)",
-                                    border: "1px solid var(--border)", background: "transparent",
-                                    color: "var(--text-muted)", cursor: (!prompt.trim() || sending || optimizingPrompt) ? "not-allowed" : "pointer",
-                                    opacity: (!prompt.trim() || sending || optimizingPrompt) ? 0.5 : 1,
-                                    flexShrink: 0,
-                                }}
+                                className="h-9 w-9 shrink-0 border-border bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground"
                             >
-                                <X style={{ width: "1rem", height: "1rem" }} />
-                            </button>
+                                <X className="h-4 w-4" />
+                            </Button>
                             <button
                                 type="button"
                                 onClick={handleToggleVoiceInput}
