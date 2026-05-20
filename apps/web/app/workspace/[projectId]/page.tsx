@@ -3126,13 +3126,13 @@ export default function WorkspacePage() {
                             </label>
                             <Button
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
                                 size="icon"
                                 onClick={handleClearPrompt}
                                 disabled={!prompt.trim() || sending || optimizingPrompt}
                                 title={t("workspace.ui.clearPrompt")}
                                 aria-label={t("workspace.ui.clearPrompt")}
-                                className="h-9 w-9 shrink-0 border-border bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground"
+                                className="h-9 w-9 shrink-0 border border-border text-muted-foreground hover:text-foreground"
                             >
                                 <X className="h-4 w-4" />
                             </Button>
