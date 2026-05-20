@@ -38,6 +38,15 @@ interface ConfirmState {
 
 type SidebarTab = "overview" | "ai" | "deployment" | "danger";
 
+function getPublicDeploymentUrl(deployment: AdminProjectDto["activeDeployment"]): string | null {
+    if (!deployment) return null;
+    return deployment.subdomainUrl ?? deployment.url;
+}
+
+function getPublicDeploymentLabel(deployment: AdminProjectDto["activeDeployment"]): string {
+    return deployment?.customSlug && deployment.subdomainUrl ? "Slug URL" : "Live URL";
+}
+
 /** Segment-control tab bar for the project sidebar. */
 function SidebarTabs({ active, onChange }: { active: SidebarTab; onChange: (t: SidebarTab) => void }) {
     const tabs: { id: SidebarTab; label: string; danger?: boolean }[] = [
@@ -263,12 +272,26 @@ export default function AdminProjectsPage() {
                                             }
                                         </td>
                                         <td className="py-3 px-4">
-                                            {p.activeDeployment
-                                                ? <Badge variant={p.activeDeployment.isAdminBlocked ? "destructive" : "success"} className="text-xs">
-                                                    {p.activeDeployment.isAdminBlocked ? "Blocked" : "Live"}
-                                                </Badge>
-                                                : <span className="text-xs text-muted-foreground">—</span>
-                                            }
+                                            {p.activeDeployment ? (
+                                                <div className="space-y-1">
+                                                    <Badge variant={p.activeDeployment.isAdminBlocked ? "destructive" : "success"} className="text-xs">
+                                                        {p.activeDeployment.isAdminBlocked ? "Blocked" : "Live"}
+                                                    </Badge>
+                                                    {getPublicDeploymentUrl(p.activeDeployment) ? (
+                                                        <a
+                                                            href={getPublicDeploymentUrl(p.activeDeployment)!}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            onClick={(event) => event.stopPropagation()}
+                                                            className="block text-xs text-primary hover:underline break-all"
+                                                        >
+                                                            {getPublicDeploymentUrl(p.activeDeployment)}
+                                                        </a>
+                                                    ) : null}
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">—</span>
+                                            )}
                                         </td>
                                         <td className="py-3 px-4 text-muted-foreground text-xs">
                                             {new Date(p.createdAt).toLocaleDateString()}
@@ -391,14 +414,14 @@ export default function AdminProjectsPage() {
                                                     <span>{new Date(selectedProject.createdAt).toLocaleString()}</span>
                                                     {selectedProject.activeDeployment && (
                                                         <>
-                                                            <span className="text-muted-foreground">Live URL</span>
+                                                            <span className="text-muted-foreground">{getPublicDeploymentLabel(selectedProject.activeDeployment)}</span>
                                                             <a
-                                                                href={selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                                href={getPublicDeploymentUrl(selectedProject.activeDeployment)!}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 className="text-primary hover:underline text-xs break-all"
                                                             >
-                                                                {selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                                {getPublicDeploymentUrl(selectedProject.activeDeployment)}
                                                             </a>
                                                         </>
                                                     )}
@@ -441,14 +464,14 @@ export default function AdminProjectsPage() {
                                                         </div>
                                                     )}
                                                     <div className="flex gap-2">
-                                                        <span className="text-muted-foreground">URL:</span>
+                                                        <span className="text-muted-foreground">{getPublicDeploymentLabel(selectedProject.activeDeployment)}:</span>
                                                         <a
-                                                            href={selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                            href={getPublicDeploymentUrl(selectedProject.activeDeployment)!}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
                                                             className="text-primary hover:underline text-xs break-all"
                                                         >
-                                                            {selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                            {getPublicDeploymentUrl(selectedProject.activeDeployment)}
                                                         </a>
                                                     </div>
                                                     <div className="pt-1">
