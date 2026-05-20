@@ -38,13 +38,14 @@ interface ConfirmState {
 
 type SidebarTab = "overview" | "ai" | "deployment" | "danger";
 
-function getPublicDeploymentUrl(deployment: AdminProjectDto["activeDeployment"]): string | null {
-    if (!deployment) return null;
+/** Prefer the nullish-safe public subdomain URL when available, otherwise fall back to the stored deployment URL. */
+function getPublicDeploymentUrl(deployment: NonNullable<AdminProjectDto["activeDeployment"]>): string {
     return deployment.subdomainUrl ?? deployment.url;
 }
 
-function getPublicDeploymentLabel(deployment: AdminProjectDto["activeDeployment"]): string {
-    return deployment?.customSlug && deployment.subdomainUrl ? "Slug URL" : "Live URL";
+/** Only label explicit custom-slug deployments as "Slug URL"; publishId-based public links stay labeled as generic live URLs. */
+function getPublicDeploymentLabel(deployment: NonNullable<AdminProjectDto["activeDeployment"]>): string {
+    return deployment.customSlug && deployment.subdomainUrl ? "Slug URL" : "Live URL";
 }
 
 /** Segment-control tab bar for the project sidebar. */
@@ -94,6 +95,13 @@ export default function AdminProjectsPage() {
     const [actionInFlight, setActionInFlight] = useState(false);
 
     const limit = 20;
+    const selectedProjectDeployment = selectedProject?.activeDeployment ?? null;
+    const selectedProjectDeploymentDetails = selectedProjectDeployment
+        ? {
+            url: getPublicDeploymentUrl(selectedProjectDeployment),
+            label: getPublicDeploymentLabel(selectedProjectDeployment),
+        }
+        : null;
 
     const fetchProjects = useCallback(
         async (p: number, s: string) => {
@@ -249,55 +257,56 @@ export default function AdminProjectsPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {projects.map((p) => (
-                                    <tr
-                                        key={p.id}
-                                        onClick={() => selectProject(p)}
-                                        className={cn(
-                                            "border-b border-border cursor-pointer hover:bg-muted/30 transition-colors",
-                                            selectedProject?.id === p.id && "bg-muted/50",
-                                        )}
-                                    >
-                                        <td className="py-3 px-4 font-medium">{p.name}</td>
-                                        <td className="py-3 px-4 text-muted-foreground">
-                                            <span className="block font-mono text-xs">{p.ownerEmail}</span>
-                                            {p.ownerIsBlocked && (
-                                                <Badge variant="destructive" className="text-xs mt-1">Blocked</Badge>
+                                {projects.map((p) => {
+                                    const deploymentUrl = p.activeDeployment ? getPublicDeploymentUrl(p.activeDeployment) : undefined;
+                                    return (
+                                        <tr
+                                            key={p.id}
+                                            onClick={() => selectProject(p)}
+                                            className={cn(
+                                                "border-b border-border cursor-pointer hover:bg-muted/30 transition-colors",
+                                                selectedProject?.id === p.id && "bg-muted/50",
                                             )}
-                                        </td>
-                                        <td className="py-3 px-4 text-muted-foreground">
-                                            {p.presetId
-                                                ? <Badge variant="outline" className="text-xs">{p.presetId}</Badge>
-                                                : <span className="text-xs text-muted-foreground">—</span>
-                                            }
-                                        </td>
-                                        <td className="py-3 px-4">
-                                            {p.activeDeployment ? (
-                                                <div className="space-y-1">
-                                                    <Badge variant={p.activeDeployment.isAdminBlocked ? "destructive" : "success"} className="text-xs">
-                                                        {p.activeDeployment.isAdminBlocked ? "Blocked" : "Live"}
-                                                    </Badge>
-                                                    {getPublicDeploymentUrl(p.activeDeployment) ? (
+                                        >
+                                            <td className="py-3 px-4 font-medium">{p.name}</td>
+                                            <td className="py-3 px-4 text-muted-foreground">
+                                                <span className="block font-mono text-xs">{p.ownerEmail}</span>
+                                                {p.ownerIsBlocked && (
+                                                    <Badge variant="destructive" className="text-xs mt-1">Blocked</Badge>
+                                                )}
+                                            </td>
+                                            <td className="py-3 px-4 text-muted-foreground">
+                                                {p.presetId
+                                                    ? <Badge variant="outline" className="text-xs">{p.presetId}</Badge>
+                                                    : <span className="text-xs text-muted-foreground">—</span>
+                                                }
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                {p.activeDeployment ? (
+                                                    <div className="space-y-1">
+                                                        <Badge variant={p.activeDeployment.isAdminBlocked ? "destructive" : "success"} className="text-xs">
+                                                            {p.activeDeployment.isAdminBlocked ? "Blocked" : "Live"}
+                                                        </Badge>
                                                         <a
-                                                            href={getPublicDeploymentUrl(p.activeDeployment)!}
+                                                            href={deploymentUrl}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
                                                             onClick={(event) => event.stopPropagation()}
                                                             className="block text-xs text-primary hover:underline break-all"
                                                         >
-                                                            {getPublicDeploymentUrl(p.activeDeployment)}
+                                                            {deploymentUrl}
                                                         </a>
-                                                    ) : null}
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground">—</span>
-                                            )}
-                                        </td>
-                                        <td className="py-3 px-4 text-muted-foreground text-xs">
-                                            {new Date(p.createdAt).toLocaleDateString()}
-                                        </td>
-                                    </tr>
-                                ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground">—</span>
+                                                )}
+                                            </td>
+                                            <td className="py-3 px-4 text-muted-foreground text-xs">
+                                                {new Date(p.createdAt).toLocaleDateString()}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                                 {projects.length === 0 && !loading && (
                                     <tr>
                                         <td colSpan={5} className="py-10 text-center text-muted-foreground">
@@ -412,16 +421,16 @@ export default function AdminProjectsPage() {
                                                     <span>{selectedProject.presetId ?? <span className="text-muted-foreground">none</span>}</span>
                                                     <span className="text-muted-foreground">Created</span>
                                                     <span>{new Date(selectedProject.createdAt).toLocaleString()}</span>
-                                                    {selectedProject.activeDeployment && (
+                                                    {selectedProjectDeploymentDetails && (
                                                         <>
-                                                            <span className="text-muted-foreground">{getPublicDeploymentLabel(selectedProject.activeDeployment)}</span>
+                                                            <span className="text-muted-foreground">{selectedProjectDeploymentDetails.label}</span>
                                                             <a
-                                                                href={getPublicDeploymentUrl(selectedProject.activeDeployment)!}
+                                                                href={selectedProjectDeploymentDetails.url}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 className="text-primary hover:underline text-xs break-all"
                                                             >
-                                                                {getPublicDeploymentUrl(selectedProject.activeDeployment)}
+                                                                {selectedProjectDeploymentDetails.url}
                                                             </a>
                                                         </>
                                                     )}
@@ -463,17 +472,19 @@ export default function AdminProjectsPage() {
                                                             <span>{selectedProject.activeDeployment.customSlug}</span>
                                                         </div>
                                                     )}
-                                                    <div className="flex gap-2">
-                                                        <span className="text-muted-foreground">{getPublicDeploymentLabel(selectedProject.activeDeployment)}:</span>
-                                                        <a
-                                                            href={getPublicDeploymentUrl(selectedProject.activeDeployment)!}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="text-primary hover:underline text-xs break-all"
-                                                        >
-                                                            {getPublicDeploymentUrl(selectedProject.activeDeployment)}
-                                                        </a>
-                                                    </div>
+                                                    {selectedProjectDeploymentDetails && (
+                                                        <div className="flex gap-2">
+                                                            <span className="text-muted-foreground">{selectedProjectDeploymentDetails.label}:</span>
+                                                            <a
+                                                                href={selectedProjectDeploymentDetails.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-primary hover:underline text-xs break-all"
+                                                            >
+                                                                {selectedProjectDeploymentDetails.url}
+                                                            </a>
+                                                        </div>
+                                                    )}
                                                     <div className="pt-1">
                                                         {selectedProject.activeDeployment.isAdminBlocked ? (
                                                             <Button
