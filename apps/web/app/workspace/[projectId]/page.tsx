@@ -48,6 +48,9 @@ import {
     listProjectAssets,
     getProjectAiAnalytics,
     generateProjectImage,
+    getStockImageProviderStatus,
+    regenerateMediaByKey,
+    regenerateStockProjectImage,
     suggestProjectImageIdea,
     downloadProjectAssetDataUrl,
     getPublicAssetUrl,
@@ -55,6 +58,7 @@ import {
     type ProjectAssetDto,
     type AiUsageAnalyticsDto,
     type SuggestProjectImageIdeaResult,
+    type StockImageProviderStatus,
 } from "../../../lib/api";
 import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
@@ -63,11 +67,12 @@ import ProjectConfigPopup from "../../../components/ProjectConfigPopup";
 import MediaInspectorPanel from "../../../components/MediaInspectorPanel";
 import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
 import { MediaGrid, type MediaItem } from "@/components/media";
-import { ChevronDown, FileText, ImageIcon, Loader2, Mic, Paperclip, Settings, Square, X } from "lucide-react";
-import { uploadProjectAsset, deleteProjectAsset, getProjectAsset } from "../../../lib/api/assets";
+import { ChevronDown, FileText, ImageIcon, Loader2, Mic, Paperclip, RefreshCw, Settings, Square, X } from "lucide-react";
+import { uploadProjectAsset, getProjectAsset, updateProjectAsset } from "../../../lib/api/assets";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
 import type { PreviewViewport } from "../../../components/workspace/PreviewViewportSelector";
@@ -91,6 +96,19 @@ type BrowserSpeechRecognitionResult = {
 type BrowserSpeechRecognitionEvent = Event & {
     resultIndex: number;
     results: ArrayLike<BrowserSpeechRecognitionResult>;
+};
+
+type ChatAttachedFile = {
+    id: string;
+    name: string;
+    mimeType: string;
+    fileSize?: number;
+};
+
+type PipelineModelOverrideState = {
+    provider: string;
+    model: string;
+    applied: boolean;
 };
 
 type BrowserSpeechRecognitionErrorEvent = Event & {
@@ -131,9 +149,6 @@ function setCookie(name: string, value: string, days = 365) {
     document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
 }
 
-// ── Model dropdown helpers ────────────────────────────────────────────────────
-type ModelItem = LlmProviderCatalogDto["models"][number];
-
 // ── Cost formatting helper ────────────────────────────────────────────────────
 /**
  * Formats a EUR cost amount for compact display.
@@ -145,29 +160,6 @@ function formatCostEur(amount: number | undefined): string {
     if (amount < 0.01)   return `€${amount.toFixed(4)}`;
     if (amount < 1)      return `€${amount.toFixed(3)}`;
     return `€${amount.toFixed(2)}`;
-}
-
-/** Extract family/namespace from a model ID (part before the first "/"). */
-function modelFamily(id: string): string {
-    if (id.includes("/")) return id.slice(0, id.indexOf("/"));
-    // No namespace: derive from leading alpha word (e.g. "llama", "qwen", "phi")
-    const m = id.match(/^([a-zA-Z]+)/);
-    return m ? m[1] : "other";
-}
-
-/** Short display name: strip the namespace prefix when present. */
-function modelShortName(id: string): string {
-    const slash = id.indexOf("/");
-    return slash >= 0 ? id.slice(slash + 1) : id;
-}
-
-/** Cost-tier badge prefix for paid models. */
-function tierBadge(tier: ModelItem["priceTier"]): string {
-    if (tier === "€")    return "€ ";
-    if (tier === "€€")   return "€€ ";
-    if (tier === "€€€")  return "€€€ ";
-    if (tier === "€€€€") return "€€€€ ";
-    return "";
 }
 
 function getStringDetail(details: unknown, key: string): string | undefined {
@@ -185,6 +177,8 @@ function appendPromptSegment(base: string, addition: string): string {
 }
 
 const PROJECT_ASSET_DOWNLOAD_PATH_RE = /\/v1\/projects\/([^/]+)\/assets\/([^/]+)\/download(?:$|\?)/i;
+const PUBLIC_MEDIA_PATH_RE = /\/p\/media\/([^/?#]+)/i;
+const ARTIFACT_URL_RE = /(?:https?:\/\/[^"'()\s]+|\/(?:p\/media|v1\/projects)\/[^"'()\s]+)/gi;
 
 function parseProtectedAssetDownloadUrl(rawSrc: string): { projectId: string; assetId: string } | null {
     const trimmed = String(rawSrc ?? "").trim();
@@ -201,6 +195,58 @@ function parseProtectedAssetDownloadUrl(rawSrc: string): { projectId: string; as
     } catch {
         return null;
     }
+}
+
+function parsePublicMediaUrl(rawSrc: string): { assetId: string } | null {
+    const trimmed = String(rawSrc ?? "").trim();
+    if (!trimmed || typeof window === "undefined") return null;
+
+    try {
+        const url = new URL(trimmed, window.location.origin);
+        const match = url.pathname.match(PUBLIC_MEDIA_PATH_RE);
+        if (!match?.[1]) return null;
+        return { assetId: decodeURIComponent(match[1]) };
+    } catch {
+        return null;
+    }
+}
+
+async function resolvePreviewAssetUrls(input: {
+    html: string;
+    css: string;
+    token: string;
+    projectId: string;
+}): Promise<{ html: string; css: string }> {
+    const source = `${input.html}\n${input.css}`;
+    const urls = Array.from(new Set(source.match(ARTIFACT_URL_RE) ?? []));
+    if (urls.length === 0) return { html: input.html, css: input.css };
+
+    const replacements = new Map<string, string>();
+    await Promise.all(urls.map(async (url) => {
+        const protectedAsset = parseProtectedAssetDownloadUrl(url);
+        const publicAsset = parsePublicMediaUrl(url);
+        const assetId = protectedAsset?.assetId ?? publicAsset?.assetId;
+        const assetProjectId = protectedAsset?.projectId ?? input.projectId;
+        if (!assetId) return;
+
+        try {
+            const dataUrl = await downloadProjectAssetDataUrl(input.token, assetProjectId, assetId);
+            if (dataUrl) replacements.set(url, dataUrl);
+        } catch {
+            // Keep the original URL. The preview should degrade without blocking rendering.
+        }
+    }));
+
+    if (replacements.size === 0) return { html: input.html, css: input.css };
+
+    let html = input.html;
+    let css = input.css;
+    for (const [from, to] of replacements) {
+        html = html.split(from).join(to);
+        css = css.split(from).join(to);
+    }
+
+    return { html, css };
 }
 
 function sanitizeMediaElementPayload(element: SelectedFocusElement) {
@@ -225,63 +271,39 @@ function sanitizeMediaElementPayload(element: SelectedFocusElement) {
     };
 }
 
-/**
- * Renders <optgroup> sections for a model list:
- * - paid models grouped by family (alphabetical)
- * - free models grouped by family (alphabetical), pushed to the bottom with a divider
- */
-function groupedModelOptions(models: ModelItem[]): React.ReactNode {
-    const paid = models.filter((m) => m.priceTier !== "free");
-    const free = models.filter((m) => m.priceTier === "free");
+function inferStockImageQuery(element: SelectedFocusElement, fallbackPrompt: string): string {
+    const candidates = [
+        element.currentAlt,
+        element.textSnippet,
+        fallbackPrompt,
+    ];
 
-    function intoFamilyGroups(list: ModelItem[]): [string, ModelItem[]][] {
-        const map = new Map<string, ModelItem[]>();
-        for (const m of list) {
-            const fam = modelFamily(m.id);
-            if (!map.has(fam)) map.set(fam, []);
-            map.get(fam)!.push(m);
+    for (const candidate of candidates) {
+        const cleaned = candidate?.replace(/\s+/g, " ").trim();
+        if (cleaned && cleaned.length >= 3) {
+            return cleaned.slice(0, 120);
         }
-        return [...map.entries()].sort(([a], [b]) =>
-            a.localeCompare(b, undefined, { sensitivity: "base" })
-        );
     }
 
-    const paidGroups = intoFamilyGroups(paid);
-    const freeGroups = intoFamilyGroups(free);
+    const src = element.currentSrc || element.backgroundImageUrl || "";
+    try {
+        const url = new URL(src);
+        if (url.hostname.includes("loremflickr.com")) {
+            const parts = url.pathname.split("/").filter(Boolean);
+            const keyword = parts[2]?.replace(/[,+_-]+/g, " ");
+            if (keyword) return decodeURIComponent(keyword).slice(0, 120);
+        }
+        if (url.hostname.includes("picsum.photos")) {
+            const parts = url.pathname.split("/").filter(Boolean);
+            const seed = parts[1]?.replace(/[,+_-]+/g, " ");
+            if (seed) return decodeURIComponent(seed).slice(0, 120);
+        }
+    } catch {
+        // Ignore malformed current src and use a stable default below.
+    }
 
-    return (
-        <>
-            {paidGroups.map(([family, items]) => (
-                <optgroup key={`g-${family}`} label={family}>
-                    {items
-                        .sort((a, b) => a.id.localeCompare(b.id))
-                        .map((m) => (
-                            <option key={m.id} value={m.id}>
-                                {tierBadge(m.priceTier)}{modelShortName(m.id)}
-                            </option>
-                        ))}
-                </optgroup>
-            ))}
-            {freeGroups.length > 0 && (
-                <>
-                    <option disabled value="">── 🆓 Free models ──</option>
-                    {freeGroups.map(([family, items]) => (
-                        <optgroup key={`gf-${family}`} label={`🆓 ${family}`}>
-                            {items
-                                .sort((a, b) => a.id.localeCompare(b.id))
-                                .map((m) => (
-                                    <option key={m.id} value={m.id}>
-                                        {modelShortName(m.id)}
-                                    </option>
-                                ))}
-                        </optgroup>
-                    ))}
-                </>
-            )}
-        </>
-    );
+    return "website image";
 }
-// ── End model dropdown helpers ───────────────────────────────────────────────
 
 type SelectedFocusElement = NonNullable<LlmFocusContext["selectedElement"]>;
 
@@ -361,6 +383,12 @@ function sanitizeSelectedElementForFocus(
     };
 }
 
+function extractMediaKeyFromSelectedElement(element: LlmFocusContext["selectedElement"] | null | undefined): string | null {
+    const outerHtml = element?.outerHtml ?? "";
+    const match = outerHtml.match(/\bdata-media-key=["']([a-z0-9]+(?:-[a-z0-9]+)*)["']/i);
+    return match?.[1] ?? null;
+}
+
 function isFocusContextValidationError(error: unknown): boolean {
     if (!(error instanceof ApiError) || error.status !== 400) {
         return false;
@@ -425,6 +453,11 @@ export default function WorkspacePage() {
     const [providersCatalog, setProvidersCatalog] = useState<LlmProviderCatalogDto[]>([]);
     const [selectedProvider, setSelectedProvider] = useState<string>("");
     const [selectedModel, setSelectedModel] = useState<string>("");
+    const [pipelineModelOverride, setPipelineModelOverride] = useState<PipelineModelOverrideState | null>(() => {
+        const provider = searchParams?.get("preferredProvider") ?? "";
+        const model = searchParams?.get("preferredModel") ?? "";
+        return provider || model ? { provider, model, applied: false } : null;
+    });
     const imageModelOptions = React.useMemo(() => {
         const imageProviders = providersCatalog.filter((provider) =>
             provider.models.some((model) => model.isActive && model.capabilities.includes("image_generation")),
@@ -446,7 +479,7 @@ export default function WorkspacePage() {
     const preferredModelRef = useRef(searchParams?.get("preferredModel") ?? "");
     const preferredModelAppliedRef = useRef(false);
     // voiceListening, voiceSupported, voiceError are provided by useSpeechDictation below
-    const [chatAttachedFiles, setChatAttachedFiles] = useState<{ id: string; name: string; mimeType: string }[]>([]);
+    const [chatAttachedFiles, setChatAttachedFiles] = useState<ChatAttachedFile[]>([]);
     const [isDragOverChat, setIsDragOverChat] = useState(false);
     const chatFileInputRef = useRef<HTMLInputElement>(null);
     const [pendingEnrichmentPolling, setPendingEnrichmentPolling] = useState<string[]>([]);
@@ -498,12 +531,21 @@ export default function WorkspacePage() {
     const [generatingMedia, setGeneratingMedia] = useState(false);
     const [suggestingMedia, setSuggestingMedia] = useState(false);
     const [mediaSuggestion, setMediaSuggestion] = useState<SuggestProjectImageIdeaResult | null>(null);
+    const [stockProviderStatus, setStockProviderStatus] = useState<StockImageProviderStatus | null>(null);
+    const [regeneratingStockImage, setRegeneratingStockImage] = useState(false);
+    const stockRegenerationOffsetsRef = useRef<Record<string, number>>({});
     const [selectedImageModel, setSelectedImageModel] = useState("");
     const [selectedImageSize, setSelectedImageSize] = useState("1024x1024");
     const [selectedImageSteps, setSelectedImageSteps] = useState(4);
     const [projectAiAnalytics, setProjectAiAnalytics] = useState<AiUsageAnalyticsDto | null>(null);
     const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
     const [codeEditorSelection, setCodeEditorSelection] = useState<LlmFocusContext["codeSelection"] | null>(null);
+    const [previewAssetResolved, setPreviewAssetResolved] = useState<{
+        sourceHtml: string;
+        sourceCss: string;
+        html: string;
+        css: string;
+    } | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const assetPreviewUrlCacheRef = useRef<Map<string, string>>(new Map());
     const resolveSidebarMediaSrc = useCallback(async (rawSrc: string): Promise<string> => {
@@ -943,6 +985,7 @@ export default function WorkspacePage() {
     useEffect(() => {
         if (!autoPromptPending) return;
         if (autoPromptFiredRef.current) return;
+        if ((preferredProviderRef.current || preferredModelRef.current) && !preferredModelAppliedRef.current) return;
         if (conversationLoading || !selectedModel || sending || !token) return;
         autoPromptFiredRef.current = true;
         setAutoPromptPending(false);
@@ -1019,6 +1062,7 @@ export default function WorkspacePage() {
 
         setSelectedProvider(provider.provider);
         setSelectedModel(model.id);
+        setPipelineModelOverride({ provider: provider.provider, model: model.id, applied: true });
         preferredModelAppliedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [providersCatalog]);
@@ -1148,6 +1192,21 @@ export default function WorkspacePage() {
         void loadProjectAssets(token);
         void loadProjectAiUsage(token);
     }, [token, loadProjectAssets, loadProjectAiUsage]);
+
+    useEffect(() => {
+        if (!token || !editMode || !selectedElement) return;
+        let disposed = false;
+        getStockImageProviderStatus(token, projectId)
+            .then((status) => {
+                if (!disposed) setStockProviderStatus(status);
+            })
+            .catch(() => {
+                if (!disposed) setStockProviderStatus(null);
+            });
+        return () => {
+            disposed = true;
+        };
+    }, [token, projectId, editMode, selectedElement?.stableNodeId]);
 
     useEffect(() => {
         if (!selectedElement) return;
@@ -1390,6 +1449,81 @@ export default function WorkspacePage() {
                 : t("workspace.notifications.style.doneMessage"),
         });
     }, [selectedElement, mediaMode, addNotification, applyMediaToPreview, saveMediaVersion]);
+
+    const handleRegenerateStockImage = useCallback(async () => {
+        if (!token || !selectedElement) return;
+
+        const query = inferStockImageQuery(selectedElement, prompt);
+        const key = selectedElement.stableNodeId || selectedElement.selector || query;
+        const offset = (stockRegenerationOffsetsRef.current[key] ?? 0) + 1;
+        stockRegenerationOffsetsRef.current[key] = offset;
+
+        setRegeneratingStockImage(true);
+        const notifId = addNotification({
+            label: "Stock image",
+            status: "running",
+            message: `Fetching ${stockProviderStatus?.activeProvider ?? "configured provider"} image for "${query}"...`,
+        });
+
+        try {
+            const mediaKey = extractMediaKeyFromSelectedElement(selectedElement);
+            const result = mediaKey
+                ? await regenerateMediaByKey(token, projectId, mediaKey, {
+                    width: selectedElement.originalWidth,
+                    height: selectedElement.originalHeight,
+                    offset,
+                    targetSelector: selectedElement.selector,
+                    targetMode: mediaMode,
+                    scope: assetScope,
+                })
+                : await regenerateStockProjectImage(token, projectId, {
+                    query,
+                    width: selectedElement.originalWidth,
+                    height: selectedElement.originalHeight,
+                    offset,
+                    targetSelector: selectedElement.selector,
+                    targetMode: mediaMode,
+                    scope: assetScope,
+                });
+
+            setProjectAssets((prev) => [result.asset, ...prev.filter((entry) => entry.id !== result.asset.id)]);
+            const nextHtml = applyMediaToPreview(result.assetUrl);
+            const versioned = await saveMediaVersion(
+                nextHtml || editorHtmlRef.current,
+                "stock-image-regenerated",
+                { promptExcerpt: query },
+            );
+            void loadProjectAssets(token);
+            void loadProjectAiUsage(token);
+
+            updateNotification(notifId, {
+                label: result.fallbackUsed ? "Stock image fallback" : "Stock image ready",
+                status: "done",
+                message: versioned
+                    ? `${result.provider} asset saved and versioned.`
+                    : `${result.provider} asset saved.`,
+            });
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : "Unable to fetch and save stock image";
+            updateNotification(notifId, { label: "Stock image failed", status: "error", message });
+        } finally {
+            setRegeneratingStockImage(false);
+        }
+    }, [
+        token,
+        selectedElement,
+        prompt,
+        addNotification,
+        stockProviderStatus?.activeProvider,
+        projectId,
+        mediaMode,
+        assetScope,
+        applyMediaToPreview,
+        saveMediaVersion,
+        loadProjectAssets,
+        loadProjectAiUsage,
+        updateNotification,
+    ]);
 
     const handleSuggestMedia = useCallback(async () => {
         if (!token || !selectedElement) return;
@@ -1879,6 +2013,7 @@ export default function WorkspacePage() {
         setEditorHtml(artifacts?.html ?? "");
         setEditorCss(artifacts?.css ?? "");
         setEditorJs(artifacts?.js ?? "");
+        setPreviewAssetResolved(null);
         setEditorSelectionLabel("");
         setCodeEditorSelection(null);
         // Clear the selected element when the active snapshot changes.
@@ -1888,6 +2023,33 @@ export default function WorkspacePage() {
         // on the next focused-edit turn because the ID is no longer present in the base.
         clearSelectedElement();
     }, [artifactsKey, artifacts?.html, artifacts?.css, artifacts?.js, clearSelectedElement]);
+
+    useEffect(() => {
+        if (!token || (!editorHtml && !editorCss)) {
+            setPreviewAssetResolved(null);
+            return;
+        }
+
+        let cancelled = false;
+        void resolvePreviewAssetUrls({
+            html: editorHtml,
+            css: editorCss,
+            token,
+            projectId,
+        }).then((resolved) => {
+            if (cancelled) return;
+            setPreviewAssetResolved({
+                sourceHtml: editorHtml,
+                sourceCss: editorCss,
+                html: resolved.html,
+                css: resolved.css,
+            });
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [editorHtml, editorCss, projectId, token]);
 
     // Watchdog: if the iframe key changes but onLoad never fires within 4 s
     // (browser bug, blank srcDoc race), bump previewForceKey to force a new mount.
@@ -1906,16 +2068,6 @@ export default function WorkspacePage() {
     const liveTotalTokens = streamPromptTokens + liveGeneratedTokens;
     const currentProvider = providersCatalog.find((p) => p.provider === selectedProvider) ?? null;
     const currentProviderMissingKey = Boolean(currentProvider?.requiresKey && !currentProvider.hasApiKeyConfigured);
-    const currentProviderModels = (() => {
-        const models = (currentProvider?.models ?? []).filter((m) => m.isActive);
-        const byId = new Map<string, typeof models[number]>();
-        for (const model of models) {
-            if (!byId.has(model.id) || model.isDefault) {
-                byId.set(model.id, model);
-            }
-        }
-        return [...byId.values()];
-    })();
 
     const presentLlmError = useCallback((err: unknown): string => {
         const fallbackMessage = err instanceof Error ? err.message : String(err);
@@ -1965,10 +2117,17 @@ export default function WorkspacePage() {
         return t("workspace.llmErrors.errorWithStatus", { status: err.status, message });
     }, [addNotification, currentProvider?.provider, selectedModel]);
 
-        const previewResult = editorHtml || editorCss || editorJs
+    const previewHtml = previewAssetResolved?.sourceHtml === editorHtml && previewAssetResolved.sourceCss === editorCss
+        ? previewAssetResolved.html
+        : editorHtml;
+    const previewCss = previewAssetResolved?.sourceHtml === editorHtml && previewAssetResolved.sourceCss === editorCss
+        ? previewAssetResolved.css
+        : editorCss;
+
+        const previewResult = previewHtml || previewCss || editorJs
         ? buildPreviewDoc(
-                        editorHtml,
-                        editorCss,
+                        previewHtml,
+                        previewCss,
                         editorJs
           )
         : null;
@@ -2175,17 +2334,21 @@ export default function WorkspacePage() {
                 });
             }
 
+            const attachedAssetIds = chatAttachedFiles.map((file) => file.id).slice(0, 12);
             let llm: Awaited<ReturnType<typeof llmChatPreview>>;
             let interruptedMeta: Extract<LlmChatStreamEvent, { type: "interrupted" }> | null = null;
             try {
                 let streamDone = false;
                 let streamResult: Awaited<ReturnType<typeof llmChatPreview>> | null = null;
+                // Single notification updated in-place across media-resolution steps.
+                let mediaNotifId: string | null = null;
 
                 await streamLlmChatPreview(
                     token,
                     projectId,
                     {
                         message: content,
+                        assetIds: attachedAssetIds.length > 0 ? attachedAssetIds : undefined,
                         provider: selectedProvider || undefined,
                         model: selectedModel || undefined,
                         capability: chatDefaults.capability,
@@ -2203,6 +2366,43 @@ export default function WorkspacePage() {
 
                         if (event.type === "answer") {
                             setDraftAnswer((prev) => `${prev}${event.content}`);
+                            return;
+                        }
+
+                        if (event.type === "media_progress") {
+                            // Deterministic media-resolution feedback, surfaced as a single
+                            // live-updating system notification.
+                            const message = (() => {
+                                switch (event.phase) {
+                                    case "start":
+                                        return `Recupero ${event.total ?? 0} immagini dal provider…`;
+                                    case "resolving":
+                                        return `Recupero immagine "${event.mediaKey ?? ""}"…`;
+                                    case "resolved":
+                                        return `Immagine ${event.index ?? 0}/${event.total ?? 0} salvata${event.provider ? ` (${event.provider}${event.fallbackUsed ? " · fallback" : ""})` : ""}.`;
+                                    case "failed":
+                                        return `Immagine "${event.mediaKey ?? ""}" non recuperata (${event.index ?? 0}/${event.total ?? 0}).`;
+                                    case "replacing":
+                                        return "Sostituzione dei placeholder nell'artifact…";
+                                    case "done":
+                                        return `${event.resolvedCount ?? 0}/${event.total ?? 0} immagini pronte.`;
+                                    default:
+                                        return "Elaborazione media…";
+                                }
+                            })();
+                            if (!mediaNotifId) {
+                                mediaNotifId = addNotification({
+                                    label: "Media",
+                                    status: event.phase === "done" ? "done" : "running",
+                                    message,
+                                });
+                            } else {
+                                updateNotification(mediaNotifId, {
+                                    label: "Media",
+                                    status: event.phase === "done" ? "done" : "running",
+                                    message,
+                                });
+                            }
                             return;
                         }
 
@@ -2279,6 +2479,7 @@ export default function WorkspacePage() {
 
                 llm = await llmChatPreview(token, projectId, {
                     message: content,
+                    assetIds: attachedAssetIds.length > 0 ? attachedAssetIds : undefined,
                     provider: selectedProvider || undefined,
                     model: selectedModel || undefined,
                     capability: chatDefaults.capability,
@@ -2363,6 +2564,7 @@ export default function WorkspacePage() {
                             structuredParseValid: llm.structuredParseValid,
                             tokenUsage: llm.usage,
                             promptingTrace: llm.promptingTrace,
+                            mediaResolution: llm.mediaResolution,
                         },
                         activate: true,
                     });
@@ -2597,6 +2799,7 @@ export default function WorkspacePage() {
                 projectId,
                 {
                     rawPrompt: original,
+                    assetIds: chatAttachedFiles.map((file) => file.id).slice(0, 12),
                     conversationId: convId,
                     provider: selectedProvider || undefined,
                     model: selectedModel || undefined,
@@ -2761,6 +2964,13 @@ export default function WorkspacePage() {
         setPromptRestoreValue(null);
     }
 
+    const addChatAttachedFile = useCallback((file: ChatAttachedFile) => {
+        setChatAttachedFiles((prev) => {
+            if (prev.some((entry) => entry.id === file.id)) return prev;
+            return [...prev, file];
+        });
+    }, []);
+
     const handleChatFileAttach = useCallback(async (files: FileList | File[]) => {
         const tok = getToken();
         if (!tok) return;
@@ -2774,11 +2984,24 @@ export default function WorkspacePage() {
                     message: t("workspace.ui.uploading"),
                 });
                 try {
-                    const { asset } = await uploadProjectAsset(tok, projectId, file, { useInProject: true });
-                    setChatAttachedFiles((prev) => [...prev, { id: asset.id, name: file.name, mimeType: file.type }]);
-                    if (file.type.startsWith("image/")) {
-                        setPendingEnrichmentPolling((prev) => [...prev, asset.id]);
+                    const existingAsset = projectAssets.find((asset) =>
+                        asset.source === "user_upload" &&
+                        asset.originalName === file.name &&
+                        asset.fileSize === file.size &&
+                        asset.mimeType === file.type
+                    );
+                    const asset = existingAsset
+                        ? (existingAsset.useInProject
+                            ? existingAsset
+                            : (await updateProjectAsset(tok, projectId, existingAsset.id, { useInProject: true })).asset)
+                        : (await uploadProjectAsset(tok, projectId, file, { useInProject: true })).asset;
+
+                    addChatAttachedFile({ id: asset.id, name: asset.label ?? asset.originalName, mimeType: asset.mimeType, fileSize: asset.fileSize });
+                    setProjectAssets((prev) => [asset, ...prev.filter((entry) => entry.id !== asset.id)]);
+                    if (asset.mimeType.startsWith("image/")) {
+                        setPendingEnrichmentPolling((prev) => prev.includes(asset.id) ? prev : [...prev, asset.id]);
                     }
+                    void loadProjectAssets(tok);
                     updateNotification(notifId, { status: "done", message: t("workspace.ui.uploadSuccess") });
                 } catch (err) {
                     const msg = (err as { body?: { error?: string } })?.body?.error;
@@ -2788,18 +3011,11 @@ export default function WorkspacePage() {
         } finally {
             setAttachingFile(false);
         }
-    }, [addNotification, updateNotification, projectId, t]);
+    }, [addChatAttachedFile, addNotification, loadProjectAssets, projectAssets, projectId, t, updateNotification]);
 
-    const handleRemoveChatFile = useCallback(async (assetId: string) => {
-        const tok = getToken();
-        if (!tok) return;
-        try {
-            await deleteProjectAsset(tok, projectId, assetId);
-            setChatAttachedFiles((prev) => prev.filter((f) => f.id !== assetId));
-        } catch {
-            setChatAttachedFiles((prev) => prev.filter((f) => f.id !== assetId));
-        }
-    }, [projectId]);
+    const handleRemoveChatFile = useCallback((assetId: string) => {
+        setChatAttachedFiles((prev) => prev.filter((f) => f.id !== assetId));
+    }, []);
 
     // Poll enrichment status for recently uploaded images
     useEffect(() => {
@@ -2897,34 +3113,20 @@ export default function WorkspacePage() {
                         <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                             {t("workspace.ui.chatTitle")}
                         </span>
-                        <select
-                            style={controlSelectStyle}
-                            value={selectedProvider}
-                            onChange={(e) => setSelectedProvider(e.target.value)}
+                        <ProviderModelPicker
+                            providers={providersCatalog}
+                            valueProvider={selectedProvider}
+                            valueModel={selectedModel}
+                            onChange={({ provider, model }) => {
+                                setPipelineModelOverride(null);
+                                setSelectedProvider(provider);
+                                setSelectedModel(model);
+                            }}
+                            preferredCapability="chat"
                             disabled={providersCatalog.length === 0 || sending || optimizingPrompt}
-                        >
-                            {providersCatalog.length === 0 ? (
-                                <option value="">{t("workspace.ui.providerPlaceholder")}</option>
-                            ) : (
-                                providersCatalog.map((p) => (
-                                    <option key={p.provider} value={p.provider}>
-                                        {p.provider}
-                                    </option>
-                                ))
-                            )}
-                        </select>
-                        <select
-                            style={controlSelectStyle}
-                            value={selectedModel}
-                            onChange={(e) => setSelectedModel(e.target.value)}
-                            disabled={!currentProvider || currentProviderModels.length === 0 || sending || optimizingPrompt}
-                        >
-                            {currentProviderModels.length === 0 ? (
-                                <option value="">Model</option>
-                            ) : (
-                                groupedModelOptions(currentProviderModels)
-                            )}
-                        </select>
+                            placeholder={t("workspace.ui.providerPlaceholder")}
+                            className="min-w-[18rem] flex-1"
+                        />
                     </div>
                     {currentProviderMissingKey && currentProvider && (
                         <div
@@ -2947,6 +3149,13 @@ export default function WorkspacePage() {
                         <p className="mt-2 text-xs text-muted-foreground">
                             {t("workspace.ui.optimizePromptLabel", { provider: selectedProvider, model: selectedModel.split("/").pop() })}
                         </p>
+                    )}
+                    {pipelineModelOverride?.applied && (
+                        <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+                            <span className="shrink-0">{t("workspace.ui.pipelineOverrideActive")}</span>
+                            <span className="truncate">{pipelineModelOverride.provider} · {pipelineModelOverride.model}</span>
+                            <span className="shrink-0 text-primary/70">{t("workspace.ui.pipelineOverrideSticky")}</span>
+                        </div>
                     )}
                 </div>
 
@@ -3054,8 +3263,11 @@ export default function WorkspacePage() {
                 >
                     {/* Drag-and-drop overlay */}
                     {isDragOverChat && (
-                        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10">
-                            <span className="text-sm font-medium text-primary">{t("workspace.ui.dropToAttach")}</span>
+                        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md border-2 border-dashed border-primary bg-primary/10">
+                            <span className="inline-flex items-center gap-2 rounded-md border border-primary/40 bg-background/90 px-3 py-2 text-sm font-medium text-primary shadow-sm">
+                                <Paperclip className="h-4 w-4" />
+                                {t("workspace.ui.dropToAttach")}
+                            </span>
                         </div>
                     )}
 
@@ -3101,44 +3313,44 @@ export default function WorkspacePage() {
                         {/* Action buttons stacked vertically */}
                         <div className="workspace-input-actions">
                             {/* Label-based file trigger — most reliable cross-browser approach */}
-                            <label
-                                htmlFor="chat-file-input"
-                                title={t("workspace.ui.attachTitle")}
-                                aria-label={t("workspace.ui.attachLabel")}
-                                style={{
-                                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                                    width: "2.25rem", height: "2.25rem", borderRadius: "var(--radius)",
-                                    border: "1px solid var(--border)", background: "transparent",
-                                    color: "var(--text-muted)", cursor: (sending || attachingFile || optimizingPrompt) ? "not-allowed" : "pointer",
-                                    opacity: (sending || attachingFile || optimizingPrompt) ? 0.5 : 1,
-                                    flexShrink: 0,
-                                }}
-                            >
-                                {attachingFile
-                                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                                    : <Paperclip className="h-4 w-4" />
-                                }
-                            </label>
-                            <button
+                            <Button
+                                asChild
                                 type="button"
+                                variant="outline"
+                                size="icon"
+                                disabled={sending || attachingFile || optimizingPrompt}
+                                className="h-9 w-9 shrink-0 text-muted-foreground"
+                            >
+                                <label
+                                    htmlFor="chat-file-input"
+                                    title={t("workspace.ui.attachTitle")}
+                                    aria-label={t("workspace.ui.attachLabel")}
+                                    className={(sending || attachingFile || optimizingPrompt) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
+                                >
+                                    {attachingFile
+                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                        : <Paperclip className="h-4 w-4" />
+                                    }
+                                </label>
+                            </Button>
+                            <Button
+                                type="button"
+                                variant={voiceListening ? "destructive" : "outline"}
+                                size="icon"
                                 onClick={handleToggleVoiceInput}
                                 disabled={sending || optimizingPrompt}
                                 title={voiceListening ? t("workspace.ui.voiceListeningTitle") : t("workspace.ui.voiceStartTitle")}
                                 aria-label={voiceListening ? t("workspace.ui.voiceListeningLabel") : t("workspace.ui.voiceStartLabel")}
-                                style={{
-                                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                                    width: "2.25rem", height: "2.25rem", borderRadius: "var(--radius)",
-                                    border: "1px solid var(--border)",
-                                    background: voiceListening ? "var(--error, #f87171)" : "transparent",
-                                    color: voiceListening ? "#fff" : "var(--text-muted)",
-                                    cursor: (sending || optimizingPrompt) ? "not-allowed" : "pointer",
-                                    opacity: (sending || optimizingPrompt) ? 0.5 : 1,
-                                    flexShrink: 0,
-                                }}
+                                className="h-9 w-9 shrink-0"
                             >
-                                {voiceListening ? <Square style={{ width: "1rem", height: "1rem" }} /> : <Mic style={{ width: "1rem", height: "1rem" }} />}
-                            </button>
+                                {voiceListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                            </Button>
                         </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
+                        <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                        <span>{t("workspace.ui.attachDropHint")}</span>
                     </div>
 
                     {/* Attached files scrollable bar */}
@@ -3289,6 +3501,17 @@ export default function WorkspacePage() {
                                     type="button"
                                     size="sm"
                                     variant="outline"
+                                    onClick={handleRegenerateStockImage}
+                                    disabled={regeneratingStockImage}
+                                    className="gap-1.5"
+                                >
+                                    <RefreshCw className={regeneratingStockImage ? "size-3 animate-spin" : "size-3"} />
+                                    {regeneratingStockImage ? "Fetching stock" : "Regenerate stock"}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
                                     onClick={() => {
                                         setMediaInspectorSection("gallery");
                                         setMediaToolsOpen(true);
@@ -3344,12 +3567,15 @@ export default function WorkspacePage() {
                                     onImageStepsChange={setSelectedImageSteps}
                                     aiAnalytics={projectAiAnalytics}
                                     loadingAiAnalytics={loadingAiAnalytics}
+                                    stockProviderStatus={stockProviderStatus}
+                                    regeneratingStockImage={regeneratingStockImage}
                                     initialSection={mediaInspectorSection}
                                     onGenerateWithPrompt={(p) => {
                                         setPrompt(p);
                                         void runMediaGeneration(p.slice(0, 2000), { label: t("workspace.notifications.imageGeneration.label") });
                                         setMediaToolsOpen(false);
                                     }}
+                                    onRegenerateStockImage={handleRegenerateStockImage}
                                     onOpenGallery={() => setConfigOpen(true)}
                                     onApplyAsset={(asset) => void handleApplyAsset(asset)}
                                     onApplyCurrentStyles={handleApplyCurrentStyles}
@@ -4241,7 +4467,9 @@ export default function WorkspacePage() {
             onRename={(name: string) => setProjectName(name)}
             presetLabel={presetCatalog.find(p => p.id === projectPresetId)?.labelIt}
             briefGuideQuestions={presetCatalog.find(p => p.id === projectPresetId)?.briefGuideQuestions}
-            presetRecommendedModelLabel={presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.label ?? presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.modelId}
+            presetRecommendedModelLabel={pipelineModelOverride?.applied
+                ? `Pipeline: ${pipelineModelOverride.provider} · ${pipelineModelOverride.model}`
+                : presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.label ?? presetCatalog.find(p => p.id === projectPresetId)?.recommendedModel?.modelId}
             onAssetPick={(asset) => void handleApplyAsset(asset)}
         />
         <LlmProviderErrorDialog

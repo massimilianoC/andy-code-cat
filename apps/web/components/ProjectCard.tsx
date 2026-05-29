@@ -55,7 +55,12 @@ async function fetchThumbnailBlobUrl(projectId: string, snapshotId: string): Pro
     const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
     const url = `${base}/v1/projects/${projectId}/preview-snapshots/${snapshotId}/thumbnail`;
     try {
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(url, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "x-project-id": projectId,
+            },
+        });
         if (!res.ok) return null;
         const blob = await res.blob();
         return URL.createObjectURL(blob);
@@ -144,7 +149,7 @@ export default function ProjectCard({ project, onOpen, onDuplicate, onDelete, on
                             ref={iframeRef}
                             srcDoc={legacyHtml}
                             title={`Anteprima ${project.name}`}
-                            sandbox=""
+                            sandbox="allow-scripts"
                             scrolling="no"
                             aria-hidden="true"
                             style={{

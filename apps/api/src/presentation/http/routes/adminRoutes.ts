@@ -27,6 +27,7 @@ import { SetPlatformConfig } from "../../../application/use-cases/admin/SetPlatf
 import { AdminTogglePublication } from "../../../application/use-cases/admin/AdminTogglePublication";
 import { SeedLlmCatalog } from "../../../application/use-cases/SeedLlmCatalog";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
+import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
 import { DraftProjectTemplate } from "../../../application/use-cases/DraftProjectTemplate";
 import { env } from "../../../config";
 import { PRESET_CATALOG } from "../../../domain/entities/ProjectPreset";
@@ -113,7 +114,10 @@ export function createAdminRoutes(): Router {
         env.OPENROUTER_BASE_URL,
         llmCatalogRepo,
         env.hasOpenRouterApiKey,
+        env.providerApiKeys,
+        env.LLM_DEFAULT_PROVIDER,
     );
+    const getEffectiveLlmCatalog = new GetEffectiveLlmCatalog(getLlmCatalog);
     const draftProjectTemplate = new DraftProjectTemplate(
         configRepo,
         promptExecutionLogRepo,
@@ -186,8 +190,11 @@ export function createAdminRoutes(): Router {
 
     router.get("/admin/llm-registry", async (_req, res, next) => {
         try {
-            const result = await getLlmCatalog.execute();
-            res.json(result);
+            const result = await getEffectiveLlmCatalog.execute();
+            res.json({
+                ...result,
+                byokEnabled: true,
+            });
         } catch (err) {
             next(err);
         }
@@ -196,9 +203,9 @@ export function createAdminRoutes(): Router {
     router.post("/admin/llm-registry/seed", async (req, res, next) => {
         try {
             adminSeedLlmRegistrySchema.parse(req.body ?? {});
-            const result = await seedLlmCatalog.execute();
-            const providers = await llmCatalogRepo.listAllProviders();
-            res.json({ ok: true, ...result, providers });
+            const seedResult = await seedLlmCatalog.execute();
+            const result = await getEffectiveLlmCatalog.execute();
+            res.json({ ok: true, ...seedResult, ...result, byokEnabled: true });
         } catch (err) {
             next(err);
         }

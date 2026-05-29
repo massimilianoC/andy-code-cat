@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { RefreshCw } from "lucide-react";
 import type { AiUsageAnalyticsDto, ProjectAssetDto, SuggestProjectImageIdeaResult } from "@/lib/api/assets";
 import type { LlmFocusContext } from "@/lib/api/llm";
 import { downloadProjectAssetDataUrl, listUserMediaLibrary } from "@/lib/api/assets";
@@ -40,10 +41,18 @@ interface MediaInspectorPanelProps {
     onImageStepsChange: (value: number) => void;
     aiAnalytics: AiUsageAnalyticsDto | null;
     loadingAiAnalytics: boolean;
+    stockProviderStatus?: {
+        activeProvider: string;
+        fallbackMode: "notify";
+        fallbackProviders: string[];
+        persistenceEnabled: boolean;
+    } | null;
+    regeneratingStockImage?: boolean;
     /** Which accordion to open by default. */
     initialSection?: "gen-image" | "gallery" | "advanced";
     /** Called when the user clicks Generate — passes the (possibly edited) prompt. */
     onGenerateWithPrompt: (prompt: string) => void;
+    onRegenerateStockImage: () => void;
     onOpenGallery: () => void;
     onApplyAsset: (asset: ProjectAssetDto) => void;
     onApplyCurrentStyles: () => void;
@@ -205,6 +214,31 @@ export default function MediaInspectorPanel(props: MediaInspectorPanelProps) {
                 </summary>
                 <div className="space-y-2 border-t border-border px-3 py-3">
                     <p className="text-xs italic text-muted-foreground">{props.chatPromptPlaceholder}</p>
+                    <div className="rounded-md border border-border bg-background/50 p-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Stock provider
+                                </p>
+                                <p className="text-xs text-foreground">
+                                    {props.stockProviderStatus?.activeProvider ?? "configured default"}
+                                    {props.stockProviderStatus?.persistenceEnabled ? " · saved to assets" : ""}
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5"
+                                onClick={props.onRegenerateStockImage}
+                                disabled={Boolean(props.regeneratingStockImage)}
+                                title="Fetch a new stock image from the active provider and save it as a project asset"
+                            >
+                                <RefreshCw className={props.regeneratingStockImage ? "size-3 animate-spin" : "size-3"} />
+                                {props.regeneratingStockImage ? "Fetching" : "Regenerate stock"}
+                            </Button>
+                        </div>
+                    </div>
                     {props.suggesting ? (
                         <p className="text-[11px] text-muted-foreground">Generazione suggerimento in corso…</p>
                     ) : (

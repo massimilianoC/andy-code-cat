@@ -4,10 +4,12 @@ import {
     llmPromptConfigSchema,
     optimizePromptSchema,
     type LlmChatPreviewResult,
+    type MediaResolutionMetadata,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson, buildFormattedReply } from "../../../application/llm/llmParser";
 import { applyFocusPatch } from "../../../application/llm/llmPatchMerger";
 import { buildFocusedModeSystemAddendum } from "../../../application/llm/focusedPrompt";
+import { buildChatCompletionRequestBody } from "../../../application/llm/chatRequestAdapter";
 import {
     buildOutputBudgetPolicy,
     buildFallbackStructured,
@@ -16,7 +18,7 @@ import {
     buildMessagesWithHistory,
 } from "../../../application/llm/llmMessageBuilder";
 import { buildStyleContextBlock } from "../../../application/llm/styleContextBuilder";
-import { resolveImagesInHtml } from "../../../application/llm/imageUrlRewriter";
+import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
 import { composeSystemPrompt, composeSystemPromptWithLayers } from "../../../application/llm/systemPromptComposer";
 import { buildPresetLayerFromPreset, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
@@ -36,12 +38,15 @@ import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoPr
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
 import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
+import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
 import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptConfig";
 import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptConfig";
 import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
+import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
+import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
@@ -70,11 +75,9 @@ type LlmRuntimeContext = {
         }>;
     };
     modelId: string;
-    /** MongoDB _id of the llm_prompt_configs document resolved for this call */
     promptConfigId?: string;
     prePromptTemplate?: string;
     systemPrompt: string;
-    /** Governance focused-edit system prompt for this presetId (Layer E variant for focused mode). */
     governanceFocusedSystemPrompt?: string;
 };
 
@@ -205,7 +208,7 @@ function parseLlmChatPreviewBody(raw: unknown) {
         });
 
         if (fallbackParsed.success) {
-            console.warn("[llm] invalid focusContext ignored — falling back to full-project context.", {
+            console.warn("[llm] invalid focusContext ignored - falling back to full-project context.", {
                 focusContextErrors: parsed.error.flatten().fieldErrors.focusContext,
             });
             return fallbackParsed.data;
@@ -230,7 +233,17 @@ export function createLlmRoutes(): Router {
     const presetRepository = new MongoProjectPresetRepository();
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
     const snapshotRepository = new MongoPreviewSnapshotRepository();
+    const mediaResolutionTraceRepository = new MongoMediaResolutionTraceRepository();
     const serviceKeyRepo = new MongoServiceApiKeyRepository();
+    const resolveArtifactMedia = new ResolveArtifactMedia(
+        assetRepository,
+        getFileStorage(),
+        serviceKeyRepo,
+        undefined,
+        undefined,
+        platformConfigRepo,
+        mediaResolutionTraceRepository,
+    );
 
     router.use(authMiddleware);
 
@@ -242,7 +255,10 @@ export function createLlmRoutes(): Router {
         env.OPENROUTER_BASE_URL,
         llmCatalogRepository,
         env.hasOpenRouterApiKey,
+        env.providerApiKeys,
+        env.LLM_DEFAULT_PROVIDER,
     );
+    const getEffectiveLlmCatalog = new GetEffectiveLlmCatalog(getLlmCatalog);
 
     const optimizeUserPrompt = new OptimizeUserPrompt(
         projectRepository,
@@ -269,191 +285,6 @@ export function createLlmRoutes(): Router {
         return kind === "api-key" ? key : `Bearer ${key}`;
     }
 
-    /**
-     * Assigns percentile-based € tier labels to a provider's model list.
-     *
-     * Only models with `priceInputUsdPerM > 0` (paid text models) are included in the
-     * percentile computation.  Free and unknown-price models skip the percentile logic:
-     *  - priceInputUsdPerM === 0  → "free"
-     *  - priceInputUsdPerM === undefined → undefined (no badge)
-     *
-     * Tier thresholds are computed per-provider from the provider's own price distribution:
-     *  ≤ p25  → €
-     *  ≤ p50  → €€
-     *  ≤ p75  → €€€
-     *  > p75  → €€€€
-     */
-    function assignPriceTiers<T extends { priceInputUsdPerM?: number; priceTier?: string }>(models: T[]): T[] {
-        const paidPrices = models
-            .map((m) => m.priceInputUsdPerM)
-            .filter((p): p is number => p !== undefined && p > 0);
-
-        if (paidPrices.length === 0) return models;
-
-        const sorted = [...paidPrices].sort((a, b) => a - b);
-        const n = sorted.length;
-        const p25 = sorted[Math.floor((n - 1) * 0.25)]!;
-        const p50 = sorted[Math.floor((n - 1) * 0.50)]!;
-        const p75 = sorted[Math.floor((n - 1) * 0.75)]!;
-
-        return models.map((m) => {
-            const price = m.priceInputUsdPerM;
-            if (price === undefined) return m; // no price data — no tier
-            if (price === 0) return { ...m, priceTier: "free" };
-            if (price <= p25) return { ...m, priceTier: "€" };
-            if (price <= p50) return { ...m, priceTier: "€€" };
-            if (price <= p75) return { ...m, priceTier: "€€€" };
-            return { ...m, priceTier: "€€€€" };
-        });
-    }
-
-    async function discoverOpenAiCompatibleModels(input: {
-        providerKey: string;
-        baseUrl: string;
-        authType?: "api-key" | "bearer" | "none";
-        fallbackModels: LlmRuntimeContext["providerCatalog"]["models"];
-    }): Promise<LlmRuntimeContext["providerCatalog"]["models"]> {
-        const authHeader = resolveAuthHeader(input.providerKey, input.authType);
-
-        if (!authHeader && input.authType !== "none") {
-            return dedupeModelsById(input.fallbackModels);
-        }
-
-        try {
-            const response = await fetch(`${input.baseUrl.replace(/\/$/, "")}/models`, {
-                method: "GET",
-                headers: {
-                    ...(authHeader ? { Authorization: authHeader } : {}),
-                },
-            });
-
-            if (!response.ok) {
-                return dedupeModelsById(input.fallbackModels);
-            }
-
-            // OpenRouter returns a richer payload with architecture metadata
-            type OpenRouterModel = {
-                id?: string;
-                architecture?: { modality?: string };
-                pricing?: { prompt?: string; completion?: string };
-            };
-            const payload = await response.json().catch(() => ({})) as { data?: Array<OpenRouterModel> };
-            const rawModels = payload.data ?? [];
-
-            if (rawModels.length === 0) {
-                return dedupeModelsById(input.fallbackModels);
-            }
-
-            // ── Provider-specific model filtering ───────────────────────────
-            const textModels = rawModels.filter((m) => {
-                const id = String(m.id ?? "").trim();
-                if (!id) return false;
-
-                if (input.providerKey === "openrouter") {
-                    // OpenRouter: keep only models with text output (->text modality)
-                    const modality = m.architecture?.modality ?? "";
-                    return modality.endsWith("->text");
-                }
-
-                if (input.providerKey === "siliconflow") {
-                    // SiliconFlow mixes image/video gen models in the same list.
-                    // Exclude them by ID pattern.
-                    const lower = id.toLowerCase();
-                    const isImageOrVideo =
-                        lower.includes("flux") ||
-                        lower.includes("stable-diffusion") ||
-                        lower.includes("stable_diffusion") ||
-                        lower.includes("text-to-video") ||
-                        lower.includes("wan") ||
-                        lower.includes("cogvideo") ||
-                        lower.includes("kling") ||
-                        lower.includes("hunyuan-video") ||
-                        lower.includes("image");
-                    return !isImageOrVideo;
-                }
-
-                // Default: include everything
-                return true;
-            });
-
-            if (textModels.length === 0) {
-                return dedupeModelsById(input.fallbackModels);
-            }
-
-            // ── Map to runtime model shape ────────────────────────────────
-            const mapped = textModels.map((m, index) => {
-                const id = String(m.id ?? "").trim();
-                const modality = m.architecture?.modality ?? "";
-                const existing = input.fallbackModels.find((model) => model.id === id);
-
-                // ── Attach real numeric prices ──────────────────────────────
-                let priceInputUsdPerM: number | undefined;
-                let priceOutputUsdPerM: number | undefined;
-
-                if (input.providerKey === "openrouter" && m.pricing?.prompt !== undefined) {
-                    // OpenRouter returns USD per token — convert to USD per million
-                    const pp = parseFloat(m.pricing.prompt);
-                    const pc = parseFloat(m.pricing.completion ?? "0");
-                    if (!isNaN(pp)) priceInputUsdPerM = pp * 1_000_000;
-                    if (!isNaN(pc)) priceOutputUsdPerM = pc * 1_000_000;
-                } else if (input.providerKey === "siliconflow") {
-                    // SiliconFlow: use scraped lookup table (no pricing in /models)
-                    const sfPrice = getSiliconFlowPrice(id);
-                    if (sfPrice) {
-                        priceInputUsdPerM = sfPrice.input;
-                        priceOutputUsdPerM = sfPrice.output;
-                    }
-                }
-                // Local providers (lmstudio, ollama): no price data → no tier
-
-                // Detect vision capability from modality or known patterns
-                const hasVision =
-                    modality.startsWith("text+image") ||
-                    id.includes("vision") ||
-                    id.includes("vl-") ||
-                    id.includes("-vl") ||
-                    id.includes("llava") ||
-                    id.includes("pixtral") ||
-                    id.includes("gpt-4o") ||
-                    (id.includes("gemini") && modality.includes("image"));
-
-                const capabilities: string[] = existing?.capabilities?.length
-                    ? existing.capabilities
-                    : hasVision ? ["vision", "chat"] : ["chat"];
-
-                return {
-                    id,
-                    provider: input.providerKey,
-                    role: existing?.role ?? "dialogue",
-                    capabilities,
-                    isDefault: existing?.isDefault ?? (index === 0 && !input.fallbackModels.some((m) => m.isDefault)),
-                    isFallback: existing?.isFallback ?? index !== 0,
-                    isActive: existing?.isActive ?? true,
-                    displayName: existing?.displayName,
-                    description: existing?.description,
-                    promptTemplate: existing?.promptTemplate,
-                    focusPromptTemplate: existing?.focusPromptTemplate,
-                    ...(priceInputUsdPerM !== undefined ? { priceInputUsdPerM } : {}),
-                    ...(priceOutputUsdPerM !== undefined ? { priceOutputUsdPerM } : {}),
-                };
-            });
-
-            // Re-inject image_generation (and other non-text) models from the
-            // seed catalog that were intentionally excluded from the /models
-            // discovery (FLUX, stable-diffusion…).  Without this merge the
-            // client sees "no image model available".
-            const discoveredIds = new Set(mapped.map((m) => m.id));
-            const nonTextFallbacks = input.fallbackModels
-                .filter((m) => m.isActive && !discoveredIds.has(m.id) && !m.capabilities.includes("chat"))
-                .map((m) => ({ ...m, provider: input.providerKey }));
-
-            // Assign percentile-based € tiers per-provider after all prices are known
-            return assignPriceTiers([...mapped, ...nonTextFallbacks]);
-        } catch {
-            return dedupeModelsById(input.fallbackModels);
-        }
-    }
-
     async function resolveContext(input: {
         projectId: string;
         userId: string;
@@ -461,6 +292,7 @@ export function createLlmRoutes(): Router {
         provider?: string;
         model?: string;
         capability?: string;
+        assetIds?: string[];
         systemPrompt?: string;
     }): Promise<LlmRuntimeContext> {
         const catalog = await getLlmCatalog.execute();
@@ -484,7 +316,13 @@ export function createLlmRoutes(): Router {
 
         const styleBlock = buildStyleContextBlock(userProfile, moodboard);
         const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
-        const documentContextLayer = buildProjectKnowledgeLayer(projectAssets);
+        const selectedAssetIds = new Set(input.assetIds ?? []);
+        const contextAssets = selectedAssetIds.size > 0
+            ? projectAssets.filter((asset) => selectedAssetIds.has(asset.id))
+            : projectAssets;
+        const documentContextLayer = buildProjectKnowledgeLayer(contextAssets, {
+            includeUnenrichedAssets: selectedAssetIds.size > 0,
+        });
 
         const providerCatalog =
             (input.provider
@@ -536,9 +374,10 @@ export function createLlmRoutes(): Router {
             .filter((value): value is string => Boolean(value && value.trim()))
             .join("\n\n");
 
-        // For openai-compatible providers with an explicit model request, bypass the
-        // local catalog lookup — the full model list is only available via live discovery
-        // (/models) which is not persisted in the DB seed catalog.
+        // For openai-compatible providers with an explicit model request, trust the
+        // requested id directly. The catalog is already live-hydrated (GetLlmCatalog →
+        // hydrateProviderCatalog), but this keeps the call safe even if a freshly
+        // discovered id has not yet propagated into this provider's hydrated list.
         if (input.model && providerCatalog.apiType === "openai-compatible") {
             return {
                 providerCatalog: { ...providerCatalog, models: providerModels },
@@ -555,10 +394,7 @@ export function createLlmRoutes(): Router {
         }
 
         return {
-            providerCatalog: {
-                ...providerCatalog,
-                models: providerModels,
-            },
+            providerCatalog: { ...providerCatalog, models: providerModels },
             modelId: roleModel.id,
             promptConfigId: promptConfig.id,
             prePromptTemplate: effectivePrePromptTemplate || undefined,
@@ -569,39 +405,17 @@ export function createLlmRoutes(): Router {
 
     router.get("/llm/providers", async (_req, res, next) => {
         try {
-            const catalog = await getLlmCatalog.execute();
-            const providers = await Promise.all(
-                catalog.providers.map(async (provider) => {
-                    const models = provider.apiType === "openai-compatible"
-                        ? await discoverOpenAiCompatibleModels({
-                            providerKey: provider.provider,
-                            baseUrl: provider.baseUrl,
-                            authType: provider.authType,
-                            fallbackModels: provider.models,
-                        })
-                        : dedupeModelsById(provider.models);
-
-                    return {
-                        ...provider,
-                        ...getProviderStatus(provider.provider, provider.authType),
-                        models,
-                    };
-                })
-            );
-
-            // Derive activeProvider from the resolved model list: prefer the provider
-            // that owns a dialogue model explicitly marked isDefault, then fall back
-            // to the env-configured default so the value is never empty.
-            const activeProvider =
-                providers.find((p) => p.models.some((m) => m.isDefault && m.role === "dialogue"))?.provider
-                ?? providers.find((p) => p.models.some((m) => m.isDefault))?.provider
-                ?? env.LLM_DEFAULT_PROVIDER;
+            const catalog = await getEffectiveLlmCatalog.execute();
+            const providers = catalog.providers.map((provider) => ({
+                ...provider,
+                ...getProviderStatus(provider.provider, provider.authType),
+            }));
 
             res.json({
                 ...catalog,
                 providers,
                 byokEnabled: true,
-                activeProvider,
+                activeProvider: catalog.activeProvider,
                 hasProviderApiKeyConfigured: Object.keys(env.providerApiKeys).length > 0,
             });
         } catch (error) {
@@ -860,6 +674,7 @@ export function createLlmRoutes(): Router {
                 provider: body.provider,
                 model: body.model,
                 capability: body.capability,
+                assetIds: body.assetIds,
                 systemPrompt: body.systemPrompt,
             });
 
@@ -896,16 +711,17 @@ export function createLlmRoutes(): Router {
                     "Content-Type": "application/json",
                     ...(authHeader ? { Authorization: authHeader } : {}),
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(buildChatCompletionRequestBody({
+                    provider: context.providerCatalog.provider,
                     model: context.modelId,
-                    max_tokens: Math.min(
+                    maxTokens: Math.min(
                         body.max_tokens ?? env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,
                         env.LLM_MAX_COMPLETION_TOKENS
                     ),
                     temperature: body.temperature ?? 0.4,
                     messages,
-                    ...(body.thinking_budget != null ? { thinking: { budget_tokens: body.thinking_budget } } : {}),
-                }),
+                    thinkingBudget: body.thinking_budget,
+                })),
             });
 
             const sfJson = await sfRes.json().catch(() => ({}));
@@ -955,6 +771,7 @@ export function createLlmRoutes(): Router {
 
             const parsed = tryParseStructuredJson(rawReply);
             let structured = parsed.structured ?? buildFallbackStructured(body.message);
+            let mediaResolutionMetadata: MediaResolutionMetadata | undefined;
             let focusPatchApplied: boolean | undefined;
             let focusPatchParseError: boolean | undefined;
             if (isFocusedMode && body.currentArtifacts) {
@@ -1042,12 +859,39 @@ export function createLlmRoutes(): Router {
                     }
                 }
             }
-            // Post-process: resolve placeholder image URLs via API connector chain (Pexels → Pixabay → Unsplash → LoremFlickr)
-            if (structured.artifacts?.html) {
-                structured = {
-                    ...structured,
-                    artifacts: { ...structured.artifacts, html: await resolveImagesInHtml(structured.artifacts.html, serviceKeyRepo) },
-                };
+            // Post-process media placeholders and legacy provider URLs into stable ProjectAsset URLs.
+            // Wrapped in try/catch: media resolution must never abort the artifact delivery.
+            // If resolution fails entirely the user gets the raw artifacts and a logged warning.
+            if (structured.artifacts?.html || structured.artifacts?.css) {
+                try {
+                    const mediaResolution = await resolveArtifactMedia.execute({
+                        projectId: req.sandbox!.projectId,
+                        userId: req.auth!.userId,
+                        artifacts: structured.artifacts,
+                        mediaManifest: structured.mediaManifest,
+                        sourceContext: {
+                            route: "chat-preview",
+                            conversationId: body.conversationId,
+                            focusPatchApplied,
+                        },
+                        mode: isFocusedMode ? "focused_edit" : "initial_generation",
+                    });
+                    structured = {
+                        ...structured,
+                        artifacts: mediaResolution.artifacts,
+                    };
+                    mediaResolutionMetadata = mediaResolution.metadata;
+                } catch (mediaError) {
+                    console.error("[llm/chat-preview] media resolution failed — delivering artifacts without resolved media:", mediaError);
+                    ExecutionLogger.instance.emit({
+                        projectId: req.sandbox!.projectId,
+                        domain: "system",
+                        eventType: "artifact_media_resolution_error",
+                        level: "error",
+                        status: "failure",
+                        metadata: { error: mediaError instanceof Error ? mediaError.message : String(mediaError) },
+                    });
+                }
             }
             const reply = (parsed.parseValid || focusPatchParseError) ? buildFormattedReply(structured) : rawReply;
             const resolvedUsage = resolveUsageWithFallback({
@@ -1092,6 +936,7 @@ export function createLlmRoutes(): Router {
                     focusContext: body.focusContext,
                 },
                 structured,
+                mediaResolution: mediaResolutionMetadata,
                 focusPatchApplied,
                 focusPatchParseError,
                 provider: context.providerCatalog.provider,
@@ -1223,6 +1068,7 @@ export function createLlmRoutes(): Router {
                 provider: body.provider,
                 model: body.model,
                 capability: body.capability,
+                assetIds: body.assetIds,
                 systemPrompt: body.systemPrompt,
             });
 
@@ -1277,19 +1123,18 @@ export function createLlmRoutes(): Router {
                         "Content-Type": "application/json",
                         ...(authHeader ? { Authorization: authHeader } : {}),
                     },
-                    body: JSON.stringify({
+                    body: JSON.stringify(buildChatCompletionRequestBody({
+                        provider: context.providerCatalog.provider,
                         model: context.modelId,
                         stream: true,
-                        max_tokens: Math.min(
+                        maxTokens: Math.min(
                             body.max_tokens ?? env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,
                             env.LLM_MAX_COMPLETION_TOKENS
                         ),
                         temperature: body.temperature ?? 0.4,
                         messages,
-                        // Thinking/reasoning budget for models that support it (e.g. Qwen3-*-Thinking, DeepSeek-R1).
-                        // Constrains internal CoT tokens to avoid runaway reasoning costs.
-                        ...(body.thinking_budget != null ? { thinking: { budget_tokens: body.thinking_budget } } : {}),
-                    }),
+                        thinkingBudget: body.thinking_budget,
+                    })),
                     signal: fetchAbort.signal,
                 });
             } catch (fetchErr) {
@@ -1482,6 +1327,7 @@ export function createLlmRoutes(): Router {
             const trimmedRaw = rawReply.trim();
             const parsed = tryParseStructuredJson(trimmedRaw);
             let structured = parsed.structured ?? buildFallbackStructured(body.message);
+            let mediaResolutionMetadata: MediaResolutionMetadata | undefined;
             let focusPatchAppliedStream: boolean | undefined;
             let focusPatchParseErrorStream: boolean | undefined;
             if (isFocusedMode && body.currentArtifacts) {
@@ -1554,12 +1400,43 @@ export function createLlmRoutes(): Router {
                     }
                 }
             }
-            // Post-process: resolve placeholder image URLs via API connector chain (Pexels → Pixabay → Unsplash → LoremFlickr)
-            if (structured.artifacts?.html) {
-                structured = {
-                    ...structured,
-                    artifacts: { ...structured.artifacts, html: await resolveImagesInHtml(structured.artifacts.html, serviceKeyRepo) },
-                };
+            // Post-process media placeholders and legacy provider URLs into stable ProjectAsset URLs.
+            if (structured.artifacts?.html || structured.artifacts?.css) {
+                try {
+                    const mediaResolution = await resolveArtifactMedia.execute({
+                        projectId: req.sandbox!.projectId,
+                        userId: req.auth!.userId,
+                        artifacts: structured.artifacts,
+                        mediaManifest: structured.mediaManifest,
+                        sourceContext: {
+                            route: "chat-preview-stream",
+                            conversationId: body.conversationId,
+                            focusPatchApplied: focusPatchAppliedStream,
+                        },
+                        mode: isFocusedMode ? "focused_edit" : "initial_generation",
+                        // Forward deterministic media-resolution steps to the client in real time.
+                        onProgress: (event) => {
+                            if (!res.writableEnded && !res.destroyed) {
+                                sendSse(res, { type: "media_progress", ...event });
+                            }
+                        },
+                    });
+                    structured = {
+                        ...structured,
+                        artifacts: mediaResolution.artifacts,
+                    };
+                    mediaResolutionMetadata = mediaResolution.metadata;
+                } catch (mediaError) {
+                    console.error("[llm/chat-preview-stream] media resolution failed — delivering artifacts without resolved media:", mediaError);
+                    ExecutionLogger.instance.emit({
+                        projectId: req.sandbox!.projectId,
+                        domain: "system",
+                        eventType: "artifact_media_resolution_error",
+                        level: "error",
+                        status: "failure",
+                        metadata: { error: mediaError instanceof Error ? mediaError.message : String(mediaError) },
+                    });
+                }
             }
             const reply = (parsed.parseValid || focusPatchParseErrorStream) ? buildFormattedReply(structured) : trimmedRaw;
             const resolvedUsage = resolveUsageWithFallback({
@@ -1582,6 +1459,7 @@ export function createLlmRoutes(): Router {
                     focusContext: body.focusContext,
                 },
                 structured,
+                mediaResolution: mediaResolutionMetadata,
                 provider: context.providerCatalog.provider,
                 model: context.modelId,
                 finishReason,

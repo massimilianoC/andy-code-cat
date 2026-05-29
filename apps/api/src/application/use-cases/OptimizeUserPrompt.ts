@@ -9,6 +9,7 @@ import type { PromptExecutionLogRepository } from "../../domain/repositories/Pro
 import type { GetLlmCatalog } from "./GetLlmCatalog";
 import { estimateCost, type CostEstimate } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
+import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 import { buildOptimizeUserPromptRequest } from "../prompting/optimizeUserPromptInstruction";
 import { buildProjectKnowledgeLayer } from "../llm/systemPromptLayers";
@@ -19,6 +20,21 @@ import { ResourceType } from "../../domain/entities/CostTransaction";
 const TASK_KEY = "optimize_user_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
 const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
+
+// Reasoning/thinking models (e.g. Kimi, DeepSeek-R1) may stream the actual answer
+// through the reasoning channel and leave `content` empty. Strip any <think> wrapper
+// and use the reasoning text as the optimized prompt rather than silently reverting
+// to the original — otherwise the user pays for an optimization that is discarded.
+function stripThinkBlocks(text: string): string {
+    return text
+        .replace(/<think>[\s\S]*?<\/think>/gi, "")
+        .replace(/<\/?think>/gi, "")
+        .trim();
+}
+
+function resolveOptimizedText(content: string, reasoning: string, rawPrompt: string): string {
+    return stripThinkBlocks(content) || stripThinkBlocks(reasoning) || rawPrompt;
+}
 
 type OptimizerUsage = {
     promptTokens: number;
@@ -330,7 +346,7 @@ export class OptimizeUserPrompt {
         const activeProviders = catalog.providers.filter((provider) => provider.isActive);
         const requestedModel = input.model?.trim();
 
-        const providerCatalog =
+        const selectedProviderCatalog =
             activeProviders.find((provider) => provider.provider === input.provider)
             ?? (requestedModel
                 ? activeProviders.find((provider) => provider.models.some((model) => model.isActive && model.id === requestedModel))
@@ -340,13 +356,15 @@ export class OptimizeUserPrompt {
             ?? activeProviders.find((provider) => provider.provider === FALLBACK_PROVIDER)
             ?? activeProviders[0];
 
-        if (!providerCatalog) {
+        if (!selectedProviderCatalog) {
             throw new Error("No active LLM provider configured for prompt optimization");
         }
 
+        const providerCatalog = selectedProviderCatalog;
+
         const activeModels = providerCatalog.models.filter((model) => model.isActive);
         const modelId =
-            (requestedModel && activeModels.some((model) => model.id === requestedModel) ? requestedModel : undefined)
+            (requestedModel && providerCatalog.apiType === "openai-compatible" ? requestedModel : undefined)
             || (taskSettings.model && activeModels.some((model) => model.id === taskSettings.model) ? taskSettings.model : undefined)
             || activeModels.find((model) => model.role === "dialogue" && model.isDefault)?.id
             || activeModels.find((model) => model.isDefault)?.id
@@ -429,12 +447,13 @@ export class OptimizeUserPrompt {
                     "Content-Type": "application/json",
                     ...(preparedContext.authHeader ? { Authorization: preparedContext.authHeader } : {}),
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(buildChatCompletionRequestBody({
+                    provider: preparedContext.providerCatalog.provider,
                     model: preparedContext.modelId,
-                    max_tokens: Math.min(preparedContext.taskSettings.maxCompletionTokens, env.LLM_MAX_COMPLETION_TOKENS),
+                    maxTokens: Math.min(preparedContext.taskSettings.maxCompletionTokens, env.LLM_MAX_COMPLETION_TOKENS),
                     temperature: preparedContext.taskSettings.temperature,
                     messages: preparedContext.messages,
-                }),
+                })),
             });
 
             const payload = await response.json().catch(() => ({}));
@@ -442,7 +461,12 @@ export class OptimizeUserPrompt {
                 throw new Error(`Prompt optimizer provider error ${response.status}`);
             }
 
-            const optimizedPrompt = String(payload?.choices?.[0]?.message?.content ?? "").trim() || input.rawPrompt;
+            const optimizerMessage = payload?.choices?.[0]?.message;
+            const optimizedPrompt = resolveOptimizedText(
+                String(optimizerMessage?.content ?? ""),
+                String(optimizerMessage?.reasoning_content ?? optimizerMessage?.reasoning ?? ""),
+                input.rawPrompt,
+            );
             const usage = payload?.usage
                 ? {
                     promptTokens: Number(payload.usage.prompt_tokens ?? 0),
@@ -510,13 +534,14 @@ export class OptimizeUserPrompt {
                     "Content-Type": "application/json",
                     ...(preparedContext.authHeader ? { Authorization: preparedContext.authHeader } : {}),
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(buildChatCompletionRequestBody({
+                    provider: preparedContext.providerCatalog.provider,
                     model: preparedContext.modelId,
                     stream: true,
-                    max_tokens: Math.min(preparedContext.taskSettings.maxCompletionTokens, env.LLM_MAX_COMPLETION_TOKENS),
+                    maxTokens: Math.min(preparedContext.taskSettings.maxCompletionTokens, env.LLM_MAX_COMPLETION_TOKENS),
                     temperature: preparedContext.taskSettings.temperature,
                     messages: preparedContext.messages,
-                }),
+                })),
             });
 
             if (!response.ok || !response.body) {
@@ -527,6 +552,7 @@ export class OptimizeUserPrompt {
             const decoder = new TextDecoder();
             let buffer = "";
             let rawReply = "";
+            let reasoningReply = "";
             let finishReason: string | undefined;
             let usage: OptimizerUsage | undefined;
             let providerCostUsd: number | undefined;
@@ -570,6 +596,7 @@ export class OptimizeUserPrompt {
                         const content = delta?.content;
 
                         if (thinking) {
+                            reasoningReply += String(thinking);
                             handlers?.onThinking?.(String(thinking));
                         }
 
@@ -602,13 +629,13 @@ export class OptimizeUserPrompt {
                 }
             }
 
-            const optimizedPrompt = rawReply.trim() || input.rawPrompt;
+            const optimizedPrompt = resolveOptimizedText(rawReply, reasoningReply, input.rawPrompt);
             const result = this.buildResult({
                 startedAt,
                 request: input,
                 context: preparedContext,
                 optimizedPrompt,
-                rawResponse: rawReply.trim() || optimizedPrompt,
+                rawResponse: (rawReply.trim() || reasoningReply.trim()) || optimizedPrompt,
                 finishReason: finishReason ?? "stop",
                 usage,
                 providerCostUsd,

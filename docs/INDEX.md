@@ -19,7 +19,7 @@ Read in this order before making changes:
 ## Product & Project
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | [README.md](../README.md) | Public project overview, quick start, and positioning |
 | [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Stable planning entry point for agents and contributors |
 | [docs/project/ROADMAP.md](project/ROADMAP.md) | Project roadmap and release direction |
@@ -31,7 +31,7 @@ Read in this order before making changes:
 ## Architecture
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) | Current services, route map, storage adapters, and governance status |
 | [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) | Layer 1 preview flow, Layer 2 generation pipeline, and transition mechanics |
 | [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, and operational security rules |
@@ -41,7 +41,7 @@ Read in this order before making changes:
 ## Agent Navigation
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) | Primary entry point for coding agents |
 | [docs/agents/LLM_PROVIDER_HANDOFF_RECAP.md](agents/LLM_PROVIDER_HANDOFF_RECAP.md) | LLM provider and chat-preview implementation notes |
 | [docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md](agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md) | Layer ownership map and collision-prevention rules for parallel agents |
@@ -51,7 +51,7 @@ Read in this order before making changes:
 ## Guides & Runbooks
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Testable steps per milestone |
 | [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Production hardening and deployment safety guidance |
 | [docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md](runbooks/BETA_LAUNCH_HARDENING_PLAN.md) | Beta-readiness checklist |
@@ -70,7 +70,7 @@ Read in this order before making changes:
 ## Core Technical Specifications
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | [docs/specs/SPEC.md](specs/SPEC.md) | Backend API platform and MVP architecture |
 | [docs/specs/DB_PLATFORM_SPEC.md](specs/DB_PLATFORM_SPEC.md) | MongoDB schema design, publication model, and credit system |
 | [docs/specs/COST_TRANSACTION_LEDGER_SPEC.md](specs/COST_TRANSACTION_LEDGER_SPEC.md) | Centralized cost-transaction ledger — atomic per-event billing, configurable rates, policy enforcement, and SuperAdmin cost UI |
@@ -87,22 +87,25 @@ Read in this order before making changes:
 ## Feature Specifications
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
 | [docs/specs/I18N_ARTIFACTS_SPEC.md](specs/I18N_ARTIFACTS_SPEC.md) | Multilingual support for LLM-generated artifact websites — post-publication translation pipeline |
 | [docs/specs/UX_REVIEW_AND_PUBLISH_SPEC.md](specs/UX_REVIEW_AND_PUBLISH_SPEC.md) | Review workspace and publish flow |
 | [docs/specs/WYSIWYG_EDIT_MODE_SPEC.md](specs/WYSIWYG_EDIT_MODE_SPEC.md) | WYSIWYG editor architecture and milestones |
 | [docs/specs/ONBOARDING_AND_STYLE_PROFILING_SPEC.md](specs/ONBOARDING_AND_STYLE_PROFILING_SPEC.md) | Onboarding, style profiling, and Layer 0 context |
 | [docs/specs/PRESET_TYPED_SPECS.md](specs/PRESET_TYPED_SPECS.md) | Preset catalog, output contracts, and prompt modules |
-| [docs/specs/IMAGE_PICKER_SPEC.md](specs/IMAGE_PICKER_SPEC.md) | Edit-mode image picker: refresh + save icons on images, API connector chain, asset persistence |
+| [docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md) | Target architecture for structured LLM media manifests, deterministic backend media resolution, provider policy, asset persistence, notifications, and snapshot/publish guardrails |
+| [docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_GAPS.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_GAPS.md) | Implementation-ready backlog of remaining gaps against the Artifact Media Orchestrator spec (per-gap files, fix, acceptance, effort) |
+| [docs/specs/MEDIA_STRATEGY_RESOLVER_PIPELINE_SPEC.md](specs/MEDIA_STRATEGY_RESOLVER_PIPELINE_SPEC.md) | Proposed next evolution for frontend-selectable media strategies: stock search, AI image generation, project/user assets, hybrid context planning, structured JSON planner outputs, failure traces, admin UI, and Playwright E2E |
+| [docs/specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md](specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md) | ⚠️ DEPRECATED / historical — Wave-1 analysis, superseded by [ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md). Kept for context only. |
 | [docs/specs/SECTION_CONTEXT_OPT_SPEC.md](specs/SECTION_CONTEXT_OPT_SPEC.md) | Section-aware context optimization |
 | [docs/specs/PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX and guardrails |
 | [docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md](specs/PROMPTING_SERVICE_PLATFORM_SPEC.md) | Internal prompting platform and audit model |
+| [docs/specs/LLM_PROVIDER_CATALOG_ALIGNMENT_SPEC.md](specs/LLM_PROVIDER_CATALOG_ALIGNMENT_SPEC.md) | Summary spec for provider compatibility fixes, single-source catalog alignment, shared picker UI, validation status, and review perimeter |
 | [docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md](specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md) | Ultra-operational MVP spec for Zero Effort + GodMode, shared orchestration, and parallel implementation waves |
 | [docs/specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md](specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md) | Evoluzione Zero Effort: media upload step, Layer F media context nel prompt, async job tracking, notifiche email/Telegram |
 | [docs/specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md](specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md) | Asset-aware prompt enrichment plan |
 | [docs/specs/DOCUMENT_CONTEXT_LAYER_SPEC.md](specs/DOCUMENT_CONTEXT_LAYER_SPEC.md) | Document Context Layer — PDF/DOCX parsing, image vision analysis, AssetEnrichmentTrace envelope, and Layer D prompt injection |
-| [docs/specs/EXTERNAL_API_KEYS_PLATFORM_SPEC.md](specs/EXTERNAL_API_KEYS_PLATFORM_SPEC.md) | External API Key Management — ServiceApiKey collection, AES-256-GCM encryption, image service fallback policy, admin UI Integration Hub, BYOK-ready architecture |
 | [docs/specs/IMAGE_PROMPTING_PIPELINE_SPEC.md](specs/IMAGE_PROMPTING_PIPELINE_SPEC.md) | Structured image prompting, context enrichment, and versioning-aligned pipeline |
 | [docs/specs/BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | Backend-as-a-service extension layer |
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
@@ -117,7 +120,7 @@ Read in this order before making changes:
 ## VibeCore Components (feat/dashboard-lovable-chat)
 
 | Path | Description |
-|---|---|
+| --- | --- |
 | `apps/web/components/dashboard/VibeCoreEntry.tsx` | Full-screen glass card entry — textarea, file drag-drop, mode selector, phase state machine, Layer Φ classify → createProject → upload → redirect |
 | `apps/web/components/dashboard/VibeCoreBackground.tsx` | CSS-only SVG blob background (4 ellipses, 45–60 s drift, feGaussianBlur) |
 | `apps/web/components/dashboard/ModeSelector.tsx` | Segmented EASY / MEDIUM / HARD pill with per-mode glow ring |
@@ -134,17 +137,27 @@ Read in this order before making changes:
 ## Test Reports
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | [docs/reports/E2E_DCL_REPORT_2026-05-14.md](reports/E2E_DCL_REPORT_2026-05-14.md) | Autonomous E2E session — DCL pipeline, Zero Effort flow, Layer D verification, 5 bugs found and fixed |
+| [docs/reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md](reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md) | Current implementation certification for Artifact Media Orchestrator: verified defaults, Docker smoke status, file map, human-test path, open gaps, and future development anchors |
 
 ---
 
 ## Governance Controls
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Product-level prompt, injection, and runtime governance model |
 | [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](specs/FIRST_INSTALL_SETUP_SPEC.md) | First-install wizard and initial platform configuration |
 | [docs/governance/PLATFORM_GOVERNANCE_POLICY.md](governance/PLATFORM_GOVERNANCE_POLICY.md) | Governance ownership, approval flow, and audit expectations |
 
 > If you add, move, or retire documentation, update this index in the same change.
+
+---
+
+## Deprecated Specs Archive
+
+| Document | Replacement |
+| --- | --- |
+| [docs/archive/specs/IMAGE_PICKER_SPEC.deprecated.md](archive/specs/IMAGE_PICKER_SPEC.deprecated.md) | Superseded by [docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md) |
+| [docs/archive/specs/EXTERNAL_API_KEYS_PLATFORM_SPEC.deprecated.md](archive/specs/EXTERNAL_API_KEYS_PLATFORM_SPEC.deprecated.md) | Image-provider governance superseded by [docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md); general API-key/BYOK ideas are historical only |

@@ -5,6 +5,7 @@ import type { PromptExecutionLogRepository } from "../../domain/repositories/Pro
 import { env } from "../../config";
 import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
+import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import type { GetLlmCatalog } from "../use-cases/GetLlmCatalog";
 import { buildContextAwareImagePrompt, type ImagePromptContextPacket } from "./buildImagePromptContext";
 import { buildSuggestImageIdeaRequest } from "./buildSuggestImageIdeaInstruction";
@@ -150,7 +151,7 @@ export class SuggestProjectImageIdea {
             const activeProviders = catalog.providers.filter((provider) => provider.isActive);
             const requestedModel = input.model?.trim();
 
-            const providerCatalog =
+            const selectedProviderCatalog =
                 activeProviders.find((provider) => provider.provider === input.provider)
                 ?? (requestedModel
                     ? activeProviders.find((provider) => provider.models.some((model) => model.isActive && model.id === requestedModel))
@@ -160,7 +161,7 @@ export class SuggestProjectImageIdea {
                 ?? activeProviders.find((provider) => provider.provider === FALLBACK_PROVIDER)
                 ?? activeProviders[0];
 
-            if (!providerCatalog) {
+            if (!selectedProviderCatalog) {
                 await persistLog("failed", fallback.suggestion, undefined, undefined, "No active provider configured for suggestion");
                 return {
                     suggestion: fallback.suggestion,
@@ -172,9 +173,11 @@ export class SuggestProjectImageIdea {
                 };
             }
 
+            const providerCatalog = selectedProviderCatalog;
+
             const activeModels = providerCatalog.models.filter((model) => model.isActive);
             const modelId =
-                (requestedModel && activeModels.some((model) => model.id === requestedModel) ? requestedModel : undefined)
+                (requestedModel && providerCatalog.apiType === "openai-compatible" ? requestedModel : undefined)
                 || (taskSettings.model && activeModels.some((model) => model.id === taskSettings.model) ? taskSettings.model : undefined)
                 || activeModels.find((model) => model.role === "dialogue" && model.isDefault)?.id
                 || activeModels.find((model) => model.isDefault)?.id
@@ -205,12 +208,13 @@ export class SuggestProjectImageIdea {
                     "Content-Type": "application/json",
                     ...(authHeader ? { Authorization: authHeader } : {}),
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(buildChatCompletionRequestBody({
+                    provider: providerCatalog.provider,
                     model: modelId,
-                    max_tokens: Math.min(taskSettings.maxCompletionTokens, env.LLM_MAX_COMPLETION_TOKENS),
+                    maxTokens: Math.min(taskSettings.maxCompletionTokens, env.LLM_MAX_COMPLETION_TOKENS),
                     temperature: taskSettings.temperature,
-                    messages,
-                }),
+                    messages: [...messages],
+                })),
             });
 
             const payload = await response.json().catch(() => ({}));

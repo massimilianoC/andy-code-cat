@@ -1,5 +1,6 @@
 import { setPlatformConfigSchema } from "@andy-code-cat/contracts";
 import type { PlatformConfigRepository } from "../../../domain/repositories/PlatformConfigRepository";
+import { resolveMediaProviderPolicy } from "../../media/mediaProviderPolicy";
 
 export class SetPlatformConfig {
     constructor(private readonly configRepository: PlatformConfigRepository) { }
@@ -18,6 +19,7 @@ export class SetPlatformConfig {
                 planExpiresAt: updated.defaultUserLimits.planExpiresAt?.toISOString(),
             },
             governanceByProduct: updated.governanceByProduct ?? {},
+            mediaProviderPolicy: resolveMediaProviderPolicy(updated),
             updatedAt: updated.updatedAt.toISOString(),
             updatedByUserId: updated.updatedByUserId,
         };

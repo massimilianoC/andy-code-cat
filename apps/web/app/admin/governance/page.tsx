@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import {
     getAdminConfig,
+    getAdminLlmRegistry,
     updateProductGovernance,
     type ProductGovernanceDto,
     type PlatformConfigDto,
     type CookieBannerLocaleText,
     type PromptTaskSettingDto,
+    type AdminLlmProviderDto,
 } from "@/lib/api/admin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MonacoCodeEditor } from "@/components/admin/MonacoCodeEditor";
 import { PromptTaskSettingsCard } from "@/components/admin/PromptTaskSettingsCard";
+import { resolvePromptTaskSettingAgainstCatalog } from "@/lib/adminLlmCatalog";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -53,7 +56,7 @@ const PROMPT_TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
     enrich_image: {
         enabled: true,
         provider: "siliconflow",
-        model: "Qwen/Qwen2.5-VL-72B-Instruct",
+        model: "Qwen/Qwen3-VL-32B-Instruct",
         temperature: 0.1,
         maxCompletionTokens: 600,
         systemTemplate: "",
@@ -375,16 +378,37 @@ export default function AdminGovernancePage() {
     const [productKeyInput, setProductKeyInput] = useState(DEFAULT_PRODUCT_KEY);
     const [activeProductKey, setActiveProductKey] = useState(DEFAULT_PRODUCT_KEY);
     const [governance, setGovernance] = useState<ProductGovernanceDto>(EMPTY_GOVERNANCE);
+    const [providers, setProviders] = useState<AdminLlmProviderDto[]>([]);
+
+    function normalizeVisiblePromptTasks(nextGovernance: ProductGovernanceDto, nextProviders: AdminLlmProviderDto[]) {
+        return {
+            ...nextGovernance,
+            promptTaskSettings: {
+                ...(nextGovernance.promptTaskSettings ?? {}),
+                [DEFAULT_PROMPT_TASK_KEY]: resolvePromptTaskSettingAgainstCatalog(
+                    nextGovernance.promptTaskSettings?.[DEFAULT_PROMPT_TASK_KEY] ?? PROMPT_TASK_DEFAULTS[DEFAULT_PROMPT_TASK_KEY],
+                    nextProviders,
+                    { requiredCapability: "chat" },
+                ),
+                [TEMPLATE_DRAFT_TASK_KEY]: resolvePromptTaskSettingAgainstCatalog(
+                    nextGovernance.promptTaskSettings?.[TEMPLATE_DRAFT_TASK_KEY] ?? PROMPT_TASK_DEFAULTS[TEMPLATE_DRAFT_TASK_KEY],
+                    nextProviders,
+                    { requiredCapability: "chat" },
+                ),
+            },
+        };
+    }
 
     useEffect(() => {
         const token = getToken();
         if (!token) { router.replace("/login"); return; }
 
-        getAdminConfig(token)
-            .then((nextConfig) => {
+        Promise.all([getAdminConfig(token), getAdminLlmRegistry(token)])
+            .then(([nextConfig, registry]) => {
                 setConfig(nextConfig);
+                setProviders(registry.providers ?? []);
                 const selected = nextConfig.governanceByProduct?.[DEFAULT_PRODUCT_KEY] ?? EMPTY_GOVERNANCE;
-                setGovernance(mergeWithEmpty(selected));
+                setGovernance(normalizeVisiblePromptTasks(mergeWithEmpty(selected), registry.providers ?? []));
             })
             .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load governance config"))
             .finally(() => setLoading(false));
@@ -416,7 +440,7 @@ export default function AdminGovernancePage() {
 
     function loadProductConfig(productKey: string) {
         const selected = config?.governanceByProduct?.[productKey] ?? EMPTY_GOVERNANCE;
-        setGovernance(mergeWithEmpty(selected));
+        setGovernance(normalizeVisiblePromptTasks(mergeWithEmpty(selected), providers));
         setActiveProductKey(productKey);
         setProductKeyInput(productKey);
     }
@@ -433,6 +457,8 @@ export default function AdminGovernancePage() {
         try {
             const updated = await updateProductGovernance(token, productKey, governance);
             setConfig(updated);
+            const selected = updated.governanceByProduct?.[productKey] ?? EMPTY_GOVERNANCE;
+            setGovernance(normalizeVisiblePromptTasks(mergeWithEmpty(selected), providers));
             setActiveProductKey(productKey);
             setSaved(true);
             setTimeout(() => setSaved(false), 2500);
@@ -1012,6 +1038,7 @@ export default function AdminGovernancePage() {
                                     description="Controls the rewriting layer that strengthens the user brief before generation, aligned with the active project-type template model."
                                     helperText="Default fallback: SiliconFlow + MiniMax M2.5"
                                     value={governance.promptTaskSettings?.[DEFAULT_PROMPT_TASK_KEY] ?? PROMPT_TASK_DEFAULTS[DEFAULT_PROMPT_TASK_KEY]}
+                                    providers={providers}
                                     onFieldChange={(key, value) => setPromptTaskField(DEFAULT_PROMPT_TASK_KEY, key, value)}
                                 />
                                 <PromptTaskSettingsCard
@@ -1019,6 +1046,7 @@ export default function AdminGovernancePage() {
                                     description="Reusable service task for superadmin-side creation and refinement of project-type template models from short natural-language instructions."
                                     helperText="This powers dedicated admin authoring flows without introducing a separate prompting stack."
                                     value={governance.promptTaskSettings?.[TEMPLATE_DRAFT_TASK_KEY] ?? PROMPT_TASK_DEFAULTS[TEMPLATE_DRAFT_TASK_KEY]}
+                                    providers={providers}
                                     onFieldChange={(key, value) => setPromptTaskField(TEMPLATE_DRAFT_TASK_KEY, key, value)}
                                 />
                             </CardContent>

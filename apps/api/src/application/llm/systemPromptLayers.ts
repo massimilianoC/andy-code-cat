@@ -143,7 +143,8 @@ export function buildBaseConstraintsLayer(): string {
         "- No JavaScript framework (React, Vue, Angular, Svelte) — vanilla JS only.",
         "- CSS strategy: choose Tailwind CDN OR vanilla CSS — never both in the same output.",
         "- artifacts.css and artifacts.js must be plain strings without <style> or <script> wrappers.",
-        "- All JavaScript MUST go exclusively in artifacts.js. Never embed script logic inline in the HTML artifact — not in <script> tags, not as event attributes. In the HTML, reference JS only with: <script src=\"app.js\"></script>.",
+        "- All JavaScript MUST go exclusively in artifacts.js. Never embed script logic inline in the HTML artifact — not in <script> tags, not as event attributes. In the HTML, reference JS only with: <script src=\"script.js\"></script>.",
+        "- For vanilla (non-Tailwind) CSS, reference the stylesheet exactly once in <head> with: <link rel=\"stylesheet\" href=\"style.css\">. The platform serves artifacts.css as style.css and artifacts.js as script.js — NEVER use other filenames (e.g. app.css, app.js, main.js) or they will 404 in publication.",
         "",
         "HTML compactness rules (mandatory):",
         "- Target HTML under 30 KB (approx 30 000 chars). Aim for the minimum markup that achieves the design.",
@@ -153,12 +154,14 @@ export function buildBaseConstraintsLayer(): string {
         "- Avoid inline style= attributes; put all styling in artifacts.css.",
         "- Do not repeat identical class lists across sibling elements — factor them into a shared parent or CSS rule.",
         "",
-        "Visibility-without-JS rules (mandatory — preview iframe runs allow-scripts only and external assets may fail):",
+        "Visibility-without-JS rules (NON-EDITABLE platform rules — they override any project/model/governance template; preview iframe runs allow-scripts only and external assets may fail):",
         "- All primary content (text, images, sections) MUST be visible on initial render with CSS alone, before any JS executes.",
-        "- Never set `opacity:0`, `visibility:hidden`, or off-screen `transform` as the default state of content unless a CSS-only rule restores it (e.g. `@media (prefers-reduced-motion)` fallback or a pure-CSS animation that ends in the visible state).",
-        "- JavaScript may ENHANCE (animate, reveal, interact) but must never GATE the appearance of static content.",
-        "- If you include a CSS file/library that hides elements until a class is toggled (AOS, WOW, ScrollReveal-like patterns), you MUST also load the matching JS that toggles that class, and you MUST also provide a CSS-only fallback that leaves content visible if the script never runs.",
-        "- The HTML must reference exactly one external script: `<script src='app.js'></script>` placed immediately before `</body>`. Do not add `defer`, `async`, `type='module'`, or inline `<script>` blocks.",
+        "- Never set `opacity:0`, `visibility:hidden`, `height:0`, `display:none`, or off-screen `transform` as the DEFAULT state of content unless a pure-CSS rule restores it without JS (e.g. a `@keyframes` animation that ENDS in the visible state and is applied directly in CSS).",
+        "- JavaScript may ENHANCE (animate, reveal, interact) but must never GATE the appearance of static content. If the script never runs, every section, card, image and text block must still be fully visible.",
+        "- FORBIDDEN unless you ALSO ship a CSS-only visible fallback AND load every required plugin: scroll-reveal libraries (AOS, WOW.js, ScrollReveal), and Alpine directives that hide content (`x-show`, `x-collapse`, `x-cloak`, `x-transition`).",
+        "- Specifically: do NOT use Alpine `x-collapse` or `x-cloak` unless you load the matching plugin via CDN (e.g. `@alpinejs/collapse`) AND the content is visible by default without it. Prefer the native HTML `<details>`/`<summary>` element for collapsible sections — it needs no JS and is always visible.",
+        "- Reveal-on-scroll pattern that is SAFE: start elements visible, then add an OPTIONAL entrance animation via `@keyframes` in CSS only. Do not couple visibility to a JS-added class without a CSS fallback.",
+        "- The HTML must reference exactly one external script: `<script src='script.js'></script>` placed immediately before `</body>`. Do not add `defer`, `async`, `type='module'`, or inline `<script>` blocks.",
         "- The iframe sandbox is `allow-scripts` only: no `window.parent`/`top` access, no top-level navigation, no `localStorage` writes from the page logic that affect the parent. Persist game state to memory only.",
         "",
         "Canvas / game-engine container rules (mandatory when using Phaser, Three.js, A-Frame, p5.js, etc.):",
@@ -206,7 +209,7 @@ export function buildPresetLayer(presetId?: string | null): string {
  */
 export function buildProjectKnowledgeLayer(
     assets: ProjectAsset[],
-    opts?: { maxChars?: number; maxAssets?: number },
+    opts?: { maxChars?: number; maxAssets?: number; includeUnenrichedAssets?: boolean },
 ): string {
     if (!env.enrichmentInjectLayerD) return "";
 
@@ -217,13 +220,15 @@ export function buildProjectKnowledgeLayer(
     // (the pipeline saves these immediately after parsing, before the LLM brief is done).
     const ready = assets.filter(a => {
         const trace = a.enrichmentTrace;
-        if (!trace) return false;
-        const status = trace.provenance.enrichmentStatus;
-        const hasContent =
-            status === "ready" ||
-            (status === "pending" && (trace.textLayer !== null || trace.structuredData !== null));
-        if (!hasContent) return false;
-        if (a.useInProject === false && !a.styleRole) return false;
+        if (!trace && !opts?.includeUnenrichedAssets) return false;
+        if (trace) {
+            const status = trace.provenance.enrichmentStatus;
+            const hasContent =
+                status === "ready" ||
+                (status === "pending" && (trace.textLayer !== null || trace.structuredData !== null));
+            if (!hasContent) return false;
+        }
+        if (a.useInProject === false && !a.styleRole && !opts?.includeUnenrichedAssets) return false;
         return true;
     });
 
@@ -248,11 +253,11 @@ export function buildProjectKnowledgeLayer(
     totalChars += header.length + 2;
 
     for (const asset of selected) {
-        const trace = asset.enrichmentTrace!;
+        const trace = asset.enrichmentTrace;
         // Prefer the fragment that was pre-rendered during enrichment (deterministic,
         // single-pass). Fall back to on-the-fly rendering for legacy traces that
         // predate the cache field.
-        const block = trace.renderedFragment ?? renderAssetLayerDFragment(trace);
+        const block = trace?.renderedFragment ?? (trace ? renderAssetLayerDFragment(trace) : renderUnenrichedAssetLayerDFragment(asset));
         if (totalChars + block.length + 2 > maxChars) break;
         blocks.push(block);
         totalChars += block.length + 2;
@@ -261,6 +266,17 @@ export function buildProjectKnowledgeLayer(
     if (blocks.length === 0) return "";
 
     return `${header}\n\n${blocks.join("\n\n")}`;
+}
+
+function renderUnenrichedAssetLayerDFragment(asset: ProjectAsset): string {
+    const label = asset.label || asset.originalName;
+    return [
+        `- ${label}`,
+        `  - Type: ${asset.mimeType}`,
+        asset.descriptionText ? `  - Notes: ${asset.descriptionText}` : undefined,
+        asset.styleRole ? `  - Intended role: ${asset.styleRole}` : undefined,
+        "  - Status: uploaded reference; detailed extraction is still pending.",
+    ].filter((line): line is string => Boolean(line)).join("\n");
 }
 
 /**

@@ -2,21 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square } from "lucide-react";
+import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square, Settings } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import { ModeSelector, type VibeMode } from "./ModeSelector";
 import { VibeCoreBackground } from "./VibeCoreBackground";
 import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
 import { classifyVibeIntent, prefillZeroEffort } from "@/lib/api/vibecore";
 import { getZeroEffortConfig } from "@/lib/api/pipelines";
 import { createProject, uploadProjectAsset, renameProject } from "@/lib/api";
+import { getLlmProviders, type LlmProviderCatalogDto } from "@/lib/api/llm";
 
 /** Max file size accepted via the VibeCore drag-and-drop zone (10 MB). */
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_FILES = 3;
 const VIBE_MODE_KEY = "vibecore_mode";
+const PIPELINE_MODEL_OVERRIDE_KEY = "vibecore_pipeline_model_override";
 const ACCEPTED_MIME_TYPES = [
     // Documents
     "application/pdf",
@@ -66,6 +70,11 @@ interface FilePill {
     id: string;
 }
 
+interface PipelineModelOverride {
+    provider: string;
+    model: string;
+}
+
 function loadMode(): VibeMode {
     try {
         const saved = localStorage.getItem(VIBE_MODE_KEY);
@@ -79,6 +88,32 @@ function loadMode(): VibeMode {
 function saveMode(mode: VibeMode) {
     try {
         localStorage.setItem(VIBE_MODE_KEY, mode);
+    } catch {
+        // ignore
+    }
+}
+
+function loadPipelineModelOverride(): PipelineModelOverride | null {
+    try {
+        const raw = localStorage.getItem(PIPELINE_MODEL_OVERRIDE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<PipelineModelOverride>;
+        if (typeof parsed.provider === "string" && parsed.provider && typeof parsed.model === "string" && parsed.model) {
+            return { provider: parsed.provider, model: parsed.model };
+        }
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+function savePipelineModelOverride(value: PipelineModelOverride | null) {
+    try {
+        if (value) {
+            localStorage.setItem(PIPELINE_MODEL_OVERRIDE_KEY, JSON.stringify(value));
+        } else {
+            localStorage.removeItem(PIPELINE_MODEL_OVERRIDE_KEY);
+        }
     } catch {
         // ignore
     }
@@ -128,6 +163,36 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
     const [error, setError] = useState<string | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
+    const [providersCatalog, setProvidersCatalog] = useState<LlmProviderCatalogDto[]>([]);
+    const [pipelineOverride, setPipelineOverride] = useState<PipelineModelOverride | null>(null);
+    const [modelOverrideOpen, setModelOverrideOpen] = useState(false);
+
+    useEffect(() => {
+        setPipelineOverride(loadPipelineModelOverride());
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        void getLlmProviders(token)
+            .then((response) => {
+                if (!cancelled) setProvidersCatalog(response.providers ?? []);
+            })
+            .catch(() => {
+                if (!cancelled) setProvidersCatalog([]);
+            });
+        return () => { cancelled = true; };
+    }, [token]);
+
+    function updatePipelineOverride(next: PipelineModelOverride | null) {
+        setPipelineOverride(next);
+        savePipelineModelOverride(next);
+    }
+
+    function applyPipelineModelParams(query: URLSearchParams) {
+        if (!pipelineOverride) return;
+        query.set("preferredProvider", pipelineOverride.provider);
+        query.set("preferredModel", pipelineOverride.model);
+    }
 
     // Cmd/Ctrl + K focuses input from anywhere on the page
     useEffect(() => {
@@ -156,7 +221,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
      * HARD mode: creates a blank project (carrying current prompt + files if any),
      * then navigates to Guided Mode (God Mode workspace) with autoTemplating=true so the workspace's
      * auto-templating engine can classify the intent on first generation.
-     * The god_mode_generate superadmin config determines which provider/model is used.
+    * The UI model override wins; otherwise god_mode_generate determines which provider/model is used.
      */
     async function handleHardMode() {
         setPhase("creating");
@@ -182,14 +247,15 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             setPhase("redirecting");
             const query = new URLSearchParams({ autoTemplating: "true" });
             if (prompt.trim()) query.set("autoPrompt", prompt.trim().slice(0, 2000));
+            applyPipelineModelParams(query);
 
-            // Apply god_mode_generate model so workspace uses the superadmin-configured model.
+            // Apply god_mode_generate only when no UI override is active.
             try {
                 const pipelineConfig = await getZeroEffortConfig(token, projectId);
-                if (pipelineConfig?.godModeGenerate?.provider) {
+                if (!pipelineOverride && pipelineConfig?.godModeGenerate?.provider) {
                     query.set("preferredProvider", pipelineConfig.godModeGenerate.provider);
                 }
-                if (pipelineConfig?.godModeGenerate?.model) {
+                if (!pipelineOverride && pipelineConfig?.godModeGenerate?.model) {
                     query.set("preferredModel", pipelineConfig.godModeGenerate.model);
                 }
             } catch {
@@ -270,6 +336,8 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             const classification = await classifyVibeIntent(token, {
                 prompt: prompt.trim(),
                 attachmentMeta,
+                provider: pipelineOverride?.provider,
+                model: pipelineOverride?.model,
             }).catch(() => null);
 
             // Create project early so files (and their Layer D enrichment) can be uploaded
@@ -301,6 +369,8 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 attachmentMeta,
                 templateId: classification?.templateId ?? null,
                 formatHint: classification?.formatHint ?? null,
+                provider: pipelineOverride?.provider,
+                model: pipelineOverride?.model,
             }).catch(() => null);
 
             // Store prefill draft in sessionStorage for launch page
@@ -329,6 +399,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             });
             if (classification?.formatHint) query.set("formatHint", classification.formatHint);
             if (hasPrefill) query.set("prefilled", "1");
+            applyPipelineModelParams(query);
             router.push(`/launch/${projectId}?${query.toString()}`);
         } catch {
             setError("Si è verificato un errore. Riprova.");
@@ -525,38 +596,45 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             />
                         </label>
 
-                        {/* Mic button — voice dictation (hidden when browser does not support Web Speech API) */}
-                        {voiceSupported && (
-                            <button
-                                type="button"
-                                onClick={toggleVoice}
-                                disabled={isLoading}
-                                aria-label={voiceListening
-                                    ? t("workspace.ui.voiceListeningLabel")
-                                    : t("workspace.ui.voiceStartLabel")}
-                                title={voiceListening
-                                    ? t("workspace.ui.voiceListeningTitle")
-                                    : t("workspace.ui.voiceStartTitle")}
-                                className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150 shrink-0"
-                                style={{
-                                    border: `1px solid ${
-                                        voiceListening
-                                            ? "rgba(248,113,113,0.5)"
-                                            : "rgba(255,255,255,0.15)"
-                                    }`,
-                                    background: voiceListening
-                                        ? "rgba(248,113,113,0.15)"
-                                        : "transparent",
-                                    color: voiceListening
-                                        ? "#f87171"
-                                        : "rgba(255,255,255,0.38)",
-                                }}
-                            >
-                                {voiceListening
-                                    ? <Square className="h-3.5 w-3.5" />
-                                    : <Mic className="h-3.5 w-3.5" />}
-                            </button>
-                        )}
+                        {/* Mic button — always visible; unsupported browsers show the hook error on click. */}
+                        <button
+                            type="button"
+                            onClick={toggleVoice}
+                            disabled={isLoading}
+                            aria-disabled={isLoading}
+                            aria-label={voiceListening
+                                ? t("workspace.ui.voiceListeningLabel")
+                                : t("workspace.ui.voiceStartLabel")}
+                            title={voiceListening
+                                ? t("workspace.ui.voiceListeningTitle")
+                                : voiceSupported
+                                    ? t("workspace.ui.voiceStartTitle")
+                                    : t("workspace.ui.voiceOnlyChrome")}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-150"
+                            style={{
+                                border: `1px solid ${
+                                    voiceListening
+                                        ? "rgba(248,113,113,0.65)"
+                                        : voiceSupported
+                                            ? "rgba(255,255,255,0.22)"
+                                            : "rgba(255,255,255,0.12)"
+                                }`,
+                                background: voiceListening
+                                    ? "rgba(248,113,113,0.16)"
+                                    : voiceSupported
+                                        ? "rgba(255,255,255,0.04)"
+                                        : "rgba(255,255,255,0.02)",
+                                color: voiceListening
+                                    ? "#f87171"
+                                    : voiceSupported
+                                        ? "rgba(255,255,255,0.7)"
+                                        : "rgba(255,255,255,0.32)",
+                            }}
+                        >
+                            {voiceListening
+                                ? <Square className="h-4 w-4" />
+                                : <Mic className="h-4 w-4" />}
+                        </button>
 
                         {/* Phase status */}
                         <span
@@ -566,6 +644,25 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         >
                             {phaseLabel}
                         </span>
+
+                        <Button
+                            type="button"
+                            size="icon"
+                            variant={pipelineOverride ? "secondary" : "outline"}
+                            disabled={isLoading}
+                            onClick={() => setModelOverrideOpen((open) => !open)}
+                            aria-label={t("vibecore.modelOverrideLabel", "Modello pipeline")}
+                            title={pipelineOverride
+                                ? t("vibecore.modelOverrideActiveTitle", {
+                                    provider: pipelineOverride.provider,
+                                    model: pipelineOverride.model,
+                                    defaultValue: "Pipeline forzata su {{provider}} · {{model}}",
+                                })
+                                : t("vibecore.modelOverrideTitle", "Scegli un modello per tutta la pipeline")}
+                            className="h-9 w-9 shrink-0 border-border bg-secondary/30 text-foreground hover:bg-secondary hover:text-foreground"
+                        >
+                            <Settings className="h-4 w-4" />
+                        </Button>
 
                         {/* Submit */}
                         <button
@@ -590,6 +687,49 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             )}
                         </button>
                     </div>
+
+                    {modelOverrideOpen && (
+                        <div
+                            className="mt-3 rounded-xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur"
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter") event.preventDefault();
+                            }}
+                        >
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                        {t("vibecore.modelOverrideLabel", "Modello pipeline")}
+                                    </p>
+                                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                        {pipelineOverride
+                                            ? `${pipelineOverride.provider} · ${pipelineOverride.model}`
+                                            : t("vibecore.modelOverrideDefault", "Usa i modelli configurati dal sistema")}
+                                    </p>
+                                </div>
+                                {pipelineOverride ? (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => updatePipelineOverride(null)}
+                                        className="shrink-0"
+                                    >
+                                        {t("vibecore.modelOverrideReset", "Default")}
+                                    </Button>
+                                ) : null}
+                            </div>
+                            <ProviderModelPicker
+                                providers={providersCatalog}
+                                valueProvider={pipelineOverride?.provider}
+                                valueModel={pipelineOverride?.model}
+                                onChange={({ provider, model }) => updatePipelineOverride({ provider, model })}
+                                preferredCapability="chat"
+                                disabled={providersCatalog.length === 0 || isLoading}
+                                placeholder={t("vibecore.modelOverridePlaceholder", "Seleziona provider e modello")}
+                                searchPlaceholder={t("vibecore.modelOverrideSearch", "Cerca provider o modello")}
+                            />
+                        </div>
+                    )}
                 </form>
 
                 {/* Loading hints — 3 pulsing dots + cycling keyword phrase */}

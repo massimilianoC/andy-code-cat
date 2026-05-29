@@ -33,6 +33,13 @@ export interface PreviewSnapshot {
             prePromptTemplate?: string;
             effectiveSystemPrompt?: string;
         };
+        mediaResolution?: {
+            version: "media-resolution-v1";
+            traceIds: string[];
+            assetIds: string[];
+            mediaKeys: string[];
+            degraded: boolean;
+        };
     };
     createdAt: string;
     activatedAt?: string;
@@ -75,6 +82,13 @@ export function createPreviewSnapshot(
                 promptConfigId?: string;
                 prePromptTemplate?: string;
                 effectiveSystemPrompt?: string;
+            };
+            mediaResolution?: {
+                version: "media-resolution-v1";
+                traceIds: string[];
+                assetIds: string[];
+                mediaKeys: string[];
+                degraded: boolean;
             };
         };
         activate?: boolean;

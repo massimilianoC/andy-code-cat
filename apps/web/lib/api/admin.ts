@@ -56,11 +56,23 @@ export interface PlatformStatsDto {
     totalTokensConsumedLifetime: number;
 }
 
+export type StockProviderId = "pexels" | "pixabay" | "unsplash" | "loremflickr" | "picsum";
+
+export interface MediaProviderPolicyDto {
+    stockImage: {
+        primaryProvider: StockProviderId;
+        fallbackEnabled: boolean;
+        fallbackProviders: StockProviderId[];
+        allowPicsumFallback: boolean;
+    };
+}
+
 export interface PlatformConfigDto {
     registrationOpen: boolean;
     emailVerificationRequired: boolean;
     defaultUserLimits: UserLimitsDto;
     governanceByProduct?: Record<string, ProductGovernanceDto>;
+    mediaProviderPolicy?: MediaProviderPolicyDto;
     updatedAt: string;
     updatedByUserId?: string;
 }
@@ -153,6 +165,9 @@ export interface AdminLlmProviderDto {
     apiType?: "openai-compatible" | "anthropic-compatible" | "custom";
     authType?: "api-key" | "bearer" | "none";
     isActive: boolean;
+    requiresKey?: boolean;
+    hasApiKeyConfigured?: boolean;
+    keyEnvironmentVariable?: string;
     models: AdminLlmModelDto[];
     createdAt: string;
     updatedAt: string;
@@ -161,6 +176,8 @@ export interface AdminLlmProviderDto {
 export interface AdminLlmRegistryDto {
     source: string;
     providers: AdminLlmProviderDto[];
+    activeProvider?: string;
+    byokEnabled?: boolean;
 }
 
 export interface AdminPresetRecommendedModelDto {
@@ -317,6 +334,13 @@ export function updateProductGovernance(
             [productKey]: governancePatch,
         },
     });
+}
+
+export function updateMediaProviderPolicy(
+    token: string,
+    policy: Partial<MediaProviderPolicyDto["stockImage"]>,
+): Promise<PlatformConfigDto> {
+    return call<PlatformConfigDto>("PATCH", "/v1/admin/config", { mediaProviderPolicy: { stockImage: policy } }, auth(token));
 }
 
 export function getAdminLlmRegistry(token: string): Promise<AdminLlmRegistryDto> {

@@ -32,7 +32,7 @@ export async function searchPixabay(
     params: ImageSearchParams,
     apiKey: string,
 ): Promise<ImageSearchResult | null> {
-    const { query, width = 800, type = "photo", perPage = 3 } = params;
+    const { query, width = 800, type = "photo", perPage = 3, resultIndex = 0 } = params;
 
     const base = type === "video" ? PIXABAY_VIDEO_API : PIXABAY_PHOTO_API;
     const url =
@@ -46,7 +46,7 @@ export async function searchPixabay(
 
     if (type === "video") {
         const json = (await res.json()) as { hits: PixabayVideoHit[] };
-        const hit = json.hits?.[0];
+        const hit = json.hits?.[Math.max(0, Math.min(resultIndex, json.hits.length - 1))];
         if (!hit) return null;
         const variant =
             hit.videos.large?.url
@@ -65,7 +65,7 @@ export async function searchPixabay(
     }
 
     const json = (await res.json()) as { hits: PixabayPhotoHit[] };
-    const hit = json.hits?.[0];
+    const hit = json.hits?.[Math.max(0, Math.min(resultIndex, json.hits.length - 1))];
     if (!hit) return null;
 
     const src = width >= 1000 ? hit.largeImageURL : hit.webformatURL;

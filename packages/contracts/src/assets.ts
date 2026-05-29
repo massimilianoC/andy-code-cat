@@ -249,6 +249,62 @@ export const generateProjectImageSchema = z.object({
 
 export type GenerateProjectImageInput = z.infer<typeof generateProjectImageSchema>;
 
+export const regenerateStockProjectImageSchema = z.object({
+    query: requiredTrimmedString(300),
+    width: z.number().int().positive().max(10000).optional(),
+    height: z.number().int().positive().max(10000).optional(),
+    offset: z.number().int().min(0).max(100).optional(),
+    targetSelector: optionalTrimmedString(300),
+    targetMode: z.enum(["foreground", "background"]).default("foreground"),
+    scope: userFacingAssetScopeSchema.optional(),
+});
+
+export type RegenerateStockProjectImageInput = z.infer<typeof regenerateStockProjectImageSchema>;
+
+export const regenerateMediaByKeySchema = z.object({
+    snapshotId: optionalTrimmedString(120),
+    offset: z.number().int().min(0).max(100).optional(),
+    width: z.number().int().positive().max(10000).optional(),
+    height: z.number().int().positive().max(10000).optional(),
+    targetSelector: optionalTrimmedString(300),
+    targetMode: z.enum(["foreground", "background"]).optional(),
+    scope: userFacingAssetScopeSchema.optional(),
+});
+
+export type RegenerateMediaByKeyInput = z.infer<typeof regenerateMediaByKeySchema>;
+
+export interface RegenerateStockProjectImageResultDto {
+    asset: ProjectAssetDto;
+    assetUrl: string;
+    provider: string;
+    fallbackUsed: boolean;
+    attribution: string;
+    attemptedProviders: Array<{
+        provider: string;
+        status: "success" | "failed" | "skipped";
+        reason?: string;
+    }>;
+}
+
+export interface RegenerateMediaByKeyResultDto extends RegenerateStockProjectImageResultDto {
+    mediaKey: string;
+    traceId?: string;
+}
+
+export interface StockImageProviderStatusDto {
+    activeProvider: string;
+    fallbackMode: "notify";
+    fallbackProviders: string[];
+    persistenceEnabled: boolean;
+    configuredProviders: {
+        pexels: boolean;
+        pixabay: boolean;
+        unsplash: boolean;
+        loremflickr: boolean;
+        picsum: boolean;
+    };
+}
+
 export interface GenerateProjectImageResultDto {
     taskId: string;
     status: "queued";

@@ -23,6 +23,7 @@ import { createAdminRoutes } from "./presentation/http/routes/adminRoutes";
 import { createPipelineRoutes } from "./presentation/http/routes/pipelineRoutes";
 import { createCostRoutes } from "./presentation/http/routes/costRoutes";
 import { createVibecoreRoutes } from "./presentation/http/routes/vibecoreRoutes";
+import { createNotificationRoutes } from "./presentation/http/routes/notificationRoutes";
 
 export function createApp() {
     const app = express();
@@ -74,14 +75,16 @@ export function createApp() {
     app.use("/v1", createExecutionLogRoutes());
     app.use("/v1", createCostRoutes());
     app.use("/v1", createVibecoreRoutes());
+    app.use("/v1", createNotificationRoutes());
+
+    // Public media serving must be mounted before publish static routes.
+    // Otherwise /p/media/:assetId is swallowed by /p/:publishId/:file.
+    app.use("/p", createPublicMediaRoutes());
 
     // Publish: API routes (auth-protected) + static serving (public)
     const { apiRouter: publishApi, staticRouter: publishStatic } = createPublishRoutes();
     app.use("/v1", publishApi);
     app.use("/p", publishStatic);
-
-    // Public media serving — no auth, immutable URLs for project assets
-    app.use("/p", createPublicMediaRoutes());
 
     // Super admin routes — auth + requireSuperAdmin guard applied inside the router
     app.use("/v1", createAdminRoutes());

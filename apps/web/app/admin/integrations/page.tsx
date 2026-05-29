@@ -10,9 +10,13 @@ import {
     deleteServiceKey,
     getServiceKeyEnvStatus,
     seedServiceKeysFromEnv,
+    getAdminConfig,
+    updateMediaProviderPolicy,
     type ServiceApiKeyDto,
     type ServiceCategory,
     type EnvKeyStatusDto,
+    type MediaProviderPolicyDto,
+    type StockProviderId,
 } from "@/lib/api/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +48,21 @@ const EMPTY_DRAFT = {
     isDefault: false,
 };
 
+const STOCK_PROVIDER_OPTIONS: { value: StockProviderId; label: string }[] = [
+    { value: "pexels", label: "Pexels" },
+    { value: "pixabay", label: "Pixabay" },
+    { value: "unsplash", label: "Unsplash" },
+    { value: "loremflickr", label: "LoremFlickr (no-key fallback)" },
+];
+
+const FALLBACK_PROVIDER_OPTIONS: { value: StockProviderId; label: string }[] = [
+    { value: "pexels", label: "Pexels" },
+    { value: "pixabay", label: "Pixabay" },
+    { value: "unsplash", label: "Unsplash" },
+    { value: "loremflickr", label: "LoremFlickr" },
+    { value: "picsum", label: "Picsum (placeholder only)" },
+];
+
 export default function AdminIntegrationsPage() {
     const router = useRouter();
     const [keys, setKeys] = useState<ServiceApiKeyDto[]>([]);
@@ -52,6 +71,11 @@ export default function AdminIntegrationsPage() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [saved, setSaved] = useState(false);
+
+    // Media provider policy state
+    const [mediaPolicy, setMediaPolicy] = useState<MediaProviderPolicyDto["stockImage"] | null>(null);
+    const [savingPolicy, setSavingPolicy] = useState(false);
+    const [policySaved, setPolicySaved] = useState(false);
 
     const [showForm, setShowForm] = useState(false);
     const [editId, setEditId] = useState<string | null>(null);
@@ -64,8 +88,17 @@ export default function AdminIntegrationsPage() {
     useEffect(() => {
         const token = getToken();
         if (!token) { router.replace("/login"); return; }
-        Promise.all([listServiceKeys(token), getServiceKeyEnvStatus(token)])
-            .then(([ks, es]) => { setKeys(ks.keys); setEnvStatus(es); })
+        Promise.all([listServiceKeys(token), getServiceKeyEnvStatus(token), getAdminConfig(token)])
+            .then(([ks, es, cfg]) => {
+                setKeys(ks.keys);
+                setEnvStatus(es);
+                setMediaPolicy(cfg.mediaProviderPolicy?.stockImage ?? {
+                    primaryProvider: "pexels",
+                    fallbackEnabled: true,
+                    fallbackProviders: ["pixabay", "unsplash", "loremflickr"],
+                    allowPicsumFallback: true,
+                });
+            })
             .catch((e) => setError(String(e)))
             .finally(() => setLoading(false));
     }, [router]);
@@ -157,6 +190,23 @@ export default function AdminIntegrationsPage() {
             setKeys((prev) => prev.filter((k) => k.id !== id));
         } catch (e) {
             setError(String(e));
+        }
+    }
+
+    async function handleSaveMediaPolicy() {
+        const token = getToken();
+        if (!token || !mediaPolicy) return;
+        setSavingPolicy(true);
+        setError(null);
+        try {
+            const updated = await updateMediaProviderPolicy(token, mediaPolicy);
+            setMediaPolicy(updated.mediaProviderPolicy?.stockImage ?? mediaPolicy);
+            setPolicySaved(true);
+            setTimeout(() => setPolicySaved(false), 2500);
+        } catch (e) {
+            setError(String(e));
+        } finally {
+            setSavingPolicy(false);
         }
     }
 
@@ -313,6 +363,92 @@ export default function AdminIntegrationsPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Stock Provider Policy */}
+            {mediaPolicy && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Stock provider policy</CardTitle>
+                        <CardDescription className="text-xs">
+                            Controls which stock image provider is used when generating artifacts.
+                            The primary provider is used first; fallbacks kick in only if it fails (when fallback is enabled).
+                            Changing the primary provider does not require a new API key — use Integration Hub above to manage keys.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs">Primary provider</Label>
+                                <select
+                                    className="w-full h-8 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                                    value={mediaPolicy.primaryProvider}
+                                    onChange={(e) => setMediaPolicy((p) => p ? { ...p, primaryProvider: e.target.value as StockProviderId } : p)}
+                                >
+                                    {STOCK_PROVIDER_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs">Fallback providers (order matters)</Label>
+                                <div className="flex flex-wrap gap-2">
+                                    {FALLBACK_PROVIDER_OPTIONS
+                                        .filter((opt) => opt.value !== mediaPolicy.primaryProvider)
+                                        .map((opt) => {
+                                            const checked = mediaPolicy.fallbackProviders.includes(opt.value);
+                                            return (
+                                                <label key={opt.value} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={(e) => setMediaPolicy((p) => {
+                                                            if (!p) return p;
+                                                            const next = e.target.checked
+                                                                ? [...p.fallbackProviders, opt.value]
+                                                                : p.fallbackProviders.filter((v) => v !== opt.value);
+                                                            return { ...p, fallbackProviders: next };
+                                                        })}
+                                                    />
+                                                    {opt.label}
+                                                </label>
+                                            );
+                                        })}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-6 text-sm">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={mediaPolicy.fallbackEnabled}
+                                    onChange={(e) => setMediaPolicy((p) => p ? { ...p, fallbackEnabled: e.target.checked } : p)}
+                                />
+                                <span className="text-xs">Enable fallback (if primary fails, try next)</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={mediaPolicy.allowPicsumFallback}
+                                    onChange={(e) => setMediaPolicy((p) => p ? { ...p, allowPicsumFallback: e.target.checked } : p)}
+                                />
+                                <span className="text-xs">Allow Picsum as last-resort fallback</span>
+                            </label>
+                        </div>
+                        <div className="flex items-center gap-3 pt-1">
+                            <Button size="sm" disabled={savingPolicy} onClick={handleSaveMediaPolicy}>
+                                {savingPolicy ? "Saving…" : "Save policy"}
+                            </Button>
+                            {policySaved && (
+                                <span className="text-xs text-muted-foreground">Saved.</span>
+                            )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                            Note: fallback is only used during full artifact generation, not during Edit-mode image regeneration.
+                            If the primary provider fails in Edit mode the action fails explicitly.
+                        </p>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Add key form */}
             {showForm && (

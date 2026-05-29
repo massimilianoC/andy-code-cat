@@ -12,6 +12,7 @@ import type { RequestWithContext } from "../types";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
+import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
 import { CreatePreviewSnapshot } from "../../../application/use-cases/CreatePreviewSnapshot";
 import { ListPreviewSnapshots } from "../../../application/use-cases/ListPreviewSnapshots";
 import { ActivatePreviewSnapshot } from "../../../application/use-cases/ActivatePreviewSnapshot";
@@ -28,9 +29,10 @@ export function createPreviewSnapshotRoutes(): Router {
     const projectRepository = new MongoProjectRepository();
     const conversationRepository = new MongoConversationRepository();
     const previewSnapshotRepository = new MongoPreviewSnapshotRepository();
+    const mediaResolutionTraceRepository = new MongoMediaResolutionTraceRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
-    const createPreviewSnapshot = new CreatePreviewSnapshot(previewSnapshotRepository);
+    const createPreviewSnapshot = new CreatePreviewSnapshot(previewSnapshotRepository, mediaResolutionTraceRepository);
     const listPreviewSnapshots = new ListPreviewSnapshots(previewSnapshotRepository);
     const activatePreviewSnapshot = new ActivatePreviewSnapshot(previewSnapshotRepository);
     const getPreviewSnapshot = new GetPreviewSnapshot(previewSnapshotRepository);
@@ -86,7 +88,7 @@ export function createPreviewSnapshotRoutes(): Router {
                 let artifacts = body.artifacts;
                 let structuredParseValid = body.metadata?.structuredParseValid ?? false;
 
-                if (body.rawLlmResponse) {
+                if (body.rawLlmResponse && !artifacts.html.trim()) {
                     const parsed = tryParseStructuredJson(body.rawLlmResponse);
                     if (parsed.parseValid && parsed.structured && parsed.structured.artifacts.html) {
                         artifacts = {

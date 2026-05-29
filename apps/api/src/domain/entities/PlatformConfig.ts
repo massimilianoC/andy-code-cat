@@ -76,7 +76,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     enrich_image: {
         enabled: true,
         provider: "siliconflow",
-        model: "Qwen/Qwen2.5-VL-72B-Instruct",
+        model: "Qwen/Qwen3-VL-32B-Instruct",
         temperature: 0.1,
         maxCompletionTokens: 600,
         systemTemplate: "",
@@ -85,7 +85,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     vibe_intent_classify: {
         enabled: true,
         provider: "siliconflow",
-        model: "Qwen/Qwen3-8B",
+        model: "MiniMaxAI/MiniMax-M2.5",
         temperature: 0.0,
         maxCompletionTokens: 256,
         systemTemplate: "",
@@ -94,7 +94,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     vibe_intent_prefill: {
         enabled: true,
         provider: "siliconflow",
-        model: "Qwen/Qwen3-8B",
+        model: "MiniMaxAI/MiniMax-M2.5",
         temperature: 0.3,
         maxCompletionTokens: 768,
         systemTemplate: "",
@@ -218,6 +218,23 @@ export interface PlatformCostRates {
     updatedByUserId?: string;
 }
 
+export type MediaStockProviderId = "pexels" | "pixabay" | "unsplash" | "loremflickr" | "picsum";
+
+export interface MediaProviderPolicy {
+    stockImage: {
+        /** Superadmin-selected primary provider for stock image retrieval. */
+        primaryProvider: MediaStockProviderId;
+        /** When false, resolver fails after the primary provider instead of degrading. */
+        fallbackEnabled: boolean;
+        /** Ordered fallback providers used only when fallbackEnabled is true. */
+        fallbackProviders: MediaStockProviderId[];
+        /** Last-resort non-semantic placeholder provider. Kept explicit because it is lowest quality. */
+        allowPicsumFallback: boolean;
+        /** Overrides IMAGE_STOCK_PERSIST_STRICT for media resolution when set. */
+        strictPersistence?: boolean;
+    };
+}
+
 /**
  * Singleton platform-wide configuration document.
  * Stored in the `platform_config` collection under id "global".
@@ -237,6 +254,8 @@ export interface PlatformConfig {
     updatedByUserId?: string;
     /** Live cost-rate overrides. When absent, CostTransactionService falls back to env vars. */
     costRates?: PlatformCostRates;
+    /** Superadmin media-provider policy for deterministic media orchestration. */
+    mediaProviderPolicy?: MediaProviderPolicy;
 }
 
 export function resolvePromptTaskSettingFromConfig(

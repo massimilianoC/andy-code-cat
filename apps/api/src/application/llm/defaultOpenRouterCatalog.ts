@@ -12,25 +12,14 @@ import { decorateSeedModel } from "./modelRegistryPresets";
  * available to the account (filtered to text/chat modalities only).
  */
 const FREE_DEFAULTS: Array<{ id: string; role: PipelineModelRole; capabilities: string[] }> = [
-    // Google Gemma 4 (new generation)
-    { id: "google/gemma-4-27b-it:free", role: "dialogue", capabilities: ["chat"] },
-    { id: "google/gemma-4-9b-it:free", role: "dialogue_fast", capabilities: ["chat"] },
-    // Google Gemma 3
-    { id: "google/gemma-3-12b-it:free", role: "dialogue", capabilities: ["chat"] },
-    { id: "google/gemma-3-4b-it:free", role: "dialogue_fast", capabilities: ["chat"] },
-    // DeepSeek R1 (reasoning, free tier)
-    { id: "deepseek/deepseek-r1:free", role: "quality_check", capabilities: ["chat"] },
-    // Meta Llama 4
-    { id: "meta-llama/llama-4-scout:free", role: "dialogue", capabilities: ["chat"] },
-    { id: "meta-llama/llama-4-maverick:free", role: "dialogue", capabilities: ["chat"] },
-    // Mistral free
-    { id: "mistralai/mistral-small-3.2-24b-instruct:free", role: "dialogue_fast", capabilities: ["chat"] },
-    // Vision (multimodal free)
-    { id: "google/gemma-3n-e4b-it:free", role: "vision", capabilities: ["vision", "chat"] },
-    { id: "nvidia/nemotron-nano-9b-v2:free", role: "vision_fast", capabilities: ["chat"] },
-    // Coding free
+    // Stable free set validated against the live OpenRouter catalog (2026-05-29)
+    { id: "minimax/minimax-m2.5:free", role: "dialogue", capabilities: ["chat"] },
+    { id: "deepseek/deepseek-v4-flash:free", role: "dialogue_fast", capabilities: ["chat"] },
+    { id: "z-ai/glm-4.5-air:free", role: "quality_check", capabilities: ["chat"] },
+    { id: "google/gemma-4-31b-it:free", role: "vision", capabilities: ["vision", "chat"] },
+    { id: "nvidia/nemotron-nano-12b-v2-vl:free", role: "vision_fast", capabilities: ["vision", "chat"] },
     { id: "nvidia/nemotron-3-nano-30b-a3b:free", role: "coding", capabilities: ["chat"] },
-    { id: "liquid/lfm-2.5-1.2b-instruct:free", role: "coding_fast", capabilities: ["chat"] },
+    { id: "qwen/qwen3-coder:free", role: "coding_fast", capabilities: ["chat"] },
 ];
 
 /**
@@ -41,14 +30,14 @@ const FREE_DEFAULTS: Array<{ id: string; role: PipelineModelRole; capabilities: 
  */
 const PAID_DEFAULTS: Array<{ id: string; role: PipelineModelRole; capabilities: string[] }> = [
     // Google Gemma 4 (flagship)
-    { id: "google/gemma-4-27b-it", role: "dialogue", capabilities: ["chat"] },
+    { id: "google/gemma-4-31b-it", role: "dialogue", capabilities: ["chat"] },
     // Google Gemini 2.5
     { id: "google/gemini-2.5-pro", role: "quality_check", capabilities: ["vision", "chat"] },
     { id: "google/gemini-2.5-flash", role: "dialogue_fast", capabilities: ["vision", "chat"] },
     // Anthropic Claude
-    { id: "anthropic/claude-sonnet-4-5", role: "coding", capabilities: ["chat"] },
+    { id: "anthropic/claude-sonnet-4.5", role: "coding", capabilities: ["chat"] },
     { id: "anthropic/claude-3.5-haiku", role: "coding_fast", capabilities: ["chat"] },
-    { id: "anthropic/claude-opus-4-5", role: "dialogue", capabilities: ["chat"] },
+    { id: "anthropic/claude-opus-4.5", role: "dialogue", capabilities: ["chat"] },
     // OpenAI
     { id: "openai/gpt-4o", role: "vision", capabilities: ["vision", "chat"] },
     { id: "openai/gpt-4o-mini", role: "dialogue", capabilities: ["vision", "chat"] },
