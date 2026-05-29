@@ -4,6 +4,8 @@ import type { VibeClassifyResponse, AttachmentMeta, VibePrefillRequest, VibePref
 export interface VibeClassifyInput {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
+    provider?: string;
+    model?: string;
 }
 
 export function classifyVibeIntent(

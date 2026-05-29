@@ -34,7 +34,7 @@ export async function searchPexels(
     params: ImageSearchParams,
     apiKey: string,
 ): Promise<ImageSearchResult | null> {
-    const { query, width = 800, height = 600, type = "photo", perPage = 1 } = params;
+    const { query, width = 800, height = 600, type = "photo", perPage = 1, resultIndex = 0 } = params;
 
     const base = type === "video" ? PEXELS_VIDEO_API : PEXELS_PHOTO_API;
     const url = `${base}?query=${encodeURIComponent(query)}&per_page=${perPage}&orientation=landscape`;
@@ -47,7 +47,7 @@ export async function searchPexels(
 
     if (type === "video") {
         const json = (await res.json()) as { videos: PexelsVideoHit[] };
-        const hit = json.videos?.[0];
+        const hit = json.videos?.[Math.max(0, Math.min(resultIndex, json.videos.length - 1))];
         if (!hit) return null;
         // Prefer HD file
         const file =
@@ -64,7 +64,7 @@ export async function searchPexels(
     }
 
     const json = (await res.json()) as { photos: PexelsPhotoHit[] };
-    const hit = json.photos?.[0];
+    const hit = json.photos?.[Math.max(0, Math.min(resultIndex, json.photos.length - 1))];
     if (!hit) return null;
 
     // Pick the best-fit size

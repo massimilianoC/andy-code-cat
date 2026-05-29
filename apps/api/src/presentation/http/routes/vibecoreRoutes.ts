@@ -32,6 +32,8 @@ const attachmentMetaSchema = z.object({
 const classifyBodySchema = z.object({
     prompt: z.string().min(1).max(2000),
     attachmentMeta: z.array(attachmentMetaSchema).max(3).optional(),
+    provider: z.string().min(1).max(80).optional(),
+    model: z.string().min(1).max(200).optional(),
     /**
      * Optional. When omitted the API auto-creates a draft project so the
      * classifier LLM cost is always attributable (double-sandbox).
@@ -44,6 +46,8 @@ const prefillBodySchema = z.object({
     prompt: z.string().min(1).max(2000),
     /** If provided, backend loads project assets and builds Layer D document context for the LLM. */
     projectId: z.string().max(128).optional(),
+    provider: z.string().min(1).max(80).optional(),
+    model: z.string().min(1).max(200).optional(),
     attachmentMeta: z.array(attachmentMetaSchema).max(3).optional(),
     templateId: z.string().max(120).nullable().optional(),
     formatHint: z.string().max(50).nullable().optional(),
@@ -61,6 +65,8 @@ export function createVibecoreRoutes(): Router {
         env.OPENROUTER_BASE_URL,
         llmCatalogRepository,
         env.hasOpenRouterApiKey,
+        env.providerApiKeys,
+        env.LLM_DEFAULT_PROVIDER,
     );
     const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog);
     const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog);
@@ -108,6 +114,8 @@ export function createVibecoreRoutes(): Router {
                 const result = await vibeClassify.execute({
                     prompt: parsed.data.prompt,
                     attachmentMeta: parsed.data.attachmentMeta,
+                    provider: parsed.data.provider,
+                    model: parsed.data.model,
                     userId,
                     projectId,
                 });
@@ -206,6 +214,8 @@ export function createVibecoreRoutes(): Router {
                     attachmentMeta: parsed.data.attachmentMeta,
                     templateId: parsed.data.templateId ?? null,
                     formatHint: (parsed.data.formatHint ?? null) as import("@andy-code-cat/contracts").FormatHint | null,
+                    provider: parsed.data.provider,
+                    model: parsed.data.model,
                     userId,
                     projectId,
                 });

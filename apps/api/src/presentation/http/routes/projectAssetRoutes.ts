@@ -15,7 +15,7 @@ import { AddUrlReference } from "../../../application/use-cases/AddUrlReference"
 import { ListProjectAssets } from "../../../application/use-cases/ListProjectAssets";
 import { DeleteProjectAsset } from "../../../application/use-cases/DeleteProjectAsset";
 import type { RequestWithContext } from "../types";
-import { generateProjectImageSchema, suggestProjectImageIdeaSchema, type ProjectAssetDto } from "@andy-code-cat/contracts";
+import { generateProjectImageSchema, regenerateMediaByKeySchema, regenerateStockProjectImageSchema, suggestProjectImageIdeaSchema, type ProjectAssetDto } from "@andy-code-cat/contracts";
 import { GenerateProjectImage } from "../../../application/use-cases/GenerateProjectImage";
 import { GetProjectAiAnalytics } from "../../../application/use-cases/GetProjectAiAnalytics";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
@@ -27,6 +27,11 @@ import { SuggestProjectImageIdea } from "../../../application/prompting/SuggestP
 import { buildImagePromptContextPacket } from "../../../application/prompting/buildImagePromptContext";
 import { AssetEnrichmentPipeline } from "../../../application/documents/enrichment/AssetEnrichmentPipeline";
 import { env } from "../../../config";
+import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
+import { RegenerateStockProjectImage } from "../../../application/use-cases/RegenerateStockProjectImage";
+import { buildStockProviderOrder, resolveMediaProviderPolicy } from "../../../application/media/mediaProviderPolicy";
+import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
+import { RegenerateMediaByKey } from "../../../application/use-cases/RegenerateMediaByKey";
 
 // In-memory storage: the use case writes to disk itself after validation.
 const upload = multer({
@@ -150,6 +155,7 @@ export function createProjectAssetRoutes(): Router {
     const listAssets = new ListProjectAssets(assetRepository);
     const deleteAsset = new DeleteProjectAsset(assetRepository, storage);
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const serviceKeyRepository = new MongoServiceApiKeyRepository();
     const promptConfigRepository = new MongoLlmPromptConfigRepository();
     const platformConfigRepository = new MongoPlatformConfigRepository();
     const llmCatalogRepository = new MongoLlmCatalogRepository();
@@ -160,6 +166,8 @@ export function createProjectAssetRoutes(): Router {
         env.OPENROUTER_BASE_URL,
         llmCatalogRepository,
         env.hasOpenRouterApiKey,
+        env.providerApiKeys,
+        env.LLM_DEFAULT_PROVIDER,
     );
     const optimizeImagePrompt = new OptimizeImagePrompt(
         platformConfigRepository,
@@ -181,6 +189,16 @@ export function createProjectAssetRoutes(): Router {
     );
     const getLlmPromptConfig = new GetLlmPromptConfig(promptConfigRepository);
     const getProjectAiAnalytics = new GetProjectAiAnalytics(promptExecutionLogRepository, assetRepository);
+    const regenerateStockProjectImage = new RegenerateStockProjectImage(
+        assetRepository,
+        storage,
+        serviceKeyRepository,
+        undefined,
+        undefined,
+        platformConfigRepository,
+    );
+    const mediaResolutionTraceRepository = new MongoMediaResolutionTraceRepository();
+    const regenerateMediaByKey = new RegenerateMediaByKey(mediaResolutionTraceRepository, regenerateStockProjectImage);
 
     router.use(authMiddleware);
 
@@ -344,6 +362,114 @@ export function createProjectAssetRoutes(): Router {
                     storagePath: result.storagePath,
                     downloadUrl: `/v1/projects/${req.sandbox!.projectId}/assets/${result.asset.id}/download`,
                     cssDefaults: result.cssDefaults,
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    // GET /v1/projects/:projectId/images/provider-status — current stock-image provider policy summary
+    router.get(
+        "/projects/:projectId/images/provider-status",
+        sandboxMiddleware,
+        async (_req: RequestWithContext, res, next) => {
+            try {
+                const [pexelsDb, pixabayDb, unsplashDb, platformConfig] = await Promise.all([
+                    serviceKeyRepository.findActiveByService("pexels").catch(() => null),
+                    serviceKeyRepository.findActiveByService("pixabay").catch(() => null),
+                    serviceKeyRepository.findActiveByService("unsplash").catch(() => null),
+                    platformConfigRepository.get().catch(() => null),
+                ]);
+                const policy = resolveMediaProviderPolicy(platformConfig);
+                const providerOrder = buildStockProviderOrder(policy);
+
+                const configuredProviders = {
+                    pexels: Boolean(pexelsDb || env.hasPexelsApiKey),
+                    pixabay: Boolean(pixabayDb || env.hasPixabayApiKey),
+                    unsplash: Boolean(unsplashDb || env.hasUnsplashApiKey),
+                    loremflickr: true,
+                    picsum: true,
+                };
+
+                res.json({
+                    activeProvider: policy.stockImage.primaryProvider,
+                    fallbackMode: policy.stockImage.fallbackEnabled ? "notify" : "disabled",
+                    fallbackProviders: providerOrder.filter((provider) => provider !== policy.stockImage.primaryProvider),
+                    providerOrder,
+                    mediaProviderPolicy: policy,
+                    persistenceEnabled: true,
+                    configuredProviders,
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    // POST /v1/projects/:projectId/images/regenerate-stock — fetch a new stock image and persist it as a project asset
+    router.post(
+        "/projects/:projectId/images/regenerate-stock",
+        sandboxMiddleware,
+        async (req: RequestWithContext, res, next) => {
+            try {
+                const input = regenerateStockProjectImageSchema.parse(req.body);
+                const result = await regenerateStockProjectImage.execute({
+                    projectId: req.sandbox!.projectId,
+                    userId: req.auth!.userId,
+                    query: input.query,
+                    width: input.width,
+                    height: input.height,
+                    offset: input.offset,
+                    targetSelector: input.targetSelector,
+                    targetMode: input.targetMode,
+                    scope: input.scope,
+                    allowFallback: false,
+                });
+
+                res.status(201).json({
+                    asset: toDto(result.asset),
+                    assetUrl: result.assetUrl,
+                    provider: result.provider,
+                    fallbackUsed: result.fallbackUsed,
+                    attribution: result.attribution,
+                    attemptedProviders: result.attemptedProviders,
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    // POST /v1/projects/:projectId/media/:mediaKey/regenerate — regenerate from the latest persisted media trace
+    router.post(
+        "/projects/:projectId/media/:mediaKey/regenerate",
+        sandboxMiddleware,
+        async (req: RequestWithContext, res, next) => {
+            try {
+                const input = regenerateMediaByKeySchema.parse(req.body);
+                const result = await regenerateMediaByKey.execute({
+                    projectId: req.sandbox!.projectId,
+                    userId: req.auth!.userId,
+                    mediaKey: req.params.mediaKey!,
+                    snapshotId: input.snapshotId,
+                    width: input.width,
+                    height: input.height,
+                    offset: input.offset,
+                    targetSelector: input.targetSelector,
+                    targetMode: input.targetMode,
+                    scope: input.scope,
+                });
+
+                res.status(201).json({
+                    mediaKey: result.mediaKey,
+                    traceId: result.traceId,
+                    asset: toDto(result.asset),
+                    assetUrl: result.assetUrl,
+                    provider: result.provider,
+                    fallbackUsed: result.fallbackUsed,
+                    attribution: result.attribution,
+                    attemptedProviders: result.attemptedProviders,
                 });
             } catch (error) {
                 next(error);

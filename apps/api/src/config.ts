@@ -14,6 +14,7 @@ const DEFAULT_SILICONFLOW_IMAGE_SIZE = "1024x1024";
 const envSchema = z.object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     API_PORT: z.coerce.number().default(4000),
+    PUBLIC_API_BASE_URL: z.string().url().optional(),
     MONGODB_URI: z.string().min(1),
     MONGODB_DB_NAME: z.string().min(1).default("andy-code-cat"),
     JWT_ACCESS_SECRET: z.string().min(16),
@@ -56,6 +57,7 @@ const envSchema = z.object({
     PEXELS_API_KEY: z.string().optional(),
     PIXABAY_API_KEY: z.string().optional(),
     UNSPLASH_ACCESS_KEY: z.string().optional(),
+    IMAGE_STOCK_PERSIST_STRICT: z.string().default("false"),
     COST_POLICY_TEXT_EUR_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0.005),
     COST_POLICY_IMAGE_EUR_PER_ASSET: z.coerce.number().nonnegative().default(0.1),
     COST_POLICY_VIDEO_EUR_PER_ASSET: z.coerce.number().nonnegative().default(0.2),
@@ -95,7 +97,7 @@ const envSchema = z.object({
     ENRICHMENT_TEXT_MODEL: z.string().default("Qwen/Qwen2.5-72B-Instruct"),
     ENRICHMENT_IMAGE_ANALYSIS: z.string().default("true"),
     ENRICHMENT_VISION_PROVIDER: z.string().default("siliconflow"),
-    ENRICHMENT_VISION_MODEL: z.string().default("Qwen/Qwen2.5-VL-72B-Instruct"),
+    ENRICHMENT_VISION_MODEL: z.string().default("Qwen/Qwen3-VL-32B-Instruct"),
     ENRICHMENT_INJECT_LAYER_D: z.string().default("true"),
     ENRICHMENT_LAYER_D_MAX_CHARS: z.coerce.number().int().positive().default(21000),
     ENRICHMENT_LAYER_D_MAX_ASSETS: z.coerce.number().int().positive().default(5),
@@ -113,6 +115,7 @@ if (!parsed.success) {
 
 export const env = {
     ...parsed.data,
+    PUBLIC_API_BASE_URL: parsed.data.PUBLIC_API_BASE_URL?.trim() || `http://localhost:${parsed.data.API_PORT}`,
     SILICONFLOW_IMAGE_MODEL: parsed.data.SILICONFLOW_IMAGE_MODEL?.trim() || DEFAULT_SILICONFLOW_IMAGE_MODEL,
     SILICONFLOW_IMAGE_SIZE: parsed.data.SILICONFLOW_IMAGE_SIZE?.trim() || DEFAULT_SILICONFLOW_IMAGE_SIZE,
     MINIO_ENDPOINT: parsed.data.MINIO_ENDPOINT?.trim() || "localhost",
@@ -127,6 +130,7 @@ export const env = {
     hasPexelsApiKey: Boolean(parsed.data.PEXELS_API_KEY?.trim()),
     hasPixabayApiKey: Boolean(parsed.data.PIXABAY_API_KEY?.trim()),
     hasUnsplashApiKey: Boolean(parsed.data.UNSPLASH_ACCESS_KEY?.trim()),
+    imageStockPersistStrict: parsed.data.IMAGE_STOCK_PERSIST_STRICT === "true",
     providerApiKeys: (() => {
         const map: Record<string, string> = {};
         if (parsed.data.SILICONFLOW_API_KEY?.trim()) {

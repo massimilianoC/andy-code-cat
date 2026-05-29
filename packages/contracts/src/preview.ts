@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { llmFocusContextSchema } from "./llm";
+import { mediaResolutionMetadataSchema } from "./mediaResolution";
 
 export const previewArtifactsSchema = z.object({
     html: z.string().max(10000000),
@@ -25,6 +26,7 @@ export const previewSnapshotMetadataSchema = z.object({
         prePromptTemplate: z.string().max(50000).optional(),
         effectiveSystemPrompt: z.string().max(50000).optional(),
     }).optional(),
+    mediaResolution: mediaResolutionMetadataSchema.optional(),
 }).optional();
 
 export const createPreviewSnapshotSchema = z.object({
@@ -91,6 +93,22 @@ export interface PreviewSnapshotDto {
             originalUserMessage: string;
             prePromptTemplate?: string;
             effectiveSystemPrompt?: string;
+        };
+        mediaResolution?: {
+            version: "media-resolution-v1";
+            traceIds: string[];
+            assetIds: string[];
+            mediaKeys: string[];
+            degraded: boolean;
+            directives?: Array<{
+                key: string;
+                role?: string;
+                semanticQuery?: string;
+                status: "resolved" | "fallback_resolved" | "unresolved";
+                provider?: string;
+                assetId?: string;
+                fallbackUsed?: boolean;
+            }>;
         };
     };
     createdAt: string;

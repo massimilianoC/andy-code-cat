@@ -441,6 +441,11 @@ export default function ZeroEffortLaunchPage() {
     const searchParams = useSearchParams();
     const projectId = params?.projectId ?? "";
     const step4Ref = useRef<HTMLDivElement>(null);
+    const pipelineOverride = useMemo(() => {
+        const provider = searchParams?.get("preferredProvider")?.trim() ?? "";
+        const model = searchParams?.get("preferredModel")?.trim() ?? "";
+        return provider && model ? { provider, model } : null;
+    }, [searchParams]);
 
     const [token, setToken] = useState<string | null>(null);
     const [project, setProject] = useState<Project | null>(null);
@@ -637,8 +642,8 @@ export default function ZeroEffortLaunchPage() {
                 rawPrompt: editedBrief,
                 conversationId: result.conversationId,
                 taskKey: "zero_effort_optimize",
-                provider: pipelineConfig?.optimize.provider,
-                model: pipelineConfig?.optimize.model,
+                provider: pipelineOverride?.provider ?? pipelineConfig?.optimize.provider,
+                model: pipelineOverride?.model ?? pipelineConfig?.optimize.model,
             });
             setOptimizedPrompt(optimizeRes.optimizedPrompt);
             setEditedOptimizedPrompt(optimizeRes.optimizedPrompt);
@@ -653,11 +658,13 @@ export default function ZeroEffortLaunchPage() {
         if (!result) return;
         const finalPrompt = editedOptimizedPrompt || optimizedPrompt;
         let url = `/workspace/${projectId}?conv=${result.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`;
-        if (pipelineConfig?.vibeGenerate?.provider) {
-            url += `&preferredProvider=${encodeURIComponent(pipelineConfig.vibeGenerate!.provider)}`;
+        const effectiveProvider = pipelineOverride?.provider ?? pipelineConfig?.vibeGenerate?.provider ?? pipelineConfig?.generate?.provider;
+        const effectiveModel = pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model;
+        if (effectiveProvider) {
+            url += `&preferredProvider=${encodeURIComponent(effectiveProvider)}`;
         }
-        if (pipelineConfig?.vibeGenerate?.model) {
-            url += `&preferredModel=${encodeURIComponent(pipelineConfig.vibeGenerate!.model)}`;
+        if (effectiveModel) {
+            url += `&preferredModel=${encodeURIComponent(effectiveModel)}`;
         }
         router.push(url);
     }
@@ -700,14 +707,16 @@ export default function ZeroEffortLaunchPage() {
                 rawPrompt: brief,
                 conversationId: briefResult.conversationId,
                 taskKey: "zero_effort_optimize",
-                provider: localConfig?.optimize.provider,
-                model: localConfig?.optimize.model,
+                provider: pipelineOverride?.provider ?? localConfig?.optimize.provider,
+                model: pipelineOverride?.model ?? localConfig?.optimize.model,
             });
             const finalPrompt = optimizeRes.optimizedPrompt;
 
             const skipParam = aiPrefilled ? "&skipAutoOptimize=1" : "";
-            const modelParams = localConfig?.vibeGenerate
-                ? `&preferredProvider=${encodeURIComponent(localConfig.vibeGenerate!.provider)}&preferredModel=${encodeURIComponent(localConfig.vibeGenerate!.model)}`
+            const effectiveProvider = pipelineOverride?.provider ?? localConfig?.vibeGenerate?.provider ?? localConfig?.generate?.provider;
+            const effectiveModel = pipelineOverride?.model ?? localConfig?.vibeGenerate?.model ?? localConfig?.generate?.model;
+            const modelParams = effectiveProvider && effectiveModel
+                ? `&preferredProvider=${encodeURIComponent(effectiveProvider)}&preferredModel=${encodeURIComponent(effectiveModel)}`
                 : "";
             router.push(
                 `/workspace/${projectId}?conv=${briefResult.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}${skipParam}${modelParams}`,
@@ -1047,7 +1056,7 @@ export default function ZeroEffortLaunchPage() {
                                     </CardDescription>
                                 </div>
                                 <Badge variant={phase === "optimized" ? "success" : "secondary"} className="ml-auto text-xs">
-                                    {phase === "optimized" ? "Prompt pronto" : `${pipelineConfig?.vibeGenerate?.model ?? "MiniMax-M2.5"}`}
+                                    {phase === "optimized" ? "Prompt pronto" : `${pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model ?? "MiniMax-M2.5"}`}
                                 </Badge>
                             </div>
                         </CardHeader>

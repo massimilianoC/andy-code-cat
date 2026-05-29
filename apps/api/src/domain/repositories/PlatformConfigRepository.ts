@@ -1,6 +1,7 @@
 import type { PlatformConfig } from "../entities/PlatformConfig";
 import type { ProductGovernanceConfig } from "../entities/PlatformConfig";
 import type { PlatformCostRates } from "../entities/PlatformConfig";
+import type { MediaProviderPolicy } from "../entities/PlatformConfig";
 import type { UserLimits } from "../entities/User";
 
 export interface UpdatePlatformConfigInput {
@@ -17,6 +18,9 @@ export interface UpdatePlatformConfigInput {
     }>>;
     updatedByUserId?: string;
     costRates?: Partial<Omit<PlatformCostRates, "updatedAt" | "updatedByUserId">> & { updatedByUserId?: string };
+    mediaProviderPolicy?: Partial<{
+        stockImage: Partial<MediaProviderPolicy["stockImage"]>;
+    }>;
 }
 
 export interface PlatformConfigRepository {

@@ -5,6 +5,8 @@ import type { PreviewSnapshotRepository } from "../../domain/repositories/Previe
 import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 import type { PublishHistoryRepository } from "../../domain/repositories/PublishHistoryRepository";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
+import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
+import { SystemNotifier } from "../services/SystemNotifier";
 
 // ---------------------------------------------------------------------------
 // Artifact post-processing (same logic as ExportLayer1Zip, minimal version)
@@ -226,6 +228,12 @@ export class PublishProject {
             throw Object.assign(new Error("No snapshot found to publish"), { statusCode: 404 });
         }
 
+        this.assertPublishableMedia(snapshot.artifacts, {
+            projectId: input.projectId,
+            userId: input.userId,
+            snapshotId: snapshot.id,
+        });
+
         // 2. Validate and check uniqueness of customSlug (if provided)
         if (input.customSlug) {
             const taken = await this.deploymentRepo.isCustomSlugTaken(input.customSlug);
@@ -311,6 +319,8 @@ export class PublishProject {
         newCustomSlug?: string,
         presetId?: string | null,
     ): Promise<SiteDeployment> {
+        this.assertPublishableMedia(artifacts, { projectId, userId, snapshotId });
+
         const processed = postProcess(artifacts);
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
@@ -367,5 +377,35 @@ export class PublishProject {
         }).catch(() => { /* non-critical */ });
 
         return updated ?? existing;
+    }
+
+    private assertPublishableMedia(
+        artifacts: { html: string; css: string },
+        context: { projectId: string; userId: string; snapshotId: string },
+    ): void {
+        try {
+            assertNoUnresolvedMediaPlaceholders(artifacts, {
+                operation: "publish",
+                ...context,
+            });
+        } catch (error) {
+            if (error instanceof UnresolvedMediaPlaceholderError) {
+                SystemNotifier.instance.emit({
+                    projectId: context.projectId,
+                    userId: context.userId,
+                    audience: "both",
+                    domain: "publish",
+                    severity: "error",
+                    title: "Pubblicazione bloccata: media non risolti",
+                    message: `Risolvi o rigenera i media prima di pubblicare. Placeholder: ${error.keys.join(", ")}.`,
+                    sourceEventType: "publish_blocked_unresolved_media",
+                    metadata: {
+                        snapshotId: context.snapshotId,
+                        unresolvedMediaKeys: error.keys,
+                    },
+                });
+            }
+            throw error;
+        }
     }
 }

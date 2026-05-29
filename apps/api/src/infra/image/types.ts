@@ -6,6 +6,7 @@ export interface ImageSearchParams {
     height?: number;
     type?: ImageMediaType;
     perPage?: number;
+    resultIndex?: number;
 }
 
 export interface ImageSearchResult {
@@ -18,4 +19,18 @@ export interface ImageSearchResult {
     /** Height in px, if known */
     height?: number;
     mediaType: ImageMediaType;
+}
+
+export type ImageProviderId = "pexels" | "pixabay" | "unsplash" | "loremflickr" | "picsum";
+
+export interface ImageResolutionAttempt {
+    provider: ImageProviderId;
+    status: "success" | "failed" | "skipped";
+    reason?: string;
+}
+
+export interface ResolvedImageSearchResult extends ImageSearchResult {
+    provider: ImageProviderId;
+    fallbackUsed: boolean;
+    attemptedProviders: ImageResolutionAttempt[];
 }

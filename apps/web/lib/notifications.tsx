@@ -4,10 +4,14 @@ import {
     createContext,
     useCallback,
     useContext,
+    useEffect,
     useRef,
     useState,
     type ReactNode,
 } from "react";
+import type { SystemNotificationDto } from "@andy-code-cat/contracts";
+import { listNotifications, markNotificationRead } from "./api/notifications";
+import { getAccessToken } from "./token-store";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,6 +21,7 @@ export type NotificationStatus = "running" | "done" | "error";
 
 export interface SystemNotification {
     id: string;
+    remoteId?: string;
     /** Short label shown in the panel (e.g. "Export ZIP", "Cattura JPG") */
     label: string;
     status: NotificationStatus;
@@ -83,7 +88,47 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const remove = useCallback((id: string) => {
+        const current = notifications.find((n) => n.id === id);
+        const token = getAccessToken();
+        if (current?.remoteId && token) {
+            markNotificationRead(token, current.remoteId).catch(() => { /* best-effort */ });
+        }
         setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, [notifications]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadPersistentNotifications() {
+            const token = getAccessToken();
+            if (!token) return;
+
+            try {
+                const result = await listNotifications(token);
+                if (cancelled) return;
+
+                const mapped = result.notifications.map(mapPersistentNotification);
+                setNotifications((prev) => {
+                    const local = prev.filter((n) => !n.remoteId);
+                    const existingRemoteIds = new Set(prev.map((n) => n.remoteId).filter(Boolean));
+                    const remote = mapped.map((incoming) => {
+                        const previous = prev.find((n) => n.remoteId === incoming.remoteId);
+                        return previous ?? incoming;
+                    });
+                    const missingExisting = prev.filter((n) => n.remoteId && !existingRemoteIds.has(n.remoteId));
+                    return [...local, ...missingExisting, ...remote];
+                });
+            } catch {
+                // Notification polling must not disturb the workspace UI.
+            }
+        }
+
+        void loadPersistentNotifications();
+        const interval = window.setInterval(loadPersistentNotifications, 30000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(interval);
+        };
     }, []);
 
     return (
@@ -93,6 +138,24 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
             {children}
         </NotificationsContext.Provider>
     );
+}
+
+function mapPersistentNotification(notification: SystemNotificationDto): SystemNotification {
+    const severityToStatus: Record<SystemNotificationDto["severity"], NotificationStatus> = {
+        info: "done",
+        warning: "done",
+        error: "error",
+    };
+
+    return {
+        id: `persistent-${notification.id}`,
+        remoteId: notification.id,
+        label: notification.title,
+        status: severityToStatus[notification.severity],
+        message: notification.message,
+        startedAt: new Date(notification.createdAt).getTime(),
+        completedAt: new Date(notification.createdAt).getTime(),
+    };
 }
 
 export function useNotifications(): NotificationsContextValue {

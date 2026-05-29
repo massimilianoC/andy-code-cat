@@ -1,5 +1,6 @@
 import type { PlatformConfigRepository } from "../../../domain/repositories/PlatformConfigRepository";
 import { DEFAULT_USER_LIMITS } from "../../../domain/entities/User";
+import { resolveMediaProviderPolicy } from "../../media/mediaProviderPolicy";
 
 export class GetPlatformConfig {
     constructor(private readonly configRepository: PlatformConfigRepository) { }
@@ -80,6 +81,7 @@ export class GetPlatformConfig {
                 planExpiresAt: effective.defaultUserLimits.planExpiresAt?.toISOString(),
             },
             governanceByProduct,
+            mediaProviderPolicy: resolveMediaProviderPolicy(effective),
             updatedAt: effective.updatedAt.toISOString(),
             updatedByUserId: effective.updatedByUserId,
         };

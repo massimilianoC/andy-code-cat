@@ -3,6 +3,7 @@ import type { LlmCatalogRepository } from "../../domain/repositories/LlmCatalogR
 import { buildDefaultSiliconFlowCatalog } from "../llm/defaultSiliconFlowCatalog";
 import { buildDefaultLmStudioCatalog } from "../llm/defaultLmStudioCatalog";
 import { buildDefaultOpenRouterCatalog } from "../llm/defaultOpenRouterCatalog";
+import { hydrateProviderCatalog } from "../llm/liveProviderCatalog";
 
 export class GetLlmCatalog {
     constructor(
@@ -11,34 +12,56 @@ export class GetLlmCatalog {
         private readonly lmStudioBaseUrl: string,
         private readonly openRouterBaseUrl: string,
         private readonly repository?: LlmCatalogRepository,
-        private readonly hasOpenRouterApiKey: boolean = false
+        private readonly hasOpenRouterApiKey: boolean = false,
+        private readonly providerApiKeys: Record<string, string | undefined> = {},
+        private readonly defaultProvider: string = "siliconflow",
     ) { }
 
-    async execute(): Promise<{ source: "env" | "mongo"; providers: LlmProviderCatalog[] }> {
+    async execute(): Promise<{ source: "env" | "mongo"; providers: LlmProviderCatalog[]; activeProvider: string }> {
         const fallbackProviders = [
             buildDefaultSiliconFlowCatalog(this.siliconFlowBaseUrl),
             buildDefaultLmStudioCatalog(this.lmStudioBaseUrl),
             buildDefaultOpenRouterCatalog(this.openRouterBaseUrl, this.hasOpenRouterApiKey),
         ];
 
-        if (!this.repository) {
+        const baseCatalog = await (async () => {
+            if (!this.repository) {
+                return {
+                    source: "env" as const,
+                    providers: fallbackProviders,
+                };
+            }
+
+            const mongoProviders = await this.repository.listActiveProviders().catch(() => []);
+            if (mongoProviders.length > 0) {
+                return {
+                    source: "mongo" as const,
+                    providers: mongoProviders,
+                };
+            }
+
             return {
-                source: "env",
+                source: "env" as const,
                 providers: fallbackProviders,
             };
-        }
+        })();
 
-        const mongoProviders = await this.repository.listActiveProviders().catch(() => []);
-        if (mongoProviders.length > 0) {
-            return {
-                source: "mongo",
-                providers: mongoProviders,
-            };
-        }
+        const providers = await Promise.all(
+            baseCatalog.providers.map((provider) => hydrateProviderCatalog(
+                provider,
+                this.providerApiKeys[provider.provider],
+            )),
+        );
+
+        const activeProvider =
+            providers.find((provider) => provider.models.some((model) => model.isDefault && model.role === "dialogue"))?.provider
+            ?? providers.find((provider) => provider.models.some((model) => model.isDefault))?.provider
+            ?? this.defaultProvider;
 
         return {
-            source: "env",
-            providers: fallbackProviders,
+            ...baseCatalog,
+            providers,
+            activeProvider,
         };
     }
 }

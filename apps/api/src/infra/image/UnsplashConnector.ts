@@ -18,7 +18,7 @@ export async function searchUnsplash(
     params: ImageSearchParams,
     accessKey: string,
 ): Promise<ImageSearchResult | null> {
-    const { query, width = 800, perPage = 1 } = params;
+    const { query, width = 800, perPage = 1, resultIndex = 0 } = params;
 
     const url =
         `${UNSPLASH_SEARCH_API}?query=${encodeURIComponent(query)}` +
@@ -31,7 +31,7 @@ export async function searchUnsplash(
     if (!res.ok) return null;
 
     const json = (await res.json()) as { results: UnsplashPhotoHit[] };
-    const hit = json.results?.[0];
+    const hit = json.results?.[Math.max(0, Math.min(resultIndex, json.results.length - 1))];
     if (!hit) return null;
 
     const src =

@@ -49,6 +49,7 @@ export interface LlmFocusContext {
 
 export interface LlmChatInput {
     message: string;
+    assetIds?: string[];
     provider?: string;
     model?: string;
     capability?: "chat" | "vision" | "image_generation" | "video_generation" | "tools" | "embeddings";
@@ -88,6 +89,13 @@ export interface LlmChatPreviewResult {
             css: string;
             js: string;
         };
+    };
+    mediaResolution?: {
+        version: "media-resolution-v1";
+        traceIds: string[];
+        assetIds: string[];
+        mediaKeys: string[];
+        degraded: boolean;
     };
     provider: string;
     model: string;
@@ -195,9 +203,21 @@ export interface PromptUsageSummaryResult {
     runs: number;
 }
 
+export type MediaProgressPhase = "start" | "resolving" | "resolved" | "failed" | "replacing" | "done";
+
 export type LlmChatStreamEvent =
     | { type: "thinking"; content: string }
     | { type: "answer"; content: string }
+    | {
+        type: "media_progress";
+        phase: MediaProgressPhase;
+        mediaKey?: string;
+        index?: number;
+        total?: number;
+        provider?: string;
+        fallbackUsed?: boolean;
+        resolvedCount?: number;
+    }
     | { type: "done"; result: LlmChatPreviewResult }
     | { type: "error"; message: string; durationMs?: number; error?: ApiErrorPayload }
     | {

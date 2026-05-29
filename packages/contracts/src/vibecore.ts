@@ -18,6 +18,10 @@ export interface AttachmentMeta {
 export interface VibeClassifyRequest {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
+    /** Optional one-shot provider override for this pipeline run. */
+    provider?: string;
+    /** Optional one-shot model override for this pipeline run. */
+    model?: string;
     /**
      * Optional. When omitted the API auto-creates a draft project so the LLM
      * cost is always attributable to a (user, project) pair (double-sandbox).
@@ -47,6 +51,10 @@ export interface VibePrefillRequest {
     prompt: string;
     /** If provided, backend loads project assets and injects Layer D document context into the prefill prompt. */
     projectId?: string;
+    /** Optional one-shot provider override for this pipeline run. */
+    provider?: string;
+    /** Optional one-shot model override for this pipeline run. */
+    model?: string;
     attachmentMeta?: AttachmentMeta[];
     templateId?: string | null;
     formatHint?: FormatHint | null;
