@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { listSystemNotificationsQuerySchema } from "@andy-code-cat/contracts";
 import { MongoSystemNotificationRepository } from "../../../infra/repositories/MongoSystemNotificationRepository";
 import { SystemNotifier } from "../../../application/services/SystemNotifier";
@@ -19,8 +20,20 @@ export function createNotificationRoutes(): Router {
     const router = Router();
     const repository = new MongoSystemNotificationRepository();
     SystemNotifier.configure(repository);
+    const notificationReadLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        limit: 120,
+        standardHeaders: true,
+        legacyHeaders: false,
+    });
+    const notificationWriteLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        limit: 60,
+        standardHeaders: true,
+        legacyHeaders: false,
+    });
 
-    router.get("/notifications", authMiddleware, async (req: RequestWithContext, res, next) => {
+    router.get("/notifications", notificationReadLimiter, authMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const query = listSystemNotificationsQuerySchema.parse(req.query);
             const notifications = await repository.listForUser(req.auth!.userId, query);
@@ -30,7 +43,7 @@ export function createNotificationRoutes(): Router {
         }
     });
 
-    router.patch("/notifications/:id/read", authMiddleware, async (req: RequestWithContext, res, next) => {
+    router.patch("/notifications/:id/read", notificationWriteLimiter, authMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const notification = await repository.markRead(req.params.id!, req.auth!.userId);
             if (!notification) {
@@ -43,7 +56,7 @@ export function createNotificationRoutes(): Router {
         }
     });
 
-    router.get("/admin/notifications", authMiddleware, requireSuperAdmin, async (req, res, next) => {
+    router.get("/admin/notifications", notificationReadLimiter, authMiddleware, requireSuperAdmin, async (req, res, next) => {
         try {
             const query = listSystemNotificationsQuerySchema.parse(req.query);
             const notifications = await repository.listForAdmin(query);
