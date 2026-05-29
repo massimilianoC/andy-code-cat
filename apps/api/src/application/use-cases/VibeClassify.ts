@@ -8,11 +8,12 @@ import { env } from "../../config";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
+import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
-const FALLBACK_MODEL = "Qwen/Qwen3-8B";
+const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
 const CONFIDENCE_THRESHOLD = 0.65;
 const MAX_PROMPT_CHARS = 2000;
 
@@ -79,6 +80,10 @@ function parseClassifyResponse(raw: string): Omit<VibeClassifyResponse, "skipped
 export interface VibeClassifyInput {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
+    /** Optional one-shot provider override for this pipeline run. */
+    provider?: string;
+    /** Optional one-shot model override for this pipeline run. */
+    model?: string;
     /** Owner of the cost transaction. Optional only for backward compat — strongly recommended. */
     userId?: string;
     /** When provided together with userId the LLM cost is recorded in the project ledger. */
@@ -114,16 +119,29 @@ export class VibeClassify {
 
         const catalog = await this.getLlmCatalog.execute();
         const activeProviders = catalog.providers.filter((p) => p.isActive);
-        const providerCatalog =
+        const overrideProviderCatalog = input.provider
+            ? activeProviders.find((p) => p.provider === input.provider)
+            : undefined;
+        const selectedProviderCatalog =
+            overrideProviderCatalog ??
             activeProviders.find((p) => p.provider === taskSettings.provider) ??
             activeProviders.find((p) => p.provider === FALLBACK_PROVIDER) ??
+            // Never silently fall back to local LM Studio for this background task.
+            activeProviders.find((p) => p.provider !== "lmstudio") ??
             activeProviders[0];
 
-        if (!providerCatalog) {
+        if (!selectedProviderCatalog) {
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "no active provider", skipped: true, ...echoProject };
         }
 
+        const providerCatalog = selectedProviderCatalog;
+
+        const overrideModelId = input.model
+            ? providerCatalog.models.find((m) => m.isActive && m.id === input.model)?.id
+            : undefined;
+
         const modelId =
+            overrideModelId ??
             providerCatalog.models.find((m) => m.isActive && m.id === taskSettings.model)?.id ??
             providerCatalog.models.find((m) => m.isActive && m.isDefault)?.id ??
             providerCatalog.models.find((m) => m.isActive)?.id ??
@@ -146,12 +164,13 @@ export class VibeClassify {
                     "Content-Type": "application/json",
                     ...(authHeader ? { Authorization: authHeader } : {}),
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(buildChatCompletionRequestBody({
+                    provider: providerCatalog.provider,
                     model: modelId,
-                    max_tokens: Math.min(taskSettings.maxCompletionTokens, 512),
+                    maxTokens: Math.min(taskSettings.maxCompletionTokens, 512),
                     temperature: taskSettings.temperature,
                     messages,
-                }),
+                })),
             });
 
             if (!response.ok) {

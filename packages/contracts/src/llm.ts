@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { ArtifactMediaManifest } from "./mediaManifest";
+import type { MediaResolutionMetadata } from "./mediaResolution";
 
 const optionalTrimmedString = (max: number) =>
     z.preprocess(
@@ -63,6 +65,7 @@ export const llmFocusContextSchema = z.object({
 
 export const llmChatPreviewSchema = z.object({
     message: z.string().min(1).max(20000),
+    assetIds: z.array(z.string().min(1).max(120)).max(12).optional(),
     provider: z.string().min(1).max(80).optional(),
     model: z.string().min(1).max(200).optional(),
     capability: z.enum(["chat", "vision", "image_generation", "video_generation", "tools", "embeddings"]).optional(),
@@ -146,6 +149,12 @@ export interface LlmFocusedPatch {
 export interface LlmStructuredResponse {
     chat: LlmStructuredChat;
     artifacts: LlmStructuredArtifacts;
+    /**
+     * Optional during migration. New full-artifact generations should provide
+     * semantic media requests and asset://media/<key> placeholders instead of
+     * provider-specific image URLs.
+     */
+    mediaManifest?: ArtifactMediaManifest;
     /** Present only when the LLM operated in focused-edit mode. */
     focusPatch?: LlmFocusedPatch;
 }
@@ -247,6 +256,7 @@ export interface LlmChatPreviewResult {
     structuredParseValid?: boolean;
     promptingTrace?: LlmPromptingTrace;
     structured?: LlmStructuredResponse;
+    mediaResolution?: MediaResolutionMetadata;
     /** true when a focused-mode patch was successfully applied; false/undefined when merge failed or mode was not focused. */
     focusPatchApplied?: boolean;
     /** true when focused-mode was active but the LLM response could not be parsed at all (malformed JSON). */

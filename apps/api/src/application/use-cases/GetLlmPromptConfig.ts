@@ -127,43 +127,41 @@ artifacts.js: plain JavaScript text only. NO <script> tag wrapper.
 Even when using Tailwind, still put any custom CSS overrides in artifacts.css.
 If truly no CSS is needed: "". If truly no JS is needed: "".
 
-## IMAGES — recommended stock sources
+## IMAGES — platform media placeholders
 When the design calls for images (hero shots, backgrounds, cards, avatars, product photos, etc.),
-use real-looking stock imagery. Avoid generic grey placeholders unless the user explicitly asks
-for a wireframe / skeleton style.
+use platform media placeholders instead of direct provider URLs.
 
-### LoremFlickr — semantic keyword images (PRIMARY — always works, no API key required)
-URL pattern:  https://loremflickr.com/<width>/<height>/<keyword>
-Examples:
-  Hero banner:  <img src="https://loremflickr.com/1200/600/technology" alt="technology">
-  Team avatar:  <img src="https://loremflickr.com/200/200/person" alt="team member">
-  Card image:   <img src="https://loremflickr.com/400/300/food" alt="food">
-Use descriptive single-word keywords (technology, nature, city, food, travel, business, sport, etc.).
-The image is semantically matched to the keyword and always returns a valid photo.
+For foreground images, emit an HTML owner element with a stable media key:
+  <img src='asset://media/hero-main' data-media-key='hero-main' alt='Creative team working in a bright studio'>
 
-### Unsplash — high-quality specific photos (only with a known photo ID)
-URL pattern:  https://images.unsplash.com/photo-<PHOTO_ID>?w=<W>&h=<H>&fit=crop&q=80
-Example:
-  <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&h=600&fit=crop&q=80" alt="tech">
-IMPORTANT: Only use Unsplash with a specific PHOTO_ID from https://unsplash.com.
-The old source.unsplash.com/random URL is PERMANENTLY DEPRECATED (returns 410 Gone) — never use it.
+For CSS backgrounds, put the same media key on the HTML element targeted by the CSS rule:
+  <section class='hero' data-media-key='hero-background'></section>
+  CSS: .hero { background-image: url('asset://media/hero-background'); }
 
-### Pixabay — additional free CC0 photos
-Website: https://pixabay.com — searchable catalogue of CC0 images and vectors.
-Direct CDN URLs require the exact asset path; use LoremFlickr for dynamic generation.
-Recommend Pixabay to the user when they want to manually curate images for their project.
+Also add a matching top-level mediaManifest object:
+{
+  "version": "media-manifest-v1",
+  "requests": [{
+    "key": "hero-main",
+    "kind": "image",
+    "role": "hero",
+    "sourceStrategy": "stock",
+    "semanticQuery": "creative team working in a bright design studio",
+    "alt": "Creative team working in a bright design studio",
+    "priority": 10
+  }]
+}
 
-### Picsum Photos — last resort only (non-semantic)
-URL pattern:  https://picsum.photos/seed/<keyword>/<width>/<height>
-NOTE: The seed word does NOT match a related image — it only ensures the same image every run.
-Use only when keyword-relevance is not needed. Prefer LoremFlickr for topic-specific imagery.
-  <img src="https://picsum.photos/seed/hero/1200/600" alt="hero">
+The backend resolves each placeholder through the configured media provider policy,
+persists the binary as a project asset, and replaces asset://media/<key> with /p/media/:assetId.
+Never emit random/provider image URLs such as loremflickr.com, picsum.photos, pexels.com,
+pixabay.com, or unsplash.com in generated artifacts.
 
 ### Image sizing guidelines
-- Full-width hero:    1200×600 or 1440×700
-- Section background: 1200×400
-- Card / thumbnail:   400×300 or 600×400
-- Square avatar:      200×200 or 300×300
+- Full-width hero:    1200x600 or 1440x700
+- Section background: 1200x400
+- Card / thumbnail:   400x300 or 600x400
+- Square avatar:      200x200 or 300x300
 Always set meaningful alt text. Use CSS object-fit: cover; on <img> inside fixed containers.
 
 ## CONVERSATION CONTEXT

@@ -11,7 +11,7 @@
 
 ## Clean Architecture Map (API)
 
-```
+```text
 apps/api/src/
   domain/          ← pure TypeScript entities + repository interfaces (zero external dependencies)
   application/     ← use-cases + orchestration (depends only on domain)
@@ -94,6 +94,13 @@ Required flow: `presentation → application → domain`, `infra → domain`
 ### Media generation flow (✅ local-first, provider-backed)
 
 - `POST /v1/projects/:id/assets/generate-image` creates a sandboxed media job for the selected WYSIWYG element
+- `POST /v1/projects/:id/images/regenerate-stock` fetches a provider-backed stock image, stores it as a `platform_generated` project asset, and returns an internal media URL for focused image replacement
+- `ResolveArtifactMedia` is the central backend use case for LLM media output: it validates `mediaManifest`, resolves `asset://media/<key>` placeholders through the configured stock-image chain, persists the binary as a `ProjectAsset`, writes `MediaResolutionTrace` records, and replaces HTML/CSS placeholders with internal `/p/media/:assetId` URLs before snapshots are created
+- Preview snapshots carry `metadata.mediaResolution` with trace IDs, asset IDs, media keys, and degraded status; active snapshots are blocked if HTML/CSS still contains unresolved `asset://media/*` placeholders
+- `SystemNotification` persists media fallback/failure and publish/export block events for both the owning user and superadmin review; the existing web `NotificationPanel` polls unread backend notifications alongside client-local task notifications
+- Publish, republish, and Layer 1 export scan selected snapshot artifacts for unresolved `asset://media/*` placeholders before post-processing or storage writes, and fail explicitly instead of resolving media during publication/export
+- Legacy LLM HTML post-processing for LoremFlickr/Picsum URLs remains inside `ResolveArtifactMedia` as a migration compatibility path only
+- Current implementation certification, verified Docker-local smoke status, default provider policy, file map, and open criticalities are tracked in `docs/reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md`
 - The route stores a placeholder asset immediately so the editor can react without blocking
 - When SiliconFlow is configured, the backend fetches the real generated image, persists it to MinIO, and updates the same asset record
 - The asset document retains the full generation ledger: provider, model, prompt, semantic classification, latency, cost, token usage when available, and provider response summary
@@ -103,7 +110,8 @@ Required flow: `presentation → application → domain`, `infra → domain`
 - Streaming SSE with `thinking` / `answer` / `done` events
 - History injection (latest N turns, 6000-token budget)
 - Artifact context injection (previous HTML/CSS/JS)
-- Structured JSON response: `{ chat: { summary, bullets, nextActions }, artifacts: { html, css, js } }`
+- Structured JSON response: `{ chat: { summary, bullets, nextActions }, artifacts: { html, css, js }, mediaManifest? }`; chat-preview responses may include `mediaResolution` metadata for snapshot linkage
+- New media-bearing artifacts should use provider-agnostic `asset://media/<key>` placeholders plus `mediaManifest.requests[]`; backend resolution is deterministic and provider logic stays out of the frontend
 - `contextStats: { estimatedTokens, historyTurns, atCapacity }` planned for M1
 
 ## What Is NOT Built Yet
@@ -114,6 +122,7 @@ Required flow: `presentation → application → domain`, `infra → domain`
 - `DeployWorker` (nginx automation) → **M4**
 - `CreditService` + `CreditTransaction` → **M5**
 - Frontend wizard + job progress UI → **M6**
+- Artifact media browser E2E, non-stock manifest resolvers, resolver registry, complete failed trace persistence, superadmin media-policy UI, and admin media notification dashboard → see `docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_GAPS.md` and `docs/reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md`
 
 ## Single Source Of Truth
 
@@ -132,7 +141,7 @@ Required flow: `presentation → application → domain`, `infra → domain`
 ### Registered providers
 
 | Provider | Auth | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `siliconflow` | Bearer (`SILICONFLOW_API_KEY`) | Discovery filters out image/video generation models by ID |
 | `lmstudio` | none | Local model, no key required |
 | `openrouter` | Bearer (`OPENROUTER_API_KEY`) | Discovery filters by `architecture.modality` to keep only text-capable models; `:free` models are available without credits |

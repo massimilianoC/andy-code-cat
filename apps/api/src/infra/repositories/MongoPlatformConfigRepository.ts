@@ -16,6 +16,7 @@ interface PlatformConfigDocument {
     updatedAt: Date;
     updatedByUserId?: string;
     costRates?: PlatformCostRates;
+    mediaProviderPolicy?: PlatformConfig["mediaProviderPolicy"];
 }
 
 function toEntity(doc: PlatformConfigDocument): PlatformConfig {
@@ -28,6 +29,7 @@ function toEntity(doc: PlatformConfigDocument): PlatformConfig {
         updatedAt: doc.updatedAt,
         updatedByUserId: doc.updatedByUserId,
         costRates: doc.costRates,
+        mediaProviderPolicy: doc.mediaProviderPolicy,
     };
 }
 
@@ -179,6 +181,16 @@ export class MongoPlatformConfigRepository implements PlatformConfigRepository {
                 updatedAt: new Date(),
                 updatedByUserId: inputRates.updatedByUserId ?? input.updatedByUserId,
             } as PlatformCostRates;
+        }
+        if (input.mediaProviderPolicy !== undefined) {
+            setFields.mediaProviderPolicy = {
+                ...(existingDoc?.mediaProviderPolicy ?? {}),
+                ...input.mediaProviderPolicy,
+                stockImage: {
+                    ...(existingDoc?.mediaProviderPolicy?.stockImage ?? {}),
+                    ...(input.mediaProviderPolicy.stockImage ?? {}),
+                },
+            } as PlatformConfig["mediaProviderPolicy"];
         }
 
         await col.updateOne(

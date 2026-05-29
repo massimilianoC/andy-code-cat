@@ -198,6 +198,27 @@ describe("buildProjectKnowledgeLayer — Layer D enrichment timing", () => {
         expect(result).toBe("");
     });
 
+    it("includes explicitly selected uploaded assets while enrichment is still pending", () => {
+        const asset = makeAsset({
+            originalName: "brand-reference.png",
+            mimeType: "image/png",
+            enrichmentTrace: null,
+        });
+        const result = buildProjectKnowledgeLayer([asset], { includeUnenrichedAssets: true });
+        expect(result).toContain("brand-reference.png");
+        expect(result).toContain("uploaded reference");
+    });
+
+    it("includes explicitly selected assets even when they are not globally enabled", () => {
+        const asset = makeAsset({
+            useInProject: false,
+            styleRole: undefined,
+            enrichmentTrace: makeTrace("pending", { withTextLayer: true }),
+        });
+        const result = buildProjectKnowledgeLayer([asset], { includeUnenrichedAssets: true });
+        expect(result).toContain("LAYER D");
+    });
+
     it("includes assets with useInProject=false but with a styleRole", () => {
         const asset = makeAsset({
             useInProject: false,

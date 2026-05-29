@@ -1,4 +1,12 @@
-# SPEC: Image Picker in Edit Mode
+# DEPRECATED: Image Picker in Edit Mode
+
+> Deprecated on 2026-05-29.  
+> Superseded by `docs/specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md`.  
+> Reason: this draft treated asset persistence as a manual save action after URL proposal. The current target architecture requires backend fetch + local asset persistence by default for every stock image resolution/regeneration, with explicit provider fallback policy and notifications.
+
+---
+
+# Legacy Spec: Image Picker in Edit Mode
 
 **Status:** Draft — design only, not implemented  
 **Scope:** Additive feature, zero refactoring of existing layers  

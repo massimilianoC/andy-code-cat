@@ -29,10 +29,23 @@ const promptTaskSettingSchema = z.object({
     systemTemplate: z.string().max(20000).default(""),
 });
 
+const mediaStockProviderSchema = z.enum(["pexels", "pixabay", "unsplash", "loremflickr", "picsum"]);
+
+const mediaProviderPolicySchema = z.object({
+    stockImage: z.object({
+        primaryProvider: mediaStockProviderSchema.default("pexels"),
+        fallbackEnabled: z.boolean().default(true),
+        fallbackProviders: z.array(mediaStockProviderSchema).max(5).default(["pixabay", "unsplash", "loremflickr"]),
+        allowPicsumFallback: z.boolean().default(true),
+        strictPersistence: z.boolean().optional(),
+    }).partial().optional(),
+}).partial();
+
 export const setPlatformConfigSchema = z.object({
     registrationOpen: z.boolean().optional(),
     emailVerificationRequired: z.boolean().optional(),
     defaultUserLimits: setUserLimitsSchema.optional(),
+    mediaProviderPolicy: mediaProviderPolicySchema.optional(),
     governanceByProduct: z.record(z.string().min(1), z.object({
         promptTemplates: z.object({
             generationSystem: z.string().max(20000).default(""),
@@ -357,6 +370,15 @@ export interface PlatformConfigDto {
     }>;
     updatedAt: string;
     updatedByUserId?: string;
+    mediaProviderPolicy?: {
+        stockImage: {
+            primaryProvider: "pexels" | "pixabay" | "unsplash" | "loremflickr" | "picsum";
+            fallbackEnabled: boolean;
+            fallbackProviders: Array<"pexels" | "pixabay" | "unsplash" | "loremflickr" | "picsum">;
+            allowPicsumFallback: boolean;
+            strictPersistence?: boolean;
+        };
+    };
 }
 
 export interface AdminDeploymentDto {

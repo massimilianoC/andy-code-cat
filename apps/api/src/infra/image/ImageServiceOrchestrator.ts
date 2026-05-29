@@ -1,5 +1,5 @@
 import { env } from "../../config";
-import type { ImageSearchParams, ImageSearchResult } from "./types";
+import type { ImageProviderId, ImageResolutionAttempt, ImageSearchParams, ImageSearchResult, ResolvedImageSearchResult } from "./types";
 import { searchPexels } from "./PexelsConnector";
 import { searchPixabay } from "./PixabayConnector";
 import { searchUnsplash } from "./UnsplashConnector";
@@ -29,49 +29,106 @@ export async function resolveImage(
     params: ImageSearchParams,
     keyOverrides: ImageKeyOverrides = {},
 ): Promise<ImageSearchResult> {
+    return resolveImageWithTrace(params, keyOverrides);
+}
+
+export async function resolveImageWithTrace(
+    params: ImageSearchParams,
+    keyOverrides: ImageKeyOverrides = {},
+    providerOrder?: ImageProviderId[],
+): Promise<ResolvedImageSearchResult> {
     const { query, width = 800, height = 600 } = params;
+    const attempts: ImageResolutionAttempt[] = [];
 
     const pexelsKey = keyOverrides.pexels ?? (env.hasPexelsApiKey ? env.PEXELS_API_KEY : undefined);
     const pixabayKey = keyOverrides.pixabay ?? (env.hasPixabayApiKey ? env.PIXABAY_API_KEY : undefined);
     const unsplashKey = keyOverrides.unsplash ?? (env.hasUnsplashApiKey ? env.UNSPLASH_ACCESS_KEY : undefined);
 
-    // 1. Pexels
-    if (pexelsKey) {
-        try {
-            const result = await searchPexels(params, pexelsKey);
-            if (result) return result;
-        } catch {
-            // fall through
+    const order = providerOrder?.length
+        ? providerOrder
+        : ["pexels", "pixabay", "unsplash", "loremflickr", "picsum"] as ImageProviderId[];
+
+    const success = (provider: ImageProviderId, result: ImageSearchResult): ResolvedImageSearchResult => ({
+        ...result,
+        provider,
+        fallbackUsed: attempts.some((attempt) => attempt.status === "failed" || attempt.status === "skipped"),
+        attemptedProviders: [...attempts, { provider, status: "success" }],
+    });
+
+    for (const provider of order) {
+        if (provider === "pexels") {
+            if (!pexelsKey) {
+                attempts.push({ provider, status: "skipped", reason: "missing-api-key" });
+                continue;
+            }
+            try {
+                const result = await searchPexels(params, pexelsKey);
+                if (result) return success(provider, result);
+                attempts.push({ provider, status: "failed", reason: "no-result" });
+            } catch (error) {
+                attempts.push({ provider, status: "failed", reason: error instanceof Error ? error.message : "connector-error" });
+            }
+            continue;
+        }
+
+        if (provider === "pixabay") {
+            if (params.type === "video") {
+                attempts.push({ provider, status: "skipped", reason: "video-explicit-provider-only" });
+                continue;
+            }
+            if (!pixabayKey) {
+                attempts.push({ provider, status: "skipped", reason: "missing-api-key" });
+                continue;
+            }
+            try {
+                const result = await searchPixabay(params, pixabayKey);
+                if (result) return success(provider, result);
+                attempts.push({ provider, status: "failed", reason: "no-result" });
+            } catch (error) {
+                attempts.push({ provider, status: "failed", reason: error instanceof Error ? error.message : "connector-error" });
+            }
+            continue;
+        }
+
+        if (provider === "unsplash") {
+            if (params.type === "video") {
+                attempts.push({ provider, status: "skipped", reason: "photo-only-provider" });
+                continue;
+            }
+            if (!unsplashKey) {
+                attempts.push({ provider, status: "skipped", reason: "missing-api-key" });
+                continue;
+            }
+            try {
+                const result = await searchUnsplash(params, unsplashKey);
+                if (result) return success(provider, result);
+                attempts.push({ provider, status: "failed", reason: "no-result" });
+            } catch (error) {
+                attempts.push({ provider, status: "failed", reason: error instanceof Error ? error.message : "connector-error" });
+            }
+            continue;
+        }
+
+        if (provider === "loremflickr") {
+            if (params.type === "video") {
+                attempts.push({ provider, status: "skipped", reason: "photo-only-provider" });
+                continue;
+            }
+            const result = await searchLoremFlickr(params);
+            if (result) return success(provider, result);
+            attempts.push({ provider, status: "failed", reason: "no-result" });
+            continue;
+        }
+
+        if (provider === "picsum") {
+            break;
         }
     }
 
-    // 2. Pixabay (photos only via fallback — video is explicit caller choice)
-    if (pixabayKey && params.type !== "video") {
-        try {
-            const result = await searchPixabay(params, pixabayKey);
-            if (result) return result;
-        } catch {
-            // fall through
-        }
+    if (!order.includes("picsum")) {
+        throw new Error(`No stock image provider resolved "${query}" from configured order: ${order.join(", ")}`);
     }
 
-    // 3. Unsplash
-    if (unsplashKey && params.type !== "video") {
-        try {
-            const result = await searchUnsplash(params, unsplashKey);
-            if (result) return result;
-        } catch {
-            // fall through
-        }
-    }
-
-    // 4. LoremFlickr — always available for photos
-    if (params.type !== "video") {
-        const result = await searchLoremFlickr(params);
-        if (result) return result;
-    }
-
-    // 5. Picsum last resort (deterministic, non-semantic)
     const seed = encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase());
     return {
         url: `https://picsum.photos/seed/${seed}/${width}/${height}`,
@@ -79,5 +136,8 @@ export async function resolveImage(
         width,
         height,
         mediaType: "photo",
+        provider: "picsum",
+        fallbackUsed: attempts.length > 0,
+        attemptedProviders: [...attempts, { provider: "picsum", status: "success" }],
     };
 }

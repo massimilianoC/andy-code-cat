@@ -7,12 +7,12 @@ const DEFAULT_MODELS: Record<PipelineModelRole, string> = {
     coding_fast: "Qwen/Qwen3-Coder-30B-A3B-Instruct",
     dialogue: "MiniMaxAI/MiniMax-M2.5",
     dialogue_fast: "Qwen/Qwen3-8B",
-    vision: "Qwen/Qwen2.5-VL-72B-Instruct",
+    vision: "Qwen/Qwen3-VL-32B-Instruct",
     vision_fast: "Qwen/Qwen3-VL-8B-Instruct",
     quality_check: "deepseek-ai/DeepSeek-V3",
     image_gen: "black-forest-labs/FLUX.1-dev",
     image_gen_fast: "black-forest-labs/FLUX.1-schnell",
-    embeddings: "BAAI/bge-m3"
+    embeddings: "Qwen/Qwen3-Embedding-8B"
 };
 
 const FALLBACK_MODELS: Partial<Record<PipelineModelRole, string>> = {
@@ -20,11 +20,11 @@ const FALLBACK_MODELS: Partial<Record<PipelineModelRole, string>> = {
     coding_fast: "Qwen/Qwen3-8B",
     dialogue: "moonshotai/Kimi-K2.5",
     dialogue_fast: "zai-org/GLM-4.5-Air",
-    vision: "zai-org/GLM-4.6V",
-    vision_fast: "zai-org/GLM-4.5V",
+    vision: "Qwen/Qwen3-VL-30B-A3B-Instruct",
+    vision_fast: "zai-org/GLM-5V-Turbo",
     quality_check: "Qwen/Qwen2.5-72B-Instruct",
     image_gen: "black-forest-labs/FLUX.1-schnell",
-    embeddings: "BAAI/bge-large-en-v1.5"
+    embeddings: "Qwen/Qwen3-Embedding-4B"
 };
 
 /**
@@ -38,18 +38,18 @@ const SUPPLEMENTAL_MODELS: Array<{ id: string; capabilities: string[] }> = [
     { id: "google/gemma-4-31B-it", capabilities: ["chat"] },
     { id: "google/gemma-4-26B-A4B-it", capabilities: ["chat"] },
     // Qwen — extra reasoning / large models
-    { id: "Qwen/QwQ-32B", capabilities: ["chat"] },
     { id: "Qwen/Qwen3-32B", capabilities: ["chat"] },
-    { id: "Qwen/Qwen3-235B-A22B-Instruct-2507", capabilities: ["chat"] },
+    { id: "Qwen/Qwen3.6-35B-A3B", capabilities: ["chat"] },
+    { id: "Qwen/Qwen3.5-397B-A17B", capabilities: ["chat"] },
     // DeepSeek — R1 reasoning
     { id: "deepseek-ai/DeepSeek-R1", capabilities: ["chat"] },
     // Moonshot / Kimi — extra large
-    { id: "moonshotai/Kimi-K2-Instruct", capabilities: ["chat"] },
+    { id: "moonshotai/Kimi-K2.6", capabilities: ["chat"] },
     // Tencent Hunyuan
     { id: "tencent/Hunyuan-A13B-Instruct", capabilities: ["chat"] },
-    // OpenAI OSS (hosted on SiliconFlow)
-    { id: "openai/gpt-oss-120b", capabilities: ["chat"] },
-    { id: "openai/gpt-oss-20b", capabilities: ["chat"] },
+    // Current high-capacity alternates
+    { id: "zai-org/GLM-5.1", capabilities: ["chat"] },
+    { id: "Qwen/Qwen3.5-122B-A10B", capabilities: ["chat"] },
 ];
 
 function inferCapabilities(role: PipelineModelRole): string[] {

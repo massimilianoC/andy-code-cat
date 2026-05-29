@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MonacoCodeEditor } from "@/components/admin/MonacoCodeEditor";
+import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 
 const ROLE_OPTIONS = [
     "dialogue",
@@ -102,17 +103,13 @@ export default function AdminModelsPage() {
         }
     }
 
-    function selectProvider(providerKey: string) {
+    function selectProviderModel(providerKey: string, modelId?: string) {
         setSelectedProvider(providerKey);
         const provider = providers.find((entry) => entry.provider === providerKey);
-        const firstModel = provider?.models[0] ?? null;
-        setDraft(firstModel ? { ...firstModel } : { ...EMPTY_MODEL, provider: providerKey });
-    }
-
-    function selectModel(modelId: string) {
-        const provider = providers.find((entry) => entry.provider === selectedProvider);
-        const model = provider?.models.find((entry) => entry.id === modelId) ?? null;
-        setDraft(model ? { ...model } : { ...EMPTY_MODEL, provider: selectedProvider });
+        const model = modelId
+            ? provider?.models.find((entry) => entry.id === modelId) ?? null
+            : provider?.models[0] ?? null;
+        setDraft(model ? { ...model } : { ...EMPTY_MODEL, provider: providerKey });
     }
 
     function createNewModel() {
@@ -245,18 +242,14 @@ export default function AdminModelsPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-1">
-                            <Label>Provider</Label>
-                            <select
-                                value={selectedProvider}
-                                onChange={(e) => selectProvider(e.target.value)}
-                                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                            >
-                                {providers.map((provider) => (
-                                    <option key={provider.provider} value={provider.provider}>
-                                        {provider.provider}
-                                    </option>
-                                ))}
-                            </select>
+                            <Label>Provider & model</Label>
+                            <ProviderModelPicker
+                                providers={providers}
+                                valueProvider={selectedProvider}
+                                valueModel={draft.id}
+                                onChange={({ provider, model }) => selectProviderModel(provider, model)}
+                                includeInactive
+                            />
                         </div>
 
                         <div className="space-y-2">
@@ -265,7 +258,7 @@ export default function AdminModelsPage() {
                                     key={model.id}
                                     type="button"
                                     variant="outline"
-                                    onClick={() => selectModel(model.id)}
+                                    onClick={() => selectProviderModel(selectedProvider, model.id)}
                                     className="w-full h-auto justify-start rounded-lg px-3 py-2 text-left"
                                 >
                                     <div className="w-full">

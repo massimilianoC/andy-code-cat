@@ -1,4 +1,14 @@
-# External API Key Management — Platform Integration Hub
+# DEPRECATED: External API Key Management — Platform Integration Hub
+
+> Deprecated on 2026-05-29.  
+> Superseded for image-provider governance by `docs/specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md`.  
+> Reason: this plan mixes general API key management with a permissive automatic image fallback policy. The current target architecture requires explicit provider policy, fail-fast or notify fallback behavior, persistent system notifications, and local persistence of stock images before HTML/snapshot use.
+>
+> Historical value: still useful as background for `ServiceApiKey` encryption/BYOK ideas, but it must not be used as the active image-provider implementation spec.
+
+---
+
+# Legacy Spec: External API Key Management — Platform Integration Hub
 
 > **Status:** Planned — Milestone M-APIKEYS  
 > **Date:** 2026-05-13  

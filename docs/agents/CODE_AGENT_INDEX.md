@@ -51,6 +51,8 @@ apps/api/src/
     ProjectPreset.ts         ← static catalog of 9 presets with outputSpec + systemPromptModule
     ProjectAsset.ts          ← uploaded asset with source user_upload/platform_generated
     PreviewSnapshot.ts       ← artifact versioning for assistant responses
+    MediaResolutionTrace.ts  ← mediaManifest resolution audit records linked to ProjectAsset/PreviewSnapshot
+    SystemNotification.ts    ← persistent user/superadmin notifications for media, publish, export, system events
     ExportRecord.ts          ← ZIP export record with TTL
     GenerationWorkspace.ts   ← generation workspace for the pipeline
     ExecutionLog.ts          ← execution log with TTL 90 days
@@ -70,6 +72,13 @@ apps/api/src/
     ExportLayer1Zip.ts / GetExport.ts
     PrepareGenerationWorkspace.ts
     PublishProject.ts / UnpublishProject.ts
+    RegenerateMediaByKey.ts ← regenerates keyed artifact media from persisted MediaResolutionTrace
+
+  application/media/
+    ResolveArtifactMedia.ts  ← validates mediaManifest, resolves asset://media keys, persists ProjectAsset + MediaResolutionTrace
+    assertResolvedMediaPlaceholders.ts ← publish/export/snapshot activation unresolved-media guard
+    mediaNotifications.ts              ← persistent notification emit helpers for media fallback/failure
+    replaceMediaPlaceholders.ts / validateMediaManifest.ts
 
   application/llm/
     styleContextBuilder.ts   ← merge profile+moodboard → "## STYLE CONTEXT" block (Layer C)
@@ -99,6 +108,7 @@ apps/api/src/
     MongoUserStyleProfileRepository.ts
     MongoProjectMoodboardRepository.ts
     MongoProjectAssetRepository.ts
+    MongoMediaResolutionTraceRepository.ts
     MongoExportRepository.ts
     MongoSiteDeploymentRepository.ts
 
@@ -113,6 +123,8 @@ apps/api/src/
 
 packages/contracts/src/
   auth.ts / conversation.ts / llm.ts   ← shared Zod schemas
+  mediaManifest.ts / mediaResolution.ts ← artifact media requests + snapshot trace metadata
+  notifications.ts                     ← persistent notification schemas and DTOs
   preview.ts                           ← PreviewSnapshot schemas
   wysiwyg.ts                           ← WysiwygEditSession schemas + DTO
   userProfile.ts                       ← updateUserStyleProfileSchema + UserStyleProfileDto
@@ -131,10 +143,35 @@ apps/web/components/
 
 apps/web/lib/
   api.ts                               ← all API helper functions
-  notifications.tsx                    ← NotificationsProvider + useNotifications()
+  api/notifications.ts                 ← backend notification polling + mark-read calls
+  notifications.tsx                    ← NotificationsProvider + useNotifications(), merges local and persisted notifications
 ```
 
 ⚠️ **Route ordering in app.ts**: `createUserProfileRoutes()` MUST be registered BEFORE `createProjectRoutes()` — the `projectRoutes` router has a global `router.use(authMiddleware)` that blocks `/v1/style-tags` (public route) if it comes first.
+
+## Artifact Media Orchestrator Continuation Notes
+
+Primary handoff: `docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md`, especially Section 18.
+Next-strategy roadmap: `docs/specs/MEDIA_STRATEGY_RESOLVER_PIPELINE_SPEC.md`.
+Current-state certification: `docs/reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md`.
+
+Current implemented baseline:
+
+- Chat-preview and stream routes call `ResolveArtifactMedia` before snapshot save.
+- Preview snapshots carry `metadata.mediaResolution` and active snapshots are blocked if unresolved `asset://media/*` remains.
+- `media_resolution_traces` links media requests to assets and later snapshots.
+- `system_notifications` persists user/superadmin media fallback/failure and publish/export block events.
+- Publish/export guardrails block unresolved placeholders before provider calls, storage writes, export record creation, or ZIP generation.
+- Edit regeneration uses `POST /v1/projects/:projectId/media/:mediaKey/regenerate` when `data-media-key` exists and is primary-provider-only (`allowFallback: false`). Full artifact generation may still use configured fallback to complete the initial artifact.
+
+When resuming work, check these likely gap areas first:
+
+- Browser E2E for prompt -> media manifest -> resolved snapshot -> edit regenerate -> publish/export.
+- Failure `MediaResolutionTrace` rows for provider exceptions.
+- Dedicated resolvers for `image_generation`, `project_asset`, and `user_library` manifest strategies.
+- Frontend media strategy selector for Auto Mix, Stock, AI Generate, and Project Assets, backed by strategy-specific JSON planner prompts.
+- Admin notification dashboard/filter UI.
+- Media inspector trace/media-key picker when the selected DOM node no longer has `data-media-key`.
 
 ### To build (in priority order)
 

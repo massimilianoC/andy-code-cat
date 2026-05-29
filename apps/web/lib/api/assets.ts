@@ -185,6 +185,58 @@ export interface GenerateProjectImageResult {
     };
 }
 
+export interface RegenerateStockProjectImageInput {
+    query: string;
+    width?: number;
+    height?: number;
+    offset?: number;
+    targetSelector?: string;
+    targetMode?: "foreground" | "background";
+    scope?: "project" | "user";
+}
+
+export interface RegenerateStockProjectImageResult {
+    asset: ProjectAssetDto;
+    assetUrl: string;
+    provider: string;
+    fallbackUsed: boolean;
+    attribution: string;
+    attemptedProviders: Array<{
+        provider: string;
+        status: "success" | "failed" | "skipped";
+        reason?: string;
+    }>;
+}
+
+export interface RegenerateMediaByKeyInput {
+    snapshotId?: string;
+    width?: number;
+    height?: number;
+    offset?: number;
+    targetSelector?: string;
+    targetMode?: "foreground" | "background";
+    scope?: "project" | "user";
+}
+
+export interface RegenerateMediaByKeyResult extends RegenerateStockProjectImageResult {
+    mediaKey: string;
+    traceId?: string;
+}
+
+export interface StockImageProviderStatus {
+    activeProvider: string;
+    fallbackMode: "notify";
+    fallbackProviders: string[];
+    persistenceEnabled: boolean;
+    configuredProviders: {
+        pexels: boolean;
+        pixabay: boolean;
+        unsplash: boolean;
+        loremflickr: boolean;
+        picsum: boolean;
+    };
+}
+
 export interface AiUsageRecentRequestDto {
     id: string;
     kind: "llm" | "image";
@@ -314,6 +366,33 @@ export function generateProjectImage(token: string, projectId: string, data: Gen
         "POST",
         `/v1/projects/${projectId}/assets/generate-image`,
         data,
+        { Authorization: `Bearer ${token}`, "x-project-id": projectId }
+    );
+}
+
+export function regenerateStockProjectImage(token: string, projectId: string, data: RegenerateStockProjectImageInput) {
+    return call<RegenerateStockProjectImageResult>(
+        "POST",
+        `/v1/projects/${projectId}/images/regenerate-stock`,
+        data,
+        { Authorization: `Bearer ${token}`, "x-project-id": projectId }
+    );
+}
+
+export function regenerateMediaByKey(token: string, projectId: string, mediaKey: string, data: RegenerateMediaByKeyInput) {
+    return call<RegenerateMediaByKeyResult>(
+        "POST",
+        `/v1/projects/${projectId}/media/${encodeURIComponent(mediaKey)}/regenerate`,
+        data,
+        { Authorization: `Bearer ${token}`, "x-project-id": projectId }
+    );
+}
+
+export function getStockImageProviderStatus(token: string, projectId: string) {
+    return call<StockImageProviderStatus>(
+        "GET",
+        `/v1/projects/${projectId}/images/provider-status`,
+        undefined,
         { Authorization: `Bearer ${token}`, "x-project-id": projectId }
     );
 }

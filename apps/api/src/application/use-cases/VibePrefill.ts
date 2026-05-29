@@ -7,13 +7,14 @@ import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
 import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
+import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const TASK_KEY = "vibe_intent_prefill";
 const FALLBACK_PROVIDER = "siliconflow";
-const FALLBACK_MODEL = "Qwen/Qwen3-8B";
+const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
 const MAX_PROMPT_CHARS = 2000;
 const MAX_TOKENS = 768;
 
@@ -162,6 +163,10 @@ export interface VibePrefillInput {
     attachmentMeta?: AttachmentMeta[];
     templateId?: string | null;
     formatHint?: FormatHint | null;
+    /** Optional one-shot provider override for this pipeline run. */
+    provider?: string;
+    /** Optional one-shot model override for this pipeline run. */
+    model?: string;
     /** When provided, the use-case records an LLM cost transaction against this project. */
     userId?: string;
     /** When provided together with userId, cost is attributed to this project. */
@@ -187,16 +192,31 @@ export class VibePrefill {
 
         const catalog = await this.getLlmCatalog.execute();
         const activeProviders = catalog.providers.filter((p) => p.isActive);
-        const providerCatalog =
+        const overrideProviderCatalog = input.provider
+            ? activeProviders.find((p) => p.provider === input.provider)
+            : undefined;
+        const selectedProviderCatalog =
+            overrideProviderCatalog ??
             activeProviders.find((p) => p.provider === taskSettings.provider) ??
             activeProviders.find((p) => p.provider === FALLBACK_PROVIDER) ??
+            // Never silently fall back to local LM Studio for this background task —
+            // prefer any reliable cloud provider; LM Studio is used only when explicitly
+            // configured (override or superadmin task settings) above.
+            activeProviders.find((p) => p.provider !== "lmstudio") ??
             activeProviders[0];
 
-        if (!providerCatalog) {
+        if (!selectedProviderCatalog) {
             return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
         }
 
+        const providerCatalog = selectedProviderCatalog;
+
+        const overrideModelId = input.model
+            ? providerCatalog.models.find((m) => m.isActive && m.id === input.model)?.id
+            : undefined;
+
         const modelId =
+            overrideModelId ??
             providerCatalog.models.find((m) => m.isActive && m.id === taskSettings.model)?.id ??
             providerCatalog.models.find((m) => m.isActive && m.isDefault)?.id ??
             providerCatalog.models.find((m) => m.isActive)?.id ??
@@ -223,15 +243,16 @@ export class VibePrefill {
                     "Content-Type": "application/json",
                     ...(authHeader ? { Authorization: authHeader } : {}),
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(buildChatCompletionRequestBody({
+                    provider: providerCatalog.provider,
                     model: modelId,
-                    max_tokens: Math.min(taskSettings.maxCompletionTokens, MAX_TOKENS),
+                    maxTokens: Math.min(taskSettings.maxCompletionTokens, MAX_TOKENS),
                     temperature: taskSettings.temperature ?? 0.3,
                     messages: [
                         { role: "system" as const, content: systemPrompt },
                         { role: "user" as const, content: userMessage },
                     ],
-                }),
+                })),
             });
 
             if (!response.ok) {

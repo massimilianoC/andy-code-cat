@@ -4,6 +4,8 @@
 > Date: 2026-04-16  
 > Scope: image-generation prompting, context enrichment, prompt optimization, focus-aware media application, prompt/version traceability
 
+> Alignment note, 2026-05-29: this spec remains active only for AI image generation and prompt quality. Stock/placeholder image provider selection, fallback policy, backend fetch, local asset persistence, and Edit-mode stock regeneration are governed by `docs/specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md`.
+
 ---
 
 ## 1. Goal

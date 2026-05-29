@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PromptTaskSettingsCard } from "@/components/admin/PromptTaskSettingsCard";
+import { resolvePromptTaskSettingAgainstCatalog } from "@/lib/adminLlmCatalog";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -100,48 +101,48 @@ OUTPUT RULES
 const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
     [CLASSIFY_TASK_KEY]: {
         enabled: true,
-        provider: "siliconflow",
-        model: "Qwen/Qwen3-8B",
+        provider: "",
+        model: "",
         temperature: 0.0,
         maxCompletionTokens: 256,
         systemTemplate: CLASSIFY_DEFAULT_PROMPT,
     },
     [PREFILL_TASK_KEY]: {
         enabled: true,
-        provider: "siliconflow",
-        model: "Qwen/Qwen3-8B",
+        provider: "",
+        model: "",
         temperature: 0.3,
         maxCompletionTokens: 768,
         systemTemplate: PREFILL_DEFAULT_PROMPT,
     },
     [OPTIMIZE_TASK_KEY]: {
         enabled: true,
-        provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        provider: "",
+        model: "",
         temperature: 0.7,
         maxCompletionTokens: 1200,
         systemTemplate: OPTIMIZE_DEFAULT_PROMPT,
     },
     [GENERATE_TASK_KEY]: {
         enabled: true,
-        provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        provider: "",
+        model: "",
         temperature: 0.5,
         maxCompletionTokens: 14000,
         systemTemplate: "",
     },
     [VIBE_GENERATE_TASK_KEY]: {
         enabled: true,
-        provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        provider: "",
+        model: "",
         temperature: 0.5,
         maxCompletionTokens: 14000,
         systemTemplate: "",
     },
     [GOD_MODE_GENERATE_TASK_KEY]: {
         enabled: true,
-        provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        provider: "",
+        model: "",
         temperature: 0.5,
         maxCompletionTokens: 14000,
         systemTemplate: "",
@@ -160,6 +161,23 @@ export default function ZeroEffortAdminPage() {
 
     const [providers, setProviders] = useState<AdminLlmProviderDto[]>([]);
 
+    function mergeTask(
+        key: string,
+        saved: Partial<PromptTaskSettingDto> | undefined,
+        nextProviders: AdminLlmProviderDto[],
+        preferredProvider?: string,
+    ): PromptTaskSettingDto {
+        return resolvePromptTaskSettingAgainstCatalog(
+            {
+                ...TASK_DEFAULTS[key],
+                ...(saved ?? {}),
+                systemTemplate: saved?.systemTemplate || TASK_DEFAULTS[key].systemTemplate,
+            },
+            nextProviders,
+            { preferredProvider, requiredCapability: "chat" },
+        );
+    }
+
     const [classifyTask,      setClassifyTask]      = useState<PromptTaskSettingDto>(TASK_DEFAULTS[CLASSIFY_TASK_KEY]);
     const [prefillTask,       setPrefillTask]        = useState<PromptTaskSettingDto>(TASK_DEFAULTS[PREFILL_TASK_KEY]);
     const [optimizeTask,      setOptimizeTask]       = useState<PromptTaskSettingDto>(TASK_DEFAULTS[OPTIMIZE_TASK_KEY]);
@@ -176,19 +194,14 @@ export default function ZeroEffortAdminPage() {
             getAdminLlmRegistry(t),
         ]).then(([cfg, registry]) => {
             const productSettings = cfg.governanceByProduct?.[DEFAULT_PRODUCT_KEY]?.promptTaskSettings ?? {};
-            // Merge: prefer saved values, but don't override non-empty defaults with empty string
-            const mergeTask = (key: string, saved?: Partial<PromptTaskSettingDto>): PromptTaskSettingDto => ({
-                ...TASK_DEFAULTS[key],
-                ...(saved ?? {}),
-                systemTemplate: saved?.systemTemplate || TASK_DEFAULTS[key].systemTemplate,
-            });
-            setClassifyTask(mergeTask(CLASSIFY_TASK_KEY, productSettings[CLASSIFY_TASK_KEY]));
-            setPrefillTask(mergeTask(PREFILL_TASK_KEY, productSettings[PREFILL_TASK_KEY]));
-            setOptimizeTask(mergeTask(OPTIMIZE_TASK_KEY, productSettings[OPTIMIZE_TASK_KEY]));
-            setGenerateTask(mergeTask(GENERATE_TASK_KEY, productSettings[GENERATE_TASK_KEY]));
-            setVibeGenerateTask(mergeTask(VIBE_GENERATE_TASK_KEY, productSettings[VIBE_GENERATE_TASK_KEY]));
-            setGodModeGenerateTask(mergeTask(GOD_MODE_GENERATE_TASK_KEY, productSettings[GOD_MODE_GENERATE_TASK_KEY]));
-            setProviders(registry.providers ?? []);
+            const nextProviders = registry.providers ?? [];
+            setClassifyTask(mergeTask(CLASSIFY_TASK_KEY, productSettings[CLASSIFY_TASK_KEY], nextProviders, registry.activeProvider));
+            setPrefillTask(mergeTask(PREFILL_TASK_KEY, productSettings[PREFILL_TASK_KEY], nextProviders, registry.activeProvider));
+            setOptimizeTask(mergeTask(OPTIMIZE_TASK_KEY, productSettings[OPTIMIZE_TASK_KEY], nextProviders, registry.activeProvider));
+            setGenerateTask(mergeTask(GENERATE_TASK_KEY, productSettings[GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
+            setVibeGenerateTask(mergeTask(VIBE_GENERATE_TASK_KEY, productSettings[VIBE_GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
+            setGodModeGenerateTask(mergeTask(GOD_MODE_GENERATE_TASK_KEY, productSettings[GOD_MODE_GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
+            setProviders(nextProviders);
         })
         .catch(() => setError("Unable to load config."))
         .finally(() => setLoading(false));

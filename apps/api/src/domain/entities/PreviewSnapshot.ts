@@ -45,6 +45,13 @@ export interface PreviewSnapshotMetadata {
         prePromptTemplate?: string;
         effectiveSystemPrompt?: string;
     };
+    mediaResolution?: {
+        version: "media-resolution-v1";
+        traceIds: string[];
+        assetIds: string[];
+        mediaKeys: string[];
+        degraded: boolean;
+    };
 }
 
 export interface PreviewSnapshot {

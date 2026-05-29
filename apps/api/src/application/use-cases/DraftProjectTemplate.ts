@@ -7,6 +7,7 @@ import type { GetLlmCatalog } from "./GetLlmCatalog";
 import { buildDraftProjectTemplateRequest } from "../prompting/draftProjectTemplateInstruction";
 import { estimateCost, type CostEstimate } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
+import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
@@ -124,13 +125,15 @@ export class DraftProjectTemplate {
 
         const catalog = await this.getLlmCatalog.execute();
         const activeProviders = catalog.providers.filter((provider) => provider.isActive);
-        const providerCatalog = activeProviders.find((provider) => provider.provider === taskSettings.provider)
+        const selectedProviderCatalog = activeProviders.find((provider) => provider.provider === taskSettings.provider)
             ?? activeProviders.find((provider) => provider.provider === FALLBACK_PROVIDER)
             ?? activeProviders[0];
 
-        if (!providerCatalog) {
+        if (!selectedProviderCatalog) {
             throw new Error("No active LLM provider configured for template drafting");
         }
+
+        const providerCatalog = selectedProviderCatalog;
 
         const modelId = providerCatalog.models.find((model) => model.isActive && model.id === taskSettings.model)?.id
             ?? providerCatalog.models.find((model) => model.isActive && model.isDefault)?.id
@@ -153,12 +156,13 @@ export class DraftProjectTemplate {
                 "Content-Type": "application/json",
                 ...(authHeader ? { Authorization: authHeader } : {}),
             },
-            body: JSON.stringify({
+            body: JSON.stringify(buildChatCompletionRequestBody({
+                provider: providerCatalog.provider,
                 model: modelId,
-                max_tokens: Math.min(taskSettings.maxCompletionTokens, env.LLM_MAX_COMPLETION_TOKENS),
+                maxTokens: Math.min(taskSettings.maxCompletionTokens, env.LLM_MAX_COMPLETION_TOKENS),
                 temperature: taskSettings.temperature,
                 messages,
-            }),
+            })),
         });
 
         const payload = await response.json().catch(() => ({}));

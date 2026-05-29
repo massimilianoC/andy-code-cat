@@ -11,6 +11,8 @@ import type { Message } from "../../domain/entities/Conversation";
 import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 import { buildFullDoc, captureHtml } from "../../infra/capture/PuppeteerCaptureService";
 import { env } from "../../config";
+import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
+import { SystemNotifier } from "../services/SystemNotifier";
 
 // ---------------------------------------------------------------------------
 // Post-processor: separates inline CSS/JS from HTML artifacts
@@ -335,6 +337,33 @@ export class ExportLayer1Zip {
                 ),
                 { statusCode: 404 }
             );
+        }
+
+        try {
+            assertNoUnresolvedMediaPlaceholders(snapshot.artifacts, {
+                operation: "export",
+                projectId: input.projectId,
+                userId: input.userId,
+                snapshotId: snapshot.id,
+            });
+        } catch (error) {
+            if (error instanceof UnresolvedMediaPlaceholderError) {
+                SystemNotifier.instance.emit({
+                    projectId: input.projectId,
+                    userId: input.userId,
+                    audience: "both",
+                    domain: "export",
+                    severity: "error",
+                    title: "Export bloccato: media non risolti",
+                    message: `Risolvi o rigenera i media prima di esportare. Placeholder: ${error.keys.join(", ")}.`,
+                    sourceEventType: "export_blocked_unresolved_media",
+                    metadata: {
+                        snapshotId: snapshot.id,
+                        unresolvedMediaKeys: error.keys,
+                    },
+                });
+            }
+            throw error;
         }
 
         // Fetch conversation messages for README history (best-effort, non-blocking)

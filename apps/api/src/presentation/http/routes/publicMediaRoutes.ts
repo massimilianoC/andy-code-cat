@@ -27,6 +27,12 @@ export function createPublicMediaRoutes(): Router {
                 return;
             }
 
+            // Preview iframes are sandboxed srcDoc documents with an opaque origin.
+            // Helmet's default CORP is same-origin, which makes browsers block these
+            // media responses even when the request succeeds with 200 OK.
+            res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+            res.setHeader("Access-Control-Allow-Origin", "*");
+
             const asset = await assetRepository.findByIdPublic(assetId);
             if (!asset) {
                 res.status(404).json({ error: "Asset not found" });

@@ -1,4 +1,4 @@
-import type { LlmStructuredResponse } from "@andy-code-cat/contracts";
+import { artifactMediaManifestSchema, type LlmStructuredResponse } from "@andy-code-cat/contracts";
 import { jsonrepair } from "jsonrepair";
 
 /**
@@ -247,6 +247,25 @@ function extractFocusPatch(parsed: Partial<LlmStructuredResponse>): LlmStructure
  * Centralises the assembly logic that was previously duplicated across every
  * repair try-catch branch.
  */
+/**
+ * Normalizes a mediaManifest candidate into an object suitable for schema validation.
+ * Accepts an already-parsed object, or a JSON-encoded string (some models double-encode it).
+ * Returns undefined when the value is absent or an unparseable string.
+ */
+function coerceManifestCandidate(value: unknown): unknown {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return undefined;
+        try {
+            return JSON.parse(trimmed);
+        } catch {
+            return undefined;
+        }
+    }
+    return value;
+}
+
 function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredResponse | null {
     if (!parsed?.chat || !parsed?.artifacts) return null;
     const htmlStr = normalizeHtmlArtifact(unescapeDoubleEncodedHtml(String(parsed.artifacts.html ?? "")));
@@ -257,6 +276,16 @@ function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredRe
         if (!cssStr) cssStr = extracted.css;
         if (!jsStr) jsStr = extracted.js;
     }
+    // Some models (e.g. MiniMax) place mediaManifest inside artifacts instead of at the root,
+    // and/or emit it as a JSON-encoded STRING rather than a nested object. Rescue both cases
+    // so the manifest is not silently dropped.
+    const rawManifest =
+        coerceManifestCandidate(parsed.mediaManifest)
+        ?? coerceManifestCandidate((parsed.artifacts as unknown as Record<string, unknown>)?.mediaManifest);
+    const manifest = rawManifest
+        ? artifactMediaManifestSchema.safeParse(rawManifest)
+        : null;
+
     return {
         chat: {
             summary: String(parsed.chat.summary ?? ""),
@@ -264,6 +293,7 @@ function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredRe
             nextActions: Array.isArray(parsed.chat.nextActions) ? parsed.chat.nextActions.map(String) : [],
         },
         artifacts: { html: htmlStr, css: cssStr, js: jsStr },
+        mediaManifest: manifest?.success ? manifest.data : undefined,
         focusPatch: extractFocusPatch(parsed),
     };
 }

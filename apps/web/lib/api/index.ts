@@ -15,6 +15,7 @@ export * from "./health";
 export * from "./publish";
 export * from "./user";
 export * from "./pipelines";
+export * from "./notifications";
 // ApiError is part of the public surface
 export { ApiError } from "./call";
 export * from "./admin";
