@@ -71,7 +71,11 @@ import { ChevronDown, FileText, ImageIcon, Loader2, Mic, Paperclip, RefreshCw, S
 import { uploadProjectAsset, getProjectAsset, updateProjectAsset } from "../../../lib/api/assets";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
@@ -160,6 +164,40 @@ function formatCostEur(amount: number | undefined): string {
     if (amount < 0.01)   return `€${amount.toFixed(4)}`;
     if (amount < 1)      return `€${amount.toFixed(3)}`;
     return `€${amount.toFixed(2)}`;
+}
+
+type MessageMetadataView = NonNullable<MessageDto["metadata"]>;
+type MessageMediaResolutionView = NonNullable<MessageMetadataView["mediaResolution"]>;
+
+function clipIdentifier(value: string | undefined, head = 8, tail = 4): string {
+    if (!value) return "—";
+    if (value.length <= head + tail + 1) return value;
+    return `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
+function getMediaResolvedCount(mediaResolution: MessageMediaResolutionView | undefined): number {
+    if (!mediaResolution) return 0;
+    return mediaResolution.directives?.filter((directive) =>
+        directive.status === "resolved" || directive.status === "fallback_resolved",
+    ).length ?? mediaResolution.assetIds?.length ?? 0;
+}
+
+function getMediaFailedCount(mediaResolution: MessageMediaResolutionView | undefined): number {
+    if (!mediaResolution) return 0;
+    return mediaResolution.directives?.filter((directive) => directive.status === "unresolved").length
+        ?? Math.max(0, (mediaResolution.mediaKeys?.length ?? 0) - getMediaResolvedCount(mediaResolution));
+}
+
+function getMessageOutcomeSummary(message: MessageDto | undefined) {
+    const metadata = message?.metadata;
+    const mediaResolution = metadata?.mediaResolution;
+    return {
+        hasSnapshot: Boolean(metadata?.snapshotId),
+        hasMedia: Boolean(mediaResolution?.mediaKeys?.length),
+        resolvedCount: getMediaResolvedCount(mediaResolution),
+        failedCount: getMediaFailedCount(mediaResolution),
+        degraded: Boolean(mediaResolution?.degraded),
+    };
 }
 
 function getStringDetail(details: unknown, key: string): string | undefined {
@@ -2601,6 +2639,26 @@ export default function WorkspacePage() {
                     setEditorHtml(snapArt?.html ?? llm.structured.artifacts.html ?? "");
                     setEditorCss(snapArt?.css ?? llm.structured.artifacts.css ?? "");
                     setEditorJs(snapArt?.js ?? llm.structured.artifacts.js ?? "");
+                    setActiveConv((prev) => {
+                        if (!prev) return prev;
+                        return {
+                            ...prev,
+                            messages: prev.messages.map((message) => {
+                                if (message.id !== assistantSaved.message.id) {
+                                    return message;
+                                }
+
+                                return {
+                                    ...message,
+                                    metadata: {
+                                        ...(message.metadata ?? {}),
+                                        snapshotId: snap.snapshot.id,
+                                        mediaResolution: snap.snapshot.metadata?.mediaResolution,
+                                    },
+                                };
+                            }),
+                        };
+                    });
                     // Spinner cleared by iframe onLoad; fallback timeout in case user is on another tab
                     setPreviewRefreshing(true);
                     setPreviewPending(true);
@@ -4841,9 +4899,224 @@ function formatDuration(ms: number | undefined): string {
     return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function MetaStat({
+    label,
+    value,
+    mono = false,
+}: {
+    label: string;
+    value: React.ReactNode;
+    mono?: boolean;
+}) {
+    return (
+        <div className="rounded-md border border-border bg-muted/20 p-3">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+            <div className={mono ? "mt-1 break-all font-mono text-sm text-foreground" : "mt-1 text-sm font-medium text-foreground"}>
+                {value}
+            </div>
+        </div>
+    );
+}
+
+function MessageOutcomeBadges({ message }: { message: MessageDto }) {
+    const { t } = useTranslation();
+    const summary = getMessageOutcomeSummary(message);
+    if (!summary.hasSnapshot && !summary.hasMedia) {
+        return null;
+    }
+
+    return (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            {summary.hasSnapshot ? (
+                <Badge variant="outline" className="text-[10px] uppercase">
+                    {t("workspace.ui.messageOutcome.artifactLinked")}
+                </Badge>
+            ) : null}
+            {summary.hasMedia ? (
+                <Badge variant={summary.degraded ? "secondary" : "success"} className="text-[10px] uppercase">
+                    {t("workspace.ui.messageOutcome.mediaCount", {
+                        resolved: summary.resolvedCount,
+                        total: message.metadata?.mediaResolution?.mediaKeys.length ?? 0,
+                    })}
+                </Badge>
+            ) : null}
+            {summary.failedCount > 0 ? (
+                <Badge variant="destructive" className="text-[10px] uppercase">
+                    {t("workspace.ui.messageOutcome.failedCount", { count: summary.failedCount })}
+                </Badge>
+            ) : null}
+        </div>
+    );
+}
+
+function RequestInsightDialog({
+    message,
+    open,
+    onOpenChange,
+}: {
+    message: MessageDto;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const { t } = useTranslation();
+    const metadata = message.metadata;
+    if (!metadata) return null;
+
+    const mediaResolution = metadata.mediaResolution;
+    const resolvedCount = getMediaResolvedCount(mediaResolution);
+    const failedCount = getMediaFailedCount(mediaResolution);
+    const systemMsg = metadata.promptingTrace?.messagesSentToLlm?.find((entry) => entry.role === "system");
+    const generatedArtifacts = metadata.generatedArtifacts;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle>{t("workspace.ui.requestInsight.title")}</DialogTitle>
+                    <DialogDescription>
+                        {t("workspace.ui.requestInsight.description")}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <ScrollArea className="max-h-[75vh] pr-4">
+                    <div className="space-y-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] uppercase">{message.role}</Badge>
+                            {metadata.provider ? (
+                                <Badge variant="outline" className="text-[10px] uppercase">{metadata.provider}</Badge>
+                            ) : null}
+                            {metadata.model ? (
+                                <Badge variant="secondary" className="text-[10px] uppercase">
+                                    {metadata.model.split("/").pop()}
+                                </Badge>
+                            ) : null}
+                            {mediaResolution ? (
+                                <Badge variant={mediaResolution.degraded ? "secondary" : "success"} className="text-[10px] uppercase">
+                                    {mediaResolution.degraded
+                                        ? t("workspace.ui.requestInsight.mediaDegraded")
+                                        : t("workspace.ui.requestInsight.mediaResolved")}
+                                </Badge>
+                            ) : null}
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            <MetaStat label={t("workspace.ui.requestInsight.snapshot")} value={clipIdentifier(metadata.snapshotId)} mono />
+                            <MetaStat label={t("workspace.ui.requestInsight.duration")} value={formatDuration(metadata.executionTimeMs)} />
+                            <MetaStat label={t("workspace.ui.requestInsight.tokens")} value={metadata.tokenUsage?.totalTokens?.toLocaleString() ?? "—"} />
+                            <MetaStat label={t("workspace.ui.requestInsight.cost")} value={formatCostEur(metadata.costEstimate?.amount) || "€0"} />
+                        </div>
+
+                        {mediaResolution ? (
+                            <div className="rounded-lg border border-border bg-background/60 p-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <div className="text-sm font-semibold text-foreground">{t("workspace.ui.requestInsight.mediaOutcomeTitle")}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {t("workspace.ui.requestInsight.mediaOutcomeSubtitle", {
+                                                count: mediaResolution.mediaKeys.length,
+                                            })}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        <Badge variant="success" className="text-[10px] uppercase">
+                                            {t("workspace.ui.requestInsight.resolvedCount", { count: resolvedCount })}
+                                        </Badge>
+                                        {failedCount > 0 ? (
+                                            <Badge variant="destructive" className="text-[10px] uppercase">
+                                                {t("workspace.ui.requestInsight.failedCount", { count: failedCount })}
+                                            </Badge>
+                                        ) : null}
+                                    </div>
+                                </div>
+                                {mediaResolution.directives?.length ? (
+                                    <div className="mt-3 space-y-2">
+                                        {mediaResolution.directives.slice(0, 6).map((directive) => (
+                                            <div key={directive.key} className="rounded-md border border-border bg-card/70 p-3">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <Badge variant="outline" className="text-[10px] uppercase">{directive.key}</Badge>
+                                                    <Badge
+                                                        variant={
+                                                            directive.status === "unresolved"
+                                                                ? "destructive"
+                                                                : directive.status === "fallback_resolved"
+                                                                    ? "secondary"
+                                                                    : "success"
+                                                        }
+                                                        className="text-[10px] uppercase"
+                                                    >
+                                                        {t(`workspace.ui.requestInsight.directiveStatus.${directive.status}`)}
+                                                    </Badge>
+                                                    {directive.provider ? (
+                                                        <span className="text-xs text-muted-foreground">{directive.provider}</span>
+                                                    ) : null}
+                                                </div>
+                                                {directive.semanticQuery ? (
+                                                    <p className="mt-2 text-sm text-foreground">{directive.semanticQuery}</p>
+                                                ) : null}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null}
+                            </div>
+                        ) : null}
+
+                        <DisclosurePanel
+                            title={t("workspace.ui.requestInsight.artifactSummaryTitle")}
+                            subtitle={t("workspace.ui.requestInsight.artifactSummarySubtitle")}
+                        >
+                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                <MetaStat
+                                    label={t("workspace.ui.requestInsight.structuredParse")}
+                                    value={metadata.structuredParseValid
+                                        ? t("workspace.ui.requestInsight.parseValid")
+                                        : t("workspace.ui.requestInsight.parseFailed")}
+                                />
+                                <MetaStat label={t("workspace.ui.requestInsight.htmlBytes")} value={generatedArtifacts?.html?.length?.toLocaleString() ?? "—"} />
+                                <MetaStat label={t("workspace.ui.requestInsight.cssBytes")} value={generatedArtifacts?.css?.length?.toLocaleString() ?? "—"} />
+                                <MetaStat label={t("workspace.ui.requestInsight.jsBytes")} value={generatedArtifacts?.js?.length?.toLocaleString() ?? "—"} />
+                            </div>
+                        </DisclosurePanel>
+
+                        <DisclosurePanel
+                            title={t("workspace.ui.requestInsight.technicalTraceTitle")}
+                            subtitle={t("workspace.ui.requestInsight.technicalTraceSubtitle")}
+                        >
+                            <div className="space-y-3">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <MetaStat label={t("workspace.ui.requestInsight.snapshotId")} value={metadata.snapshotId ?? "—"} mono />
+                                    <MetaStat label={t("workspace.ui.requestInsight.promptConfig")} value={metadata.promptingTrace?.promptConfigId ?? "—"} mono />
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <MetaStat label={t("workspace.ui.requestInsight.llmMessagesSent")} value={metadata.promptingTrace?.messagesSentToLlm?.length ?? 0} />
+                                    <MetaStat
+                                        label={t("workspace.ui.requestInsight.systemPromptEstimate")}
+                                        value={t("workspace.ui.requestInsight.systemPromptEstimateValue", {
+                                            count: estimateTokens(systemMsg?.content).toLocaleString(),
+                                        })}
+                                    />
+                                </div>
+                                {mediaResolution ? (
+                                    <>
+                                        <Separator />
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            <MetaStat label={t("workspace.ui.requestInsight.traceIds")} value={mediaResolution.traceIds.join(", ") || "—"} mono />
+                                            <MetaStat label={t("workspace.ui.requestInsight.assetIds")} value={mediaResolution.assetIds.join(", ") || "—"} mono />
+                                        </div>
+                                    </>
+                                ) : null}
+                            </div>
+                        </DisclosurePanel>
+                    </div>
+                </ScrollArea>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto | undefined; variant?: "message" | "global" }) {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
+    const [dialogOpen, setDialogOpen] = useState(false);
     const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -4866,6 +5139,9 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
     const cost = m.costEstimate;
     const trace = m.promptingTrace;
     const operation = m.operation;
+    const mediaResolution = m.mediaResolution;
+    const mediaResolvedCount = getMediaResolvedCount(mediaResolution);
+    const mediaFailedCount = getMediaFailedCount(mediaResolution);
 
     // Preprompt weight
     const systemMsg = trace?.messagesSentToLlm?.find((x) => x.role === "system");
@@ -4881,25 +5157,43 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
         if (usage) parts.push(`${usage.totalTokens.toLocaleString()} tok`);
         if (m.executionTimeMs) parts.push(formatDuration(m.executionTimeMs));
         if (cost?.amount) parts.push(formatCostEur(cost.amount));
-        return parts.length ? parts.join(" · ") : "info";
+        if (mediaResolution?.mediaKeys?.length) {
+            parts.push(t("workspace.ui.reqMeta.badgeMedia", {
+                resolved: mediaResolvedCount,
+                total: mediaResolution.mediaKeys.length,
+            }));
+        }
+        return parts.length ? parts.join(" · ") : t("workspace.ui.reqMeta.badgeInfo");
     })();
 
     return (
-        <div ref={containerRef} className="req-meta-info"
-            onMouseEnter={openTooltip}
-            onMouseLeave={() => setOpen(false)}
-        >
-            <button
-                type="button"
-                className="req-meta-badge"
-                onClick={() => setOpen((v) => !v)}
-                aria-label={tooltipTitle}
+        <>
+            <div ref={containerRef} className="req-meta-info flex items-center gap-2"
+                onMouseEnter={openTooltip}
+                onMouseLeave={() => setOpen(false)}
             >
-                ℹ {badgeLabel}
-            </button>
+                <button
+                    type="button"
+                    className="req-meta-badge"
+                    onClick={() => setOpen((v) => !v)}
+                    aria-label={tooltipTitle}
+                >
+                    ℹ {badgeLabel}
+                </button>
+                {(m.snapshotId || mediaResolution) ? (
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => setDialogOpen(true)}
+                    >
+                        {t("workspace.ui.requestInsight.openDetails")}
+                    </Button>
+                ) : null}
 
-            {open && (
-                <div className="req-meta-tooltip" style={tooltipStyle}>
+                {open && (
+                    <div className="req-meta-tooltip" style={tooltipStyle}>
                     <div className="req-meta-tooltip-title">{tooltipTitle}</div>
 
                     {operation && (
@@ -4932,6 +5226,39 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                             <span className="req-meta-label">{t("workspace.ui.reqMeta.finishReason")}</span>
                             <span className="req-meta-value">{m.finishReason}</span>
                         </div>
+                    )}
+                    {m.snapshotId && (
+                        <div className="req-meta-section">
+                            <span className="req-meta-label">{t("workspace.ui.reqMeta.snapshot")}</span>
+                            <span className="req-meta-value" style={{ fontSize: "0.6rem", wordBreak: "break-all" }}>{m.snapshotId}</span>
+                        </div>
+                    )}
+                    {mediaResolution && (
+                        <>
+                            <div className="req-meta-divider" />
+                            <div className="req-meta-section">
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.mediaStatus")}</span>
+                                <span className="req-meta-value">
+                                    {mediaResolution.degraded
+                                        ? t("workspace.ui.reqMeta.mediaDegraded")
+                                        : t("workspace.ui.reqMeta.mediaResolved")}
+                                </span>
+                            </div>
+                            <div className="req-meta-section">
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.mediaResolvedCount")}</span>
+                                <span className="req-meta-value">{mediaResolvedCount}</span>
+                            </div>
+                            <div className="req-meta-section">
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.mediaFailedCount")}</span>
+                                <span className="req-meta-value">{mediaFailedCount}</span>
+                            </div>
+                            <div className="req-meta-section">
+                                <span className="req-meta-label">{t("workspace.ui.reqMeta.mediaKeys")}</span>
+                                <span className="req-meta-value" style={{ wordBreak: "break-word" }}>
+                                    {mediaResolution.mediaKeys.length > 0 ? mediaResolution.mediaKeys.join(", ") : "—"}
+                                </span>
+                            </div>
+                        </>
                     )}
 
                     {/* Token usage */}
@@ -5028,9 +5355,15 @@ function RequestMetaInfo({ message, variant = "message" }: { message: MessageDto
                             </div>
                         </>
                     )}
-                </div>
-            )}
-        </div>
+                    </div>
+                )}
+            </div>
+            <RequestInsightDialog
+                message={message}
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+            />
+        </>
     );
 }
 
@@ -5101,6 +5434,7 @@ function MessageBubble({ message }: { message: MessageDto }) {
                         )}
                     </div>
                 )}
+                {!isUser && !isError ? <MessageOutcomeBadges message={message} /> : null}
                 {chatStructured ? (
                     <div>
                         <p style={{ margin: 0 }}>{chatStructured.summary}</p>

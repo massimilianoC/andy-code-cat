@@ -16,6 +16,14 @@ type StockRegenerator = {
         scope?: "project" | "user";
         suppressNotifications?: boolean;
         allowFallback?: boolean;
+        lineage?: {
+            conversationId?: string;
+            sourceMessageId?: string;
+            parentSnapshotId?: string;
+            mediaKey?: string;
+            semanticQuery?: string;
+            resolutionRoute?: string;
+        };
     }): Promise<{
         asset: ProjectAsset;
         assetUrl: string;
@@ -82,6 +90,13 @@ export class RegenerateMediaByKey {
             scope: input.scope,
             suppressNotifications: true,
             allowFallback: false,
+            lineage: {
+                conversationId: previousTrace.conversationId,
+                parentSnapshotId: input.snapshotId ?? previousTrace.snapshotId,
+                mediaKey: input.mediaKey,
+                semanticQuery: request.semanticQuery,
+                resolutionRoute: "edit-regenerate-media-key",
+            },
         });
 
         const traceInput: CreateMediaResolutionTraceInput = {

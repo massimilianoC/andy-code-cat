@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Conversation } from "../../../domain/entities/Conversation";
 import type { PreviewSnapshot } from "../../../domain/entities/PreviewSnapshot";
 import { ActivatePreviewSnapshot } from "../ActivatePreviewSnapshot";
 import { CreatePreviewSnapshot } from "../CreatePreviewSnapshot";
@@ -51,6 +52,52 @@ class MemoryPreviewSnapshotRepository {
     getActiveForProjects = vi.fn();
 }
 
+class MemoryConversationRepository {
+    conversations: Conversation[] = [{
+        id: "conversation-1",
+        projectId: "project-1",
+        userId: "user-1",
+        title: "Test",
+        totalTokens: 0,
+        totalCost: 0,
+        createdAt: new Date("2026-05-29T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-29T00:00:00.000Z"),
+        messages: [{
+            id: "message-1",
+            role: "assistant",
+            content: "Generated preview",
+            timestamp: new Date("2026-05-29T00:00:00.000Z"),
+            metadata: {
+                provider: "siliconflow",
+                model: "MiniMaxAI/MiniMax-M3",
+            },
+            backgroundTasks: [],
+        }],
+    }];
+
+    findById = vi.fn(async (conversationId: string, projectId: string) => {
+        return this.conversations.find((conversation) => conversation.id === conversationId && conversation.projectId === projectId) ?? null;
+    });
+
+    updateMessageMetadata = vi.fn(async (conversationId: string, projectId: string, messageId: string, metadata: Record<string, unknown>) => {
+        const conversation = this.conversations.find((entry) => entry.id === conversationId && entry.projectId === projectId);
+        const message = conversation?.messages.find((entry) => entry.id === messageId);
+        if (!message) return null;
+        message.metadata = {
+            ...(message.metadata ?? {}),
+            ...metadata,
+        };
+        return message;
+    });
+
+    create = vi.fn();
+    listForProject = vi.fn();
+    findForProject = vi.fn();
+    addMessage = vi.fn();
+    addBackgroundTask = vi.fn();
+    updateBackgroundTask = vi.fn();
+}
+
 describe("Preview snapshot media resolution guardrails", () => {
     it("attaches persisted media trace IDs after snapshot creation", async () => {
         const repository = new MemoryPreviewSnapshotRepository();
@@ -77,6 +124,54 @@ describe("Preview snapshot media resolution guardrails", () => {
         expect(traceRepository.attachSnapshot).toHaveBeenCalledWith("project-1", ["trace-1"], "snapshot-1");
     });
 
+    it("links the assistant message to the created snapshot and persisted media summary", async () => {
+        const previewRepository = new MemoryPreviewSnapshotRepository();
+        const traceRepository = { attachSnapshot: vi.fn(async () => undefined), createMany: vi.fn() };
+        const conversationRepository = new MemoryConversationRepository();
+        const useCase = new CreatePreviewSnapshot(
+            previewRepository as any,
+            traceRepository as any,
+            conversationRepository as any,
+        );
+
+        const snapshot = await useCase.execute({
+            projectId: "project-1",
+            conversationId: "conversation-1",
+            sourceMessageId: "message-1",
+            artifacts: { html: "<main></main>", css: "", js: "" },
+            metadata: {
+                mediaResolution: {
+                    version: "media-resolution-v1",
+                    traceIds: ["trace-1"],
+                    assetIds: ["asset-1"],
+                    mediaKeys: ["hero-main"],
+                    degraded: false,
+                    directives: [{
+                        key: "hero-main",
+                        status: "resolved",
+                        provider: "pexels",
+                        assetId: "asset-1",
+                    }],
+                },
+            },
+            activate: true,
+        });
+
+        expect(snapshot.id).toBe("snapshot-1");
+        expect(conversationRepository.updateMessageMetadata).toHaveBeenCalledWith(
+            "conversation-1",
+            "project-1",
+            "message-1",
+            expect.objectContaining({
+                snapshotId: "snapshot-1",
+                mediaResolution: expect.objectContaining({
+                    mediaKeys: ["hero-main"],
+                    traceIds: ["trace-1"],
+                }),
+            }),
+        );
+    });
+
     it("rejects active snapshot creation with unresolved media placeholders", async () => {
         const useCase = new CreatePreviewSnapshot(new MemoryPreviewSnapshotRepository() as any);
 
@@ -90,6 +185,22 @@ describe("Preview snapshot media resolution guardrails", () => {
             },
             activate: true,
         })).rejects.toThrow("Cannot activate preview snapshot with unresolved media placeholders");
+    });
+
+    it("rejects snapshot creation when the provided source message does not belong to the conversation", async () => {
+        const useCase = new CreatePreviewSnapshot(
+            new MemoryPreviewSnapshotRepository() as any,
+            undefined,
+            new MemoryConversationRepository() as any,
+        );
+
+        await expect(useCase.execute({
+            projectId: "project-1",
+            conversationId: "conversation-1",
+            sourceMessageId: "missing-message",
+            artifacts: { html: "<main></main>", css: "", js: "" },
+            activate: true,
+        })).rejects.toThrow('Source message "missing-message" not found');
     });
 
     it("rejects activating existing snapshots with unresolved media placeholders", async () => {

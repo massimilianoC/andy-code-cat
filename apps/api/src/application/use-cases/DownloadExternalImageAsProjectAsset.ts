@@ -36,7 +36,16 @@ export class DownloadExternalImageAsProjectAsset {
         resolved: ResolvedImageSearchResult;
         targetMode?: "foreground" | "background";
         scope?: "project" | "user";
-        sourceContext?: Record<string, unknown>;
+        sourceContext?: {
+            route?: string;
+            targetSelector?: string;
+            offset?: number;
+            conversationId?: string;
+            sourceMessageId?: string;
+            parentSnapshotId?: string;
+            mediaKey?: string;
+            semanticQuery?: string;
+        };
     }): Promise<ProjectAsset> {
         const startedAt = new Date();
         const downloaded = await this.downloader.download(input.resolved.url);
@@ -67,6 +76,13 @@ export class DownloadExternalImageAsProjectAsset {
             outputMimeType: downloaded.mimeType,
             width: input.resolved.width,
             height: input.resolved.height,
+            conversationId: input.sourceContext?.conversationId,
+            sourceMessageId: input.sourceContext?.sourceMessageId,
+            parentSnapshotId: input.sourceContext?.parentSnapshotId,
+            mediaKey: input.sourceContext?.mediaKey,
+            semanticQuery: input.sourceContext?.semanticQuery ?? input.query,
+            resolutionRoute: input.sourceContext?.route,
+            fallbackUsed: input.resolved.fallbackUsed,
             providerResponse: {
                 query: input.query,
                 attribution: input.resolved.attribution,
