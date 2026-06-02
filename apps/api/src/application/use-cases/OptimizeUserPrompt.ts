@@ -13,7 +13,12 @@ import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 import { buildOptimizeUserPromptRequest } from "../prompting/optimizeUserPromptInstruction";
 import { buildProjectKnowledgeLayer } from "../llm/systemPromptLayers";
-import { resolvePromptTaskSettingFromConfig, type PromptTaskSetting } from "../../domain/entities/PlatformConfig";
+import {
+    resolveAttachmentPolicyFromConfig,
+    resolveDocumentContextPolicyFromConfig,
+    resolvePromptTaskSettingFromConfig,
+    type PromptTaskSetting,
+} from "../../domain/entities/PlatformConfig";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
 
@@ -317,13 +322,43 @@ export class OptimizeUserPrompt {
 
         const effectiveTaskKey = input.taskKey ?? TASK_KEY;
         const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, productKey, effectiveTaskKey);
+        const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, productKey);
+        const documentContextPolicy = resolveDocumentContextPolicyFromConfig(platformConfig, productKey);
         const allAssets = await this.assetRepository.listByProject(input.projectId, input.userId).catch(() => []);
         const selectedAssets = input.assetIds?.length
             ? allAssets.filter((asset) => input.assetIds!.includes(asset.id))
-            : allAssets.filter((asset) => asset.useInProject || Boolean(asset.descriptionText)).slice(0, 6);
+            : allAssets
+                .filter((asset) => asset.useInProject || Boolean(asset.descriptionText))
+                .slice(0, documentContextPolicy.maxAssetsPerPrompt);
+
+        if (selectedAssets.length > attachmentPolicy.maxAttachmentsPerPrompt) {
+            throw Object.assign(
+                new Error(`Too many assets selected for optimization (max ${attachmentPolicy.maxAttachmentsPerPrompt})`),
+                { statusCode: 422, code: "ATTACHMENT_LIMIT_EXCEEDED" },
+            );
+        }
+
+        const oversizedAsset = selectedAssets.find((asset) => asset.fileSize > attachmentPolicy.maxFileSizeBytes);
+        if (oversizedAsset) {
+            throw Object.assign(
+                new Error(`Selected asset exceeds per-file size limit (${oversizedAsset.originalName})`),
+                { statusCode: 413, code: "ATTACHMENT_FILE_TOO_LARGE" },
+            );
+        }
+
+        const selectedTotalBytes = selectedAssets.reduce((acc, asset) => acc + asset.fileSize, 0);
+        if (selectedTotalBytes > attachmentPolicy.maxTotalBytes) {
+            throw Object.assign(new Error("Selected assets exceed total size limit for optimization"), {
+                statusCode: 422,
+                code: "ATTACHMENT_TOTAL_SIZE_EXCEEDED",
+            });
+        }
 
         const layerDContext = env.enrichmentInjectLayerD
-            ? buildProjectKnowledgeLayer(selectedAssets, { maxChars: 6000, maxAssets: 3 })
+            ? buildProjectKnowledgeLayer(selectedAssets, {
+                maxChars: 6000,
+                maxAssets: documentContextPolicy.maxAssetsPerPrompt,
+            })
             : "";
 
         const { systemPrompt, userPrompt } = buildOptimizeUserPromptRequest({
