@@ -70,4 +70,68 @@ describe("buildChatCompletionRequestBody", () => {
         expect(body).not.toHaveProperty("enable_thinking");
         expect(body).not.toHaveProperty("thinking_budget");
     });
+
+    it("uses strict JSON schema for OpenRouter models that advertise structured outputs", () => {
+        const body = buildChatCompletionRequestBody({
+            ...baseInput,
+            provider: "openrouter",
+            model: "openai/gpt-4o-mini",
+            structuredOutputMode: "artifact",
+            supportedParameters: ["structured_outputs"],
+        });
+
+        expect(body).toMatchObject({
+            response_format: {
+                type: "json_schema",
+                json_schema: {
+                    name: "andy_artifact_response",
+                    strict: true,
+                },
+            },
+            provider: { require_parameters: true },
+        });
+    });
+
+    it("falls back to JSON mode for OpenRouter models that only advertise response_format", () => {
+        const body = buildChatCompletionRequestBody({
+            ...baseInput,
+            provider: "openrouter",
+            model: "some/model",
+            structuredOutputMode: "artifact",
+            supportedParameters: ["response_format"],
+        });
+
+        expect(body).toMatchObject({
+            response_format: { type: "json_object" },
+            provider: { require_parameters: true },
+        });
+    });
+
+    it("keeps unsupported OpenRouter models selectable without forcing response_format", () => {
+        const body = buildChatCompletionRequestBody({
+            ...baseInput,
+            provider: "openrouter",
+            model: "legacy/model",
+            structuredOutputMode: "artifact",
+        });
+
+        expect(body).not.toHaveProperty("response_format");
+        expect(body).not.toHaveProperty("provider");
+    });
+
+    it("uses SiliconFlow JSON mode conservatively for compatible artifact models", () => {
+        const compatible = buildChatCompletionRequestBody({
+            ...baseInput,
+            model: "MiniMaxAI/MiniMax-M2.5",
+            structuredOutputMode: "artifact",
+        });
+        const excluded = buildChatCompletionRequestBody({
+            ...baseInput,
+            model: "deepseek-ai/DeepSeek-V3.2",
+            structuredOutputMode: "artifact",
+        });
+
+        expect(compatible).toMatchObject({ response_format: { type: "json_object" } });
+        expect(excluded).not.toHaveProperty("response_format");
+    });
 });

@@ -33,7 +33,7 @@ describe("hydrateProviderCatalog", () => {
             ok: true,
             json: async () => ({
                 data: [
-                    { id: "google/gemma-4-31b-it:free", architecture: { modality: "text->text" }, pricing: { prompt: "0", completion: "0" } },
+                    { id: "google/gemma-4-31b-it:free", architecture: { modality: "text->text" }, pricing: { prompt: "0", completion: "0" }, supported_parameters: ["response_format"] },
                     { id: "black-forest-labs/flux-1-schnell", architecture: { modality: "text->image" } },
                 ],
             }),
@@ -49,6 +49,8 @@ describe("hydrateProviderCatalog", () => {
         expect(hydrated.models[0]?.priceTier).toBe("free");
         expect(hydrated.models[0]?.isDefault).toBe(true);
         expect(hydrated.models[0]?.capabilities).toEqual(["chat"]);
+        expect(hydrated.models[0]?.promptTemplate).toContain("## MODEL-SPECIFIC GUIDANCE");
+        expect(hydrated.models[0]?.supportedParameters).toEqual(["response_format"]);
         expect(hydrated.models[1]?.capabilities).toEqual(["image_generation"]);
         expect(hydrated.models[2]?.capabilities).toEqual(["chat"]);
     });
