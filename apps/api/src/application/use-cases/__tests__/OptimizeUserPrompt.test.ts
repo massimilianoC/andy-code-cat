@@ -29,7 +29,7 @@ function streamResponse(lines: string[]) {
     );
 }
 
-function createUseCase() {
+function createUseCase(platformConfig: unknown = null) {
     const projectRepository = {
         findByIdForUser: vi.fn(async () => ({
             id: "project-1",
@@ -43,7 +43,7 @@ function createUseCase() {
     const moodboardRepository = { findByProjectId: vi.fn(async () => null) };
     const userStyleProfileRepository = { findByUserId: vi.fn(async () => null) };
     const assetRepository = { listByProject: vi.fn(async () => []) };
-    const platformConfigRepository = { get: vi.fn(async () => null) };
+    const platformConfigRepository = { get: vi.fn(async () => platformConfig) };
     const userRepository = { incrementTokensConsumed: vi.fn(async () => undefined) };
     const promptExecutionLogRepository = { create: vi.fn(async () => undefined) };
     const getLlmCatalog = {
@@ -119,5 +119,41 @@ describe("OptimizeUserPrompt", () => {
             optimizedPrompt: "Landing page concreta con hero fotografico e CTA chiara.",
             status: "succeeded",
         }));
+    });
+
+    it("sends the expanded budget for a persisted legacy zero-effort optimizer setting", async () => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{
+                message: { content: "Prompt ottimizzato completo." },
+                finish_reason: "stop",
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+        }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { useCase } = createUseCase({
+            governanceByProduct: {
+                default: {
+                    promptTaskSettings: {
+                        zero_effort_optimize: {
+                            maxCompletionTokens: 1200,
+                        },
+                    },
+                },
+            },
+        });
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            taskKey: "zero_effort_optimize",
+        });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.max_tokens).toBe(32000);
     });
 });
