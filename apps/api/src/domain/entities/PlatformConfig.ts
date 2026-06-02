@@ -15,9 +15,6 @@ export interface PromptTaskSetting {
     systemTemplate: string;
 }
 
-const LEGACY_ZERO_EFFORT_OPTIMIZER_MAX_COMPLETION_TOKENS = 1200;
-const ZERO_EFFORT_OPTIMIZER_MAX_COMPLETION_TOKENS = 32000;
-
 export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     optimize_user_prompt: {
         enabled: true,
@@ -56,7 +53,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M2.5",
         temperature: 0.7,
-        maxCompletionTokens: ZERO_EFFORT_OPTIMIZER_MAX_COMPLETION_TOKENS,
+        maxCompletionTokens: 1200,
         systemTemplate: "",
     },
     zero_effort_generate: {
@@ -171,30 +168,6 @@ export interface ProductNginxConfig {
     extraServerDirectives: string;
 }
 
-export interface ProductAttachmentPolicy {
-    maxAttachmentsPerPrompt: number;
-    maxFileSizeBytes: number;
-    maxTotalBytes: number;
-    warningThresholdBytes: number;
-}
-
-export interface ProductDocumentContextPolicy {
-    maxAssetsPerPrompt: number;
-    fallbackInlineExtractionMaxAssets: number;
-}
-
-export const DEFAULT_PRODUCT_ATTACHMENT_POLICY: ProductAttachmentPolicy = {
-    maxAttachmentsPerPrompt: 10,
-    maxFileSizeBytes: 10 * 1024 * 1024,
-    maxTotalBytes: 100 * 1024 * 1024,
-    warningThresholdBytes: 80 * 1024 * 1024,
-};
-
-export const DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY: ProductDocumentContextPolicy = {
-    maxAssetsPerPrompt: 10,
-    fallbackInlineExtractionMaxAssets: 10,
-};
-
 export interface ProductGovernanceConfig {
     promptTemplates: ProductPromptTemplates;
     promptTaskSettings?: Record<string, PromptTaskSetting>;
@@ -202,8 +175,6 @@ export interface ProductGovernanceConfig {
     cookieBanner?: ProductCookieBannerConfig;
     legal?: ProductLegalConfig;
     nginx: ProductNginxConfig;
-    attachmentPolicy?: ProductAttachmentPolicy;
-    documentContextPolicy?: ProductDocumentContextPolicy;
 }
 
 /**
@@ -295,60 +266,13 @@ export function resolvePromptTaskSettingFromConfig(
     const defaultTask = (DEFAULT_PROMPT_TASK_SETTINGS[taskKey] ?? DEFAULT_PROMPT_TASK_SETTINGS.optimize_user_prompt)!;
     const fromDefault = platformConfig?.governanceByProduct?.default?.promptTaskSettings?.[taskKey];
     const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.promptTaskSettings?.[taskKey];
-    const configuredMaxCompletionTokens =
-        fromProduct?.maxCompletionTokens ?? fromDefault?.maxCompletionTokens ?? defaultTask.maxCompletionTokens;
-    // Existing deployments may have persisted the old cost-saving default. It was
-    // too small for rich Vibe/Xero briefs and caused provider-side truncation.
-    const maxCompletionTokens =
-        taskKey === "zero_effort_optimize"
-            && configuredMaxCompletionTokens === LEGACY_ZERO_EFFORT_OPTIMIZER_MAX_COMPLETION_TOKENS
-            ? ZERO_EFFORT_OPTIMIZER_MAX_COMPLETION_TOKENS
-            : configuredMaxCompletionTokens;
 
     return {
         enabled: fromProduct?.enabled ?? fromDefault?.enabled ?? defaultTask.enabled,
         provider: fromProduct?.provider || fromDefault?.provider || defaultTask.provider,
         model: fromProduct?.model || fromDefault?.model || defaultTask.model,
         temperature: fromProduct?.temperature ?? fromDefault?.temperature ?? defaultTask.temperature,
-        maxCompletionTokens,
+        maxCompletionTokens: fromProduct?.maxCompletionTokens ?? fromDefault?.maxCompletionTokens ?? defaultTask.maxCompletionTokens,
         systemTemplate: fromProduct?.systemTemplate || fromDefault?.systemTemplate || defaultTask.systemTemplate,
-    };
-}
-
-export function resolveAttachmentPolicyFromConfig(
-    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
-    productKey: string,
-): ProductAttachmentPolicy {
-    const fromDefault = platformConfig?.governanceByProduct?.default?.attachmentPolicy;
-    const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.attachmentPolicy;
-    const merged: ProductAttachmentPolicy = {
-        ...DEFAULT_PRODUCT_ATTACHMENT_POLICY,
-        ...(fromDefault ?? {}),
-        ...(fromProduct ?? {}),
-    };
-    const maxTotalBytes = Math.max(1, merged.maxTotalBytes);
-    return {
-        ...merged,
-        maxAttachmentsPerPrompt: Math.max(1, merged.maxAttachmentsPerPrompt),
-        maxFileSizeBytes: Math.max(1, merged.maxFileSizeBytes),
-        maxTotalBytes,
-        warningThresholdBytes: Math.min(Math.max(1, merged.warningThresholdBytes), maxTotalBytes),
-    };
-}
-
-export function resolveDocumentContextPolicyFromConfig(
-    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
-    productKey: string,
-): ProductDocumentContextPolicy {
-    const fromDefault = platformConfig?.governanceByProduct?.default?.documentContextPolicy;
-    const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.documentContextPolicy;
-    const merged: ProductDocumentContextPolicy = {
-        ...DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY,
-        ...(fromDefault ?? {}),
-        ...(fromProduct ?? {}),
-    };
-    return {
-        maxAssetsPerPrompt: Math.max(1, merged.maxAssetsPerPrompt),
-        fallbackInlineExtractionMaxAssets: Math.max(1, merged.fallbackInlineExtractionMaxAssets),
     };
 }

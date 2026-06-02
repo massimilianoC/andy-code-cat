@@ -65,7 +65,7 @@ export const llmFocusContextSchema = z.object({
 
 export const llmChatPreviewSchema = z.object({
     message: z.string().min(1).max(20000),
-    assetIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+    assetIds: z.array(z.string().min(1).max(120)).max(12).optional(),
     provider: z.string().min(1).max(80).optional(),
     model: z.string().min(1).max(200).optional(),
     capability: z.enum(["chat", "vision", "image_generation", "video_generation", "tools", "embeddings"]).optional(),
@@ -104,7 +104,7 @@ export const llmPromptConfigSchema = z.object({
 
 export const optimizePromptSchema = z.object({
     rawPrompt: z.string().min(1).max(20000),
-    assetIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+    assetIds: z.array(z.string().min(1).max(120)).max(12).optional(),
     conversationId: z.string().min(1).max(120).optional(),
     sessionId: z.string().min(1).max(120).optional(),
     provider: z.string().min(1).max(80).optional(),
