@@ -1,6 +1,10 @@
 import type { PlatformConfigRepository } from "../../../domain/repositories/PlatformConfigRepository";
 import { DEFAULT_USER_LIMITS } from "../../../domain/entities/User";
 import { resolveMediaProviderPolicy } from "../../media/mediaProviderPolicy";
+import {
+    DEFAULT_PRODUCT_ATTACHMENT_POLICY,
+    DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY,
+} from "../../../domain/entities/PlatformConfig";
 
 export class GetPlatformConfig {
     constructor(private readonly configRepository: PlatformConfigRepository) { }
@@ -68,6 +72,28 @@ export class GetPlatformConfig {
                         cacheTtlSeconds: governance.nginx.cacheTtlSeconds ?? 300,
                         clientMaxBodySizeMb: governance.nginx.clientMaxBodySizeMb ?? 20,
                         extraServerDirectives: governance.nginx.extraServerDirectives ?? "",
+                    },
+                    attachmentPolicy: {
+                        maxAttachmentsPerPrompt:
+                            governance.attachmentPolicy?.maxAttachmentsPerPrompt
+                            ?? DEFAULT_PRODUCT_ATTACHMENT_POLICY.maxAttachmentsPerPrompt,
+                        maxFileSizeBytes:
+                            governance.attachmentPolicy?.maxFileSizeBytes
+                            ?? DEFAULT_PRODUCT_ATTACHMENT_POLICY.maxFileSizeBytes,
+                        maxTotalBytes:
+                            governance.attachmentPolicy?.maxTotalBytes
+                            ?? DEFAULT_PRODUCT_ATTACHMENT_POLICY.maxTotalBytes,
+                        warningThresholdBytes:
+                            governance.attachmentPolicy?.warningThresholdBytes
+                            ?? DEFAULT_PRODUCT_ATTACHMENT_POLICY.warningThresholdBytes,
+                    },
+                    documentContextPolicy: {
+                        maxAssetsPerPrompt:
+                            governance.documentContextPolicy?.maxAssetsPerPrompt
+                            ?? DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY.maxAssetsPerPrompt,
+                        fallbackInlineExtractionMaxAssets:
+                            governance.documentContextPolicy?.fallbackInlineExtractionMaxAssets
+                            ?? DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY.fallbackInlineExtractionMaxAssets,
                     },
                 },
             ])

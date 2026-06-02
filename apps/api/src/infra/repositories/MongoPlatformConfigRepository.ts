@@ -1,6 +1,12 @@
 import type { Collection } from "mongodb";
 import { getDb } from "../db/mongo";
-import { DEFAULT_PROMPT_TASK_SETTINGS, type PlatformConfig, type PlatformCostRates } from "../../domain/entities/PlatformConfig";
+import {
+    DEFAULT_PRODUCT_ATTACHMENT_POLICY,
+    DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY,
+    DEFAULT_PROMPT_TASK_SETTINGS,
+    type PlatformConfig,
+    type PlatformCostRates,
+} from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository, UpdatePlatformConfigInput } from "../../domain/repositories/PlatformConfigRepository";
 import { DEFAULT_USER_LIMITS } from "../../domain/entities/User";
 
@@ -71,6 +77,12 @@ const DEFAULT_PRODUCT_GOVERNANCE: NonNullable<PlatformConfig["governanceByProduc
         cacheTtlSeconds: 300,
         clientMaxBodySizeMb: 20,
         extraServerDirectives: "",
+    },
+    attachmentPolicy: {
+        ...DEFAULT_PRODUCT_ATTACHMENT_POLICY,
+    },
+    documentContextPolicy: {
+        ...DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY,
     },
 };
 
@@ -147,6 +159,14 @@ export class MongoPlatformConfigRepository implements PlatformConfigRepository {
                     nginx: {
                         ...base.nginx,
                         ...(patch.nginx ?? {}),
+                    },
+                    attachmentPolicy: {
+                        ...(base.attachmentPolicy ?? DEFAULT_PRODUCT_ATTACHMENT_POLICY),
+                        ...(patch.attachmentPolicy ?? {}),
+                    },
+                    documentContextPolicy: {
+                        ...(base.documentContextPolicy ?? DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY),
+                        ...(patch.documentContextPolicy ?? {}),
                     },
                 };
             }

@@ -19,7 +19,11 @@ import { PrepareGenerationWorkspace } from "../../../application/use-cases/Prepa
 import { LaunchZeroEffortProject } from "../../../application/use-cases/LaunchZeroEffortProject";
 import type { GenerationWorkspace } from "../../../domain/entities/GenerationWorkspace";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
-import { resolvePromptTaskSettingFromConfig } from "../../../domain/entities/PlatformConfig";
+import {
+    resolveAttachmentPolicyFromConfig,
+    resolveDocumentContextPolicyFromConfig,
+    resolvePromptTaskSettingFromConfig,
+} from "../../../domain/entities/PlatformConfig";
 
 function toWorkspaceDto(workspace: GenerationWorkspace): GenerationWorkspaceDto {
     return {
@@ -123,15 +127,20 @@ export function createPipelineRoutes(): Router {
     router.get(
         "/projects/:projectId/pipelines/zero-effort/config",
         sandboxMiddleware,
-        async (_req: RequestWithContext, res: Response, next: NextFunction) => {
+        async (req: RequestWithContext, res: Response, next: NextFunction) => {
             try {
                 const platformConfig = await platformConfigRepository.get();
-                const productKey = "default";
+                const project = await projectRepository
+                    .findByIdForUser(req.sandbox!.projectId, req.auth!.userId)
+                    .catch(() => null);
+                const productKey = project?.presetId ?? "default";
                 const optimize = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "zero_effort_optimize");
                 const generate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "zero_effort_generate");
                 const vibeGenerate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "vibe_mode_generate");
                 const godModeGenerate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "god_mode_generate");
-                res.json({ optimize, generate, vibeGenerate, godModeGenerate });
+                const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, productKey);
+                const documentContextPolicy = resolveDocumentContextPolicyFromConfig(platformConfig, productKey);
+                res.json({ optimize, generate, vibeGenerate, godModeGenerate, attachmentPolicy, documentContextPolicy });
             } catch (error) {
                 next(error);
             }

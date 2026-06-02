@@ -51,6 +51,7 @@ import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
 import { PRESET_MAP } from "../../../domain/entities/ProjectPreset";
+import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
 
 type LlmRuntimeContext = {
     providerCatalog: {
@@ -338,6 +339,8 @@ export function createLlmRoutes(): Router {
             ?? platformConfig?.governanceByProduct?.["default"]?.promptTemplates;
         const governanceSystemPrompt = governanceTemplates?.generationSystem || undefined;
         const governanceFocusedBasePrompt = governanceTemplates?.focusedEditSystem || undefined;
+        const productKey = project?.presetId ?? "default";
+        const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, productKey);
 
         const styleBlock = buildStyleContextBlock(userProfile, moodboard);
         const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
@@ -345,6 +348,32 @@ export function createLlmRoutes(): Router {
         const contextAssets = selectedAssetIds.size > 0
             ? projectAssets.filter((asset) => selectedAssetIds.has(asset.id))
             : projectAssets;
+
+        if (selectedAssetIds.size > 0) {
+            if (contextAssets.length > attachmentPolicy.maxAttachmentsPerPrompt) {
+                throw new HttpError(
+                    `Too many attachments selected (max ${attachmentPolicy.maxAttachmentsPerPrompt})`,
+                    { statusCode: 422, code: "ATTACHMENT_LIMIT_EXCEEDED" },
+                );
+            }
+
+            const oversizedAsset = contextAssets.find((asset) => asset.fileSize > attachmentPolicy.maxFileSizeBytes);
+            if (oversizedAsset) {
+                throw new HttpError(
+                    `Attachment exceeds per-file size limit (${oversizedAsset.originalName})`,
+                    { statusCode: 413, code: "ATTACHMENT_FILE_TOO_LARGE" },
+                );
+            }
+
+            const selectedTotalBytes = contextAssets.reduce((acc, asset) => acc + asset.fileSize, 0);
+            if (selectedTotalBytes > attachmentPolicy.maxTotalBytes) {
+                throw new HttpError(
+                    "Selected attachments exceed total size limit",
+                    { statusCode: 422, code: "ATTACHMENT_TOTAL_SIZE_EXCEEDED" },
+                );
+            }
+        }
+
         const documentContextLayer = buildProjectKnowledgeLayer(contextAssets, {
             includeUnenrichedAssets: selectedAssetIds.size > 0,
         });
@@ -451,6 +480,11 @@ export function createLlmRoutes(): Router {
     router.get("/projects/:projectId/llm/prompt-config", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const config = await getLlmPromptConfig.execute(req.sandbox!.projectId);
+            const [platformConfig, project] = await Promise.all([
+                platformConfigRepo.get().catch(() => null),
+                projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId).catch(() => null),
+            ]);
+            const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, project?.presetId ?? "default");
             res.json({
                 config: {
                     ...config,
@@ -465,6 +499,8 @@ export function createLlmRoutes(): Router {
                         historyMaxMessages: env.LLM_MAX_HISTORY_MESSAGES,
                         historyMessageMaxChars: env.LLM_HISTORY_MESSAGE_MAX_CHARS,
                         maxCompletionTokens: env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,
+                        attachmentMaxFiles: attachmentPolicy.maxAttachmentsPerPrompt,
+                        attachmentMaxTotalBytes: attachmentPolicy.maxTotalBytes,
                     },
                 },
             });
