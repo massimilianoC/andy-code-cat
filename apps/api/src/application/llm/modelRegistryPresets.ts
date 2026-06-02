@@ -64,6 +64,24 @@ const ROLE_FOCUSED_PROMPTS: Partial<Record<PipelineModelRole, string>> = {
     vision_fast: "Prefer minimal visual deltas that are easy to validate.",
 };
 
+const MINIMAX_EXECUTION_PROTOCOL = [
+    "## MINIMAX EXECUTION PROTOCOL",
+    "Follow this protocol strictly for artifact generation:",
+    "- Do not expose chain-of-thought, planning notes, drafts, self-review, or alternative designs.",
+    "- Do not restate the brief. Decide once, then emit the final raw JSON object immediately.",
+    "- Perform at most one silent validation pass. Never rewrite the artifact repeatedly in the response.",
+    "- Copy platform literals exactly: asset://media/<key>, style.css, and script.js. Never insert whitespace inside URLs or placeholders.",
+    "- The response is invalid if it contains markdown fences, prose outside JSON, placeholder ellipses, or partial artifact drafts.",
+].join("\n");
+
+function appendModelFamilyGuidance(modelId: string, promptTemplate: string): string {
+    if (!/minimax/i.test(modelId) || promptTemplate.includes("## MINIMAX EXECUTION PROTOCOL")) {
+        return promptTemplate;
+    }
+
+    return [promptTemplate, MINIMAX_EXECUTION_PROTOCOL].filter(Boolean).join("\n\n");
+}
+
 export function humanizeModelId(modelId: string): string {
     const tail = modelId.split("/").pop() ?? modelId;
     return tail
@@ -73,11 +91,13 @@ export function humanizeModelId(modelId: string): string {
 }
 
 export function decorateSeedModel(model: LlmModel): LlmModel {
+    const promptTemplate = model.promptTemplate ?? ROLE_PROMPT_TEMPLATES[model.role];
+
     return {
         ...model,
         displayName: model.displayName ?? humanizeModelId(model.id),
         description: model.description ?? ROLE_DESCRIPTIONS[model.role],
-        promptTemplate: model.promptTemplate ?? ROLE_PROMPT_TEMPLATES[model.role],
+        promptTemplate: appendModelFamilyGuidance(model.id, promptTemplate),
         focusPromptTemplate: model.focusPromptTemplate ?? ROLE_FOCUSED_PROMPTS[model.role] ?? "",
     };
 }
