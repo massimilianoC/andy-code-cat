@@ -27,6 +27,16 @@ const DEFAULT_PRODUCT_KEY = "default";
 const DEFAULT_PROMPT_TASK_KEY = "optimize_user_prompt";
 const TEMPLATE_DRAFT_TASK_KEY = "draft_template_model";
 const NGINX_RUNTIME_ENABLED = false;
+const DEFAULT_ATTACHMENT_POLICY = {
+    maxAttachmentsPerPrompt: 10,
+    maxFileSizeBytes: 10 * 1024 * 1024,
+    maxTotalBytes: 100 * 1024 * 1024,
+    warningThresholdBytes: 80 * 1024 * 1024,
+};
+const DEFAULT_DOCUMENT_CONTEXT_POLICY = {
+    maxAssetsPerPrompt: 10,
+    fallbackInlineExtractionMaxAssets: 10,
+};
 
 const PROMPT_TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
     [DEFAULT_PROMPT_TASK_KEY]: {
@@ -110,6 +120,12 @@ const EMPTY_GOVERNANCE: ProductGovernanceDto = {
         cacheTtlSeconds: 300,
         clientMaxBodySizeMb: 20,
         extraServerDirectives: "",
+    },
+    attachmentPolicy: {
+        ...DEFAULT_ATTACHMENT_POLICY,
+    },
+    documentContextPolicy: {
+        ...DEFAULT_DOCUMENT_CONTEXT_POLICY,
     },
 };
 
@@ -430,6 +446,8 @@ export default function AdminGovernancePage() {
             cookieBanner: { ...EMPTY_GOVERNANCE.cookieBanner, ...src.cookieBanner },
             legal: { ...EMPTY_GOVERNANCE.legal, ...src.legal },
             nginx: { ...EMPTY_GOVERNANCE.nginx, ...src.nginx },
+            attachmentPolicy: { ...DEFAULT_ATTACHMENT_POLICY, ...(src.attachmentPolicy ?? {}) },
+            documentContextPolicy: { ...DEFAULT_DOCUMENT_CONTEXT_POLICY, ...(src.documentContextPolicy ?? {}) },
         };
     }
 
@@ -502,6 +520,26 @@ export default function AdminGovernancePage() {
         setGovernance((prev) => ({ ...prev, nginx: { ...prev.nginx, [key]: value } }));
     }
 
+    function setAttachmentPolicy<K extends keyof NonNullable<ProductGovernanceDto["attachmentPolicy"]>>(
+        key: K,
+        value: NonNullable<ProductGovernanceDto["attachmentPolicy"]>[K],
+    ) {
+        setGovernance((prev) => ({
+            ...prev,
+            attachmentPolicy: { ...DEFAULT_ATTACHMENT_POLICY, ...(prev.attachmentPolicy ?? {}), [key]: value },
+        }));
+    }
+
+    function setDocumentContextPolicy<K extends keyof NonNullable<ProductGovernanceDto["documentContextPolicy"]>>(
+        key: K,
+        value: NonNullable<ProductGovernanceDto["documentContextPolicy"]>[K],
+    ) {
+        setGovernance((prev) => ({
+            ...prev,
+            documentContextPolicy: { ...DEFAULT_DOCUMENT_CONTEXT_POLICY, ...(prev.documentContextPolicy ?? {}), [key]: value },
+        }));
+    }
+
     function setCookieBanner<K extends keyof NonNullable<ProductGovernanceDto["cookieBanner"]>>(
         key: K,
         value: NonNullable<ProductGovernanceDto["cookieBanner"]>[K],
@@ -534,6 +572,8 @@ export default function AdminGovernancePage() {
 
     const cookieBanner = governance.cookieBanner ?? EMPTY_GOVERNANCE.cookieBanner!;
     const legal = governance.legal ?? EMPTY_GOVERNANCE.legal!;
+    const attachmentPolicy = governance.attachmentPolicy ?? DEFAULT_ATTACHMENT_POLICY;
+    const documentContextPolicy = governance.documentContextPolicy ?? DEFAULT_DOCUMENT_CONTEXT_POLICY;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -1057,6 +1097,73 @@ export default function AdminGovernancePage() {
                 {/* ── Runtime (Nginx) ────────────────────────────────────────── */}
                 {activeTab === "runtime" && (
                     <>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">Attachment & Document Context Policy</CardTitle>
+                                <CardDescription className="text-xs">
+                                    Backend-enforced limits for Vibe, chat attachments, upload cap warnings, and document context depth.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <Label>Max attachments per request</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={String(attachmentPolicy.maxAttachmentsPerPrompt)}
+                                            onChange={(e) => setAttachmentPolicy("maxAttachmentsPerPrompt", Number(e.target.value) || 1)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label>Max file size (MB)</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={String(Math.round(attachmentPolicy.maxFileSizeBytes / (1024 * 1024)))}
+                                            onChange={(e) => setAttachmentPolicy("maxFileSizeBytes", (Number(e.target.value) || 1) * 1024 * 1024)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label>Project total cap (MB)</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={String(Math.round(attachmentPolicy.maxTotalBytes / (1024 * 1024)))}
+                                            onChange={(e) => setAttachmentPolicy("maxTotalBytes", (Number(e.target.value) || 1) * 1024 * 1024)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label>Warning threshold (MB)</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={String(Math.round(attachmentPolicy.warningThresholdBytes / (1024 * 1024)))}
+                                            onChange={(e) => setAttachmentPolicy("warningThresholdBytes", (Number(e.target.value) || 1) * 1024 * 1024)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label>Layer D max assets</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={String(documentContextPolicy.maxAssetsPerPrompt)}
+                                            onChange={(e) => setDocumentContextPolicy("maxAssetsPerPrompt", Number(e.target.value) || 1)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label>Fallback extraction max assets</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={String(documentContextPolicy.fallbackInlineExtractionMaxAssets)}
+                                            onChange={(e) => setDocumentContextPolicy("fallbackInlineExtractionMaxAssets", Number(e.target.value) || 1)}
+                                        />
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
                         <Card>
                             <CardHeader>
                                 <CardTitle className="text-base">Nginx Runtime Parameters</CardTitle>

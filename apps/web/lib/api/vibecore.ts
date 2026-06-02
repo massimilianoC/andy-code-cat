@@ -1,5 +1,11 @@
 import { call } from "./call";
-import type { VibeClassifyResponse, AttachmentMeta, VibePrefillRequest, VibePrefillResponse } from "@andy-code-cat/contracts";
+import type {
+    VibeClassifyResponse,
+    AttachmentMeta,
+    VibePrefillRequest,
+    VibePrefillResponse,
+    VibeConfigResponse,
+} from "@andy-code-cat/contracts";
 
 export interface VibeClassifyInput {
     prompt: string;
@@ -22,6 +28,13 @@ export function prefillZeroEffort(
     input: VibePrefillRequest,
 ): Promise<VibePrefillResponse> {
     return call<VibePrefillResponse>("POST", "/v1/vibecore/prefill", input, {
+        Authorization: `Bearer ${token}`,
+    });
+}
+
+export function getVibeConfig(token: string, projectId?: string): Promise<VibeConfigResponse> {
+    const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+    return call<VibeConfigResponse>("GET", `/v1/vibecore/config${query}`, undefined, {
         Authorization: `Bearer ${token}`,
     });
 }
