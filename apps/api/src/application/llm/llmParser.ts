@@ -235,9 +235,9 @@ function extractFocusPatch(parsed: Partial<LlmStructuredResponse>): LlmStructure
     if (!fp) return undefined;
     if (!["html", "css", "js"].includes(fp.targetType)) return undefined;
     // anchor is optional in inspector mode (server derives it from selectedElement.outerHtml)
-    if (fp.anchor !== undefined && (typeof fp.anchor !== "string" || !fp.anchor.trim())) return undefined;
+    if (fp.anchor !== undefined && fp.anchor !== null && (typeof fp.anchor !== "string" || !fp.anchor.trim())) return undefined;
     if (typeof fp.replacement !== "string" || !fp.replacement.trim()) return undefined;
-    return fp;
+    return { ...fp, anchor: fp.anchor ?? undefined };
 }
 
 /**
@@ -252,18 +252,31 @@ function extractFocusPatch(parsed: Partial<LlmStructuredResponse>): LlmStructure
  * Accepts an already-parsed object, or a JSON-encoded string (some models double-encode it).
  * Returns undefined when the value is absent or an unparseable string.
  */
-function coerceManifestCandidate(value: unknown): unknown {
-    if (value === undefined || value === null) return undefined;
-    if (typeof value === "string") {
-        const trimmed = value.trim();
-        if (!trimmed) return undefined;
-        try {
-            return JSON.parse(trimmed);
-        } catch {
-            return undefined;
-        }
+function stripNullValues(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(stripNullValues);
+    }
+    if (value && typeof value === "object") {
+        return Object.fromEntries(
+            Object.entries(value)
+                .filter(([, nested]) => nested !== null)
+                .map(([key, nested]) => [key, stripNullValues(nested)]),
+        );
     }
     return value;
+}
+
+function coerceManifestCandidate(value: unknown): unknown {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value !== "string") return stripNullValues(value);
+
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    try {
+        return stripNullValues(JSON.parse(trimmed));
+    } catch {
+        return undefined;
+    }
 }
 
 function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredResponse | null {
@@ -473,7 +486,18 @@ function extractFirstJsonObject(text: string): string | null {
 }
 
 export function tryParseStructuredJson(raw: string): { structured: LlmStructuredResponse | null; parseValid: boolean } {
-    const trimmed = raw.trim();
+    // MiniMax OpenAI-compatible responses may prepend interleaved reasoning in
+    // <think> blocks inside content. Ignore those blocks before looking for the
+    // transactional artifact JSON so draft snippets cannot win the repair pass.
+    let trimmed = raw.trim();
+    while (/^<think>/i.test(trimmed)) {
+        const closingTag = trimmed.match(/<\/think>/i);
+        if (!closingTag || closingTag.index === undefined) {
+            trimmed = "";
+            break;
+        }
+        trimmed = trimmed.slice(closingTag.index + closingTag[0].length).trim();
+    }
 
     // Primary: explicit string operations to strip ```json ... ``` fences
     let stripped = trimmed;

@@ -5,6 +5,7 @@ import { parsePlainText } from "./PlainTextParser";
 import { parseHtml } from "./HtmlParser";
 import { parseExcel } from "./ExcelParser";
 import { parsePptx } from "./PptxParser";
+import { parseStructuredData } from "./StructuredDataParser";
 
 export interface DocumentParser {
     parse(buffer: Buffer, mimeType: string): Promise<ParsedDocument>;
@@ -20,11 +21,11 @@ const DOCX_MIMES = new Set([
 const CSV_MIMES = new Set(["text/csv", "application/csv"]);
 const PLAIN_MIMES = new Set([
     "text/plain", "text/markdown", "text/x-markdown",
-    "text/xml", "application/xml",
     "text/css",
     "text/javascript", "application/javascript",
-    "application/json",
 ]);
+const JSON_MIMES = new Set(["application/json"]);
+const XML_MIMES = new Set(["text/xml", "application/xml"]);
 const HTML_MIMES = new Set(["text/html", "application/xhtml+xml"]);
 const XLSX_MIMES = new Set([
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -60,6 +61,10 @@ export function getParser(mimeType: string): DocumentParser | null {
 
     if (PPTX_MIMES.has(mime)) {
         return { parse: (buf) => parsePptx(buf) };
+    }
+
+    if (JSON_MIMES.has(mime) || XML_MIMES.has(mime)) {
+        return { parse: (buf, mt) => Promise.resolve(parseStructuredData(buf, mt)) };
     }
 
     if (PLAIN_MIMES.has(mime)) {
