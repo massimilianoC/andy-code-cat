@@ -72,6 +72,13 @@ export interface AssetGenerationMetadataDto {
     outputMimeType?: string;
     width?: number;
     height?: number;
+    conversationId?: string;
+    sourceMessageId?: string;
+    parentSnapshotId?: string;
+    mediaKey?: string;
+    semanticQuery?: string;
+    resolutionRoute?: string;
+    fallbackUsed?: boolean;
     tokenUsage?: {
         promptTokens?: number;
         completionTokens?: number;

@@ -159,7 +159,9 @@ Current implemented baseline:
 
 - Chat-preview and stream routes call `ResolveArtifactMedia` before snapshot save.
 - Preview snapshots carry `metadata.mediaResolution` and active snapshots are blocked if unresolved `asset://media/*` remains.
+- When a preview snapshot is created from `sourceMessageId`, the backend patches the source assistant message with `metadata.snapshotId` and `metadata.mediaResolution` for conversation-first parity.
 - `media_resolution_traces` links media requests to assets and later snapshots.
+- `project_assets.generationMetadata` now persists first-class lineage for generated media (`conversationId`, `parentSnapshotId`, `mediaKey`, `semanticQuery`, `resolutionRoute`, `fallbackUsed`) so runtime/UI and operators do not need to parse provider-specific payloads for core joins.
 - `system_notifications` persists user/superadmin media fallback/failure and publish/export block events.
 - Publish/export guardrails block unresolved placeholders before provider calls, storage writes, export record creation, or ZIP generation.
 - Edit regeneration uses `POST /v1/projects/:projectId/media/:mediaKey/regenerate` when `data-media-key` exists and is primary-provider-only (`allowFallback: false`). Full artifact generation may still use configured fallback to complete the initial artifact.

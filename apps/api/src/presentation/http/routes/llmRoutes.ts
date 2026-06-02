@@ -69,6 +69,7 @@ type LlmRuntimeContext = {
             description?: string;
             promptTemplate?: string;
             focusPromptTemplate?: string;
+            supportedParameters?: string[];
             priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
             priceInputUsdPerM?: number;
             priceOutputUsdPerM?: number;
@@ -114,6 +115,30 @@ function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]
 function sendSse(res: RequestWithContext["res"], payload: unknown) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (res as any).write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function buildPromptExecutionMediaResolutionSummary(metadata?: MediaResolutionMetadata) {
+    if (!metadata) {
+        return undefined;
+    }
+
+    const resolvedCount = metadata.directives?.filter((directive) => directive.status === "resolved" || directive.status === "fallback_resolved").length
+        ?? metadata.assetIds?.length
+        ?? 0;
+    const failedCount = metadata.directives?.filter((directive) => directive.status === "unresolved").length ?? 0;
+
+    if (!metadata.degraded && resolvedCount === 0 && failedCount === 0 && (!metadata.mediaKeys || metadata.mediaKeys.length === 0)) {
+        return undefined;
+    }
+
+    return {
+        version: metadata.version,
+        resolvedCount,
+        failedCount,
+        degraded: metadata.degraded,
+        mediaKeys: metadata.mediaKeys,
+        traceIds: metadata.traceIds,
+    };
 }
 
 function getProviderStatus(providerKey: string, authType?: "api-key" | "bearer" | "none"): LlmProviderStatus {
@@ -714,6 +739,8 @@ export function createLlmRoutes(): Router {
                 body: JSON.stringify(buildChatCompletionRequestBody({
                     provider: context.providerCatalog.provider,
                     model: context.modelId,
+                    supportedParameters: context.providerCatalog.models.find((model) => model.id === context.modelId)?.supportedParameters,
+                    structuredOutputMode: "artifact",
                     maxTokens: Math.min(
                         body.max_tokens ?? env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,
                         env.LLM_MAX_COMPLETION_TOKENS
@@ -960,6 +987,7 @@ export function createLlmRoutes(): Router {
                 durationMs: Date.now() - startedAt,
                 simulated: false,
             };
+            const mediaResolutionSummary = buildPromptExecutionMediaResolutionSummary(result.mediaResolution);
 
             // ── Execution log (fire-and-forget) ──────────────────────────────
             ExecutionLogger.instance.emit({
@@ -1011,6 +1039,7 @@ export function createLlmRoutes(): Router {
                 inputPrompt: body.message.slice(0, 2000),
                 contextMeta: { usedMoodboard: false, usedUserProfile: false },
                 usage: result.usage,
+                mediaResolutionSummary,
                 costEstimate: result.costEstimate,
                 status: "succeeded",
                 durationMs: result.durationMs,
@@ -1126,6 +1155,8 @@ export function createLlmRoutes(): Router {
                     body: JSON.stringify(buildChatCompletionRequestBody({
                         provider: context.providerCatalog.provider,
                         model: context.modelId,
+                        supportedParameters: context.providerCatalog.models.find((model) => model.id === context.modelId)?.supportedParameters,
+                        structuredOutputMode: "artifact",
                         stream: true,
                         maxTokens: Math.min(
                             body.max_tokens ?? env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,
@@ -1483,6 +1514,7 @@ export function createLlmRoutes(): Router {
                 focusPatchApplied: focusPatchAppliedStream,
                 focusPatchParseError: focusPatchParseErrorStream,
             };
+            const mediaResolutionSummary = buildPromptExecutionMediaResolutionSummary(result.mediaResolution);
 
             // ── Execution log (fire-and-forget) ──────────────────────────────
             ExecutionLogger.instance.emit({
@@ -1534,6 +1566,7 @@ export function createLlmRoutes(): Router {
                 inputPrompt: body.message.slice(0, 2000),
                 contextMeta: { usedMoodboard: false, usedUserProfile: false },
                 usage: result.usage,
+                mediaResolutionSummary,
                 costEstimate: result.costEstimate,
                 status: "succeeded",
                 durationMs: result.durationMs,

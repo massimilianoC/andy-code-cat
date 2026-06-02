@@ -24,8 +24,10 @@ export class MongoMediaResolutionTraceRepository implements MediaResolutionTrace
         await Promise.all([
             col.createIndex({ projectId: 1, createdAt: -1 }, { background: true }),
             col.createIndex({ projectId: 1, snapshotId: 1 }, { background: true }),
+            col.createIndex({ projectId: 1, conversationId: 1, createdAt: -1 }, { background: true }),
             col.createIndex({ projectId: 1, resolvedAssetId: 1 }, { background: true }),
             col.createIndex({ projectId: 1, mediaKey: 1, createdAt: -1 }, { background: true }),
+            col.createIndex({ projectId: 1, conversationId: 1, mediaKey: 1, createdAt: -1 }, { background: true }),
             col.createIndex({ status: 1, createdAt: -1 }, { background: true }),
         ]);
 

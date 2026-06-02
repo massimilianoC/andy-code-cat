@@ -39,6 +39,17 @@ export interface AssetGenerationMetadata {
     outputMimeType?: string;
     width?: number;
     height?: number;
+    /**
+     * First-class lineage fields used by conversation-centric analytics and
+     * deterministic replay without parsing provider-specific payloads.
+     */
+    conversationId?: string;
+    sourceMessageId?: string;
+    parentSnapshotId?: string;
+    mediaKey?: string;
+    semanticQuery?: string;
+    resolutionRoute?: string;
+    fallbackUsed?: boolean;
     tokenUsage?: AssetTokenUsage;
     cost?: AssetCostEstimate;
     errorMessage?: string;

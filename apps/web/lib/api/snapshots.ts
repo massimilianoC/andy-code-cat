@@ -39,6 +39,15 @@ export interface PreviewSnapshot {
             assetIds: string[];
             mediaKeys: string[];
             degraded: boolean;
+            directives?: Array<{
+                key: string;
+                role?: string;
+                semanticQuery?: string;
+                status: "resolved" | "fallback_resolved" | "unresolved";
+                provider?: string;
+                assetId?: string;
+                fallbackUsed?: boolean;
+            }>;
         };
     };
     createdAt: string;
@@ -89,6 +98,15 @@ export function createPreviewSnapshot(
                 assetIds: string[];
                 mediaKeys: string[];
                 degraded: boolean;
+                directives?: Array<{
+                    key: string;
+                    role?: string;
+                    semanticQuery?: string;
+                    status: "resolved" | "fallback_resolved" | "unresolved";
+                    provider?: string;
+                    assetId?: string;
+                    fallbackUsed?: boolean;
+                }>;
             };
         };
         activate?: boolean;

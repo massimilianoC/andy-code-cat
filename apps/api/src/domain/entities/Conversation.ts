@@ -48,6 +48,11 @@ export interface MessageMetadata {
     finishReason?: string;
     rawResponse?: string;
     structuredParseValid?: boolean;
+    /**
+     * Strong linkage to the persisted preview snapshot generated from this
+     * assistant message, when one exists.
+     */
+    snapshotId?: string;
     promptingTrace?: {
         originalUserMessage: string;
         /** MongoDB _id of the llm_prompt_configs document active at generation time */
@@ -63,6 +68,22 @@ export interface MessageMetadata {
         html: string;
         css: string;
         js: string;
+    };
+    mediaResolution?: {
+        version: "media-resolution-v1";
+        traceIds: string[];
+        assetIds: string[];
+        mediaKeys: string[];
+        degraded: boolean;
+        directives?: Array<{
+            key: string;
+            role?: string;
+            semanticQuery?: string;
+            status: "resolved" | "fallback_resolved" | "unresolved";
+            provider?: string;
+            assetId?: string;
+            fallbackUsed?: boolean;
+        }>;
     };
 }
 

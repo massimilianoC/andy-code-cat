@@ -268,6 +268,8 @@ export class MongoProjectAssetRepository implements ProjectAssetRepository {
         const col = await this.col();
         await col.createIndex({ projectId: 1, createdAt: -1 });
         await col.createIndex({ userId: 1, scope: 1, createdAt: -1 });
+        await col.createIndex({ projectId: 1, "generationMetadata.conversationId": 1, createdAt: -1 }, { sparse: true });
+        await col.createIndex({ projectId: 1, "generationMetadata.mediaKey": 1, createdAt: -1 }, { sparse: true });
     }
 
     async update(

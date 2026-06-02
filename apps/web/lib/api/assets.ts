@@ -60,6 +60,13 @@ export interface ProjectAssetDto {
         outputMimeType?: string;
         width?: number;
         height?: number;
+        conversationId?: string;
+        sourceMessageId?: string;
+        parentSnapshotId?: string;
+        mediaKey?: string;
+        semanticQuery?: string;
+        resolutionRoute?: string;
+        fallbackUsed?: boolean;
         tokenUsage?: {
             promptTokens?: number;
             completionTokens?: number;
@@ -248,6 +255,11 @@ export interface AiUsageRecentRequestDto {
     totalTokens?: number;
     promptPreview: string;
     imageSize?: string;
+    mediaResolution?: {
+        resolvedCount: number;
+        failedCount: number;
+        degraded: boolean;
+    };
 }
 
 export interface AiUsageAnalyticsDto {

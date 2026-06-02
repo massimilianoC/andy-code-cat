@@ -131,6 +131,35 @@ export class MongoConversationRepository implements ConversationRepository {
         return message;
     }
 
+    async updateMessageMetadata(
+        conversationId: string,
+        projectId: string,
+        messageId: string,
+        metadata: Partial<NonNullable<Message["metadata"]>>
+    ): Promise<Message | null> {
+        const setFields: Record<string, unknown> = {
+            updatedAt: new Date(),
+        };
+
+        for (const [key, value] of Object.entries(metadata)) {
+            if (value === undefined) continue;
+            setFields[`messages.$.metadata.${key}`] = value;
+        }
+
+        const col = await this.col();
+        await col.updateOne(
+            { _id: conversationId, projectId, "messages.id": messageId } as Filter<ConversationDocument>,
+            { $set: setFields }
+        );
+
+        const updated = await col.findOne(
+            { _id: conversationId, projectId, "messages.id": messageId } as Filter<ConversationDocument>,
+            { projection: { messages: { $elemMatch: { id: messageId } } } }
+        );
+
+        return updated?.messages?.[0] ?? null;
+    }
+
     async addBackgroundTask(
         conversationId: string,
         messageId: string,

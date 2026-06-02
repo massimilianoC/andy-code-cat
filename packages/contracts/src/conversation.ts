@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { mediaResolutionMetadataSchema } from "./mediaResolution";
 
 // ── Request schemas ──────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ export const addMessageSchema = z.object({
         finishReason: z.string().optional(),
         rawResponse: z.string().optional(),
         structuredParseValid: z.boolean().optional(),
+        snapshotId: z.string().min(1).max(120).optional(),
         promptingTrace: z.object({
             originalUserMessage: z.string(),
             /** MongoDB _id of the llm_prompt_configs document used to build the pipeline wrapper */
@@ -59,6 +61,7 @@ export const addMessageSchema = z.object({
             css: z.string(),
             js: z.string(),
         }).optional(),
+        mediaResolution: mediaResolutionMetadataSchema.optional(),
         chatStructured: z.object({
             summary: z.string(),
             bullets: z.array(z.string()),
@@ -202,6 +205,7 @@ export interface MessageDto {
         finishReason?: string;
         rawResponse?: string;
         structuredParseValid?: boolean;
+        snapshotId?: string;
         promptingTrace?: {
             originalUserMessage: string;
             prePromptTemplate?: string;
@@ -215,6 +219,22 @@ export interface MessageDto {
             html: string;
             css: string;
             js: string;
+        };
+        mediaResolution?: {
+            version: "media-resolution-v1";
+            traceIds: string[];
+            assetIds: string[];
+            mediaKeys: string[];
+            degraded: boolean;
+            directives?: Array<{
+                key: string;
+                role?: string;
+                semanticQuery?: string;
+                status: "resolved" | "fallback_resolved" | "unresolved";
+                provider?: string;
+                assetId?: string;
+                fallbackUsed?: boolean;
+            }>;
         };
     };
     backgroundTasks: BackgroundTaskDto[];
