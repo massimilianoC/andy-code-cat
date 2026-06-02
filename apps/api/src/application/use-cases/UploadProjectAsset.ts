@@ -62,6 +62,7 @@ export class UploadProjectAsset {
         useInProject?: boolean;
         styleRole?: "inspiration" | "material" | "logo" | "background" | "icon" | "watermark" | "reference";
         descriptionText?: string;
+        maxTotalBytes?: number;
     }): Promise<ProjectAsset> {
         if (!isAllowedMime(input.mimeType)) {
             throw Object.assign(new Error("File type not allowed"), { statusCode: 415 });
@@ -77,8 +78,10 @@ export class UploadProjectAsset {
         }
 
         const currentSize = await this.assetRepository.totalProjectSize(input.projectId, input.userId);
-        if (currentSize + input.fileSize > QUOTA_TOTAL_BYTES) {
-            throw Object.assign(new Error("Project storage quota exceeded (max 100 MB)"), { statusCode: 422 });
+        const maxTotalBytes = input.maxTotalBytes ?? QUOTA_TOTAL_BYTES;
+        if (currentSize + input.fileSize > maxTotalBytes) {
+            const maxMb = Math.round((maxTotalBytes / (1024 * 1024)) * 10) / 10;
+            throw Object.assign(new Error(`Project storage quota exceeded (max ${maxMb} MB)`), { statusCode: 422 });
         }
 
         const assetId = randomUUID();

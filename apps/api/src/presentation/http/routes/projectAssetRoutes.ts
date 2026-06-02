@@ -32,6 +32,7 @@ import { RegenerateStockProjectImage } from "../../../application/use-cases/Rege
 import { buildStockProviderOrder, resolveMediaProviderPolicy } from "../../../application/media/mediaProviderPolicy";
 import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
 import { RegenerateMediaByKey } from "../../../application/use-cases/RegenerateMediaByKey";
+import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
 
 // In-memory storage: the use case writes to disk itself after validation.
 const upload = multer({
@@ -214,6 +215,21 @@ export function createProjectAssetRoutes(): Router {
                     return;
                 }
 
+                const [platformConfig, project] = await Promise.all([
+                    platformConfigRepository.get().catch(() => null),
+                    projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId).catch(() => null),
+                ]);
+                const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, project?.presetId ?? "default");
+
+                if (req.file.size > attachmentPolicy.maxFileSizeBytes) {
+                    res.status(413).json({
+                        error: `File size exceeds limit (${attachmentPolicy.maxFileSizeBytes} bytes max).`,
+                        code: "ATTACHMENT_FILE_TOO_LARGE",
+                        attachmentPolicy,
+                    });
+                    return;
+                }
+
                 const asset = await uploadAsset.execute({
                     projectId: req.sandbox!.projectId,
                     userId: req.auth!.userId,
@@ -228,9 +244,29 @@ export function createProjectAssetRoutes(): Router {
                         ? req.body["styleRole"] as "inspiration" | "material" | "logo" | "background" | "icon" | "watermark" | "reference"
                         : undefined,
                     descriptionText: typeof req.body["descriptionText"] === "string" ? req.body["descriptionText"] : undefined,
+                    maxTotalBytes: attachmentPolicy.maxTotalBytes,
                 });
 
-                res.status(201).json({ asset: toDto(asset) });
+                const totalProjectBytes = await assetRepository
+                    .totalProjectSize(req.sandbox!.projectId, req.auth!.userId)
+                    .catch(() => asset.fileSize);
+                const warnings: string[] = [];
+                if (totalProjectBytes >= attachmentPolicy.warningThresholdBytes) {
+                    const usedMb = Math.round((totalProjectBytes / (1024 * 1024)) * 10) / 10;
+                    const capMb = Math.round((attachmentPolicy.maxTotalBytes / (1024 * 1024)) * 10) / 10;
+                    warnings.push(`Project attachments are near the storage cap: ${usedMb} MB / ${capMb} MB.`);
+                }
+
+                res.status(201).json({
+                    asset: toDto(asset),
+                    warnings,
+                    attachmentPolicy,
+                    usage: {
+                        totalBytes: totalProjectBytes,
+                        maxTotalBytes: attachmentPolicy.maxTotalBytes,
+                        warningThresholdBytes: attachmentPolicy.warningThresholdBytes,
+                    },
+                });
 
                 // Fire-and-forget enrichment — never blocks the HTTP response
                 if (env.enrichmentEnabled) {

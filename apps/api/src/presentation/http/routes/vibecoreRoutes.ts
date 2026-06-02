@@ -21,6 +21,12 @@ import { buildProjectKnowledgeLayer } from "../../../application/llm/systemPromp
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
 import { VibePrefill } from "../../../application/use-cases/VibePrefill";
+import {
+    resolveAttachmentPolicyFromConfig,
+    resolveDocumentContextPolicyFromConfig,
+    type ProductAttachmentPolicy,
+    type ProductDocumentContextPolicy,
+} from "../../../domain/entities/PlatformConfig";
 import { env } from "../../../config";
 
 const attachmentMetaSchema = z.object({
@@ -31,7 +37,7 @@ const attachmentMetaSchema = z.object({
 
 const classifyBodySchema = z.object({
     prompt: z.string().min(1).max(2000),
-    attachmentMeta: z.array(attachmentMetaSchema).max(3).optional(),
+    attachmentMeta: z.array(attachmentMetaSchema).max(100).optional(),
     provider: z.string().min(1).max(80).optional(),
     model: z.string().min(1).max(200).optional(),
     /**
@@ -48,7 +54,7 @@ const prefillBodySchema = z.object({
     projectId: z.string().max(128).optional(),
     provider: z.string().min(1).max(80).optional(),
     model: z.string().min(1).max(200).optional(),
-    attachmentMeta: z.array(attachmentMetaSchema).max(3).optional(),
+    attachmentMeta: z.array(attachmentMetaSchema).max(100).optional(),
     templateId: z.string().max(120).nullable().optional(),
     formatHint: z.string().max(50).nullable().optional(),
 });
@@ -74,6 +80,74 @@ export function createVibecoreRoutes(): Router {
     const assetRepository = new MongoProjectAssetRepository();
     const storage = getFileStorage();
 
+    function validateAttachmentMetaLimits(attachmentMeta: Array<{ sizeBytes: number }>, policy: ProductAttachmentPolicy) {
+        if (attachmentMeta.length > policy.maxAttachmentsPerPrompt) {
+            return {
+                status: 422,
+                body: {
+                    error: `Too many attachments: max ${policy.maxAttachmentsPerPrompt}`,
+                    code: "ATTACHMENT_LIMIT_EXCEEDED",
+                },
+            };
+        }
+
+        const oversized = attachmentMeta.find((item) => item.sizeBytes > policy.maxFileSizeBytes);
+        if (oversized) {
+            return {
+                status: 413,
+                body: {
+                    error: `File size exceeds limit: max ${policy.maxFileSizeBytes} bytes per file`,
+                    code: "ATTACHMENT_FILE_TOO_LARGE",
+                },
+            };
+        }
+
+        const totalBytes = attachmentMeta.reduce((acc, item) => acc + item.sizeBytes, 0);
+        if (totalBytes > policy.maxTotalBytes) {
+            return {
+                status: 422,
+                body: {
+                    error: `Attachment payload exceeds max total size (${policy.maxTotalBytes} bytes)`,
+                    code: "ATTACHMENT_TOTAL_SIZE_EXCEEDED",
+                },
+            };
+        }
+
+        return null;
+    }
+
+    function buildAttachmentWarnings(attachmentMeta: Array<{ sizeBytes: number }>, policy: ProductAttachmentPolicy): string[] {
+        const totalBytes = attachmentMeta.reduce((acc, item) => acc + item.sizeBytes, 0);
+        if (totalBytes >= policy.warningThresholdBytes) {
+            const usedMb = Math.round((totalBytes / (1024 * 1024)) * 10) / 10;
+            const capMb = Math.round((policy.maxTotalBytes / (1024 * 1024)) * 10) / 10;
+            return [`Attachment payload is near the cap: ${usedMb} MB / ${capMb} MB.`];
+        }
+        return [];
+    }
+
+    async function resolvePoliciesForProject(
+        userId: string,
+        projectId?: string,
+    ): Promise<{
+        attachmentPolicy: ProductAttachmentPolicy;
+        documentContextPolicy: ProductDocumentContextPolicy;
+    }> {
+        const platformConfig = await platformConfigRepository.get().catch(() => null);
+        if (!projectId) {
+            return {
+                attachmentPolicy: resolveAttachmentPolicyFromConfig(platformConfig, "default"),
+                documentContextPolicy: resolveDocumentContextPolicyFromConfig(platformConfig, "default"),
+            };
+        }
+        const project = await projectRepository.findByIdForUser(projectId, userId).catch(() => null);
+        const productKey = project?.presetId ?? "default";
+        return {
+            attachmentPolicy: resolveAttachmentPolicyFromConfig(platformConfig, productKey),
+            documentContextPolicy: resolveDocumentContextPolicyFromConfig(platformConfig, productKey),
+        };
+    }
+
     /**
      * Ensure a (user, project) sandbox pair for any vibe pipeline call.
      *
@@ -98,6 +172,27 @@ export function createVibecoreRoutes(): Router {
 
     router.use(authMiddleware as RequestHandler);
 
+    router.get(
+        "/vibecore/config",
+        async (req: RequestWithContext, res: Response, next: NextFunction) => {
+            try {
+                const userId = req.auth!.userId;
+                const requestedProjectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
+                if (requestedProjectId) {
+                    const owned = await projectRepository.findByIdForUser(requestedProjectId, userId).catch(() => null);
+                    if (!owned) {
+                        res.status(403).json({ error: "Project not found or access denied" });
+                        return;
+                    }
+                }
+                const { attachmentPolicy, documentContextPolicy } = await resolvePoliciesForProject(userId, requestedProjectId);
+                res.json({ attachmentPolicy, documentContextPolicy });
+            } catch (error) {
+                next(error);
+            }
+        },
+    );
+
     router.post(
         "/vibecore/classify",
         async (req: RequestWithContext, res: Response, next: NextFunction) => {
@@ -110,10 +205,19 @@ export function createVibecoreRoutes(): Router {
 
                 const userId = req.auth!.userId;
                 const projectId = await ensureVibeProject(userId, parsed.data.projectId, parsed.data.prompt);
+                const { attachmentPolicy } = await resolvePoliciesForProject(userId, projectId);
+
+                const attachmentMeta = parsed.data.attachmentMeta ?? [];
+                const violation = validateAttachmentMetaLimits(attachmentMeta, attachmentPolicy);
+                if (violation) {
+                    res.status(violation.status).json(violation.body);
+                    return;
+                }
+                const warnings = buildAttachmentWarnings(attachmentMeta, attachmentPolicy);
 
                 const result = await vibeClassify.execute({
                     prompt: parsed.data.prompt,
-                    attachmentMeta: parsed.data.attachmentMeta,
+                    attachmentMeta,
                     provider: parsed.data.provider,
                     model: parsed.data.model,
                     userId,
@@ -122,7 +226,7 @@ export function createVibecoreRoutes(): Router {
 
                 // Always echo projectId so the client pins follow-up calls
                 // (prefill, generation, conversation) to the same sandbox.
-                res.json({ ...result, projectId });
+                res.json({ ...result, projectId, warnings, attachmentPolicy });
             } catch (error) {
                 next(error);
             }
@@ -155,6 +259,15 @@ export function createVibecoreRoutes(): Router {
 
                 // Resolve (or create) the billing sandbox.
                 const projectId = await ensureVibeProject(userId, parsed.data.projectId, parsed.data.prompt);
+                const { attachmentPolicy, documentContextPolicy } = await resolvePoliciesForProject(userId, projectId);
+
+                const attachmentMeta = parsed.data.attachmentMeta ?? [];
+                const violation = validateAttachmentMetaLimits(attachmentMeta, attachmentPolicy);
+                if (violation) {
+                    res.status(violation.status).json(violation.body);
+                    return;
+                }
+                const warnings = buildAttachmentWarnings(attachmentMeta, attachmentPolicy);
 
                 // Layer D injection: load assets only when caller pinned an existing project.
                 if (parsed.data.projectId) {
@@ -163,20 +276,23 @@ export function createVibecoreRoutes(): Router {
 
                     // First pass: use fully-enriched traces (status === "ready")
                     const enrichedLayerD = env.enrichmentInjectLayerD
-                        ? buildProjectKnowledgeLayer(assets, { maxChars: 8000, maxAssets: 3 })
+                        ? buildProjectKnowledgeLayer(assets, {
+                            maxChars: 8000,
+                            maxAssets: documentContextPolicy.maxAssetsPerPrompt,
+                        })
                         : "";
 
                     if (enrichedLayerD) {
                         layerDContext = enrichedLayerD;
                         assets
                             .filter((a) => a.enrichmentTrace?.provenance.enrichmentStatus === "ready" && a.originalName)
-                            .slice(0, 3)
+                            .slice(0, documentContextPolicy.maxAssetsPerPrompt)
                             .forEach((a) => layerDocNames.push(a.originalName));
                     } else if (assets.length > 0) {
                         // Second pass: inline text extraction for document assets not yet enriched
                         const docAssets = assets
                             .filter((a) => a.storedFilename && getParser(a.mimeType) !== null)
-                            .slice(0, 3);
+                            .slice(0, documentContextPolicy.fallbackInlineExtractionMaxAssets);
 
                         const snippets = await Promise.allSettled(
                             docAssets.map(async (asset) => {
@@ -211,7 +327,7 @@ export function createVibecoreRoutes(): Router {
                 const result = await vibePrefill.execute({
                     prompt: parsed.data.prompt,
                     layerDContext,
-                    attachmentMeta: parsed.data.attachmentMeta,
+                    attachmentMeta,
                     templateId: parsed.data.templateId ?? null,
                     formatHint: (parsed.data.formatHint ?? null) as import("@andy-code-cat/contracts").FormatHint | null,
                     provider: parsed.data.provider,
@@ -225,7 +341,7 @@ export function createVibecoreRoutes(): Router {
                     result.draft.attachedDocuments = layerDocNames;
                 }
 
-                res.json({ ...result, projectId });
+                res.json({ ...result, projectId, warnings, attachmentPolicy });
             } catch (error) {
                 next(error);
             }
