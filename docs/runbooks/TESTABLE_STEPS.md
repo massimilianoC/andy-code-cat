@@ -219,8 +219,10 @@ These two items are additive roadmap improvements and can be delivered after the
 
 - Send or simulate a structured LLM response with `artifacts.html/css` using `asset://media/hero-main` and a matching `mediaManifest.requests[0].key = "hero-main"`
 - Expected: `ResolveArtifactMedia` persists a `platform_generated` `ProjectAsset`
+- Expected: the persisted generated asset carries first-class lineage in `generationMetadata` (`mediaKey`, `semanticQuery`, `resolutionRoute`, and when available `conversationId` / `parentSnapshotId`)
 - Expected: the returned artifact replaces every `asset://media/hero-main` occurrence in HTML and CSS with `/p/media/:assetId`
 - Expected: `done.result.mediaResolution` contains trace IDs, asset IDs, media keys, and `degraded` status, and the saved `PreviewSnapshot.metadata.mediaResolution` preserves the same linkage
+- Expected: after the snapshot is saved with `sourceMessageId`, `GET /v1/projects/:projectId/conversations/:conversationId` shows the assistant message with `metadata.snapshotId` and `metadata.mediaResolution`
 - Expected: missing manifest requests fail explicitly instead of saving an active artifact with unresolved media placeholders
 - Expected: provider fallback or persistence failure creates an unread backend notification visible through `GET /v1/notifications` and `GET /v1/admin/notifications`
 - Expected: configured fallback is allowed in this full artifact-generation path so the platform can return a complete first artifact when the primary provider fails

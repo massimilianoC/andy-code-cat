@@ -96,6 +96,7 @@ Read in this order before making changes:
 | [docs/specs/PRESET_TYPED_SPECS.md](specs/PRESET_TYPED_SPECS.md) | Preset catalog, output contracts, and prompt modules |
 | [docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md) | Target architecture for structured LLM media manifests, deterministic backend media resolution, provider policy, asset persistence, notifications, and snapshot/publish guardrails |
 | [docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_GAPS.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_GAPS.md) | Implementation-ready backlog of remaining gaps against the Artifact Media Orchestrator spec (per-gap files, fix, acceptance, effort) |
+| [docs/specs/MINIMAX_M3_CONVERSATION_MEDIA_PARITY_SPEC.md](specs/MINIMAX_M3_CONVERSATION_MEDIA_PARITY_SPEC.md) | Local Docker + MongoDB analysis of a successful MiniMax M3 media-bearing run: snapshot/media success, conversation parity gap, traceability deficits, and operational plan for manual or automatic keyed media replay |
 | [docs/specs/MEDIA_STRATEGY_RESOLVER_PIPELINE_SPEC.md](specs/MEDIA_STRATEGY_RESOLVER_PIPELINE_SPEC.md) | Proposed next evolution for frontend-selectable media strategies: stock search, AI image generation, project/user assets, hybrid context planning, structured JSON planner outputs, failure traces, admin UI, and Playwright E2E |
 | [docs/specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md](specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md) | ⚠️ DEPRECATED / historical — Wave-1 analysis, superseded by [ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md). Kept for context only. |
 | [docs/specs/SECTION_CONTEXT_OPT_SPEC.md](specs/SECTION_CONTEXT_OPT_SPEC.md) | Section-aware context optimization |
@@ -140,6 +141,7 @@ Read in this order before making changes:
 | --- | --- |
 | [docs/reports/E2E_DCL_REPORT_2026-05-14.md](reports/E2E_DCL_REPORT_2026-05-14.md) | Autonomous E2E session — DCL pipeline, Zero Effort flow, Layer D verification, 5 bugs found and fixed |
 | [docs/reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md](reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md) | Current implementation certification for Artifact Media Orchestrator: verified defaults, Docker smoke status, file map, human-test path, open gaps, and future development anchors |
+| [docs/reports/MINIMAX_M3_PARITY_IMPLEMENTATION_2026-06-02.md](reports/MINIMAX_M3_PARITY_IMPLEMENTATION_2026-06-02.md) | Wave-1 implementation report for MiniMax M3 conversation/media parity: message-to-snapshot linkage, first-class asset lineage, MongoDB query paths, and audit correlation strategy |
 
 ---
 

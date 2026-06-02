@@ -12,6 +12,11 @@ export interface AiUsageRecentRequest {
     totalTokens?: number;
     promptPreview: string;
     imageSize?: string;
+    mediaResolution?: {
+        resolvedCount: number;
+        failedCount: number;
+        degraded: boolean;
+    };
 }
 
 export interface AiUsageAnalyticsResult {
@@ -67,6 +72,13 @@ export class GetProjectAiAnalytics {
                 costEur: entry.costEstimate?.amount ?? 0,
                 totalTokens: entry.usage?.totalTokens,
                 promptPreview: clipPrompt(entry.inputPrompt),
+                mediaResolution: entry.mediaResolutionSummary
+                    ? {
+                        resolvedCount: entry.mediaResolutionSummary.resolvedCount,
+                        failedCount: entry.mediaResolutionSummary.failedCount,
+                        degraded: entry.mediaResolutionSummary.degraded,
+                    }
+                    : undefined,
             })),
             ...imageRecent.map((entry) => ({
                 id: entry.id,
@@ -144,6 +156,13 @@ export class GetAdminAiAnalytics {
                 costEur: entry.costEstimate?.amount ?? 0,
                 totalTokens: entry.usage?.totalTokens,
                 promptPreview: clipPrompt(entry.inputPrompt),
+                mediaResolution: entry.mediaResolutionSummary
+                    ? {
+                        resolvedCount: entry.mediaResolutionSummary.resolvedCount,
+                        failedCount: entry.mediaResolutionSummary.failedCount,
+                        degraded: entry.mediaResolutionSummary.degraded,
+                    }
+                    : undefined,
             })),
             ...imageRecent.map((entry) => ({
                 id: entry.id,

@@ -32,7 +32,11 @@ export function createPreviewSnapshotRoutes(): Router {
     const mediaResolutionTraceRepository = new MongoMediaResolutionTraceRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
-    const createPreviewSnapshot = new CreatePreviewSnapshot(previewSnapshotRepository, mediaResolutionTraceRepository);
+    const createPreviewSnapshot = new CreatePreviewSnapshot(
+        previewSnapshotRepository,
+        mediaResolutionTraceRepository,
+        conversationRepository,
+    );
     const listPreviewSnapshots = new ListPreviewSnapshots(previewSnapshotRepository);
     const activatePreviewSnapshot = new ActivatePreviewSnapshot(previewSnapshotRepository);
     const getPreviewSnapshot = new GetPreviewSnapshot(previewSnapshotRepository);
@@ -162,6 +166,16 @@ export function createPreviewSnapshotRoutes(): Router {
                         provider: body.metadata?.provider,
                         structuredParseValid,
                         hasFocusContext: Boolean(body.focusContext),
+                        mediaResolutionTraceIds: snapshot.metadata?.mediaResolution?.traceIds,
+                        mediaResolutionAssetIds: snapshot.metadata?.mediaResolution?.assetIds,
+                        mediaResolutionMediaKeys: snapshot.metadata?.mediaResolution?.mediaKeys,
+                        mediaResolutionDegraded: snapshot.metadata?.mediaResolution?.degraded,
+                        mediaResolutionResolvedCount: snapshot.metadata?.mediaResolution?.directives?.filter(
+                            (directive) => directive.status === "resolved" || directive.status === "fallback_resolved",
+                        ).length ?? snapshot.metadata?.mediaResolution?.assetIds?.length ?? 0,
+                        mediaResolutionFailedCount: snapshot.metadata?.mediaResolution?.directives?.filter(
+                            (directive) => directive.status === "unresolved",
+                        ).length ?? 0,
                     },
                 });
                 // ── end execution log ─────────────────────────────────────────
