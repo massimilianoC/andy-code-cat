@@ -1,5 +1,6 @@
 import type { LlmProviderCatalog } from "../../domain/entities/LlmCatalog";
 import { getSiliconFlowPrice } from "./siliconflowPricing";
+import { decorateSeedModel } from "./modelRegistryPresets";
 
 const LIVE_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -65,6 +66,7 @@ type DiscoveredModel = {
     id?: string;
     architecture?: { modality?: string };
     pricing?: { prompt?: string; completion?: string };
+    supported_parameters?: string[];
 };
 
 function inferCapabilities(input: { id: string; modality?: string }): string[] {
@@ -186,7 +188,7 @@ export async function hydrateProviderCatalog(
 
                 const inferredCapabilities = inferCapabilities({ id, modality });
 
-                return {
+                return decorateSeedModel({
                     id,
                     provider: providerCatalog.provider,
                     role: inferRole({ existingRole: existing?.role, capabilities: existing?.capabilities?.length ? existing.capabilities : inferredCapabilities }),
@@ -198,9 +200,10 @@ export async function hydrateProviderCatalog(
                     description: existing?.description,
                     promptTemplate: existing?.promptTemplate,
                     focusPromptTemplate: existing?.focusPromptTemplate,
+                    supportedParameters: model.supported_parameters ?? existing?.supportedParameters,
                     ...(priceInputUsdPerM !== undefined ? { priceInputUsdPerM } : {}),
                     ...(priceOutputUsdPerM !== undefined ? { priceOutputUsdPerM } : {}),
-                };
+                });
             });
 
         if (mapped.length === 0) {

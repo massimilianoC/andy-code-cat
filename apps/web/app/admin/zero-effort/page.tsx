@@ -120,7 +120,7 @@ const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
         provider: "",
         model: "",
         temperature: 0.7,
-        maxCompletionTokens: 1200,
+        maxCompletionTokens: 32000,
         systemTemplate: OPTIMIZE_DEFAULT_PROMPT,
     },
     [GENERATE_TASK_KEY]: {
@@ -299,7 +299,7 @@ export default function ZeroEffortAdminPage() {
                     <PromptTaskSettingsCard
                         title="Ottimizzazione Brief (zero_effort_optimize)"
                         description="Trasforma il brief normalizzato in un prompt strutturato e dettagliato, pronto per la generazione."
-                        helperText="Usa un modello capace di seguire istruzioni complesse. Temperature moderata (0.6–0.8). Token limite consigliato: 1000–1500."
+                        helperText="Usa un modello capace di seguire istruzioni complesse. Temperature moderata (0.6–0.8). Default: 32000 token per evitare prompt ottimizzati troncati."
                         value={optimizeTask}
                         providers={providers}
                         onFieldChange={(field, value) =>

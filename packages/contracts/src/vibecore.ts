@@ -15,6 +15,13 @@ export interface AttachmentMeta {
     sizeBytes: number;
 }
 
+export interface VibeAttachmentPolicy {
+    maxAttachmentsPerPrompt: number;
+    maxFileSizeBytes: number;
+    maxTotalBytes: number;
+    warningThresholdBytes: number;
+}
+
 export interface VibeClassifyRequest {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
@@ -42,6 +49,8 @@ export interface VibeClassifyResponse {
      * Optional only for backward compatibility with pre-cost-attribution clients.
      */
     projectId?: string;
+    warnings?: string[];
+    attachmentPolicy?: VibeAttachmentPolicy;
 }
 
 // ── Zero-Effort LLM Prefill ───────────────────────────────────────────────────
@@ -88,5 +97,15 @@ export interface VibePrefillResponse {
      * Optional only for backward compatibility with pre-cost-attribution clients.
      */
     projectId?: string;
+    warnings?: string[];
+    attachmentPolicy?: VibeAttachmentPolicy;
+}
+
+export interface VibeConfigResponse {
+    attachmentPolicy: VibeAttachmentPolicy;
+    documentContextPolicy: {
+        maxAssetsPerPrompt: number;
+        fallbackInlineExtractionMaxAssets: number;
+    };
 }
 
