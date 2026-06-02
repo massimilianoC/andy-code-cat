@@ -133,6 +133,18 @@ export interface ProductNginxDto {
     extraServerDirectives: string;
 }
 
+export interface ProductAttachmentPolicyDto {
+    maxAttachmentsPerPrompt: number;
+    maxFileSizeBytes: number;
+    maxTotalBytes: number;
+    warningThresholdBytes: number;
+}
+
+export interface ProductDocumentContextPolicyDto {
+    maxAssetsPerPrompt: number;
+    fallbackInlineExtractionMaxAssets: number;
+}
+
 export interface ProductGovernanceDto {
     promptTemplates: ProductPromptTemplatesDto;
     promptTaskSettings?: Record<string, PromptTaskSettingDto>;
@@ -140,6 +152,8 @@ export interface ProductGovernanceDto {
     cookieBanner?: ProductCookieBannerDto;
     legal?: ProductLegalDto;
     nginx: ProductNginxDto;
+    attachmentPolicy?: ProductAttachmentPolicyDto;
+    documentContextPolicy?: ProductDocumentContextPolicyDto;
 }
 
 export interface AdminLlmModelDto {

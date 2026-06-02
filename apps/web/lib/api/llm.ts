@@ -133,6 +133,8 @@ export interface LlmChatDefaults {
     historyMaxMessages: number;
     historyMessageMaxChars: number;
     maxCompletionTokens: number;
+    attachmentMaxFiles?: number;
+    attachmentMaxTotalBytes?: number;
 }
 
 export interface LlmPromptConfig {

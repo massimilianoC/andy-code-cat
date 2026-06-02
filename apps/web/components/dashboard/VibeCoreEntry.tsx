@@ -11,14 +11,17 @@ import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import { ModeSelector, type VibeMode } from "./ModeSelector";
 import { VibeCoreBackground } from "./VibeCoreBackground";
 import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
-import { classifyVibeIntent, prefillZeroEffort } from "@/lib/api/vibecore";
+import { classifyVibeIntent, getVibeConfig, prefillZeroEffort } from "@/lib/api/vibecore";
 import { getZeroEffortConfig } from "@/lib/api/pipelines";
 import { createProject, uploadProjectAsset, renameProject } from "@/lib/api";
 import { getLlmProviders, type LlmProviderCatalogDto } from "@/lib/api/llm";
 
-/** Max file size accepted via the VibeCore drag-and-drop zone (10 MB). */
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-const MAX_FILES = 3;
+const DEFAULT_ATTACHMENT_POLICY = {
+    maxAttachmentsPerPrompt: 10,
+    maxFileSizeBytes: 10 * 1024 * 1024,
+    maxTotalBytes: 100 * 1024 * 1024,
+    warningThresholdBytes: 80 * 1024 * 1024,
+};
 const VIBE_MODE_KEY = "vibecore_mode";
 const PIPELINE_MODEL_OVERRIDE_KEY = "vibecore_pipeline_model_override";
 const ACCEPTED_MIME_TYPES = [
@@ -162,10 +165,12 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     }, [phase]);
 
     const [error, setError] = useState<string | null>(null);
+    const [serverWarnings, setServerWarnings] = useState<string[]>([]);
     const [isDragOver, setIsDragOver] = useState(false);
     const [providersCatalog, setProvidersCatalog] = useState<LlmProviderCatalogDto[]>([]);
     const [pipelineOverride, setPipelineOverride] = useState<PipelineModelOverride | null>(null);
     const [modelOverrideOpen, setModelOverrideOpen] = useState(false);
+    const [attachmentPolicy, setAttachmentPolicy] = useState(DEFAULT_ATTACHMENT_POLICY);
 
     useEffect(() => {
         setPipelineOverride(loadPipelineModelOverride());
@@ -179,6 +184,16 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             })
             .catch(() => {
                 if (!cancelled) setProvidersCatalog([]);
+            });
+
+        void getVibeConfig(token)
+            .then((response) => {
+                if (!cancelled) {
+                    setAttachmentPolicy(response.attachmentPolicy ?? DEFAULT_ATTACHMENT_POLICY);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setAttachmentPolicy(DEFAULT_ATTACHMENT_POLICY);
             });
         return () => { cancelled = true; };
     }, [token]);
@@ -270,16 +285,23 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     }
 
     const addFiles = useCallback((incoming: File[]) => {
+        const maxFiles = attachmentPolicy.maxAttachmentsPerPrompt;
+        const maxFileSizeBytes = attachmentPolicy.maxFileSizeBytes;
         const valid = incoming.filter(
-            (f) => f.size <= MAX_FILE_SIZE_BYTES && ACCEPTED_MIME_TYPES.includes(f.type),
+            (f) => f.size <= maxFileSizeBytes && ACCEPTED_MIME_TYPES.includes(f.type),
         );
+        if (valid.length < incoming.length) {
+            setError("Alcuni file non sono supportati o superano i limiti consentiti.");
+        } else {
+            setError(null);
+        }
         setFiles((prev) =>
             [
                 ...prev,
                 ...valid.map((file) => ({ file, id: `${file.name}-${Date.now()}-${Math.random()}` })),
-            ].slice(0, MAX_FILES),
+            ].slice(0, maxFiles),
         );
-    }, []);
+    }, [attachmentPolicy.maxAttachmentsPerPrompt, attachmentPolicy.maxFileSizeBytes, t]);
 
     function removeFile(id: string) {
         setFiles((prev) => prev.filter((p) => p.id !== id));
@@ -324,6 +346,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
         e?.preventDefault();
         if (!prompt.trim() || phase !== "idle") return;
         setError(null);
+        setServerWarnings([]);
 
         try {
             // Layer Φ: classify intent
@@ -339,6 +362,9 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 provider: pipelineOverride?.provider,
                 model: pipelineOverride?.model,
             }).catch(() => null);
+            if (classification?.warnings?.length) {
+                setServerWarnings(classification.warnings);
+            }
 
             // Create project early so files (and their Layer D enrichment) can be uploaded
             // before the LLM prefill pass runs
@@ -372,6 +398,9 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 provider: pipelineOverride?.provider,
                 model: pipelineOverride?.model,
             }).catch(() => null);
+            if (prefillResult?.warnings?.length) {
+                setServerWarnings((prev) => [...new Set([...prev, ...prefillResult.warnings!])]);
+            }
 
             // Store prefill draft in sessionStorage for launch page
             const hasPrefill = prefillResult && !prefillResult.skipped;
@@ -514,7 +543,11 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
                     {/* File pills */}
                     {files.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
+                        <div className="mt-1 mb-2 space-y-1">
+                            <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.45)" }}>
+                                Allegati: {files.length}/{attachmentPolicy.maxAttachmentsPerPrompt}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
                             {files.map((pill) => (
                                 <span
                                     key={pill.id}
@@ -541,6 +574,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                     </button>
                                 </span>
                             ))}
+                            </div>
                         </div>
                     )}
 
@@ -554,7 +588,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             className={cn(
                                 "flex items-center gap-1.5 cursor-pointer text-xs px-2.5 py-1.5 rounded-lg",
                                 "transition-all duration-150 border border-dashed select-none",
-                                (isLoading || files.length >= MAX_FILES) &&
+                                (isLoading || files.length >= attachmentPolicy.maxAttachmentsPerPrompt) &&
                                     "opacity-40 pointer-events-none",
                             )}
                             style={{
@@ -564,7 +598,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             }}
                             title={t(
                                 "vibecore.attachHint",
-                                "Trascina file o clicca per allegare — PDF, DOCX, immagini, max 10 MB",
+                                "Trascina file o clicca per allegare documenti e immagini",
                             )}
                         >
                             {isDragOver ? (
@@ -592,7 +626,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                 accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
                                 className="sr-only"
                                 onChange={handleFileInput}
-                                disabled={isLoading || files.length >= MAX_FILES}
+                                disabled={isLoading || files.length >= attachmentPolicy.maxAttachmentsPerPrompt}
                             />
                         </label>
 
@@ -783,6 +817,14 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     >
                         {error}
                     </p>
+                )}
+
+                {!error && serverWarnings.length > 0 && (
+                    <div className="mt-3 space-y-1 text-center text-xs" style={{ color: "#fbbf24" }}>
+                        {serverWarnings.map((warning) => (
+                            <p key={warning}>{warning}</p>
+                        ))}
+                    </div>
                 )}
 
                 {/* Voice status / error */}
