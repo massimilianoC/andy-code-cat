@@ -479,7 +479,10 @@ export default function WorkspacePage() {
         historyMaxMessages: 12,
         historyMessageMaxChars: 2000,
         maxCompletionTokens: 8000,
+        attachmentMaxFiles: 10,
+        attachmentMaxTotalBytes: 100 * 1024 * 1024,
     });
+    const maxChatAttachments = Math.max(1, chatDefaults.attachmentMaxFiles ?? 10);
     const [thinkingText, setThinkingText] = useState("");
     const [draftAnswer, setDraftAnswer] = useState("");
     const [streamPromptTokens, setStreamPromptTokens] = useState(0);
@@ -2372,7 +2375,7 @@ export default function WorkspacePage() {
                 });
             }
 
-            const attachedAssetIds = chatAttachedFiles.map((file) => file.id).slice(0, 12);
+            const attachedAssetIds = chatAttachedFiles.map((file) => file.id).slice(0, maxChatAttachments);
             let llm: Awaited<ReturnType<typeof llmChatPreview>>;
             let interruptedMeta: Extract<LlmChatStreamEvent, { type: "interrupted" }> | null = null;
             try {
@@ -2857,7 +2860,7 @@ export default function WorkspacePage() {
                 projectId,
                 {
                     rawPrompt: original,
-                    assetIds: chatAttachedFiles.map((file) => file.id).slice(0, 12),
+                    assetIds: chatAttachedFiles.map((file) => file.id).slice(0, maxChatAttachments),
                     conversationId: convId,
                     provider: selectedProvider || undefined,
                     model: selectedModel || undefined,
@@ -3025,9 +3028,10 @@ export default function WorkspacePage() {
     const addChatAttachedFile = useCallback((file: ChatAttachedFile) => {
         setChatAttachedFiles((prev) => {
             if (prev.some((entry) => entry.id === file.id)) return prev;
-            return [...prev, file];
+            const next = [...prev, file];
+            return next.slice(-maxChatAttachments);
         });
-    }, []);
+    }, [maxChatAttachments]);
 
     const handleChatFileAttach = useCallback(async (files: FileList | File[]) => {
         const tok = getToken();
@@ -3048,11 +3052,22 @@ export default function WorkspacePage() {
                         asset.fileSize === file.size &&
                         asset.mimeType === file.type
                     );
-                    const asset = existingAsset
+                    const uploadResult = existingAsset
                         ? (existingAsset.useInProject
-                            ? existingAsset
-                            : (await updateProjectAsset(tok, projectId, existingAsset.id, { useInProject: true })).asset)
-                        : (await uploadProjectAsset(tok, projectId, file, { useInProject: true })).asset;
+                            ? { asset: existingAsset }
+                            : { asset: (await updateProjectAsset(tok, projectId, existingAsset.id, { useInProject: true })).asset })
+                        : await uploadProjectAsset(tok, projectId, file, { useInProject: true });
+                    const asset = uploadResult.asset;
+
+                    if (uploadResult.warnings?.length) {
+                        uploadResult.warnings.forEach((warning) => {
+                            addNotification({
+                                label: "Storage",
+                                status: "error",
+                                message: warning,
+                            });
+                        });
+                    }
 
                     addChatAttachedFile({ id: asset.id, name: asset.label ?? asset.originalName, mimeType: asset.mimeType, fileSize: asset.fileSize });
                     setProjectAssets((prev) => [asset, ...prev.filter((entry) => entry.id !== asset.id)]);
@@ -3413,31 +3428,36 @@ export default function WorkspacePage() {
 
                     {/* Attached files scrollable bar */}
                     {chatAttachedFiles.length > 0 && (
-                        <div className="flex gap-2 overflow-x-auto pb-1 pt-1" style={{ scrollbarWidth: "thin" }}>
-                            {chatAttachedFiles.map((f) => (
-                                <div
-                                    key={f.id}
-                                    className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 py-1 text-xs"
-                                    title={f.name}
-                                >
-                                    {pendingEnrichmentPolling.includes(f.id)
-                                        ? <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
-                                        : f.mimeType.startsWith("image/")
-                                            ? <ImageIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
-                                            : <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
-                                    }
-                                    <span className="max-w-[120px] truncate text-muted-foreground">{f.name}</span>
-                                    <button
-                                        type="button"
-                                        className="ml-0.5 shrink-0 text-muted-foreground hover:text-destructive"
-                                        title={t("workspace.ui.removeAttachment")}
-                                        aria-label={t("workspace.ui.removeAttachment")}
-                                        onClick={() => void handleRemoveChatFile(f.id)}
+                        <div className="space-y-1">
+                            <div className="text-[11px] text-muted-foreground">
+                                Allegati chat: {chatAttachedFiles.length}/{maxChatAttachments}
+                            </div>
+                            <div className="flex gap-2 overflow-x-auto pb-1 pt-1" style={{ scrollbarWidth: "thin" }}>
+                                {chatAttachedFiles.map((f) => (
+                                    <div
+                                        key={f.id}
+                                        className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 py-1 text-xs"
+                                        title={f.name}
                                     >
-                                        <X className="h-3 w-3" />
-                                    </button>
-                                </div>
-                            ))}
+                                        {pendingEnrichmentPolling.includes(f.id)
+                                            ? <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                                            : f.mimeType.startsWith("image/")
+                                                ? <ImageIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                                : <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                        }
+                                        <span className="max-w-[120px] truncate text-muted-foreground">{f.name}</span>
+                                        <button
+                                            type="button"
+                                            className="ml-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+                                            title={t("workspace.ui.removeAttachment")}
+                                            aria-label={t("workspace.ui.removeAttachment")}
+                                            onClick={() => void handleRemoveChatFile(f.id)}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 

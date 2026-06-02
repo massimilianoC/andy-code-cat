@@ -40,6 +40,16 @@ export interface ZeroEffortPipelineConfig {
     generate: ZeroEffortTaskConfig;
     vibeGenerate: ZeroEffortTaskConfig;
     godModeGenerate: ZeroEffortTaskConfig;
+    attachmentPolicy?: {
+        maxAttachmentsPerPrompt: number;
+        maxFileSizeBytes: number;
+        maxTotalBytes: number;
+        warningThresholdBytes: number;
+    };
+    documentContextPolicy?: {
+        maxAssetsPerPrompt: number;
+        fallbackInlineExtractionMaxAssets: number;
+    };
 }
 
 export function launchZeroEffort(

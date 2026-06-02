@@ -307,7 +307,21 @@ export async function uploadProjectAsset(
     projectId: string,
     file: File,
     meta?: { label?: string; scope?: "project" | "user"; useInProject?: boolean; styleRole?: string; descriptionText?: string }
-): Promise<{ asset: ProjectAssetDto }> {
+): Promise<{
+    asset: ProjectAssetDto;
+    warnings?: string[];
+    attachmentPolicy?: {
+        maxAttachmentsPerPrompt: number;
+        maxFileSizeBytes: number;
+        maxTotalBytes: number;
+        warningThresholdBytes: number;
+    };
+    usage?: {
+        totalBytes: number;
+        maxTotalBytes: number;
+        warningThresholdBytes: number;
+    };
+}> {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
     const formData = new FormData();
     formData.append("file", file);
@@ -325,7 +339,21 @@ export async function uploadProjectAsset(
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(res.status, json);
-    return json as { asset: ProjectAssetDto };
+    return json as {
+        asset: ProjectAssetDto;
+        warnings?: string[];
+        attachmentPolicy?: {
+            maxAttachmentsPerPrompt: number;
+            maxFileSizeBytes: number;
+            maxTotalBytes: number;
+            warningThresholdBytes: number;
+        };
+        usage?: {
+            totalBytes: number;
+            maxTotalBytes: number;
+            warningThresholdBytes: number;
+        };
+    };
 }
 
 export function addUrlReference(
