@@ -775,8 +775,6 @@ export function createLlmRoutes(): Router {
                 body: JSON.stringify(buildChatCompletionRequestBody({
                     provider: context.providerCatalog.provider,
                     model: context.modelId,
-                    supportedParameters: context.providerCatalog.models.find((model) => model.id === context.modelId)?.supportedParameters,
-                    structuredOutputMode: "artifact",
                     maxTokens: Math.min(
                         body.max_tokens ?? env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,
                         env.LLM_MAX_COMPLETION_TOKENS
@@ -1191,8 +1189,6 @@ export function createLlmRoutes(): Router {
                     body: JSON.stringify(buildChatCompletionRequestBody({
                         provider: context.providerCatalog.provider,
                         model: context.modelId,
-                        supportedParameters: context.providerCatalog.models.find((model) => model.id === context.modelId)?.supportedParameters,
-                        structuredOutputMode: "artifact",
                         stream: true,
                         maxTokens: Math.min(
                             body.max_tokens ?? env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,

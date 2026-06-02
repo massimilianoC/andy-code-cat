@@ -15,8 +15,6 @@ export interface UpdatePlatformConfigInput {
         cookieBanner: Partial<NonNullable<ProductGovernanceConfig["cookieBanner"]>>;
         legal: Partial<NonNullable<ProductGovernanceConfig["legal"]>>;
         nginx: Partial<ProductGovernanceConfig["nginx"]>;
-        attachmentPolicy: Partial<NonNullable<ProductGovernanceConfig["attachmentPolicy"]>>;
-        documentContextPolicy: Partial<NonNullable<ProductGovernanceConfig["documentContextPolicy"]>>;
     }>>;
     updatedByUserId?: string;
     costRates?: Partial<Omit<PlatformCostRates, "updatedAt" | "updatedByUserId">> & { updatedByUserId?: string };

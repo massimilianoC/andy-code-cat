@@ -29,18 +29,6 @@ const promptTaskSettingSchema = z.object({
     systemTemplate: z.string().max(20000).default(""),
 });
 
-const attachmentPolicySchema = z.object({
-    maxAttachmentsPerPrompt: z.number().int().min(1).max(100).default(10),
-    maxFileSizeBytes: z.number().int().min(1024).max(200 * 1024 * 1024).default(10 * 1024 * 1024),
-    maxTotalBytes: z.number().int().min(1024).max(1024 * 1024 * 1024).default(100 * 1024 * 1024),
-    warningThresholdBytes: z.number().int().min(1024).max(1024 * 1024 * 1024).default(80 * 1024 * 1024),
-});
-
-const documentContextPolicySchema = z.object({
-    maxAssetsPerPrompt: z.number().int().min(1).max(100).default(10),
-    fallbackInlineExtractionMaxAssets: z.number().int().min(1).max(100).default(10),
-});
-
 const mediaStockProviderSchema = z.enum(["pexels", "pixabay", "unsplash", "loremflickr", "picsum"]);
 
 const mediaProviderPolicySchema = z.object({
@@ -107,8 +95,6 @@ export const setPlatformConfigSchema = z.object({
             clientMaxBodySizeMb: z.number().int().min(1).max(1024).default(20),
             extraServerDirectives: z.string().max(40000).default(""),
         }).partial().optional(),
-        attachmentPolicy: attachmentPolicySchema.partial().optional(),
-        documentContextPolicy: documentContextPolicySchema.partial().optional(),
     }).default({})).optional(),
 });
 export type SetPlatformConfigInput = z.infer<typeof setPlatformConfigSchema>;
@@ -380,16 +366,6 @@ export interface PlatformConfigDto {
             cacheTtlSeconds: number;
             clientMaxBodySizeMb: number;
             extraServerDirectives: string;
-        };
-        attachmentPolicy?: {
-            maxAttachmentsPerPrompt: number;
-            maxFileSizeBytes: number;
-            maxTotalBytes: number;
-            warningThresholdBytes: number;
-        };
-        documentContextPolicy?: {
-            maxAssetsPerPrompt: number;
-            fallbackInlineExtractionMaxAssets: number;
         };
     }>;
     updatedAt: string;
