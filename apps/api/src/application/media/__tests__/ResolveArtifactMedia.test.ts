@@ -217,6 +217,13 @@ describe("ResolveArtifactMedia", () => {
             finalProvider: "pexels",
         });
         expect(repo.assets[0]?.generationMetadata?.providerResponse?.query).toBe("modern architecture studio");
+        expect(repo.assets[0]?.generationMetadata).toMatchObject({
+            conversationId: undefined,
+            mediaKey: "hero-main",
+            semanticQuery: "modern architecture studio",
+            resolutionRoute: "chat-preview",
+            fallbackUsed: false,
+        });
     });
 
     it("rejects placeholders without a matching manifest request", async () => {
@@ -466,7 +473,7 @@ describe("ResolveArtifactMedia", () => {
                 js: "",
             },
             mediaManifest: manifest,
-            sourceContext: { route: "chat-preview-stream" },
+            sourceContext: { route: "chat-preview-stream", conversationId: "conversation-1", parentSnapshotId: "snapshot-0" },
             mode: "initial_generation",
             onProgress: (e) => events.push(e),
         });
@@ -480,6 +487,12 @@ describe("ResolveArtifactMedia", () => {
         expect(startEvent.total).toBe(1);
         const doneEvent = events.find((e) => e.phase === "done");
         expect(doneEvent.resolvedCount).toBe(1);
+        expect(repo.assets[0]?.generationMetadata).toMatchObject({
+            conversationId: "conversation-1",
+            parentSnapshotId: "snapshot-0",
+            mediaKey: "hero-main",
+            resolutionRoute: "chat-preview-stream",
+        });
     });
 
     it("continues resolving other images when one image provider throws", async () => {

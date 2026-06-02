@@ -52,6 +52,7 @@ export interface MessageDto {
         finishReason?: string;
         rawResponse?: string;
         structuredParseValid?: boolean;
+        snapshotId?: string;
         promptingTrace?: {
             originalUserMessage: string;
             /** MongoDB _id of the llm_prompt_configs document used to build the pipeline wrapper */
@@ -67,6 +68,22 @@ export interface MessageDto {
             html: string;
             css: string;
             js: string;
+        };
+        mediaResolution?: {
+            version: "media-resolution-v1";
+            traceIds: string[];
+            assetIds: string[];
+            mediaKeys: string[];
+            degraded: boolean;
+            directives?: Array<{
+                key: string;
+                role?: string;
+                semanticQuery?: string;
+                status: "resolved" | "fallback_resolved" | "unresolved";
+                provider?: string;
+                assetId?: string;
+                fallbackUsed?: boolean;
+            }>;
         };
         chatStructured?: {
             summary: string;

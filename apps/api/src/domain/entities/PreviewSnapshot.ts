@@ -51,6 +51,15 @@ export interface PreviewSnapshotMetadata {
         assetIds: string[];
         mediaKeys: string[];
         degraded: boolean;
+        directives?: Array<{
+            key: string;
+            role?: string;
+            semanticQuery?: string;
+            status: "resolved" | "fallback_resolved" | "unresolved";
+            provider?: string;
+            assetId?: string;
+            fallbackUsed?: boolean;
+        }>;
     };
 }
 

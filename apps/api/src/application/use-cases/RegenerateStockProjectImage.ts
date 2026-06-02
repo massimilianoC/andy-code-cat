@@ -54,6 +54,14 @@ export class RegenerateStockProjectImage {
         scope?: "project" | "user";
         suppressNotifications?: boolean;
         allowFallback?: boolean;
+        lineage?: {
+            conversationId?: string;
+            sourceMessageId?: string;
+            parentSnapshotId?: string;
+            mediaKey?: string;
+            semanticQuery?: string;
+            resolutionRoute?: string;
+        };
     }): Promise<{
         asset: ProjectAsset;
         assetUrl: string;
@@ -102,9 +110,14 @@ export class RegenerateStockProjectImage {
                 targetMode: input.targetMode,
                 scope: input.scope,
                 sourceContext: {
-                    route: "edit-regenerate-stock",
+                    route: input.lineage?.resolutionRoute ?? "edit-regenerate-stock",
                     targetSelector: input.targetSelector,
                     offset,
+                    conversationId: input.lineage?.conversationId,
+                    sourceMessageId: input.lineage?.sourceMessageId,
+                    parentSnapshotId: input.lineage?.parentSnapshotId,
+                    mediaKey: input.lineage?.mediaKey,
+                    semanticQuery: input.lineage?.semanticQuery ?? input.query,
                 },
             });
         } catch (error) {
@@ -145,6 +158,12 @@ export class RegenerateStockProjectImage {
                 finalProvider: resolved.provider,
                 fallbackUsed: resolved.fallbackUsed,
                 attemptedProviders: resolved.attemptedProviders,
+                conversationId: input.lineage?.conversationId,
+                sourceMessageId: input.lineage?.sourceMessageId,
+                parentSnapshotId: input.lineage?.parentSnapshotId,
+                mediaKey: input.lineage?.mediaKey,
+                semanticQuery: input.lineage?.semanticQuery ?? input.query,
+                resolutionRoute: input.lineage?.resolutionRoute ?? "edit-regenerate-stock",
             },
         });
 

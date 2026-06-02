@@ -333,6 +333,13 @@ export class ResolveArtifactMedia {
                     targetSelector: `[data-media-key="${effectiveRequest.key}"]`,
                     scope: "project",
                     suppressNotifications: true,
+                    lineage: {
+                        conversationId: input.sourceContext.conversationId,
+                        parentSnapshotId: input.sourceContext.parentSnapshotId,
+                        mediaKey: effectiveRequest.key,
+                        semanticQuery: effectiveRequest.semanticQuery,
+                        resolutionRoute: input.sourceContext.route,
+                    },
                 });
 
                 completed += 1;

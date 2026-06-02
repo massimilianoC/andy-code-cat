@@ -2,6 +2,15 @@ import type { CostEstimate } from "./Conversation";
 
 export type PromptExecutionStatus = "succeeded" | "failed";
 
+export interface PromptExecutionMediaResolutionSummary {
+    version: string;
+    resolvedCount: number;
+    failedCount: number;
+    degraded: boolean;
+    mediaKeys?: string[];
+    traceIds?: string[];
+}
+
 export interface PromptExecutionLog {
     id: string;
     taskKey: string;
@@ -28,6 +37,7 @@ export interface PromptExecutionLog {
         completionTokens: number;
         totalTokens: number;
     };
+    mediaResolutionSummary?: PromptExecutionMediaResolutionSummary;
     costEstimate?: CostEstimate;
     status: PromptExecutionStatus;
     errorMessage?: string;

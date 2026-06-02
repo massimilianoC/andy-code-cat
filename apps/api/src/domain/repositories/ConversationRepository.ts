@@ -22,6 +22,13 @@ export interface ConversationRepository {
         message: Pick<Message, 'role' | 'content' | 'metadata'>
     ): Promise<Message>;
 
+    updateMessageMetadata(
+        conversationId: string,
+        projectId: string,
+        messageId: string,
+        metadata: Partial<NonNullable<Message["metadata"]>>
+    ): Promise<Message | null>;
+
     addBackgroundTask(
         conversationId: string,
         messageId: string,
