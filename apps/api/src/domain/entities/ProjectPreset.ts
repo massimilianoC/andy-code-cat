@@ -735,7 +735,7 @@ Pensa come un art director: impatto visivo → chiarezza → completezza.`,
     {
         id: "videogame",
         label: "Videogame Experience", labelIt: "Videogioco", labelEn: "Videogame Experience",
-        hint: "Esperienza giocabile browser-first con HUD e loop chiaro",
+        hint: "Qualsiasi gioco interattivo browser: arcade, platform, puzzle, action, avventura — con loop di gioco, HUD e meccaniche playable",
         icon: "Gamepad2",
         outputSpec: {
             pageModel: 'single_page',

@@ -165,8 +165,13 @@ export class VibeClassify {
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier disabled", skipped: true, ...echoProject };
         }
 
+        // Only expose active presets to the classifier — inactive ones (freerunner,
+        // data-dashboard) split probability mass and push game/generic requests below
+        // the confidence threshold, causing templateId to return null and Layer B to be empty.
         const templateListBlock = buildTemplateListBlock(
-            PRESET_CATALOG.map((p) => ({ id: p.id, label: p.label, hint: p.hint ?? "" })),
+            PRESET_CATALOG
+                .filter((p) => p.isActive !== false)
+                .map((p) => ({ id: p.id, label: p.label, hint: p.hint ?? "" })),
         );
 
         // If a custom systemTemplate is set in platform config, use it as template
