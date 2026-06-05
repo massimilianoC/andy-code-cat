@@ -10,6 +10,7 @@ import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import type { RequestWithContext } from "../types";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
+import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
 import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
@@ -27,6 +28,7 @@ export function createPreviewSnapshotRoutes(): Router {
     const router = Router();
 
     const projectRepository = new MongoProjectRepository();
+    const projectPresetRepository = new MongoProjectPresetRepository();
     const conversationRepository = new MongoConversationRepository();
     const previewSnapshotRepository = new MongoPreviewSnapshotRepository();
     const mediaResolutionTraceRepository = new MongoMediaResolutionTraceRepository();
@@ -40,7 +42,11 @@ export function createPreviewSnapshotRoutes(): Router {
     const listPreviewSnapshots = new ListPreviewSnapshots(previewSnapshotRepository);
     const activatePreviewSnapshot = new ActivatePreviewSnapshot(previewSnapshotRepository);
     const getPreviewSnapshot = new GetPreviewSnapshot(previewSnapshotRepository);
-    const capturePreviewSnapshot = new CapturePreviewSnapshot(previewSnapshotRepository);
+    const capturePreviewSnapshot = new CapturePreviewSnapshot(
+        previewSnapshotRepository,
+        projectRepository,
+        projectPresetRepository,
+    );
     const deletePreviewSnapshot = new DeletePreviewSnapshot(previewSnapshotRepository);
 
     router.use(authMiddleware);

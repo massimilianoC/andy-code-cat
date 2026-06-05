@@ -35,6 +35,7 @@ export interface PresetTagDefaults {
     toneTags?: string[];
     featureTags?: string[];
     audienceTags?: string[];
+    sectorTags?: string[];
 }
 
 export interface PresetRecommendedModelDto {
@@ -105,10 +106,14 @@ export function getProject(token: string, projectId: string) {
 }
 
 export function renameProject(token: string, projectId: string, name: string) {
+    return updateProject(token, projectId, { name });
+}
+
+export function updateProject(token: string, projectId: string, input: { name?: string; presetId?: string }) {
     return call<{ project: Project }>(
         "PATCH",
         `/v1/projects/${projectId}`,
-        { name },
+        input,
         { Authorization: `Bearer ${token}`, "x-project-id": projectId }
     );
 }

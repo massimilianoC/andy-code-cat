@@ -5,11 +5,13 @@ import type {
     VibePrefillRequest,
     VibePrefillResponse,
     VibeConfigResponse,
+    VibeGenerationMode,
 } from "@andy-code-cat/contracts";
 
 export interface VibeClassifyInput {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
+    generationMode?: VibeGenerationMode;
     provider?: string;
     model?: string;
 }

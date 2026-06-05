@@ -41,6 +41,18 @@ function resolveOptimizedText(content: string, reasoning: string, rawPrompt: str
     return stripThinkBlocks(content) || stripThinkBlocks(reasoning) || rawPrompt;
 }
 
+// Returns true when the LLM output is likely truncated and should not replace the original prompt.
+function isOutputLikelyTruncated(optimized: string, raw: string, finishReason: string): boolean {
+    // Explicit token cutoff reported by the provider
+    if (finishReason === "length") return true;
+    // Output suspiciously short relative to input (< 15% and < 80 chars minimum)
+    if (raw.length > 200 && optimized.length < Math.max(raw.length * 0.15, 80)) return true;
+    // Ends mid-sentence: no sentence-terminating character at the end
+    const trimmed = optimized.trimEnd();
+    if (trimmed.length > 30 && !/[.!?:;)\]"'\u00bb\n]$/.test(trimmed)) return true;
+    return false;
+}
+
 type OptimizerUsage = {
     promptTokens: number;
     completionTokens: number;
@@ -67,6 +79,7 @@ type OptimizePromptResponse = {
     skipped?: boolean;
     rawResponse?: string;
     finishReason?: string;
+    truncated?: boolean;
     promptingTrace?: OptimizerTrace;
 };
 
@@ -160,6 +173,7 @@ export class OptimizeUserPrompt {
         optimizedPrompt: string;
         rawResponse?: string;
         finishReason?: string;
+        truncated?: boolean;
         usage?: OptimizerUsage;
         providerCostUsd?: number;
         skipped?: boolean;
@@ -187,6 +201,7 @@ export class OptimizeUserPrompt {
             skipped: input.skipped ?? false,
             rawResponse: input.rawResponse ?? input.optimizedPrompt,
             finishReason: input.finishReason,
+            truncated: input.truncated ?? false,
             promptingTrace: this.buildPromptingTrace(input.request, input.context),
         };
     }
@@ -497,11 +512,14 @@ export class OptimizeUserPrompt {
             }
 
             const optimizerMessage = payload?.choices?.[0]?.message;
-            const optimizedPrompt = resolveOptimizedText(
+            const finishReasonRaw = String(payload?.choices?.[0]?.finish_reason ?? "stop");
+            const resolvedText = resolveOptimizedText(
                 String(optimizerMessage?.content ?? ""),
                 String(optimizerMessage?.reasoning_content ?? optimizerMessage?.reasoning ?? ""),
                 input.rawPrompt,
             );
+            const truncated = isOutputLikelyTruncated(resolvedText, input.rawPrompt, finishReasonRaw);
+            const optimizedPrompt = truncated ? input.rawPrompt : resolvedText;
             const usage = payload?.usage
                 ? {
                     promptTokens: Number(payload.usage.prompt_tokens ?? 0),
@@ -522,8 +540,9 @@ export class OptimizeUserPrompt {
                 request: input,
                 context: preparedContext,
                 optimizedPrompt,
-                rawResponse: optimizedPrompt,
-                finishReason: String(payload?.choices?.[0]?.finish_reason ?? "stop"),
+                rawResponse: resolvedText,
+                finishReason: finishReasonRaw,
+                truncated,
                 usage,
                 providerCostUsd,
             });
@@ -664,14 +683,18 @@ export class OptimizeUserPrompt {
                 }
             }
 
-            const optimizedPrompt = resolveOptimizedText(rawReply, reasoningReply, input.rawPrompt);
+            const resolvedStreamText = resolveOptimizedText(rawReply, reasoningReply, input.rawPrompt);
+            const streamFinishReason = finishReason ?? "stop";
+            const streamTruncated = isOutputLikelyTruncated(resolvedStreamText, input.rawPrompt, streamFinishReason);
+            const optimizedPrompt = streamTruncated ? input.rawPrompt : resolvedStreamText;
             const result = this.buildResult({
                 startedAt,
                 request: input,
                 context: preparedContext,
                 optimizedPrompt,
-                rawResponse: (rawReply.trim() || reasoningReply.trim()) || optimizedPrompt,
-                finishReason: finishReason ?? "stop",
+                rawResponse: (rawReply.trim() || reasoningReply.trim()) || resolvedStreamText,
+                finishReason: streamFinishReason,
+                truncated: streamTruncated,
                 usage,
                 providerCostUsd,
             });

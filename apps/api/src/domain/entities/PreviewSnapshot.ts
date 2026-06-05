@@ -61,6 +61,44 @@ export interface PreviewSnapshotMetadata {
             fallbackUsed?: boolean;
         }>;
     };
+    dataDashboard?: {
+        artifactKind: "data_dashboard";
+        datasetBindings: Array<{
+            bindingId: string;
+            assetId: string;
+            tableName?: string;
+            runtimeMode: "source_file" | "normalized_local" | "backend_query" | "hybrid";
+            exposureClass: "private_runtime_only" | "published_runtime_only" | "published_runtime_plus_source" | "backend_only";
+            limitations?: string[];
+        }>;
+        dashboardDefinition?: {
+            title?: string;
+            description?: string;
+            defaultBindingId?: string;
+            defaultTableName?: string;
+            preferredInteractionMode?: "local_first" | "backend_first" | "hybrid";
+        };
+        querySpecs?: Array<{
+            queryId: string;
+            bindingId: string;
+            tableName?: string;
+            intent: "kpi" | "series" | "distribution" | "table" | "ranking";
+            aggregation?: string;
+            column?: string;
+            groupBy?: string;
+            filters?: Array<Record<string, unknown>>;
+            limit?: number;
+        }>;
+        chartSpecs?: Array<{
+            chartId: string;
+            queryId: string;
+            family: "line" | "bar" | "area" | "pie" | "table" | "metric";
+            title: string;
+            x?: string;
+            y?: string;
+            series?: string;
+        }>;
+    };
 }
 
 export interface PreviewSnapshot {

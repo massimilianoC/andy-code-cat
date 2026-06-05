@@ -40,6 +40,7 @@ export interface PresetTagDefaults {
     toneTags?: string[];
     featureTags?: string[];
     audienceTags?: string[];
+    sectorTags?: string[];
 }
 
 export interface PresetRecommendedModel {
@@ -137,6 +138,15 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         sortOrder: 60,
         recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Data visual" },
     },
+    "data-dashboard": {
+        category: "data-analytics",
+        categoryLabel: "Data & Analytics",
+        categoryHint: "Grounded dashboards",
+        tags: ["dataset", "dashboard", "kpi", "analytics"],
+        sortOrder: 65,
+        isActive: false,
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Grounded analysis" },
+    },
     slideshow: {
         category: "presentation",
         categoryLabel: "Presentation",
@@ -167,6 +177,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Playable experiences",
         tags: ["runner", "arcade", "mobile"],
         sortOrder: 100,
+        isActive: false,
         recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Arcade flow" },
     },
     seriousgame: {
@@ -213,7 +224,7 @@ function withPresetMeta(preset: ProjectPreset): ProjectPreset {
         categoryHint: meta.categoryHint ?? preset.categoryHint ?? "",
         tags: meta.tags ?? preset.tags ?? [],
         sortOrder: meta.sortOrder ?? preset.sortOrder ?? 999,
-        isActive: preset.isActive ?? true,
+        isActive: meta.isActive ?? preset.isActive ?? true,
         scope: preset.scope ?? "global",
         status: preset.status ?? "published",
     };
@@ -255,22 +266,27 @@ const RAW_PRESET_CATALOG: ProjectPreset[] = [
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — LANDING PAGE:
-Struttura la pagina come landing page a conversione:
-1. HERO: headline forte, subheading, CTA primaria above-the-fold.
-2. SOCIAL PROOF / TRUST: testimonial, loghi clienti, numeri chiave.
-3. FEATURES / VALORE: sezioni benefit con icone o immagini.
-4. CTA secondaria o pricing table.
-5. FOOTER: contatti, legal links.
-Ogni sezione ha un obiettivo di conversione preciso. Niente distrazioni.
-La CTA primaria deve essere visibile senza scroll.`,
+            systemPromptModule: `FORMATO OUTPUT - LANDING PAGE:
+Genera una singola pagina orientata a una conversione primaria. Non trasformarla in un sito istituzionale.
+STRUTTURA OBBLIGATORIA:
+1. HERO conversion-first: nome/offerta, promessa misurabile, microcopy di fiducia e CTA primaria immediata.
+2. PAIN / JOB-TO-BE-DONE: problema concreto del pubblico, costo dell'inazione, motivo per cui serve ora.
+3. SOLUZIONE: 3-5 benefici espressi come risultati, non come semplici feature.
+4. PROVA: testimonial, loghi, numeri, casi o garanzie; se mancano dati, crea placeholder credibili e chiaramente sostituibili.
+5. OFFERTA / PROCESSO: cosa riceve l'utente, come funziona, tempi, step o pricing se rilevante.
+6. OBIEZIONI: FAQ breve su prezzo, tempi, rischio, supporto o requisiti.
+7. CTA FINALE: ripeti la stessa azione primaria con rassicurazione finale.
+CRITERIO DI RIUSCITA:
+- Ogni sezione deve ridurre attrito o aumentare desiderio verso la stessa CTA.
+- La pagina deve essere leggibile anche scansionandola in 30 secondi.
+- Evita sezioni generiche come "Chi siamo" se non aiutano direttamente la conversione.`,
         },
         defaultTags: {
             layoutTags: ["layout:hero-first"],
-            featureTags: ["feature:contact-form"],
+            featureTags: ["feat:contact-form"],
         },
-        briefTemplate: "Landing page orientata alla conversione per {{projectName}}. L'obiettivo principale è generare lead/contatti/acquisti. Il pubblico target è [...]",
-        styleTemplate: "Layout pulito con gerarchia visiva forte. Hero impattante, CTA ben visibile.",
+        briefTemplate: "Landing page per {{projectName}}. Obiettivo: convertire [pubblico] verso una singola azione: [lead / acquisto / prenotazione / demo]. Problema da risolvere: [...]. Promessa principale: [...]. Prove disponibili: [testimonial, numeri, clienti, garanzia]. Offerta o incentivo: [...]. Sezioni richieste: hero, problema, benefici, prova, processo/offerta, FAQ, CTA finale.",
+        styleTemplate: "Conversione prima dello stile: gerarchia forte, CTA ricorrente, blocchi brevi, proof visibile, ritmo alternato tra promessa, prova e azione.",
         briefGuideQuestions: [
             "Qual è la singola azione che vuoi che il visitatore compia?",
             "Quali sono i 3 principali benefici del tuo prodotto/servizio?",
@@ -290,24 +306,28 @@ La CTA primaria deve essere visibile senza scroll.`,
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — WEBSITE:
-Struttura come sito web classico multi-sezione con navigazione sticky in cima:
-1. HEADER con logo, navigazione (Home, Chi siamo, Servizi, Contatti).
-2. HERO con identità e proposta di valore.
-3. ABOUT / CHI SIAMO.
-4. SERVIZI / PRODOTTI (card grid).
-5. PORTFOLIO o CASE STUDY (opzionale).
-6. TESTIMONIAL.
-7. CONTATTI con form.
-8. FOOTER completo.
-Ogni sezione ha un anchor ID per la navigazione interna.`,
+            systemPromptModule: `FORMATO OUTPUT - WEBSITE:
+Genera un sito one-page completo per orientare, spiegare e creare fiducia. Non farlo sembrare una landing a una sola offerta.
+STRUTTURA OBBLIGATORIA:
+1. HEADER: identita, navigazione con anchor, CTA secondaria o contatto.
+2. HERO ISTITUZIONALE: chi e il progetto, per chi lavora, valore principale.
+3. ABOUT / POSIZIONAMENTO: storia breve, differenza competitiva, contesto.
+4. SERVIZI / PRODOTTI: card chiare con problema risolto, output, destinatario.
+5. METODO / PROCESSO: 3-5 step che spiegano come si lavora o come si compra.
+6. PROVE / PORTFOLIO: casi, risultati, gallery o esempi sostituibili.
+7. TEAM / CREDENZIALI: persone, competenze, certificazioni o partner se rilevanti.
+8. FAQ / CONTATTI / FOOTER: domande pratiche, form, canali, informazioni legali.
+CRITERIO DI RIUSCITA:
+- La pagina deve rispondere a "chi siete", "cosa fate", "perche fidarsi", "come iniziare".
+- Ogni sezione deve avere un anchor ID coerente con la navigazione.
+- La CTA e importante ma non deve schiacciare la funzione informativa del sito.`,
         },
         defaultTags: {
             layoutTags: ["layout:hero-first"],
-            featureTags: ["feature:contact-form", "feature:testimonials"],
+            featureTags: ["feat:contact-form", "feat:testimonials", "feat:portfolio-grid"],
         },
-        briefTemplate: "Sito web istituzionale per {{projectName}}. Presenta l'azienda, i servizi e facilita il contatto con i potenziali clienti.",
-        styleTemplate: "Struttura classica, professionale. Navigazione chiara. Sezioni ben distinte.",
+        briefTemplate: "Website istituzionale per {{projectName}}. Scopo: presentare identita, servizi/prodotti, metodo, prove e canali di contatto. Pubblico: [...]. Servizi principali: [...]. Differenza competitiva: [...]. Elementi da includere: [portfolio, team, FAQ, contatti, partner, gallery]. Tono desiderato: [...].",
+        styleTemplate: "Sito orientato alla fiducia: navigazione chiara, sezioni riconoscibili, contenuti scansionabili, card informative e contatti facili da trovare.",
         briefGuideQuestions: [
             "Quali sezioni del sito sono prioritarie?",
             "Quanti servizi/prodotti vuoi mostrare?",
@@ -326,23 +346,27 @@ Ogni sezione ha un anchor ID per la navigazione interna.`,
             pageModel: 'single_page',
             sectionModel: 'stepped_form',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — FORM MULTI-STEP:
-Costruisci un form multi-step (wizard) con queste caratteristiche:
-- STEP 1: dati principali (minimo campi necessari).
-- STEP 2: dettagli aggiuntivi.
-- STEP 3: riepilogo + invio.
-Navigation: bottoni "Avanti" / "Indietro" / "Invia".
-Progress bar visibile in cima.
-Validazione client-side per ogni step prima di procedere.
-Ogni step occupa lo schermo verticalmente, senza scroll orizzontale.
-Il form deve essere mobile-first.`,
+            systemPromptModule: `FORMATO OUTPUT - FORM / WIZARD:
+Genera un flusso guidato di raccolta dati, non una pagina contatti generica.
+STRUTTURA OBBLIGATORIA:
+1. INTRO: cosa verra raccolto, tempo stimato, beneficio per l'utente.
+2. PROGRESSO: stepper o progress bar con stato corrente sempre comprensibile.
+3. STEP 1 - QUALIFICAZIONE: pochi campi essenziali per capire utente/scopo.
+4. STEP 2 - DETTAGLI: informazioni specifiche, preferenze, budget, contesto o allegati simulati.
+5. STEP 3 - REVIEW: riepilogo leggibile, modifica rapida, consenso/privacy se rilevante.
+6. SUCCESS STATE: conferma, prossimi passi, tempi di risposta, contatto alternativo.
+REGOLE UX:
+- Ogni step deve avere un obiettivo chiaro e massimo 3-5 input visibili.
+- Usa validazione client-side progressiva e messaggi di errore comprensibili.
+- Mantieni stato locale del form durante la navigazione avanti/indietro.
+- Il flusso deve funzionare anche come prototipo senza backend reale.`,
         },
         defaultTags: {
-            featureTags: ["feature:contact-form"],
+            featureTags: ["feat:contact-form"],
             toneTags: ["tone:friendly-casual"],
         },
-        briefTemplate: "Form guidato multi-step per {{projectName}}. Lo scopo è raccogliere [tipo di dati] in modo semplice e progressivo.",
-        styleTemplate: "Interfaccia pulita, pochi campi per step, focus sul completamento.",
+        briefTemplate: "Form guidato per {{projectName}}. Scopo: raccogliere [lead / preventivo / iscrizione / onboarding / feedback]. Dati richiesti: [...]. Step previsti: [qualificazione, dettagli, preferenze, riepilogo]. Cosa succede dopo l'invio: [...]. Requisiti di validazione/privacy: [...].",
+        styleTemplate: "Workflow chiaro e rassicurante: pochi campi per step, progresso evidente, errori leggibili, riepilogo finale e conferma operativa.",
         briefGuideQuestions: [
             "Quali informazioni vuoi raccogliere dall'utente?",
             "Quanti step logici ha il processo?",
@@ -361,24 +385,28 @@ Il form deve essere mobile-first.`,
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — MANIFESTO:
-Struttura come manifesto brand/identitario con questi elementi:
-1. APERTURA: titolo evocativo + claim fondamentale (grande, centrato).
-2. PROBLEMA / PERCHÉ: dichiarazione del problema che si vuole risolvere.
-3. VALORI: lista di 3-7 valori fondamentali, ognuno con una riga esplicativa.
-4. VISIONE: dove si vuole arrivare, il futuro immaginato.
-5. AZIONE / CALL: cosa chiedi al lettore (unirsi, credere, agire).
-6. FIRMA: nome/brand + data.
-Tipografia forte e gerarchica. Molto testo, poco decorativismo.
-Contrasto netto tra sfondo e testo. Tono solenne ma energico.`,
+            systemPromptModule: `FORMATO OUTPUT - MANIFESTO:
+Genera una dichiarazione identitaria ad alto impatto. Non e una landing commerciale e non e un poster evento.
+STRUTTURA OBBLIGATORIA:
+1. APERTURA: titolo/claim memorabile che esprime una posizione netta.
+2. TESI: cosa sostiene il brand/progetto e perche conta ora.
+3. ANTAGONISTA / PROBLEMA: cosa viene rifiutato, superato o corretto.
+4. PRINCIPI: 5-7 valori operativi, ciascuno con frase breve e concreta.
+5. VISIONE: futuro desiderato, cambiamento promesso, conseguenza culturale o pratica.
+6. IMPEGNI: cosa il progetto promette di fare e cosa chiede alla community.
+7. FIRMA: nome, data o luogo simbolico, chiusura solenne.
+CRITERIO DI RIUSCITA:
+- Il testo deve sembrare intenzionale, non pubblicitario.
+- Ogni principio deve essere azionabile, non un valore astratto isolato.
+- Usa ritmo editoriale: frasi brevi, contrasti, ripetizioni controllate, climax finale.`,
         },
         defaultTags: {
             visualTags: ["visual:bold"],
             toneTags: ["tone:inspirational", "tone:authoritative-expert"],
             typographyTags: ["typo:display-bold"],
         },
-        briefTemplate: "Manifesto di {{projectName}}: una dichiarazione pubblica di valori, visione e missione. Rivolto a [pubblico].",
-        styleTemplate: "Tipografia display dominante. Palette scura o a forte contrasto. Nessun elemento superfluo.",
+        briefTemplate: "Manifesto per {{projectName}}. Posizione centrale: [...]. Pubblico chiamato in causa: [...]. Problema o mentalita da superare: [...]. Principi irrinunciabili: [...]. Visione di futuro: [...]. Azione richiesta al lettore: [aderire, cambiare comportamento, sostenere, partecipare].",
+        styleTemplate: "Editoriale e assertivo: tipografia protagonista, ritmo retorico, blocchi manifesto, contrasti netti e una chiusura memorabile.",
         briefGuideQuestions: [
             "Qual è il valore o principio fondante che vuoi dichiarare?",
             "Chi deve sentirsi chiamato in causa da questo manifesto?",
@@ -388,6 +416,44 @@ Contrasto netto tra sfondo e testo. Tono solenne ma energico.`,
     },
 
     // ── SLIDESHOW ──
+    {
+        id: "data-dashboard",
+        label: "Data Dashboard", labelIt: "Dashboard Dati", labelEn: "Data Dashboard",
+        hint: "Dashboard grounded su dataset allegati, KPI, filtri e analisi runtime",
+        icon: "ChartColumn",
+        outputSpec: {
+            pageModel: 'single_page',
+            sectionModel: 'masonry',
+            printReady: false,
+            systemPromptModule: `FORMATO OUTPUT - DATA DASHBOARD:
+Genera una dashboard operativa grounded su dataset allegati. Questo preset resta nascosto nel catalogo standard finche il runtime dati pubblico non e completo.
+STRUTTURA OBBLIGATORIA:
+1. DATA SUMMARY: nome dataset, righe/colonne note se disponibili, copertura e limiti.
+2. KPI STRIP: 3-6 metriche prioritarie, con formula o origine dichiarata.
+3. FILTER BAR: periodo, segmento, categoria, area o altre dimensioni filtrabili.
+4. VISUAL AREA: grafici leggibili per trend, confronto, distribuzione o ranking.
+5. EXPLORATION TABLE: tabella compatta con colonne chiave e stato vuoto/loading.
+6. INSIGHT PANEL: anomalie, domande suggerite, azioni operative, incertezza esplicita.
+VINCOLI:
+- Non inventare numeri: se mancano dati, usa placeholder marcati come da collegare al runtime.
+- Deve sembrare uno strumento di analisi, non una pagina marketing.
+- Evidenzia sempre metrica, dimensione, filtro e origine dati di ogni visualizzazione.`,
+        },
+        defaultTags: {
+            visualTags: ["visual:corporate"],
+            layoutTags: ["layout:dense-info"],
+            featureTags: [],
+        },
+        briefTemplate: "Dashboard dati per {{projectName}}. Dataset o fonte: [...]. Utenti: [operations / management / analyst]. Domande principali: [...]. KPI prioritari: [...]. Dimensioni di filtro: [periodo, categoria, area, canale]. Output atteso: KPI, grafici, tabella esplorativa, insight e limiti dichiarati.",
+        styleTemplate: "Operativa e leggibile: KPI in alto, filtri sempre visibili, densita controllata, grafici etichettati, tabella grounded e pannello insight con incertezza esplicita.",
+        briefGuideQuestions: [
+            "Quali KPI o metriche sono prioritari?",
+            "Qual è la tabella o entità principale del dataset?",
+            "Quali filtri e segmentazioni servono agli utenti?",
+            "Quali domande analitiche devono trovare risposta nella dashboard?",
+        ],
+    },
+
     {
         id: "slideshow",
         label: "Presentation / Pitch", labelIt: "Presentazione / Pitch", labelEn: "Presentation / Pitch",
@@ -414,27 +480,35 @@ Contrasto netto tra sfondo e testo. Tono solenne ma energico.`,
 }
 @page { size: 1270px 714px; margin: 0; }
 @media print { body { margin: 0; } .slide { page-break-after: always; } }`,
-            systemPromptModule: `FORMATO OUTPUT — PRESENTAZIONE SLIDE 16:9:
-Crea una presentazione con slide navigabili.
-VINCOLI TECNICI (NON NEGOZIABILI):
-- Ogni slide è un div.slide di 1270×714px.
+            systemPromptModule: `FORMATO OUTPUT - PRESENTATION / PITCH 16:9:
+Crea un deck argomentativo, navigabile e stampabile. Deve aiutare una riunione, un pitch o una review, non imitare una keynote da palco.
+VINCOLI TECNICI:
+- Ogni slide e un div.slide di 1270x714px.
 - Nessun contenuto deve uscire da queste dimensioni.
-- Navigazione con frecce sinistra/destra o pulsanti prev/next.
-- Slide counter visibile (es. "3 / 10").
-- Esportabile come PDF 16:9 (ogni slide = 1 pagina).
-STRUTTURA TIPICA:
-  Slide 1: Cover (titolo, autore, data)
-  Slide 2: Agenda / Indice
-  Slide 3-N: Contenuto (max 5 punti per slide)
-  Slide N: Conclusione + CTA
-Font grande (min 24px corpo), bullet points, mai testo denso.`,
+- Navigazione con controlli prev/next o tastiera e slide counter visibile.
+- Esportabile come PDF 16:9: una slide = una pagina.
+STRUTTURA CONSIGLIATA:
+1. Cover: titolo, contesto, autore/data.
+2. Executive summary: 3 messaggi chiave.
+3. Problema / opportunita.
+4. Audience / mercato / scenario.
+5. Soluzione o proposta.
+6. Prove: dati, esempi, casi o benchmark.
+7. Piano: step, timeline, responsabilita.
+8. Rischi / tradeoff / mitigazioni.
+9. Decisione richiesta o next steps.
+10. Chiusura con CTA.
+CRITERIO DI RIUSCITA:
+- Ogni slide deve avere un unico punto principale.
+- Usa titoli assertivi, non etichette vaghe.
+- Massimo 5 bullet per slide, testo corpo grande e leggibile.`,
         },
         defaultTags: {
             visualTags: ["visual:corporate"],
             typographyTags: ["typo:sans-serif-clean"],
         },
-        briefTemplate: "Presentazione di {{projectName}} in formato slide 16:9. Argomento: [argomento]. Audience: [chi vede la presentazione].",
-        styleTemplate: "Slide pulite, massimo 5 punti per slide, grafica di supporto al testo.",
+        briefTemplate: "Presentazione / pitch per {{projectName}}. Obiettivo: [convincere, aggiornare, vendere, formare, decidere]. Audience: [...]. Contesto: [...]. Messaggi chiave: [...]. Dati o prove disponibili: [...]. Decisione o azione richiesta alla fine: [...]. Numero slide desiderato: [...].",
+        styleTemplate: "Deck chiaro e argomentativo: una tesi per slide, titoli assertivi, visual di supporto, ritmo ordinato e conclusione orientata alla decisione.",
         briefGuideQuestions: [
             "Qual è l'obiettivo della presentazione (vendita, formazione, pitch, report)?",
             "A quante slide punti circa?",
@@ -466,24 +540,32 @@ Font grande (min 24px corpo), bullet points, mai testo denso.`,
   box-sizing: border-box;
 }
 @page { size: 1920px 1080px; margin: 0; }`,
-            systemPromptModule: `FORMATO OUTPUT — KEYNOTE VISUALE:
-Presentazione ad alto impatto visivo per conferenze o all-hands.
+            systemPromptModule: `FORMATO OUTPUT - CONFERENCE KEYNOTE:
+Crea una sequenza visuale da palco, launch o all-hands. Deve avere momenti memorabili, non un deck di bullet.
 VINCOLI TECNICI:
-- Ogni slide è 1920×1080px (full HD).
-- Prevalenza immagini/visual su testo.
-- Max 2-3 parole chiave per slide (non lista punti).
-- Navigazione keyboard-friendly (frecce).
-STRUTTURA:
-  Cover spettacolare, slide di solo-citazione, slide numerica (dato in grande),
-  slide emotiva (foto + claim), slide di sintesi finale.
-Tipografia display. Immagini fullbleed. Testo in sovrapposizione con overlay scuro.`,
+- Ogni slide e 1920x1080px full HD.
+- Prevalenza di visual, parole chiave, numeri grandi e ritmo scenico.
+- Navigazione keyboard-friendly e slide counter discreto.
+ARCO NARRATIVO:
+1. Opening hook: frase o immagine che imposta tensione.
+2. Context shift: perche il tema conta adesso.
+3. Problem reveal: cosa non funziona piu.
+4. Insight: nuova chiave di lettura.
+5. Vision: dove si vuole arrivare.
+6. Proof moments: dati, demo, citazioni o esempi in slide distinte.
+7. Commitment: cosa cambia concretamente.
+8. Closing line: chiusura breve, ricordabile, orientata all'azione.
+CRITERIO DI RIUSCITA:
+- Ogni slide deve sembrare un momento, non una pagina documento.
+- Evita liste lunghe; usa massimo una frase dominante o un dato per slide.
+- Alterna slide emotive, numeriche, citazionali e di sintesi.`,
         },
         defaultTags: {
             visualTags: ["visual:bold", "visual:futuristic"],
             typographyTags: ["typo:display-bold"],
         },
-        briefTemplate: "Keynote visuale di {{projectName}} per una presentazione ad alto impatto. Tema centrale: [tema]. Durata stimata: [minuti].",
-        styleTemplate: "Full-bleed visuals, testo dominante, palette forte e contrastata.",
+        briefTemplate: "Keynote conferenza per {{projectName}}. Tema centrale: [...]. Durata stimata: [...]. Pubblico in sala: [...]. Tensione iniziale: [...]. Insight da far ricordare: [...]. Momenti chiave: [dato, citazione, demo, reveal]. Chiusura desiderata: [...].",
+        styleTemplate: "Scenica e memorabile: full-bleed visual, parole chiave grandi, contrasti netti, ritmo da palco e pochissimo testo per slide.",
         briefGuideQuestions: [
             "Qual è il messaggio che rimane in testa dopo la presentazione?",
             "Hai immagini emotive o icone di brand da usare?",
@@ -525,98 +607,30 @@ body {
   html, body { width: var(--page-w); height: var(--page-h); }
   .page { page-break-after: always; }
 }`,
-            systemPromptModule: `FORMATO OUTPUT — DOCUMENTO A4 STAMPABILE (MULTI-VARIANT):
-
-VINCOLI TECNICI BASE (NON NEGOZIABILI):
-- Ogni pagina: div w-[210mm] h-[297mm] overflow-hidden flex flex-col bg-white (Tailwind).
-- ZERO overflow, nessun scroll, nessun viewport unit (no vw/vh), nessun position:fixed.
-- NON usare <input>, <textarea>, <select> — non si stampano correttamente.
-  Per campi compilabili: div con border-b-2 border-slate-200 (scrivibile a mano su carta).
-- Print-ready: ogni .page deve avere print:m-0 print:shadow-none print:border-none.
-- Multi-pagina: ogni div.page ha class "print:break-after-page".
-- Font: Tailwind text-* (body ≥ text-[11px]; display fino a text-5xl); no font in vw.
-
-RILEVAMENTO SUB-TIPO — analizza il brief e scegli la struttura appropriata:
-
-▶ A — POSTER / LOCANDINA
-  Trigger: "poster", "locandina", "flyer", "invito", "evento", "annuncio"
-  Singola pagina decorativa. Gerarchia: titolo dominante > visual/immagine > info > footer.
-  Shell: <div class="w-[210mm] h-[297mm] p-8 bg-white flex flex-col justify-between overflow-hidden print:m-0">
-  Struttura: HEADER (titolo display text-5xl font-black tracking-tighter) | CORPO (visual + claim) |
-             FOOTER (data, luogo, contatti — border-t pt-4 text-sm text-slate-500).
-
-▶ B — DOCUMENTO / REPORT MULTI-PAGINA
-  Trigger: "documento", "report", "guida", "manuale", "relazione", "brochure", "handbook"
-  Sequenza di div.page indipendenti. Pagina 1 = copertina.
-  COPERTINA: sfondo colorato pieno, titolo centrato (text-4xl font-black), sottotitolo, data.
-  PAGINE INTERNE:
-    header: flex justify-between border-b pb-2 mb-6 | titolo abbreviato + numero pagina text-[9px]
-    corpo: grid grid-cols-2 gap-6 (o single-col per testi lunghi)
-    sezioni: h2 text-lg font-bold mb-3 border-b pb-1 + paragrafi text-[11px] leading-relaxed
-    footer: border-t mt-auto pt-2 flex justify-between text-[9px] text-slate-400
-
-▶ C — CANVAS / WORKSHEET PARTECIPANTE
-  Trigger: "canvas", "scheda", "worksheet", "modulo", "partecipante", "esercizio", "brainstorming"
-  Pagina per compilazione su carta. NON usare elementi form HTML.
-  Shell: <div class="w-[210mm] h-[297mm] p-8 bg-white flex flex-col gap-4 overflow-hidden print:m-0">
-  ANATOMIA (dall'alto):
-  1. HEADER: flex items-start justify-between
-     sinistra — titolo event (text-3xl font-black italic) + sottotitolo text-xs
-     destra — blocco info: border-l-4 border-{accent} pl-4 con data + luogo text-sm
-  2. METADATA FIELDS (grid grid-cols-3 gap-4):
-     campo = <div class="py-2 border-b-2 border-slate-200">
-       <div class="text-[9px] uppercase font-bold text-slate-400">{label}</div>
-       <div class="h-5"></div>
-     </div>
-  3. PROMPT CARDS (grid grid-cols-4 gap-2):
-     card = <div class="bg-{accent}-50 p-3 rounded-lg border border-{accent}-100">
-       <div class="text-[9px] font-bold text-{accent}-600 uppercase mb-1">{fase}</div>
-       <p class="text-[11px] text-slate-700 leading-snug">{domanda stimolo}</p>
-     </div>
-  4. FREE-DRAW AREA (flex-grow):
-     <div class="flex-grow border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 relative overflow-hidden"
-          style="background:radial-gradient(#{accent} 1px,transparent 1px);background-size:20px 20px">
-       <div class="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
-         <span class="text-[140px] font-black text-white opacity-20">{PAROLA_CHIAVE}</span>
-       </div>
-     </div>
-  5. BOTTOM GRID (grid grid-cols-3 gap-3):
-     col-span-2 — area keywords: lista numerata con div border-b per ognuna
-     col 3 — domanda aperta: div border-b h-12
-  6. FOOTER (mt-auto border-t pt-2 flex justify-between text-[9px] text-slate-400)
-
-▶ D — GUIDA FACILITATORE / STAFF
-  Trigger: "facilitatore", "staff", "guida facilitazione", "conduttore", "formatore"
-  Multi-pagina. Badge "SOLO STAFF" prominente.
-  ANATOMIA:
-  1. HEADER: badge staff (span bg-{accent}-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase)
-             + titolo text-xl font-black + sottotitolo italic text-xs text-slate-500
-  2. TIMELINE FASI (grid grid-cols-4 gap-2):
-     cella normale: p-3 rounded-lg text-center border border-{accent}-200 bg-{accent}-50
-     cella ATTIVA: bg-{accent}-600 text-white font-bold
-  3. EXERCISE GUIDE ITEMS:
-     <div class="flex gap-4 items-start bg-slate-50/50 p-3 rounded-lg border border-slate-100">
-       <div class="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white bg-{color}-500 shrink-0 text-sm">{lettera}</div>
-       <div>
-         <span class="font-bold text-sm">{titolo}</span>
-         <p class="text-xs text-slate-600 italic mt-0.5">Obiettivo: {obiettivo}</p>
-         <p class="text-[10px] text-slate-500 mt-1">💡 {tip}</p>
-       </div>
-     </div>
-  4. TIPS CALLOUT: div bg-yellow-50 p-4 rounded-xl border border-yellow-200
-  5. FOOTER: border-t mt-auto pt-2 flex items-center justify-between text-[9px] text-slate-400
-
-PALETTE STAMPA:
-- Evento culturale/creativo: cyan-600 | Corporate: blue-700 | Sostenibilità: emerald-600
-- Testi: slate-800 (primari), slate-400 (secondari), bg-white (pagina).
-- Ink-friendly: leggibile anche in stampa B/N.`,
+            systemPromptModule: `FORMATO OUTPUT - DOCUMENTO A4 STAMPABILE:
+Genera uno o piu fogli A4 pronti per PDF/stampa. La priorita e controllo del formato, gerarchia e assenza di overflow.
+VINCOLI TECNICI:
+- Ogni pagina deve usare una classe .page con dimensioni A4 portrait, margini sicuri e overflow nascosto.
+- Non usare controlli form reali per campi compilabili su carta: rappresentali come linee, box vuoti o aree tratteggiate.
+- Evita viewport unit, position fixed e testo troppo piccolo; il contenuto deve restare dentro il foglio.
+- Se il contenuto richiede piu spazio, crea pagine A4 successive invece di comprimere illeggibilmente.
+SCEGLI IL SOTTOTIPO DAL BRIEF:
+1. POSTER / LOCANDINA: titolo dominante, visual o claim centrale, info evento/prodotto, contatti, QR/link e footer.
+2. FLYER / SCHEDA PROMO: promessa, benefici, offerta, dettagli pratici, CTA e contatti.
+3. WORKSHEET / CANVAS: intestazione, campi anagrafici, prompt guidati, aree vuote compilabili, note e riepilogo.
+4. DOCUMENTO / REPORT: copertina, sezioni numerate, callout, tabelle leggere, footer con pagina.
+5. GUIDA FACILITATORE: badge staff, obiettivi, timeline fasi, materiali, istruzioni operative, tips e checklist.
+CRITERIO DI RIUSCITA:
+- In stampa B/N la gerarchia deve restare chiara.
+- Le informazioni essenziali devono essere leggibili a colpo d'occhio.
+- Ogni foglio deve avere uno scopo unico: promuovere, spiegare, guidare o raccogliere.`,
         },
         defaultTags: {
             visualTags: ["visual:bold"],
             typographyTags: ["typo:display-bold"],
         },
-        briefTemplate: "Poster/locandina A4 per {{projectName}}. Da stampare come volantino o esportare come PDF. Contenuto principale: [titolo evento / messaggio chiave].",
-        styleTemplate: "Layout a foglio singolo stampabile. Gerarchia tipografica forte. Immagini e testo bilanciati nel formato A4.",
+        briefTemplate: "Documento A4 stampabile per {{projectName}}. Tipo: [locandina evento / flyer promo / scheda informativa / worksheet / guida staff]. Titolo principale: [...]. Informazioni obbligatorie: [data, luogo, prezzo, contatto, QR/link, sponsor]. Gerarchia: cosa deve vedersi per primo, secondo e terzo. Uso finale: [stampa, PDF, distribuzione, workshop].",
+        styleTemplate: "Print-ready prima di tutto: gerarchia netta, margini sicuri, nessun overflow, campi compilabili come linee stampabili, informazioni essenziali leggibili anche in bianco e nero.",
         briefGuideQuestions: [
             "È per stampa in bianco/nero o a colori?",
             "Qual è il titolo principale o evento?",
@@ -637,7 +651,13 @@ PALETTE STAMPA:
             printReady: false,
             systemPromptModule: `FORMATO OUTPUT — INFOGRAFICA (MULTI-VARIANT):
 
-Una pagina ad alta densità visiva. I dati parlano per immagini; il testo è sintetico.
+Una pagina ad alta densità visiva. I dati e i concetti parlano per gerarchia, icone e sequenza; il testo resta sintetico.
+
+SCEGLI SEMPRE UN ARCHETIPO PRIMA DI DISEGNARE:
+- EXPLAIN: chiarire un tema complesso con blocchi progressivi.
+- COMPARE: confrontare opzioni, categorie, pro/contro o performance.
+- PROCESS: spiegare fasi, timeline, roadmap o workflow.
+- SNAPSHOT: mostrare KPI, ranking, metriche e insight in una pagina.
 
 RILEVAMENTO SUB-TIPO — analizza il brief e scegli la struttura:
 
@@ -701,8 +721,8 @@ Pensa come un art director: impatto visivo → chiarezza → completezza.`,
             visualTags: ["visual:bold"],
             layoutTags: ["layout:full-bleed-images", "layout:dense-info"],
         },
-        briefTemplate: "Infografica per {{projectName}} sui dati/concetti: [argomento]. Dati chiave da mostrare: [dati]. Audience: [chi legge].",
-        styleTemplate: "Alta densità visiva. Icone, numeri, colori. Ritmo alternante verticale.",
+        briefTemplate: "Infografica per {{projectName}}. Archetipo: [explain / compare / process / snapshot]. Messaggio principale: [...]. Dati o concetti chiave: [...]. Audience: [...]. Sequenza narrativa desiderata: [...]. Elementi obbligatori: [KPI, timeline, icone, confronto, callout, CTA].",
+        styleTemplate: "Visual storytelling denso ma ordinato: gerarchia numerica, icone funzionali, callout, ritmo verticale e blocchi leggibili anche senza leggere tutto.",
         briefGuideQuestions: [
             "Qual è il dato o messaggio principale da comunicare?",
             "Hai dati numerici o statistiche da visualizzare?",
@@ -721,29 +741,28 @@ Pensa come un art director: impatto visivo → chiarezza → completezza.`,
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — VIDEOGAME WEB:
-Crea una vera esperienza giocabile browser-first in HTML/CSS/JS.
-CDN APPROVATA PER QUESTO PRESET (solo se necessaria):
-- Phaser: <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
-STRUTTURA RICHIESTA:
-1. Start screen con titolo, obiettivo e bottone Play (visibile senza JS).
-2. Game area: <div id='game-root'></div> con larghezza/altezza esplicite via CSS — MAI passare l'id di un <canvas> come parent di Phaser.
-3. HUD visibile con score, vite/energia, timer o progresso.
-4. Feedback immediato su collisioni, premi, game over e restart.
-5. Supporto minimo keyboard + touch.
-REGOLE PHASER OBBLIGATORIE:
-- new Phaser.Game({ parent: 'game-root', width, height, scene: ... }) — il parent è SEMPRE l'id di un <div> esistente nell'HTML.
-- this.load.image('key', '<urlString>') — il secondo argomento deve essere una stringa URL, MAI il risultato di una funzione (es. una helper che genera dataURL); per texture procedurali usa this.add.graphics().generateTexture() dentro create().
-- Includi <noscript> dentro #game-root con un breve testo che descrive il gioco — la pagina non deve mai apparire vuota se JS fallisce.
-Usa meccaniche semplici ma complete. Nessun backend richiesto. Il gioco deve essere eseguibile subito nel browser.`,
+            systemPromptModule: `FORMATO OUTPUT - VIDEOGAME EXPERIENCE:
+Crea un prototipo giocabile browser-first con un loop completo. Non generare una landing sul gioco.
+STRUTTURA OBBLIGATORIA:
+1. START SCREEN: titolo, obiettivo, controlli, pulsante Play e fallback descrittivo.
+2. GAME AREA: area di gioco dimensionata, visibile e stabile, adatta a desktop e touch.
+3. CORE LOOP: azione ripetibile in 5-15 secondi (evita, raccogli, risolvi, colpisci, abbina).
+4. HUD: score, vite/energia, timer/progresso, livello o obiettivo corrente.
+5. FEEDBACK: premio, errore, collisione, progresso, game over e restart immediato.
+6. COMPLETAMENTO: vittoria, sconfitta o high-score con riepilogo.
+REGOLE DI DESIGN:
+- Preferisci meccaniche semplici ma finite a sistemi ambiziosi incompleti.
+- Lo stato del gioco resta locale alla pagina; nessun backend richiesto.
+- I controlli devono essere spiegati nel gioco e funzionare almeno con tastiera; aggiungi touch se naturale.
+- Se usi canvas o engine, rispetta le regole globali di container del prompt base.`,
         },
         defaultTags: {
             visualTags: ["visual:futuristic"],
-            featureTags: ["feature:interactive-preview"],
-            toneTags: ["tone:playful"],
+            featureTags: [],
+            toneTags: ["tone:playful-irreverent"],
         },
-        briefTemplate: "Videogioco browser-first per {{projectName}}. Genere: [arcade/platform/puzzle/action]. Obiettivo del giocatore: [...]. Target: [...].",
-        styleTemplate: "HUD chiaro, contrasto alto, feedback rapidi, esperienza immediata da giocare.",
+        briefTemplate: "Videogioco browser-first per {{projectName}}. Genere: [arcade / puzzle / action / educational / skill]. Core loop: [...]. Obiettivo del giocatore: [...]. Azioni disponibili: [...]. Condizione di vittoria/sconfitta: [...]. Target device: [desktop, mobile, entrambi]. Mood/ambientazione: [...].",
+        styleTemplate: "Gameplay leggibile: HUD chiaro, feedback immediati, controlli evidenti, loop breve, restart rapido e asset leggeri.",
         briefGuideQuestions: [
             "Qual è il core loop di gioco da ripetere in pochi secondi?",
             "Qual è la condizione di vittoria o il punteggio massimo desiderato?",
@@ -761,29 +780,27 @@ Usa meccaniche semplici ma complete. Nessun backend richiesto. Il gioco deve ess
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — FREE RUNNER:
-Costruisci un endless runner o free runner leggero per browser.
-CDN APPROVATA PER QUESTO PRESET (solo se necessaria):
-- Phaser: <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
-VINCOLI:
-- Il personaggio si muove automaticamente avanti.
-- Il giocatore può saltare, scivolare o cambiare corsia.
-- Ostacoli leggibili, incremento progressivo della difficoltà.
-- Score persistente solo in memoria locale del browser.
-- Restart rapido e onboarding minimo.
-REGOLE PHASER OBBLIGATORIE:
-- Mount: <div id='game-root'></div> con width/height in CSS, e new Phaser.Game({ parent: 'game-root', ... }) — MAI usare l'id di un <canvas> come parent.
-- this.load.image('key', '<urlString>') accetta solo stringhe URL; per asset procedurali usa Graphics.generateTexture() dentro create().
-- Aggiungi un <noscript> con titolo gioco e istruzioni dentro #game-root.
-Preferisci codice semplice, performance fluide e controlli molto reattivi.`,
+            systemPromptModule: `FORMATO OUTPUT - FREE RUNNER:
+Preset specialistico per endless runner; resta nascosto nel catalogo standard per ridurre ridondanza con Videogame Experience.
+STRUTTURA OBBLIGATORIA:
+1. Start screen con obiettivo, controlli e pulsante Play.
+2. Personaggio o avatar che avanza automaticamente.
+3. Azioni minime: salto, scivolata o cambio corsia.
+4. Ostacoli leggibili, reward raccoglibili e incremento progressivo della difficolta.
+5. HUD con distanza, score, velocita o combo.
+6. Game over immediato con retry veloce e riepilogo high-score.
+CRITERIO DI RIUSCITA:
+- Il giocatore deve capire il loop entro 5 secondi.
+- La difficolta cresce in modo percepibile ma non casuale.
+- L'esperienza deve essere fluida, reattiva e giocabile senza asset pesanti.`,
         },
         defaultTags: {
             visualTags: ["visual:bold"],
             layoutTags: ["layout:hero-first"],
-            toneTags: ["tone:energetic"],
+            toneTags: ["tone:playful-irreverent"],
         },
-        briefTemplate: "Free runner per {{projectName}}. Ambientazione: [...]. Ostacoli principali: [...]. Reward loop: [...].",
-        styleTemplate: "Velocità percepita alta, UI minimale, colori energici e leggibilità ottima.",
+        briefTemplate: "Free runner per {{projectName}}. Ambientazione: [...]. Avatar/personaggio: [...]. Azioni disponibili: [salto, slide, corsia]. Ostacoli principali: [...]. Reward loop: [monete, combo, distanza, missioni]. Progressione difficolta: [...].",
+        styleTemplate: "Arcade e leggibile: velocita percepita alta, ostacoli chiari, HUD minimale, feedback istantaneo e retry senza attrito.",
         briefGuideQuestions: [
             "Qual è l'ambientazione del percorso?",
             "Quali azioni può fare il personaggio oltre al salto?",
@@ -801,21 +818,27 @@ Preferisci codice semplice, performance fluide e controlli molto reattivi.`,
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — SERIOUS GAME:
-Progetta un'esperienza interattiva educativa o di training.
-INCLUDI:
-1. Obiettivo didattico o comportamentale esplicito.
-2. Meccanica di gioco semplice (quiz, simulazione, scelta, drag/drop o task guidato).
-3. Feedback formativo dopo ogni azione.
-4. Riepilogo finale con risultato e consigli di miglioramento.
-Il divertimento deve sostenere l'apprendimento, non distrarlo.`,
+            systemPromptModule: `FORMATO OUTPUT - SERIOUS GAME:
+Progetta un'esperienza educativa o formativa giocabile. L'apprendimento guida la meccanica.
+STRUTTURA OBBLIGATORIA:
+1. LEARNING OBJECTIVE: competenza, comportamento o concetto da apprendere.
+2. SCENARIO: contesto realistico o simulato in cui l'utente deve decidere.
+3. CHALLENGE LOOP: quiz, scelta a bivi, simulazione, task guidato o micro-missione.
+4. FEEDBACK FORMATIVO: dopo ogni azione spiega perche e corretta/sbagliata e cosa migliorare.
+5. PROGRESSO: punteggio, mastery, badge o completamento per obiettivi.
+6. DEBRIEF FINALE: risultato, errori frequenti, consigli, prossimi passi.
+CRITERIO DI RIUSCITA:
+- La parte ludica deve rinforzare l'obiettivo didattico, non decorarlo.
+- Ogni scelta deve avere conseguenze comprensibili.
+- Evita punteggi senza spiegazione: il feedback e il vero valore del serious game.`,
         },
         defaultTags: {
-            toneTags: ["tone:helpful-supportive"],
-            audienceTags: ["audience:students"],
+            toneTags: ["tone:friendly-casual", "tone:technical-precise"],
+            audienceTags: ["audience:young-adults"],
+            sectorTags: ["sector:education"],
         },
-        briefTemplate: "Serious game per {{projectName}}. Obiettivo formativo: [...]. Pubblico: [...]. Scenario o simulazione: [...].",
-        styleTemplate: "Chiarezza prima di tutto, interazione guidata, tono coinvolgente ma affidabile.",
+        briefTemplate: "Serious game per {{projectName}}. Obiettivo formativo: [...]. Pubblico: [...]. Scenario/simulazione: [...]. Meccanica: [quiz, bivi, missione, simulazione, task]. Criteri di valutazione: [...]. Feedback desiderato: [...]. Debrief finale: [...].",
+        styleTemplate: "Formativo e guidato: scenario chiaro, feedback esplicativo, progresso visibile, tono affidabile e interazioni semplici ma significative.",
         briefGuideQuestions: [
             "Quale competenza o messaggio deve apprendere l'utente?",
             "Come misuriamo progresso o completamento?",
@@ -833,24 +856,27 @@ Il divertimento deve sostenere l'apprendimento, non distrarlo.`,
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — GIOCO 3D WEB:
-Crea una demo giocabile con resa 3D leggera o pseudo-3D adatta al browser.
-CDN APPROVATA PER QUESTO PRESET (solo se necessaria):
-- Three.js: <script src="https://cdn.jsdelivr.net/npm/three@0.174/build/three.min.js"></script>
+            systemPromptModule: `FORMATO OUTPUT - 3D GAME / 3D SCENE:
+Crea una scena 3D o pseudo-3D leggera e interattiva. Non promettere un gioco complesso se il brief non lo richiede.
+STRUTTURA OBBLIGATORIA:
+1. INTRO OVERLAY: titolo, obiettivo, controlli e stato iniziale.
+2. SCENE ROOT: area 3D dimensionata, visibile e stabile.
+3. CAMERA: punto di vista comprensibile, con movimento limitato o guidato.
+4. OBJECTIVES: raccolta oggetti, esplorazione, target, percorso o interazione con hotspot.
+5. STATE / HUD: progresso, oggetti, tempo, score o istruzioni contestuali.
+6. COMPLETION: condizione di fine, riepilogo e restart/reset.
 REGOLE:
-- Nessuna pipeline complessa o build tool esterni.
-- Mount: <div id='scene-root'></div> con width/height in CSS; in JS fai document.getElementById('scene-root').appendChild(renderer.domElement). MAI selezionare un <canvas> esistente come parent.
-- Imposta renderer.setSize(width, height) in modo esplicito; non lasciare il canvas a 0×0.
-- Prediligi camera/scena/obiettivi chiari e controlli base; geometrie semplici per stabilità.
-- Aggiungi <noscript> dentro #scene-root con descrizione e istruzioni — la pagina non deve mai apparire vuota se JS fallisce.
-L'obiettivo è un prototipo interattivo immediato, non un engine completo.`,
+- Usa geometrie semplici, luci leggibili e pochi asset per stabilita.
+- Mantieni frame e interazioni fluidi anche su dispositivi medi.
+- Se usi un engine 3D, rispetta le regole globali di container e dimensionamento.
+- Aggiungi fallback testuale visibile per descrivere l'esperienza se il rendering non parte.`,
         },
         defaultTags: {
             visualTags: ["visual:futuristic"],
-            toneTags: ["tone:playful"],
+            toneTags: ["tone:playful-irreverent"],
         },
-        briefTemplate: "Gioco 3D browser-based per {{projectName}}. Meccanica: [...]. Camera/scene: [...]. Mood: [...].",
-        styleTemplate: "Immersivo ma leggero, leggibilità alta, interazioni fluide e asset minimali.",
+        briefTemplate: "Esperienza 3D browser-based per {{projectName}}. Tipo: [scena esplorabile / mini game / showroom / simulazione]. Obiettivo utente: [...]. Camera: [orbitale, prima persona, isometrica, guidata]. Oggetti/interazioni: [...]. Condizione di completamento: [...]. Mood: [...].",
+        styleTemplate: "3D leggero e comprensibile: scena pulita, camera stabile, obiettivi visibili, pochi asset, feedback chiaro e performance fluida.",
         briefGuideQuestions: [
             "Qual è la meccanica 3D principale?",
             "Vuoi esplorazione, corsa, raccolta oggetti o shooting leggero?",
@@ -868,24 +894,26 @@ L'obiettivo è un prototipo interattivo immediato, non un engine completo.`,
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — VR EXPERIENCE CON A-FRAME:
-Genera una pagina con una scena VR A-Frame funzionante via CDN.
-CDN APPROVATA PER QUESTO PRESET:
-- A-Frame: <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-OBBLIGATORIO:
-- Usa <a-scene> con asset minimi e componenti chiari.
-- Camera, cursore/gaze o controller-friendly fallback.
-- 1 esperienza immersiva precisa: showroom, mini gioco, tour, installazione o exhibit.
-- Overlay iniziale con istruzioni e bottone Enter VR.
-- Fallback desktop/mobile se la modalità VR non è disponibile.
-La scena deve restare ordinata, stabile e subito navigabile.`,
+            systemPromptModule: `FORMATO OUTPUT - VR EXPERIENCE A-FRAME:
+Genera un'esperienza immersiva web VR con una scena precisa, non una generica pagina 3D.
+STRUTTURA OBBLIGATORIA:
+1. ENTRY OVERLAY: titolo, obiettivo, controlli, avviso desktop/mobile/VR.
+2. A-SCENE: ambiente ordinato con camera, cursor/gaze o interazione equivalente.
+3. POINTS OF INTEREST: 3-7 hotspot con label, contenuto o azione.
+4. INTERACTION MODEL: gaze, click, prossimita, scelta, raccolta o navigazione.
+5. GUIDED PATH: tour, showroom, exhibit, mini missione o installazione narrativa.
+6. FALLBACK: istruzioni desktop/mobile e contenuto comprensibile anche senza headset.
+CRITERIO DI RIUSCITA:
+- L'utente deve capire dove guardare e cosa fare nei primi secondi.
+- La scena deve avere profondita e orientamento spaziale, non solo oggetti sparsi.
+- Usa pochi elementi ben etichettati invece di molti elementi decorativi.`,
         },
         defaultTags: {
             visualTags: ["visual:futuristic"],
-            featureTags: ["feature:interactive-preview"],
+            featureTags: [],
         },
-        briefTemplate: "Esperienza VR A-Frame per {{projectName}}. Scenario: [...]. Interazioni: [...]. Utente finale: [...].",
-        styleTemplate: "Immersione, chiarezza dei punti di interesse, onboarding semplice e atmosfera forte.",
+        briefTemplate: "Esperienza VR A-Frame per {{projectName}}. Tipo: [tour, showroom, exhibit, training, mini missione]. Scenario immersivo: [...]. Hotspot/punti di interesse: [...]. Interazioni: [gaze, click, prossimita, scelta]. Utente finale/device: [...]. Obiettivo di completamento: [...].",
+        styleTemplate: "Immersiva ma guidata: onboarding immediato, hotspot leggibili, profondita spaziale, pochi elementi chiari e fallback desktop/mobile.",
         briefGuideQuestions: [
             "Si tratta di un tour, un mini-game o uno showroom immersivo?",
             "Quali hotspot o interazioni devono essere presenti?",
@@ -903,21 +931,26 @@ La scena deve restare ordinata, stabile e subito navigabile.`,
             pageModel: 'single_page',
             sectionModel: 'paginated',
             printReady: false,
-            systemPromptModule: `FORMATO OUTPUT — STORIA INTERATTIVA:
-Crea un'esperienza narrativa a bivi giocabile nel browser.
-INCLUDI:
-- Intro breve con contesto e tono.
-- Scene successive con 2-4 scelte per volta.
-- Stato minimo del giocatore (energia, reputazione, oggetti o progresso).
-- Finali multipli o checkpoint narrativi.
-Privilegia atmosfera, leggibilità e ritmo. Ogni scelta deve produrre un effetto chiaro.`,
+            systemPromptModule: `FORMATO OUTPUT - INTERACTIVE STORY:
+Crea una narrativa a scelte giocabile, con stato e conseguenze. Non generare un racconto lineare mascherato da bottoni.
+STRUTTURA OBBLIGATORIA:
+1. INTRO: mondo, protagonista, posta in gioco e tono.
+2. SCENE CARDS: scene brevi con testo leggibile, immagine/atmosfera e 2-4 scelte.
+3. STATE: almeno una variabile visibile o implicita (energia, fiducia, risorse, reputazione, indizi).
+4. CONSEQUENCES: ogni scelta modifica testo, stato, percorso o finale.
+5. CHECKPOINTS: snodi narrativi che cambiano direzione o aumentano tensione.
+6. ENDINGS: almeno 2 finali distinti o un finale con valutazione diversa.
+CRITERIO DI RIUSCITA:
+- Le scelte devono avere tradeoff reali, non sinonimi.
+- Mantieni scene concise; il ritmo interattivo conta piu della prosa lunga.
+- Mostra chiaramente l'effetto di una scelta senza rompere l'atmosfera.`,
         },
         defaultTags: {
             toneTags: ["tone:inspirational"],
-            featureTags: ["feature:interactive-preview"],
+            featureTags: [],
         },
-        briefTemplate: "Storia interattiva per {{projectName}}. Ambientazione: [...]. Protagonista: [...]. Scelte principali: [...].",
-        styleTemplate: "Mood forte, leggibilità ottima, transizioni morbide e focus sulla narrazione.",
+        briefTemplate: "Storia interattiva per {{projectName}}. Genere/tono: [fantasy, sci-fi, noir, educational, horror leggero, brand story]. Ambientazione: [...]. Protagonista: [...]. Obiettivo narrativo: [...]. Variabili di stato: [...]. Scelte chiave: [...]. Finali desiderati: [...].",
+        styleTemplate: "Narrativa atmosferica e leggibile: scene brevi, scelte con conseguenze, stato percepibile, transizioni morbide e finali distinti.",
         briefGuideQuestions: [
             "Qual è il tono della storia: fantasy, sci-fi, educational, horror leggero?",
             "Quali scelte cambiano davvero l'esito?",

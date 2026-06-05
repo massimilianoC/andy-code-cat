@@ -9,7 +9,7 @@ import { env } from "../../../config";
 import { detectEnrichmentKind, isDocumentKind, isImageKind } from "./EnrichmentKindDetector";
 import { buildEnrichmentTrace } from "./EnrichmentTraceBuilder";
 import { getParser } from "../parsers/DocumentParserFactory";
-import { extractDocumentBrief } from "./DocumentBriefExtractor";
+import { buildDatasetAppendixPrompt, buildDocumentBriefPrompt, extractDatasetAppendix, extractDocumentBrief } from "./DocumentBriefExtractor";
 import { analyzeImage } from "../image/ImageAnalyzer";
 import { prepareImageBuffer } from "../image/ImageResizeGuard";
 import type { DocumentTextLayer } from "../../../domain/entities/AssetEnrichmentTrace";
@@ -17,12 +17,23 @@ import { CostTransactionService } from "../../cost/CostTransactionService";
 import { ResourceType } from "../../../domain/entities/CostTransaction";
 import { estimateCost } from "../../llm/costPolicy";
 import { getSiliconFlowPrice } from "../../llm/siliconflowPricing";
+import { buildDatasetStructuredData, normalizeDatasetBuffer } from "../../datasets/DatasetRuntime";
+import { getFileStorage } from "../../../infra/storage/StorageFactory";
+import { DatasetCacheStore } from "../../datasets/DatasetCacheStore";
+import type { PromptExecutionLogRepository } from "../../../domain/repositories/PromptExecutionLogRepository";
+import { ExecutionLogger } from "../../services/ExecutionLogger";
 
 export interface EnrichmentInput {
     asset: ProjectAsset;
     fileBuffer: Buffer;
     getLlmCatalog: GetLlmCatalog;
     assetRepository: ProjectAssetRepository;
+    promptExecutionLogRepository?: PromptExecutionLogRepository;
+    sourceContext?: {
+        conversationId?: string;
+        messageId?: string;
+        backgroundTaskId?: string;
+    };
     /** Optional — when provided, admin-configured task settings override env var defaults. */
     platformConfig?: Pick<PlatformConfig, "governanceByProduct"> | null;
 }
@@ -68,7 +79,8 @@ function recordEnrichmentCost(params: {
     providerKey: string;
     modelId: string;
     usage: { promptTokens: number; completionTokens: number; totalTokens: number };
-    taskKey: "enrich_document" | "enrich_image";
+    taskKey: "enrich_document" | "enrich_image" | "enrich_dataset_appendix";
+    sourceContext?: EnrichmentInput["sourceContext"];
 }): number | null {
     if (!params.usage.totalTokens) return null;
 
@@ -105,6 +117,12 @@ function recordEnrichmentCost(params: {
         providerCostUsd,
         precomputedTotalEur: costEstimate.amount,
         units: params.usage,
+        sourceRef: {
+            assetId: params.asset.id,
+            conversationId: params.sourceContext?.conversationId,
+            messageId: params.sourceContext?.messageId,
+            backgroundTaskId: params.sourceContext?.backgroundTaskId,
+        },
         meta: {
             taskKey: params.taskKey,
             provider: params.providerKey,
@@ -116,13 +134,148 @@ function recordEnrichmentCost(params: {
 }
 
 export class AssetEnrichmentPipeline {
+    private readonly datasetCache = new DatasetCacheStore(getFileStorage());
+
+    private async persistPromptExecutionLog(params: {
+        input: EnrichmentInput;
+        taskKey: "enrich_document" | "enrich_dataset_appendix";
+        provider: string;
+        model: string;
+        inputPrompt: string;
+        usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+        costEur?: number | null;
+        status: "succeeded" | "failed";
+        durationMs: number;
+        errorMessage?: string;
+    }): Promise<void> {
+        const repo = params.input.promptExecutionLogRepository;
+        if (!repo) return;
+
+        await repo.create({
+            taskKey: params.taskKey,
+            projectId: params.input.asset.projectId,
+            userId: params.input.asset.userId,
+            conversationId: params.input.sourceContext?.conversationId,
+            provider: params.provider,
+            model: params.model,
+            inputPrompt: params.inputPrompt,
+            contextMeta: {
+                assetIds: [params.input.asset.id],
+                usedMoodboard: false,
+                usedUserProfile: false,
+            },
+            usage: params.usage,
+            costEstimate: params.costEur != null ? {
+                currency: "EUR",
+                amount: params.costEur,
+                breakdown: {
+                    tokenCost: params.costEur,
+                    imageCost: 0,
+                    videoCost: 0,
+                },
+                unitRates: {
+                    textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
+                    imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
+                    videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
+                },
+            } : undefined,
+            status: params.status,
+            errorMessage: params.errorMessage,
+            durationMs: params.durationMs,
+        });
+    }
+
+    private emitLlmExecutionLog(params: {
+        input: EnrichmentInput;
+        eventType: "asset_enrichment_llm_complete" | "asset_enrichment_llm_failed";
+        status: "success" | "failure" | "partial";
+        provider: string;
+        model: string;
+        durationMs: number;
+        taskKey: "enrich_document" | "enrich_dataset_appendix";
+        usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+        costEur?: number | null;
+        errorMessage?: string;
+    }): void {
+        ExecutionLogger.instance.emit({
+            projectId: params.input.asset.projectId,
+            conversationId: params.input.sourceContext?.conversationId,
+            messageId: params.input.sourceContext?.messageId,
+            domain: "llm",
+            eventType: params.eventType,
+            level: params.status === "failure" ? "error" : params.status === "partial" ? "warn" : "info",
+            status: params.status,
+            durationMs: params.durationMs,
+            metadata: {
+                provider: params.provider,
+                model: params.model,
+                taskKey: params.taskKey,
+                assetId: params.input.asset.id,
+                promptTokens: params.usage?.promptTokens,
+                completionTokens: params.usage?.completionTokens,
+                totalTokens: params.usage?.totalTokens,
+                costEur: params.costEur ?? null,
+                backgroundTaskId: params.input.sourceContext?.backgroundTaskId ?? null,
+                errorMessage: params.errorMessage ?? null,
+            },
+        });
+    }
+
     async enrich(input: EnrichmentInput): Promise<AssetEnrichmentTrace> {
         if (!env.enrichmentEnabled) {
             return this.skippedTrace(input.asset, "enrichment disabled via ENRICHMENT_ENABLED=false");
         }
 
+        // ── Idempotency guard ─────────────────────────────────────────────────
+        // If the asset already has a complete enrichment trace (status=ready AND
+        // renderedFragment present) we skip the expensive LLM pass entirely and
+        // return the cached result.  The caller can force a re-run by passing
+        // forceRe-enrich=true (not wired yet — reserved for future admin endpoint).
+        // This prevents double-billing and double-processing when the same physical
+        // file is attached to multiple conversations in the same project.
+        const existingTrace = input.asset.enrichmentTrace;
+        if (
+            existingTrace &&
+            existingTrace.provenance.enrichmentStatus === "ready" &&
+            existingTrace.renderedFragment
+        ) {
+            ExecutionLogger.instance.emit({
+                projectId: input.asset.projectId,
+                conversationId: input.sourceContext?.conversationId,
+                messageId: input.sourceContext?.messageId,
+                domain: "system",
+                eventType: "asset_enrichment_started",
+                level: "info",
+                status: "success",
+                metadata: {
+                    assetId: input.asset.id,
+                    assetKind: existingTrace.assetKind,
+                    mimeType: input.asset.mimeType,
+                    skipped: true,
+                    reason: "trace_already_ready",
+                    backgroundTaskId: input.sourceContext?.backgroundTaskId ?? null,
+                },
+            });
+            return existingTrace;
+        }
+
         const assetKind = detectEnrichmentKind(input.asset.mimeType);
         const startMs = Date.now();
+        ExecutionLogger.instance.emit({
+            projectId: input.asset.projectId,
+            conversationId: input.sourceContext?.conversationId,
+            messageId: input.sourceContext?.messageId,
+            domain: "system",
+            eventType: "asset_enrichment_started",
+            level: "info",
+            status: "success",
+            metadata: {
+                assetId: input.asset.id,
+                assetKind,
+                mimeType: input.asset.mimeType,
+                backgroundTaskId: input.sourceContext?.backgroundTaskId ?? null,
+            },
+        });
 
         // Save pending trace immediately so UI can show "analyzing…"
         const pendingTrace = buildEnrichmentTrace({
@@ -144,14 +297,46 @@ export class AssetEnrichmentPipeline {
 
         try {
             if (isDocumentKind(assetKind) && env.enrichmentDocumentParsing) {
-                return await this.enrichDocument(input, assetKind, startMs);
+                const trace = await this.enrichDocument(input, assetKind, startMs);
+                ExecutionLogger.instance.emit({
+                    projectId: input.asset.projectId,
+                    conversationId: input.sourceContext?.conversationId,
+                    messageId: input.sourceContext?.messageId,
+                    domain: "system",
+                    eventType: "asset_enrichment_completed",
+                    level: "info",
+                    status: "success",
+                    durationMs: Date.now() - startMs,
+                    metadata: {
+                        assetId: input.asset.id,
+                        assetKind,
+                        enrichmentStatus: trace.provenance.enrichmentStatus,
+                    },
+                });
+                return trace;
             }
 
             if (isImageKind(assetKind) && env.enrichmentImageAnalysis) {
-                return await this.enrichImage(input, assetKind, startMs);
+                const trace = await this.enrichImage(input, assetKind, startMs);
+                ExecutionLogger.instance.emit({
+                    projectId: input.asset.projectId,
+                    conversationId: input.sourceContext?.conversationId,
+                    messageId: input.sourceContext?.messageId,
+                    domain: "system",
+                    eventType: "asset_enrichment_completed",
+                    level: "info",
+                    status: "success",
+                    durationMs: Date.now() - startMs,
+                    metadata: {
+                        assetId: input.asset.id,
+                        assetKind,
+                        enrichmentStatus: trace.provenance.enrichmentStatus,
+                    },
+                });
+                return trace;
             }
 
-            return await this.saveTrace(input, buildEnrichmentTrace({
+            const trace = await this.saveTrace(input, buildEnrichmentTrace({
                 asset: input.asset,
                 assetKind,
                 provenance: {
@@ -165,6 +350,21 @@ export class AssetEnrichmentPipeline {
                 visualAnalysis: null,
                 designSignals: null,
             }));
+            ExecutionLogger.instance.emit({
+                projectId: input.asset.projectId,
+                conversationId: input.sourceContext?.conversationId,
+                messageId: input.sourceContext?.messageId,
+                domain: "system",
+                eventType: "asset_enrichment_skipped",
+                level: "info",
+                status: "partial",
+                durationMs: Date.now() - startMs,
+                metadata: {
+                    assetId: input.asset.id,
+                    assetKind,
+                },
+            });
+            return trace;
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             console.error(`[AssetEnrichmentPipeline] enrichment failed for asset ${input.asset.id}:`, err);
@@ -188,6 +388,21 @@ export class AssetEnrichmentPipeline {
                 input.asset.projectId,
                 failedTrace,
             );
+            ExecutionLogger.instance.emit({
+                projectId: input.asset.projectId,
+                conversationId: input.sourceContext?.conversationId,
+                messageId: input.sourceContext?.messageId,
+                domain: "system",
+                eventType: "asset_enrichment_failed",
+                level: "error",
+                status: "failure",
+                durationMs: Date.now() - startMs,
+                metadata: {
+                    assetId: input.asset.id,
+                    assetKind,
+                    errorMessage,
+                },
+            });
             return failedTrace;
         }
     }
@@ -207,7 +422,16 @@ export class AssetEnrichmentPipeline {
             }));
         }
 
-        const parsed = await parser.parse(input.fileBuffer, input.asset.mimeType);
+        const [parsed, dataset] = await Promise.all([
+            parser.parse(input.fileBuffer, input.asset.mimeType),
+            normalizeDatasetBuffer(input.fileBuffer, input.asset.mimeType).catch(() => null),
+        ]);
+
+        const datasetStructuredData = dataset ? buildDatasetStructuredData(dataset) : null;
+
+        if (dataset) {
+            await this.datasetCache.write(input.asset, dataset);
+        }
 
         const textLayer: DocumentTextLayer = {
             wordCount: parsed.wordCount,
@@ -220,11 +444,13 @@ export class AssetEnrichmentPipeline {
         };
 
         // Build the structuredData payload from parser output (available before LLM call)
-        const earlyStructuredData = parsed.sheets && parsed.sheets.length > 0
-            ? ({ kind: "spreadsheet" as const, sheets: parsed.sheets })
-            : parsed.slides && parsed.slides.length > 0
-                ? ({ kind: "presentation" as const, slides: parsed.slides })
-                : null;
+        const earlyStructuredData = datasetStructuredData
+            ? ({ kind: "dataset" as const, dataset: datasetStructuredData, sheets: parsed.sheets })
+            : parsed.sheets && parsed.sheets.length > 0
+                ? ({ kind: "spreadsheet" as const, sheets: parsed.sheets })
+                : parsed.slides && parsed.slides.length > 0
+                    ? ({ kind: "presentation" as const, slides: parsed.slides })
+                    : null;
 
         // Save textLayer + structuredData immediately so Layer D can inject them
         // even while the LLM brief is still in flight (timing gap fix).
@@ -258,7 +484,7 @@ export class AssetEnrichmentPipeline {
         // keep the asset marked "ready" so it is still injected downstream.
         let briefErrorMessage: string | null = null;
 
-        if (env.enrichmentDocumentLlmPass && parsed.rawText.length >= 50) {
+        if (env.enrichmentDocumentLlmPass) {
             const taskSetting = resolvePromptTaskSettingFromConfig(input.platformConfig, "default", "enrich_document");
             const textProviderKey = taskSetting?.provider ?? env.ENRICHMENT_TEXT_PROVIDER;
             const textModel = taskSetting?.model ?? env.ENRICHMENT_TEXT_MODEL;
@@ -266,40 +492,176 @@ export class AssetEnrichmentPipeline {
             const provider = resolveProvider(catalog, textProviderKey);
             if (provider) {
                 const authHeader = resolveAuthHeader(provider.provider, provider.authType);
-                try {
-                    const result = await extractDocumentBrief({
+                llmProvider = provider.provider;
+                llmModel = textModel;
+
+                if (parsed.rawText.length >= 50) {
+                    const briefPrompt = buildDocumentBriefPrompt({
                         textSnippet: parsed.rawText,
                         assetKind,
                         sheets: parsed.sheets,
                         slides: parsed.slides,
-                        baseUrl: provider.baseUrl,
-                        model: textModel,
-                        authHeader,
                     });
-                    documentBrief = result.brief;
-                    structuredData = result.structuredData ?? earlyStructuredData;
-                    llmProvider = provider.provider;
-                    llmModel = textModel;
-                    llmTokensUsed = result.tokensUsed;
-
-                    // ── Cost ledger: attribute LLM call to (user, project) ──
-                    if (result.usage) {
-                        llmCostEur = recordEnrichmentCost({
-                            asset: input.asset,
-                            providerKey: provider.provider,
-                            modelId: textModel,
-                            usage: result.usage,
-                            taskKey: "enrich_document",
+                    const briefStartMs = Date.now();
+                    try {
+                        const result = await extractDocumentBrief({
+                            textSnippet: parsed.rawText,
+                            assetKind,
+                            sheets: parsed.sheets,
+                            slides: parsed.slides,
+                            baseUrl: provider.baseUrl,
+                            model: textModel,
+                            authHeader,
                         });
+                        documentBrief = result.brief;
+                        structuredData = result.structuredData ?? earlyStructuredData;
+                        llmTokensUsed = (llmTokensUsed ?? 0) + (result.tokensUsed ?? 0);
+
+                        let briefCost: number | null = null;
+                        if (result.usage) {
+                            briefCost = recordEnrichmentCost({
+                                asset: input.asset,
+                                providerKey: provider.provider,
+                                modelId: textModel,
+                                usage: result.usage,
+                                taskKey: "enrich_document",
+                                sourceContext: input.sourceContext,
+                            });
+                            llmCostEur = (llmCostEur ?? 0) + (briefCost ?? 0);
+                        }
+                        await this.persistPromptExecutionLog({
+                            input,
+                            taskKey: "enrich_document",
+                            provider: provider.provider,
+                            model: textModel,
+                            inputPrompt: briefPrompt.prompt,
+                            usage: result.usage,
+                            costEur: briefCost,
+                            status: "succeeded",
+                            durationMs: Date.now() - briefStartMs,
+                        });
+                        this.emitLlmExecutionLog({
+                            input,
+                            eventType: "asset_enrichment_llm_complete",
+                            status: "success",
+                            provider: provider.provider,
+                            model: textModel,
+                            durationMs: Date.now() - briefStartMs,
+                            taskKey: "enrich_document",
+                            usage: result.usage,
+                            costEur: briefCost,
+                        });
+                    } catch (briefErr) {
+                        briefErrorMessage = briefErr instanceof Error ? briefErr.message : String(briefErr);
+                        await this.persistPromptExecutionLog({
+                            input,
+                            taskKey: "enrich_document",
+                            provider: provider.provider,
+                            model: textModel,
+                            inputPrompt: briefPrompt.prompt,
+                            status: "failed",
+                            durationMs: Date.now() - briefStartMs,
+                            errorMessage: briefErrorMessage,
+                        });
+                        this.emitLlmExecutionLog({
+                            input,
+                            eventType: "asset_enrichment_llm_failed",
+                            status: "failure",
+                            provider: provider.provider,
+                            model: textModel,
+                            durationMs: Date.now() - briefStartMs,
+                            taskKey: "enrich_document",
+                            errorMessage: briefErrorMessage,
+                        });
+                        console.warn(
+                            `[AssetEnrichmentPipeline] brief extraction failed for asset ${input.asset.id} — keeping parsed textLayer/structuredData. Reason:`,
+                            briefErrorMessage,
+                        );
                     }
-                } catch (briefErr) {
-                    briefErrorMessage = briefErr instanceof Error ? briefErr.message : String(briefErr);
-                    console.warn(
-                        `[AssetEnrichmentPipeline] brief extraction failed for asset ${input.asset.id} — keeping parsed textLayer/structuredData. Reason:`,
-                        briefErrorMessage,
-                    );
-                    // structuredData stays = earlyStructuredData (sheets/slides from parser)
-                    // documentBrief stays null
+                }
+
+                if (datasetStructuredData) {
+                    const datasetAppendixPrompt = buildDatasetAppendixPrompt(datasetStructuredData);
+                    const datasetAppendixStartMs = Date.now();
+                    try {
+                        const appendixResult = await extractDatasetAppendix({
+                            datasetStructuredData,
+                            baseUrl: provider.baseUrl,
+                            model: textModel,
+                            authHeader,
+                        });
+                        if (structuredData?.dataset) {
+                            structuredData.dataset.llmAppendix = appendixResult.appendix;
+                        } else if (earlyStructuredData?.dataset) {
+                            earlyStructuredData.dataset.llmAppendix = appendixResult.appendix;
+                            structuredData = earlyStructuredData;
+                        }
+                        llmTokensUsed = (llmTokensUsed ?? 0) + (appendixResult.tokensUsed ?? 0);
+
+                        let appendixCost: number | null = null;
+                        if (appendixResult.usage) {
+                            appendixCost = recordEnrichmentCost({
+                                asset: input.asset,
+                                providerKey: provider.provider,
+                                modelId: textModel,
+                                usage: appendixResult.usage,
+                                taskKey: "enrich_dataset_appendix",
+                                sourceContext: input.sourceContext,
+                            });
+                            llmCostEur = (llmCostEur ?? 0) + (appendixCost ?? 0);
+                        }
+                        await this.persistPromptExecutionLog({
+                            input,
+                            taskKey: "enrich_dataset_appendix",
+                            provider: provider.provider,
+                            model: textModel,
+                            inputPrompt: datasetAppendixPrompt,
+                            usage: appendixResult.usage,
+                            costEur: appendixCost,
+                            status: "succeeded",
+                            durationMs: Date.now() - datasetAppendixStartMs,
+                        });
+                        this.emitLlmExecutionLog({
+                            input,
+                            eventType: "asset_enrichment_llm_complete",
+                            status: "success",
+                            provider: provider.provider,
+                            model: textModel,
+                            durationMs: Date.now() - datasetAppendixStartMs,
+                            taskKey: "enrich_dataset_appendix",
+                            usage: appendixResult.usage,
+                            costEur: appendixCost,
+                        });
+                    } catch (appendixErr) {
+                        const appendixErrorMessage = appendixErr instanceof Error ? appendixErr.message : String(appendixErr);
+                        await this.persistPromptExecutionLog({
+                            input,
+                            taskKey: "enrich_dataset_appendix",
+                            provider: provider.provider,
+                            model: textModel,
+                            inputPrompt: datasetAppendixPrompt,
+                            status: "failed",
+                            durationMs: Date.now() - datasetAppendixStartMs,
+                            errorMessage: appendixErrorMessage,
+                        });
+                        this.emitLlmExecutionLog({
+                            input,
+                            eventType: "asset_enrichment_llm_failed",
+                            status: "failure",
+                            provider: provider.provider,
+                            model: textModel,
+                            durationMs: Date.now() - datasetAppendixStartMs,
+                            taskKey: "enrich_dataset_appendix",
+                            errorMessage: appendixErrorMessage,
+                        });
+                        console.warn(
+                            `[AssetEnrichmentPipeline] dataset appendix extraction failed for asset ${input.asset.id} — keeping deterministic dataset envelope only. Reason:`,
+                            appendixErrorMessage,
+                        );
+                        if (!briefErrorMessage) {
+                            briefErrorMessage = appendixErrorMessage;
+                        }
+                    }
                 }
             }
         }

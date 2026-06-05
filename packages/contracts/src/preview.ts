@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { llmFocusContextSchema } from "./llm";
 import { mediaResolutionMetadataSchema } from "./mediaResolution";
+import { dataDashboardArtifactMetadataSchema } from "./datasetBindings";
 
 export const previewArtifactsSchema = z.object({
     html: z.string().max(10000000),
@@ -27,6 +28,7 @@ export const previewSnapshotMetadataSchema = z.object({
         effectiveSystemPrompt: z.string().max(50000).optional(),
     }).optional(),
     mediaResolution: mediaResolutionMetadataSchema.optional(),
+    dataDashboard: dataDashboardArtifactMetadataSchema.optional(),
 }).optional();
 
 export const createPreviewSnapshotSchema = z.object({
@@ -110,6 +112,7 @@ export interface PreviewSnapshotDto {
                 fallbackUsed?: boolean;
             }>;
         };
+        dataDashboard?: import("./datasetBindings").DataDashboardArtifactMetadataDto;
     };
     createdAt: string;
     activatedAt?: string;

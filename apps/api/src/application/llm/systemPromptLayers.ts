@@ -76,7 +76,58 @@ export function renderAssetLayerDFragment(
     // Truncation is per-fragment using its own budget — deterministic, independent of
     // sibling assets present in the same Layer D render.
     const sd = trace.structuredData;
-    if (sd?.sheets && sd.sheets.length > 0) {
+    if (sd?.dataset) {
+        lines.push(`Structured dataset (${sd.dataset.sourceFormat}):`);
+        lines.push(`Global facts: ${sd.dataset.facts.rowCount} rows, ${sd.dataset.facts.columnCount} columns, ${sd.dataset.facts.numericColumnCount} numeric, ${sd.dataset.facts.categoricalColumnCount} categorical, ${sd.dataset.facts.dateColumnCount} date`);
+        for (const table of sd.dataset.tables.slice(0, 2)) {
+            const visibleHeaders = table.sampleHeaders.slice(0, 8).join(", ");
+            const measureHints = table.columns
+                .filter((column) => column.valueType === "number")
+                .slice(0, 5)
+                .map((column) => column.label || column.key)
+                .join(", ");
+            const dimensionHints = table.columns
+                .filter((column) => column.valueType === "string" || column.valueType === "date" || column.valueType === "boolean")
+                .slice(0, 5)
+                .map((column) => column.label || column.key)
+                .join(", ");
+
+            lines.push(`Table "${table.name}" — ${table.rowCount} rows — ${table.columnCount} columns`);
+            if (visibleHeaders) lines.push(`Headers: ${visibleHeaders}`);
+            if (measureHints) lines.push(`Measures: ${measureHints}`);
+            if (dimensionHints) lines.push(`Dimensions: ${dimensionHints}`);
+            if (table.sampleRows.length > 0) {
+                const previewRows = table.sampleRows
+                    .slice(0, 3)
+                    .map((row) => row.slice(0, 8).join(" | "))
+                    .join("\n");
+                lines.push("Sample rows:");
+                lines.push(previewRows);
+            }
+            if (lines.join("\n").length >= maxChars) break;
+        }
+        if (sd.dataset.limitations && sd.dataset.limitations.length > 0) {
+            lines.push(`Limitations: ${sd.dataset.limitations.slice(0, 3).join(" | ")}`);
+        }
+        // Inject llmAppendix inline so the generator sees analytical signals
+        // in the same per-asset block, not buried in a global appendix.
+        const app = sd.dataset.llmAppendix;
+        if (app) {
+            if (app.analyticalSummary) {
+                lines.push(`Analytical summary: ${app.analyticalSummary}`);
+            }
+            if (app.keySignals.length > 0) {
+                lines.push(`Key signals: ${app.keySignals.slice(0, 6).join(" | ")}`);
+            }
+            if (app.suggestedQuestions.length > 0) {
+                lines.push("Questions this dataset can answer for the page:");
+                app.suggestedQuestions.slice(0, 5).forEach((q) => lines.push(`- ${q}`));
+            }
+            if (app.cautions.length > 0) {
+                lines.push(`Grounding cautions: ${app.cautions.slice(0, 3).join(" | ")}`);
+            }
+        }
+    } else if (sd?.sheets && sd.sheets.length > 0) {
         lines.push(`Structured data (${sd.sheets.length} sheet${sd.sheets.length > 1 ? "s" : ""}):`);
         for (const sheet of sd.sheets) {
             const headerLine = `Sheet "${sheet.name}" — ${sheet.rowCount} rows — columns: ${sheet.columnHeaders
@@ -209,7 +260,7 @@ export function buildPresetLayer(presetId?: string | null): string {
  */
 export function buildProjectKnowledgeLayer(
     assets: ProjectAsset[],
-    opts?: { maxChars?: number; maxAssets?: number; includeUnenrichedAssets?: boolean },
+    opts?: { maxChars?: number; maxAssets?: number; includeUnenrichedAssets?: boolean; includeStructuredDataAppendix?: boolean },
 ): string {
     if (!env.enrichmentInjectLayerD) return "";
 
@@ -257,7 +308,21 @@ export function buildProjectKnowledgeLayer(
         // Prefer the fragment that was pre-rendered during enrichment (deterministic,
         // single-pass). Fall back to on-the-fly rendering for legacy traces that
         // predate the cache field.
-        const block = trace?.renderedFragment ?? (trace ? renderAssetLayerDFragment(trace) : renderUnenrichedAssetLayerDFragment(asset));
+        // Additionally: if the cached fragment exists but the dataset has a llmAppendix
+        // that is NOT yet reflected in it (legacy traces built before Fix A), re-render
+        // on-the-fly so analytical signals are always included without a DB migration.
+        let block: string;
+        if (!trace) {
+            block = renderUnenrichedAssetLayerDFragment(asset);
+        } else if (
+            trace.renderedFragment &&
+            !(trace.structuredData?.dataset?.llmAppendix && !trace.renderedFragment.includes("Analytical summary:"))
+        ) {
+            block = trace.renderedFragment;
+        } else {
+            // Re-render: either no cached fragment, or cached fragment is pre-Fix-A
+            block = renderAssetLayerDFragment(trace);
+        }
         if (totalChars + block.length + 2 > maxChars) break;
         blocks.push(block);
         totalChars += block.length + 2;
@@ -265,7 +330,180 @@ export function buildProjectKnowledgeLayer(
 
     if (blocks.length === 0) return "";
 
-    return `${header}\n\n${blocks.join("\n\n")}`;
+    let content = `${header}\n\n${blocks.join("\n\n")}`;
+
+    if (opts?.includeStructuredDataAppendix !== false) {
+        const appendix = buildStructuredDataLayerDAppendix(selected, {
+            maxChars: Math.max(0, maxChars - content.length - 2),
+        });
+        if (appendix) {
+            content = `${content}\n\n${appendix}`;
+        }
+    }
+
+    // Cross-asset correlation: only meaningful with 2+ enriched assets
+    if (selected.length >= 2) {
+        const correlation = buildCrossAssetCorrelationBlock(selected, {
+            maxChars: Math.max(0, maxChars - content.length - 2),
+        });
+        if (correlation) {
+            content = `${content}\n\n${correlation}`;
+        }
+    }
+
+    return content;
+}
+
+/**
+ * Cross-asset correlation block — injected at the end of Layer D when 2+ enriched assets
+ * are present. Derives shared signals, thematic bridges, and tensions between assets so
+ * the generator can produce output that is coherent across all reference materials rather
+ * than treating each asset in isolation.
+ *
+ * Purely deterministic: no LLM call, synthesised from already-computed traces.
+ */
+function buildCrossAssetCorrelationBlock(
+    assets: ProjectAsset[],
+    opts?: { maxChars?: number },
+): string {
+    const maxChars = opts?.maxChars ?? 3_000;
+    if (maxChars < 200) return "";
+
+    const lines: string[] = ["### Cross-asset correlation"];
+
+    // ── Shared audience ──────────────────────────────────────────────────────
+    const audiences = assets
+        .map((a) => a.enrichmentTrace?.documentBrief?.targetAudience)
+        .filter((a): a is string => !!a);
+    if (audiences.length >= 2) {
+        lines.push(`- Shared audience context: ${[...new Set(audiences)].join(" | ")}`);
+    }
+
+    // ── Shared tone signals ───────────────────────────────────────────────────
+    const tones = assets
+        .map((a) => a.enrichmentTrace?.documentBrief?.toneLabel)
+        .filter((t): t is string => !!t);
+    if (tones.length >= 2) {
+        lines.push(`- Tone convergence: ${[...new Set(tones)].join(" | ")}`);
+    }
+
+    // ── Shared tags across assets ─────────────────────────────────────────────
+    const tagSets = assets.map((a) => new Set<string>(a.enrichmentTrace?.distilledTags ?? []));
+    if (tagSets.length >= 2) {
+        const [first, ...rest] = tagSets as [Set<string>, ...Set<string>[]];
+        const intersection = [...first].filter((tag) => rest.every((s) => s.has(tag)));
+        if (intersection.length > 0) {
+            lines.push(`- Tags shared across all assets: ${intersection.slice(0, 8).join(", ")}`);
+        }
+    }
+
+    // ── Dataset × copy bridge ─────────────────────────────────────────────────
+    const datasetAssets = assets.filter((a) => a.enrichmentTrace?.structuredData?.dataset);
+    const copyAssets = assets.filter((a) => a.enrichmentTrace?.documentBrief && !a.enrichmentTrace?.structuredData?.dataset);
+    if (datasetAssets.length > 0 && copyAssets.length > 0) {
+        const datasetNames = datasetAssets.map((a) => a.enrichmentTrace!.distilledTitle).join(", ");
+        const copyNames = copyAssets.map((a) => a.enrichmentTrace!.distilledTitle).join(", ");
+        lines.push(`- Dataset × copy bridge: structured data from [${datasetNames}] should be grounded in the narrative voice and messaging from [${copyNames}].`);
+        lines.push("  Translate dataset signals into the tone and vocabulary present in the copy assets, not generic technical language.");
+    }
+
+    // ── Cross-dataset signal pool (when multiple datasets) ────────────────────
+    if (datasetAssets.length >= 2) {
+        const allSignals = datasetAssets.flatMap((a) =>
+            a.enrichmentTrace?.structuredData?.dataset?.llmAppendix?.keySignals ?? [],
+        );
+        if (allSignals.length > 0) {
+            lines.push(`- Combined dataset signals: ${[...new Set(allSignals)].slice(0, 8).join(" | ")}`);
+        }
+        const allQuestions = datasetAssets.flatMap((a) =>
+            a.enrichmentTrace?.structuredData?.dataset?.llmAppendix?.suggestedQuestions ?? [],
+        );
+        if (allQuestions.length > 0) {
+            lines.push("- Cross-dataset questions the page should synthesise:");
+            [...new Set(allQuestions)].slice(0, 5).forEach((q) => lines.push(`  - ${q}`));
+        }
+    }
+
+    // ── Key messages pool across all assets ───────────────────────────────────
+    const allKeyMessages = assets.flatMap((a) => a.enrichmentTrace?.documentBrief?.keyMessages ?? []);
+    if (allKeyMessages.length > 0) {
+        const deduped = [...new Set(allKeyMessages)].slice(0, 6);
+        lines.push(`- Top messages to synthesise into the output: ${deduped.join(" | ")}`);
+    }
+
+    if (lines.length <= 1) return ""; // only heading, nothing useful
+
+    const result = lines.join("\n");
+    return result.length > maxChars ? `${result.slice(0, maxChars - 15)}\n...(truncated)` : result;
+}
+
+export function buildGroundedDataContextLayer(
+    assets: ProjectAsset[],
+    opts?: { maxChars?: number; maxAssets?: number },
+): string {
+    const maxChars = opts?.maxChars ?? 8_000;
+    const maxAssets = opts?.maxAssets ?? 4;
+
+    const datasetAssets = assets
+        .filter((asset) => asset.enrichmentTrace?.structuredData?.dataset)
+        .slice(0, maxAssets);
+
+    if (datasetAssets.length === 0) return "";
+
+    const lines: string[] = [
+        "## LAYER X — GROUNDED DATA CONTEXT",
+        "The following structured datasets are available for this project.",
+        "Use them to shape a data dashboard, but never invent numerical facts that are not explicitly present below.",
+        "Prefer KPI cards, filters, chart areas, table exploration, and insight sections that align with these deterministic dataset facts.",
+        "",
+        "### Dataset runtime summary",
+    ];
+
+    for (const asset of datasetAssets) {
+        const dataset = asset.enrichmentTrace?.structuredData?.dataset;
+        if (!dataset) continue;
+        lines.push(`- Dataset: ${asset.originalName}`);
+        lines.push(`  - Format: ${dataset.sourceFormat}`);
+        lines.push(`  - Tables: ${dataset.tables.length}`);
+        lines.push(`  - Total rows: ${dataset.facts.rowCount}`);
+        lines.push(`  - Total columns: ${dataset.facts.columnCount}`);
+        lines.push(`  - Numeric columns: ${dataset.facts.numericColumnCount}`);
+        lines.push(`  - Categorical columns: ${dataset.facts.categoricalColumnCount}`);
+        lines.push(`  - Date columns: ${dataset.facts.dateColumnCount}`);
+        lines.push(`  - Supported aggregations: ${dataset.facts.supportedAggregations.join(", ")}`);
+
+        for (const table of dataset.tables.slice(0, 3)) {
+            const columnSummary = table.columns
+                .slice(0, 12)
+                .map((column) => `${column.key}[${column.valueType}]`)
+                .join(", ");
+            lines.push(`  - Table "${table.name}": ${table.rowCount} rows, ${table.columnCount} columns`);
+            lines.push(`    - Columns: ${columnSummary}`);
+            const numericCandidates = table.columns
+                .filter((column) => column.valueType === "number")
+                .slice(0, 6)
+                .map((column) => column.key);
+            if (numericCandidates.length > 0) {
+                lines.push(`    - KPI candidates: ${numericCandidates.join(", ")}`);
+            }
+            const dimensionCandidates = table.columns
+                .filter((column) => column.valueType === "string" || column.valueType === "date" || column.valueType === "boolean")
+                .slice(0, 6)
+                .map((column) => column.key);
+            if (dimensionCandidates.length > 0) {
+                lines.push(`    - Filter or grouping dimensions: ${dimensionCandidates.join(", ")}`);
+            }
+        }
+
+        if (dataset.limitations && dataset.limitations.length > 0) {
+            lines.push(`  - Limitations: ${dataset.limitations.slice(0, 4).join(" | ")}`);
+        }
+        lines.push("");
+        if (lines.join("\n").length >= maxChars) break;
+    }
+
+    const content = lines.join("\n").slice(0, maxChars);
+    return content.trim();
 }
 
 function renderUnenrichedAssetLayerDFragment(asset: ProjectAsset): string {
@@ -277,6 +515,79 @@ function renderUnenrichedAssetLayerDFragment(asset: ProjectAsset): string {
         asset.styleRole ? `  - Intended role: ${asset.styleRole}` : undefined,
         "  - Status: uploaded reference; detailed extraction is still pending.",
     ].filter((line): line is string => Boolean(line)).join("\n");
+}
+
+function buildStructuredDataLayerDAppendix(
+    assets: ProjectAsset[],
+    opts?: { maxChars?: number },
+): string {
+    const maxChars = opts?.maxChars ?? 4_000;
+    if (maxChars <= 0) return "";
+
+    const datasetAssets = assets.filter((asset) => asset.enrichmentTrace?.structuredData?.dataset);
+    if (datasetAssets.length === 0) return "";
+
+    const lines: string[] = [
+        "### Structured data appendix",
+        "Deterministic notes extracted from structured attachments:",
+    ];
+
+    for (const asset of datasetAssets) {
+        const dataset = asset.enrichmentTrace?.structuredData?.dataset;
+        if (!dataset) continue;
+
+        lines.push(`- Dataset asset: ${asset.originalName}`);
+        lines.push(`  - Source format: ${dataset.sourceFormat}`);
+        lines.push(`  - Global facts: ${dataset.facts.rowCount} rows, ${dataset.facts.columnCount} columns, ${dataset.facts.numericColumnCount} numeric, ${dataset.facts.categoricalColumnCount} categorical, ${dataset.facts.dateColumnCount} date`);
+
+        for (const table of dataset.tables.slice(0, 2)) {
+            const numericColumns = table.columns
+                .filter((column) => column.valueType === "number")
+                .slice(0, 5)
+                .map((column) => column.label || column.key);
+            const dimensionColumns = table.columns
+                .filter((column) => column.valueType === "string" || column.valueType === "date" || column.valueType === "boolean")
+                .slice(0, 5)
+                .map((column) => column.label || column.key);
+
+            lines.push(`  - Table "${table.name}": ${table.rowCount} rows, ${table.columnCount} columns`);
+            if (table.sampleHeaders.length > 0) {
+                lines.push(`    - Visible headers: ${table.sampleHeaders.slice(0, 8).join(", ")}`);
+            }
+            if (numericColumns.length > 0) {
+                lines.push(`    - Possible measures: ${numericColumns.join(", ")}`);
+            }
+            if (dimensionColumns.length > 0) {
+                lines.push(`    - Possible dimensions or filters: ${dimensionColumns.join(", ")}`);
+            }
+        }
+
+        if (dataset.limitations && dataset.limitations.length > 0) {
+            lines.push(`  - Runtime limitations: ${dataset.limitations.slice(0, 3).join(" | ")}`);
+        }
+
+        if (dataset.llmAppendix) {
+            if (dataset.llmAppendix.analyticalSummary) {
+                lines.push(`  - Analytical summary: ${dataset.llmAppendix.analyticalSummary}`);
+            }
+            if (dataset.llmAppendix.keySignals.length > 0) {
+                lines.push(`  - Key signals: ${dataset.llmAppendix.keySignals.join(" | ")}`);
+            }
+            if (dataset.llmAppendix.suggestedQuestions.length > 0) {
+                lines.push(`  - Questions the generated page SHOULD answer: ${dataset.llmAppendix.suggestedQuestions.join(" | ")}`);
+            }
+            if (dataset.llmAppendix.cautions.length > 0) {
+                lines.push(`  - Grounding cautions: ${dataset.llmAppendix.cautions.join(" | ")}`);
+            }
+        }
+
+        if (lines.join("\n").length >= maxChars) break;
+    }
+
+    const content = lines.join("\n");
+    return content.length > maxChars
+        ? `${content.slice(0, Math.max(0, maxChars - 15))}\n...(truncated)`
+        : content;
 }
 
 /**

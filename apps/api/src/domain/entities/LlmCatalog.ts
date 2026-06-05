@@ -34,6 +34,8 @@ export interface LlmModel {
     priceInputUsdPerM?: number;
     /** Actual output price in USD per million tokens (0 = free; undefined = unknown). */
     priceOutputUsdPerM?: number;
+    /** Provider-specific OpenAI-compatible supported parameters exposed by live discovery. */
+    supportedParameters?: string[];
 }
 
 export interface LlmProviderCatalog {

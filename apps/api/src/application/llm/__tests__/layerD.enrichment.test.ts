@@ -47,6 +47,7 @@ function makeTrace(
     opts: {
         withTextLayer?: boolean;
         withStructuredData?: boolean;
+        withDatasetStructuredData?: boolean;
         withBrief?: boolean;
     } = {}
 ): AssetEnrichmentTrace {
@@ -97,8 +98,89 @@ function makeTrace(
                 suggestedStyleRole: "material",
             }
             : null,
-        structuredData: opts.withStructuredData
+        structuredData: opts.withDatasetStructuredData
             ? {
+                kind: "dataset",
+                dataset: {
+                    sourceFormat: "xlsx",
+                    facts: {
+                        rowCount: 40,
+                        columnCount: 4,
+                        numericColumnCount: 1,
+                        categoricalColumnCount: 2,
+                        booleanColumnCount: 0,
+                        dateColumnCount: 1,
+                        supportedAggregations: ["count", "sum", "avg", "min", "max", "distinct_count", "top_values"],
+                    },
+                    tables: [
+                        {
+                            name: "Artisti",
+                            sourceFormat: "xlsx",
+                            rowCount: 40,
+                            columnCount: 4,
+                            sampleHeaders: ["Nome", "Genere", "Ingaggio", "Data"],
+                            sampleRows: [["Alice", "Jazz", "1200", "2026-04-01"]],
+                            columns: [
+                                {
+                                    key: "nome",
+                                    label: "Nome",
+                                    valueType: "string",
+                                    nonNullCount: 40,
+                                    nullCount: 0,
+                                    nullRatio: 0,
+                                    distinctCount: 40,
+                                    sampleValues: ["Alice"],
+                                },
+                                {
+                                    key: "genere",
+                                    label: "Genere",
+                                    valueType: "string",
+                                    nonNullCount: 40,
+                                    nullCount: 0,
+                                    nullRatio: 0,
+                                    distinctCount: 2,
+                                    sampleValues: ["Jazz"],
+                                },
+                                {
+                                    key: "ingaggio",
+                                    label: "Ingaggio",
+                                    valueType: "number",
+                                    nonNullCount: 40,
+                                    nullCount: 0,
+                                    nullRatio: 0,
+                                    distinctCount: 10,
+                                    sampleValues: ["1200"],
+                                    min: 1000,
+                                    max: 4000,
+                                    mean: 1800,
+                                    sum: 72000,
+                                },
+                                {
+                                    key: "data",
+                                    label: "Data",
+                                    valueType: "date",
+                                    nonNullCount: 40,
+                                    nullCount: 0,
+                                    nullRatio: 0,
+                                    distinctCount: 10,
+                                    sampleValues: ["2026-04-01"],
+                                    min: "2026-04-01",
+                                    max: "2026-05-01",
+                                },
+                            ],
+                        },
+                    ],
+                    limitations: ["No joins", "Single-table runtime"],
+                    llmAppendix: {
+                        analyticalSummary: "The dataset looks like an event booking roster with pricing and schedule dimensions.",
+                        keySignals: ["Ingaggio is the main KPI", "Genere and Data are likely primary filters"],
+                        suggestedQuestions: ["Which genre has the highest total ingaggio?", "How does ingaggio vary over time?"],
+                        cautions: ["Single-table runtime only", "No joins available for enrichment"],
+                    },
+                },
+            }
+            : opts.withStructuredData
+                ? {
                 kind: "spreadsheet",
                 sheets: [
                     {
@@ -111,7 +193,7 @@ function makeTrace(
                     },
                 ],
             }
-            : null,
+                : null,
         colorPalette: null,
         visualAnalysis: null,
         designSignals: null,
@@ -233,5 +315,49 @@ describe("buildProjectKnowledgeLayer — Layer D enrichment timing", () => {
         const asset = makeAsset({ enrichmentTrace: makeTrace("ready", { withBrief: true, withStructuredData: true }) });
         const result = buildProjectKnowledgeLayer([asset], { maxChars: 50 });
         expect(result).toBe("");
+    });
+
+    it("appends deterministic structured-data notes in calce when dataset runtime is available", () => {
+        const asset = makeAsset({
+            originalName: "artisti-industriali.xlsx",
+            enrichmentTrace: makeTrace("ready", { withBrief: true, withDatasetStructuredData: true }),
+        });
+        const result = buildProjectKnowledgeLayer([asset]);
+        expect(result).toContain("### Structured data appendix");
+        expect(result).toContain("artisti-industriali.xlsx");
+        expect(result).toContain("Possible measures: Ingaggio");
+        expect(result).toContain("Possible dimensions or filters: Nome, Genere, Data");
+    });
+
+    it("appends the dataset-aware llm appendix after deterministic facts when available", () => {
+        const asset = makeAsset({
+            originalName: "artisti-industriali.xlsx",
+            enrichmentTrace: makeTrace("ready", { withBrief: true, withDatasetStructuredData: true }),
+        });
+        const result = buildProjectKnowledgeLayer([asset]);
+        expect(result).toContain("Analytical summary: The dataset looks like an event booking roster");
+        expect(result).toContain("Key signals: Ingaggio is the main KPI");
+        expect(result).toContain("Suggested analytical questions: Which genre has the highest total ingaggio?");
+        expect(result).toContain("Grounding cautions: Single-table runtime only");
+    });
+
+    it("does not dump raw csv blocks when a normalized dataset runtime is available", () => {
+        const asset = makeAsset({
+            originalName: "artisti-industriali.xlsx",
+            enrichmentTrace: makeTrace("ready", { withBrief: true, withDatasetStructuredData: true }),
+        });
+        const result = buildProjectKnowledgeLayer([asset]);
+        expect(result).toContain("Structured dataset (xlsx):");
+        expect(result).toContain("Sample rows:");
+        expect(result).not.toContain("```csv");
+    });
+
+    it("can disable the structured-data appendix explicitly for backward-compatible callers", () => {
+        const asset = makeAsset({
+            originalName: "artisti-industriali.xlsx",
+            enrichmentTrace: makeTrace("ready", { withBrief: true, withDatasetStructuredData: true }),
+        });
+        const result = buildProjectKnowledgeLayer([asset], { includeStructuredDataAppendix: false });
+        expect(result).not.toContain("### Structured data appendix");
     });
 });

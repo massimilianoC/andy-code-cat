@@ -131,9 +131,17 @@
         "version_other": "{{count}} versions",
         "menu": {
             "open": "Open",
+            "openData": "Data dashboard",
             "duplicate": "Duplicate",
             "copyPrompt": "Copy prompt",
             "delete": "Delete"
+        }
+    },
+    "admin": {
+        "experimental": {
+            "title": "Experimental",
+            "dataDashboardLabel": "Data Dashboard Alpha",
+            "dataDashboardDescription": "Detached superadmin-only console for grounded dataset experiments outside the main UX."
         }
     },
     "guide": {
@@ -347,6 +355,25 @@
             "backToDashboard": "Back to dashboard",
             "continueInWorkspace": "Continue in workspace"
         },
+        "workspaceModeBadge": "God Mode",
+        "openGodMode": "Open God Mode",
+        "review": {
+            "badge": "Review and generate",
+            "description": "The AI extracted the key data from your request. Generate now or adjust the fields first.",
+            "generating": "Generation in progress…",
+            "summary": {
+                "brand": "Brand",
+                "goal": "Goal",
+                "audience": "Audience",
+                "style": "Style",
+                "contacts": "Contacts"
+            }
+        },
+        "upload": {
+            "failedBadgeTitle": "Upload failed: {{name}}",
+            "failedCount_one": "{{count}} file not uploaded — check the session",
+            "failedCount_other": "{{count}} files not uploaded — check the session"
+        },
         "loadError": "Unable to load the project.",
         "submitError": "Unable to prepare the launch flow."
     },
@@ -421,11 +448,19 @@
         "modelOverrideReset": "Default",
         "modelOverridePlaceholder": "Select provider and model",
         "modelOverrideSearch": "Search provider or model",
+        "structuredDatasetCount_one": "{{count}} structured dataset",
+        "structuredDatasetCount_other": "{{count}} structured datasets",
+        "attachCounter": "Attachments: {{count}}/{{max}}",
+        "removeFileAria": "Remove {{name}}",
+        "dataDashboardWarning": "Data dashboard mode is alpha-only and disabled in the main Vibe flow. Continuing with the standard website pipeline.",
+        "uploadAllFailed": "Unable to upload attached files: {{files}}. Check the session and try again.",
+        "uploadPartialFailed": "Some files were not uploaded: {{files}}",
         "phase": {
             "classifying": "Analysing request…",
             "prefilling": "Pre-filling fields with AI…",
             "creating": "Creating workspace…",
             "uploading": "Uploading files…",
+            "analyzing": "Analysing datasets…",
             "redirecting": "Opening…",
             "hints": {
                 "classifying": [
@@ -450,6 +485,10 @@
                     "Uploading your files…",
                     "Processing documents…",
                     "Starting enrichment pipeline…"
+                ],
+                "analyzing": [
+                    "Waiting for structured enrichment…",
+                    "Reading uploaded datasets…"
                 ],
                 "redirecting": [
                     "Almost ready…",

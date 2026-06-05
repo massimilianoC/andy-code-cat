@@ -20,6 +20,10 @@ const ALLOWED_MIME_EXACT = new Set([
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     // XML
     "application/xml",
+    // SQL
+    "application/sql",
+    "text/sql",
+    "text/x-sql",
     // JavaScript
     "application/javascript",
     // CSV

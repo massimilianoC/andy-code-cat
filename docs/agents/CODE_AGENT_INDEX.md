@@ -4,7 +4,7 @@
 
 1. `AGENTS.md` — non-negotiable rules, layer boundaries, isolation model
 2. `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md` — layer ownership map, frozen zones, PP-NNN rule IDs, and collision-prevention checklist for all agents touching the prompting pipeline
-3. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (R1→R4 active)
+3. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (`R1` delivered, `R2`/`R3` active)
 4. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — current codebase structure
 5. `docs/architecture/PIPELINE_LAYERS.md` — 2-layer architecture and transition mechanism
 6. `docs/security/SECURITY_BASELINE.md` — auth and isolation baseline
@@ -19,16 +19,17 @@
 
 ## Active Development Focus
 
-**R1 - Prompt Architecture Layer** is the current priority milestone.
-Goal: structure the system prompt as a composition of 4 layers of architectural constraints.
-See `docs/DEVELOPMENT_PLAN.md §2.2` and §R1 for details.
+The current focus is no longer first-time R1 delivery.
+Use `docs/DEVELOPMENT_PLAN.md` and `docs/project/ROADMAP.md` as the source of truth for milestone status.
 
-**Key files for R1:**
+Current active platform tracks:
 
-- `apps/api/src/presentation/http/routes/llmRoutes.ts` — `buildMessagesWithHistory()` (to be modularized)
-- `apps/api/src/application/llm/styleContextBuilder.ts` — Layer C already implemented
-- `apps/api/src/domain/entities/ProjectPreset.ts` — static preset catalog (Layer B source)
-- `docs/specs/PRESET_TYPED_SPECS.md` — full specification of the 9 presets with `systemPromptModule`
+- **R2 - Observability and cost visibility**: execution logs, usage summaries, dashboard surfaces, operational auditability
+- **R3 - Publish hardening and domain management**: path publish stabilization, slug/domain controls, nginx/SSL completion
+- **Artifact Media Orchestrator continuation**: media resolution reliability, trace completeness, resolver expansion, browser E2E
+- **Guided entry / Zero Effort / VibeCore evolution**: additive intake flows that reuse the same backend orchestration and project model
+
+When touching prompting code, treat the prompt architecture as an implemented foundation to extend carefully, not as an unbuilt milestone.
 
 ---
 

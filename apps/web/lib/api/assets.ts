@@ -104,6 +104,48 @@ export interface ProjectAssetDto {
         distilledColors?: string[];
         documentBrief?: DocumentBriefDto | null;
         designSignals?: ImageDesignSignalsDto | null;
+        dataset?: {
+            sourceFormat: "csv" | "xlsx" | "json" | "xml" | "sql";
+            tables: Array<{
+                name: string;
+                sourceFormat: "csv" | "xlsx" | "json" | "xml" | "sql";
+                rowCount: number;
+                columnCount: number;
+                columns: Array<{
+                    key: string;
+                    label: string;
+                    valueType: "string" | "number" | "boolean" | "date" | "unknown";
+                    nonNullCount: number;
+                    nullCount: number;
+                    nullRatio: number;
+                    distinctCount: number;
+                    sampleValues: string[];
+                    min?: number | string | null;
+                    max?: number | string | null;
+                    mean?: number | null;
+                    sum?: number | null;
+                }>;
+                sampleHeaders: string[];
+                sampleRows: string[][];
+                notes?: string[];
+            }>;
+            facts: {
+                rowCount: number;
+                columnCount: number;
+                numericColumnCount: number;
+                categoricalColumnCount: number;
+                booleanColumnCount: number;
+                dateColumnCount: number;
+                supportedAggregations: Array<"count" | "sum" | "avg" | "min" | "max" | "distinct_count" | "top_values">;
+            };
+            limitations?: string[];
+            llmAppendix?: {
+                analyticalSummary: string;
+                keySignals: string[];
+                suggestedQuestions: string[];
+                cautions: string[];
+            };
+        } | null;
     } | null;
     createdAt: string;
 }
@@ -306,7 +348,15 @@ export async function uploadProjectAsset(
     token: string,
     projectId: string,
     file: File,
-    meta?: { label?: string; scope?: "project" | "user"; useInProject?: boolean; styleRole?: string; descriptionText?: string }
+    meta?: {
+        label?: string;
+        scope?: "project" | "user";
+        useInProject?: boolean;
+        styleRole?: string;
+        descriptionText?: string;
+        conversationId?: string;
+        messageId?: string;
+    }
 ): Promise<{
     asset: ProjectAssetDto;
     warnings?: string[];
@@ -330,6 +380,8 @@ export async function uploadProjectAsset(
     if (meta?.useInProject !== undefined) formData.append("useInProject", String(meta.useInProject));
     if (meta?.styleRole) formData.append("styleRole", meta.styleRole);
     if (meta?.descriptionText) formData.append("descriptionText", meta.descriptionText);
+    if (meta?.conversationId) formData.append("conversationId", meta.conversationId);
+    if (meta?.messageId) formData.append("messageId", meta.messageId);
 
     const res = await fetch(`${baseUrl}/v1/projects/${projectId}/assets`, {
         method: "POST",

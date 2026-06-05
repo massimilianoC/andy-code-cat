@@ -47,6 +47,7 @@
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces",
     "seed": "npm run seed -w apps/api",
+    "seed:presets": "npm run seed:presets -w apps/api",
     "seed:llm": "npm run seed:llm -w apps/api"
   },
   "engines": {

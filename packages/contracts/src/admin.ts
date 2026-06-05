@@ -190,6 +190,7 @@ export const adminProjectPresetPatchSchema = z.object({
         toneTags: z.array(z.string().min(1).max(80)).max(20).optional(),
         featureTags: z.array(z.string().min(1).max(80)).max(20).optional(),
         audienceTags: z.array(z.string().min(1).max(80)).max(20).optional(),
+        sectorTags: z.array(z.string().min(1).max(80)).max(20).optional(),
     }).optional(),
     briefTemplate: z.string().max(20000).optional(),
     styleTemplate: z.string().max(20000).optional(),

@@ -9,6 +9,7 @@ import { MongoSiteDeploymentRepository } from "../../../infra/repositories/Mongo
 import { MongoPublishHistoryRepository } from "../../../infra/repositories/MongoPublishHistoryRepository";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
+import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { PublishProject } from "../../../application/use-cases/PublishProject";
 import { UnpublishProject } from "../../../application/use-cases/UnpublishProject";
@@ -108,10 +109,11 @@ export function createPublishRoutes() {
     const deploymentRepository = new MongoSiteDeploymentRepository();
     const historyRepository = new MongoPublishHistoryRepository();
     const userRepository = new MongoUserRepository();
+    const assetRepository = new MongoProjectAssetRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
     const platformConfigRepository = new MongoPlatformConfigRepository();
-    const publishProject = new PublishProject(deploymentRepository, snapshotRepository, localFileStorage, historyRepository, platformConfigRepository);
+    const publishProject = new PublishProject(deploymentRepository, snapshotRepository, localFileStorage, assetRepository, historyRepository, platformConfigRepository);
     const unpublishProject = new UnpublishProject(deploymentRepository, localFileStorage);
     const getSiteDeployment = new GetSiteDeployment(deploymentRepository);
 
@@ -450,6 +452,69 @@ export function createPublishRoutes() {
 
         res.setHeader("Content-Type", contentType);
         res.setHeader("Cache-Control", cacheControl);
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        fs.createReadStream(filePath).pipe(res);
+    });
+
+    staticRouter.get("/:publishId/data/:file", async (req, res) => {
+        const { publishId, file } = req.params;
+        if (!PUBLISH_ID_RE.test(publishId) || !file) {
+            res.status(404).send("Not found");
+            return;
+        }
+
+        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        if (deploymentRecord?.isAdminBlocked) {
+            res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
+                "This site has been suspended by the platform administrator."
+            );
+            return;
+        }
+        if (deploymentRecord) {
+            const owner = await userRepository.findById(deploymentRecord.userId).catch(() => null);
+            if (owner?.isBlocked) {
+                res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
+                    "This site is unavailable because the owner account has been suspended."
+                );
+                return;
+            }
+        }
+
+        if (file.includes("..") || file.includes("/") || file.includes("\\")) {
+            res.status(400).send("Invalid path");
+            return;
+        }
+
+        const relativePath = `data/${file}`;
+        const filePath = localFileStorage.resolvePublishFile(publishId, relativePath);
+        if (!filePath) {
+            res.status(404).send("Not found");
+            return;
+        }
+
+        try {
+            await fs.promises.access(filePath);
+        } catch {
+            res.status(404).send("Not found");
+            return;
+        }
+
+        const ext = path.extname(file).toLowerCase();
+        const contentType = MIME_MAP[ext] ?? "application/octet-stream";
+        const stat = await fs.promises.stat(filePath);
+        const etag = `"${stat.mtimeMs.toString(16)}-${stat.size.toString(16)}"`;
+
+        res.removeHeader("Content-Security-Policy");
+        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
+        res.setHeader("ETag", etag);
+        res.setHeader("Last-Modified", stat.mtime.toUTCString());
+        if (req.headers["if-none-match"] === etag) {
+            res.status(304).end();
+            return;
+        }
+
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=86400");
         res.setHeader("X-Content-Type-Options", "nosniff");
         fs.createReadStream(filePath).pipe(res);
     });

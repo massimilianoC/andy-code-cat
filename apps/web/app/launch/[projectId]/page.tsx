@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import { launchZeroEffort, getZeroEffortConfig, type ZeroEffortLaunchInput, type ZeroEffortPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
@@ -436,6 +437,7 @@ function phaseLabel(phase: GenerationPhase): string {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ZeroEffortLaunchPage() {
+    const { t } = useTranslation();
     const params = useParams<{ projectId: string }>();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -471,6 +473,7 @@ export default function ZeroEffortLaunchPage() {
 
     // document upload zone
     const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
+    const [uploadFailedFiles, setUploadFailedFiles] = useState<string[]>([]);
     const [uploadingFiles, setUploadingFiles] = useState(false);
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -585,14 +588,17 @@ export default function ZeroEffortLaunchPage() {
     async function handleFiles(files: FileList | File[]) {
         if (!token || !projectId) return;
         setUploadingFiles(true);
+        setUploadFailedFiles([]);
+        const failed: string[] = [];
         for (const file of Array.from(files)) {
             try {
                 await uploadProjectAsset(token, projectId, file, { useInProject: true });
                 setAttachedFiles((prev) => [...prev, file.name]);
             } catch {
-                // continue uploading remaining files even if one fails
+                failed.push(file.name);
             }
         }
+        if (failed.length > 0) setUploadFailedFiles(failed);
         setUploadingFiles(false);
     }
 
@@ -657,7 +663,11 @@ export default function ZeroEffortLaunchPage() {
     function handleGoToGodMode() {
         if (!result) return;
         const finalPrompt = editedOptimizedPrompt || optimizedPrompt;
-        let url = `/workspace/${projectId}?conv=${result.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}`;
+        const convId = result.conversationId;
+        // Store the prompt in sessionStorage to avoid URI-length limits.
+        // The workspace page reads and deletes this key on mount.
+        sessionStorage.setItem(`pipeline_handoff_${convId}`, finalPrompt);
+        let url = `/workspace/${projectId}?conv=${convId}`;
         const effectiveProvider = pipelineOverride?.provider ?? pipelineConfig?.vibeGenerate?.provider ?? pipelineConfig?.generate?.provider;
         const effectiveModel = pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model;
         if (effectiveProvider) {
@@ -712,6 +722,9 @@ export default function ZeroEffortLaunchPage() {
             });
             const finalPrompt = optimizeRes.optimizedPrompt;
 
+            const convId = briefResult.conversationId;
+            // Store the prompt in sessionStorage to avoid URI-length limits.
+            sessionStorage.setItem(`pipeline_handoff_${convId}`, finalPrompt);
             const skipParam = aiPrefilled ? "&skipAutoOptimize=1" : "";
             const effectiveProvider = pipelineOverride?.provider ?? localConfig?.vibeGenerate?.provider ?? localConfig?.generate?.provider;
             const effectiveModel = pipelineOverride?.model ?? localConfig?.vibeGenerate?.model ?? localConfig?.generate?.model;
@@ -719,7 +732,7 @@ export default function ZeroEffortLaunchPage() {
                 ? `&preferredProvider=${encodeURIComponent(effectiveProvider)}&preferredModel=${encodeURIComponent(effectiveModel)}`
                 : "";
             router.push(
-                `/workspace/${projectId}?conv=${briefResult.conversationId}&autoPrompt=${encodeURIComponent(finalPrompt)}${skipParam}${modelParams}`,
+                `/workspace/${projectId}?conv=${convId}${skipParam}${modelParams}`,
             );
         } catch (e) {
             const message = e instanceof Error ? e.message : "Impossibile avviare la generazione.";
@@ -743,21 +756,23 @@ export default function ZeroEffortLaunchPage() {
                 {/* Header */}
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <Badge variant="accent" className="mb-2">Guided Mode</Badge>
+                        <Badge variant="accent" className="mb-2">{t("launch.workspaceModeBadge")}</Badge>
                         <h1 className="text-2xl font-semibold tracking-tight">
-                            Generazione guidata
+                            {t("launch.title")}
                         </h1>
                         <p className="text-sm text-muted-foreground">
-                            {project?.name ?? "Il tuo progetto"} · Compila i 3 step e avvia la generazione automatica.
+                            {t("launch.subtitle", {
+                                name: project?.name ?? t("launch.project"),
+                            })}
                         </p>
                     </div>
                     <div className="flex gap-2 shrink-0">
                         <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")}>
-                            Dashboard
+                            {t("launch.step4.backToDashboard")}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => router.push(
                             result ? `/workspace/${projectId}?conv=${result.conversationId}` : `/workspace/${projectId}`
-                        )}>Guided Mode</Button>
+                        )}>{t("launch.openGodMode")}</Button>
                     </div>
                 </div>
 
@@ -772,10 +787,10 @@ export default function ZeroEffortLaunchPage() {
                                 <div className="flex-1 min-w-0">
                                     <CardTitle className="text-base flex items-center gap-2">
                                         <span>✦ Pre-compilato dall&apos;AI</span>
-                                        <Badge variant="accent" className="text-xs font-normal">Rivedi e genera</Badge>
+                                        <Badge variant="accent" className="text-xs font-normal">{t("launch.review.badge")}</Badge>
                                     </CardTitle>
                                     <CardDescription className="text-xs mt-0.5">
-                                        L&apos;AI ha estratto i dati dalla tua richiesta. Genera subito oppure modifica prima i campi.
+                                        {t("launch.review.description")}
                                     </CardDescription>
                                 </div>
                             </div>
@@ -784,7 +799,7 @@ export default function ZeroEffortLaunchPage() {
                             {/* Summary grid */}
                             <div className="rounded-md border border-border bg-background/60 p-3 space-y-2 text-sm">
                                 <div className="flex items-baseline gap-2 flex-wrap">
-                                    <span className="text-muted-foreground text-xs w-24 shrink-0">Brand</span>
+                                    <span className="text-muted-foreground text-xs w-24 shrink-0">{t("launch.review.summary.brand")}</span>
                                     <span className="font-medium text-foreground truncate">{form.businessName || "—"}</span>
                                     <Badge variant="secondary" className="text-xs font-normal capitalize ml-auto">
                                         {form.siteType.replace("_", " ")}
@@ -792,19 +807,19 @@ export default function ZeroEffortLaunchPage() {
                                 </div>
                                 {form.primaryGoal && (
                                     <div className="flex items-start gap-2">
-                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">Obiettivo</span>
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">{t("launch.review.summary.goal")}</span>
                                         <p className="text-xs text-foreground line-clamp-3 flex-1">{form.primaryGoal}</p>
                                     </div>
                                 )}
                                 {form.audience && (
                                     <div className="flex items-start gap-2">
-                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">Audience</span>
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">{t("launch.review.summary.audience")}</span>
                                         <p className="text-xs text-foreground line-clamp-2 flex-1">{form.audience}</p>
                                     </div>
                                 )}
                                 {(form.styleAttributes?.length ?? 0) > 0 && (
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-muted-foreground text-xs w-24 shrink-0">Stile</span>
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0">{t("launch.review.summary.style")}</span>
                                         <div className="flex flex-wrap gap-1">
                                             {form.styleAttributes.map((a) => (
                                                 <Badge key={a} variant="outline" className="text-xs font-normal capitalize">{a}</Badge>
@@ -814,7 +829,7 @@ export default function ZeroEffortLaunchPage() {
                                 )}
                                 {form.contactFields.length > 0 && (
                                     <div className="flex items-start gap-2">
-                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">Contatti</span>
+                                        <span className="text-muted-foreground text-xs w-24 shrink-0 mt-0.5">{t("launch.review.summary.contacts")}</span>
                                         <div className="flex flex-wrap gap-1">
                                             {form.contactFields.slice(0, 4).map((cf) => (
                                                 <Badge key={cf.id} variant="secondary" className="text-xs font-normal">
@@ -844,7 +859,7 @@ export default function ZeroEffortLaunchPage() {
                                     disabled={submitting}
                                     className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
                                 >
-                                    Modifica manualmente
+                                    {t("vibecore.prefillEdit")}
                                 </button>
                                 <Button
                                     onClick={() => void handleGodModeGenerate()}
@@ -852,9 +867,9 @@ export default function ZeroEffortLaunchPage() {
                                     className="gap-2"
                                 >
                                     {submitting ? (
-                                        <><Loader2 className="h-4 w-4 animate-spin" /> Generazione in corso…</>
+                                        <><Loader2 className="h-4 w-4 animate-spin" /> {t("launch.review.generating")}</>
                                     ) : (
-                                        <><Rocket className="h-4 w-4" /> Guided Mode — Genera</>
+                                        <><Rocket className="h-4 w-4" /> {t("vibecore.prefillCta")}</>
                                     )}
                                 </Button>
                             </div>
@@ -1019,6 +1034,30 @@ export default function ZeroEffortLaunchPage() {
                                             {name}
                                         </Badge>
                                     ))}
+                                </div>
+                            )}
+                            {uploadFailedFiles.length > 0 && (
+                                <div className="flex flex-wrap justify-center gap-1.5 mt-1">
+                                    {uploadFailedFiles.map((name, i) => (
+                                        <Badge
+                                            key={i}
+                                            variant="destructive"
+                                            className="text-xs font-normal max-w-[180px] truncate"
+                                            title={t("launch.upload.failedBadgeTitle", {
+                                                name,
+                                                defaultValue: "Upload failed: {{name}}",
+                                            })}
+                                        >
+                                            ✕ {name}
+                                        </Badge>
+                                    ))}
+                                    <p className="w-full text-center text-xs text-destructive mt-0.5">
+                                        {t("launch.upload.failedCount", {
+                                            count: uploadFailedFiles.length,
+                                            defaultValue_one: "{{count}} file not uploaded — check the session",
+                                            defaultValue_other: "{{count}} files not uploaded — check the session",
+                                        })}
+                                    </p>
                                 </div>
                             )}
                         </div>

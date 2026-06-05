@@ -81,10 +81,24 @@ export class MongoProjectRepository implements ProjectRepository {
     }
 
     async rename(projectId: string, userId: string, name: string): Promise<Project | null> {
+        return this.update(projectId, userId, { name });
+    }
+
+    async update(projectId: string, userId: string, input: { name?: string; presetId?: string }): Promise<Project | null> {
         const collection = await this.collection();
+        const setFields: Partial<ProjectDocument> = {};
+        if (input.name !== undefined) {
+            setFields.name = input.name;
+        }
+        if (input.presetId !== undefined) {
+            setFields.presetId = input.presetId;
+        }
+        if (Object.keys(setFields).length === 0) {
+            return this.findByIdForUser(projectId, userId);
+        }
         const result = await collection.findOneAndUpdate(
             { _id: new ObjectId(projectId), ownerUserId: new ObjectId(userId) },
-            { $set: { name } },
+            { $set: setFields },
             { returnDocument: "after" }
         );
         return result ? mapDocument(result) : null;

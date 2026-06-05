@@ -7,7 +7,24 @@ export type FormatHint =
     | "ratio_16_9"
     | "interactive_form"
     | "portfolio"
-    | "brochure";
+    | "brochure"
+    | "analytics_dashboard";
+
+export type VibeGenerationMode = "auto" | "website" | "data_dashboard";
+export type VibeResolvedMode = Exclude<VibeGenerationMode, "auto">;
+
+export interface DataDashboardDraft {
+    dashboardName: string;
+    dashboardGoal: string;
+    primaryAudience: string;
+    primaryDatasets: string[];
+    mainEntities: string[];
+    timeDimension?: string;
+    kpiCandidates: string[];
+    questionCandidates: string[];
+    preferredVisualizationStyle?: "executive" | "operations" | "exploratory" | "monitoring";
+    notes?: string;
+}
 
 export interface AttachmentMeta {
     filename: string;
@@ -25,6 +42,7 @@ export interface VibeAttachmentPolicy {
 export interface VibeClassifyRequest {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
+    generationMode?: VibeGenerationMode;
     /** Optional one-shot provider override for this pipeline run. */
     provider?: string;
     /** Optional one-shot model override for this pipeline run. */
@@ -40,6 +58,7 @@ export interface VibeClassifyRequest {
 export interface VibeClassifyResponse {
     templateId: string | null;
     formatHint: FormatHint | null;
+    resolvedMode?: VibeResolvedMode;
     confidence: number;
     reasoning: string;
     skipped: boolean;
@@ -60,6 +79,7 @@ export interface VibePrefillRequest {
     prompt: string;
     /** If provided, backend loads project assets and injects Layer D document context into the prefill prompt. */
     projectId?: string;
+    generationMode?: VibeGenerationMode;
     /** Optional one-shot provider override for this pipeline run. */
     provider?: string;
     /** Optional one-shot model override for this pipeline run. */
@@ -89,6 +109,8 @@ export interface ZeroEffortDraft {
 
 export interface VibePrefillResponse {
     draft: ZeroEffortDraft;
+    dataDashboardDraft?: DataDashboardDraft;
+    resolvedMode?: VibeResolvedMode;
     confidence: number;
     skipped: boolean;
     /**
@@ -103,6 +125,19 @@ export interface VibePrefillResponse {
 
 export interface VibeConfigResponse {
     attachmentPolicy: VibeAttachmentPolicy;
+    documentContextPolicy: {
+        maxAssetsPerPrompt: number;
+        fallbackInlineExtractionMaxAssets: number;
+    };
+}
+
+export interface VibeConfigResponse {
+    attachmentPolicy: {
+        maxAttachmentsPerPrompt: number;
+        maxFileSizeBytes: number;
+        maxTotalBytes: number;
+        warningThresholdBytes: number;
+    };
     documentContextPolicy: {
         maxAssetsPerPrompt: number;
         fallbackInlineExtractionMaxAssets: number;

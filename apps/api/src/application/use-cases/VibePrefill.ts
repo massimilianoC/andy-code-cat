@@ -1,4 +1,4 @@
-import type { VibePrefillResponse, AttachmentMeta, FormatHint, ZeroEffortDraft } from "@andy-code-cat/contracts";
+import type { DataDashboardDraft, VibeGenerationMode, VibePrefillResponse, AttachmentMeta, FormatHint, ZeroEffortDraft } from "@andy-code-cat/contracts";
 import { zeroEffortLaunchSchema } from "@andy-code-cat/contracts";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
@@ -23,6 +23,7 @@ const VALID_STYLE_ATTRIBUTES = new Set([
     "minimal", "premium", "dark", "bright", "bold",
     "elegant", "corporate", "playful", "tech", "artisan", "luxury", "eco",
 ]);
+const VALID_VIS_STYLES = new Set(["executive", "operations", "exploratory", "monitoring"]);
 
 // ── Default draft ─────────────────────────────────────────────────────────────
 
@@ -73,6 +74,31 @@ Rules:
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
 - Return ONLY the JSON object.`;
 
+const DATA_DASHBOARD_SYSTEM_PROMPT = `You are a grounded data dashboard brief extractor.
+Given a user's free-form description of an analytical dashboard project, return a JSON object that
+describes how the dataset-backed dashboard should be shaped.
+
+Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
+{
+  "dashboardName": "short dashboard name (string, required)",
+  "dashboardGoal": "what analytical outcome the dashboard must support (string, required)",
+  "primaryAudience": "who uses the dashboard (string, required)",
+  "primaryDatasets": ["dataset names or logical sources"],
+  "mainEntities": ["main entities or business objects represented in the data"],
+  "timeDimension": "time/date field name or null",
+  "kpiCandidates": ["up to 8 KPI labels"],
+  "questionCandidates": ["up to 8 analytical questions the dashboard should answer"],
+  "preferredVisualizationStyle": "executive|operations|exploratory|monitoring|null",
+  "notes": "optional implementation notes or grounding cautions"
+}
+
+Rules:
+- infer a serious operational dashboard, not a marketing landing page.
+- prefer concise KPI names and concrete analytical questions.
+- if a dataset/table/field is unknown, keep labels generic and safe.
+- respect grounded analytics: do not invent exact metric values.
+- Return ONLY the JSON object.`;
+
 function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[], templateId?: string | null, formatHint?: FormatHint | null): string {
     const parts: string[] = [prompt.slice(0, MAX_PROMPT_CHARS)];
     if (attachmentMeta?.length) {
@@ -84,6 +110,19 @@ function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[], tem
     if (templateId) parts.push(`\nDetected template: ${templateId}`);
     if (formatHint) parts.push(`\nFormat hint: ${formatHint}`);
     return parts.join("");
+}
+
+function defaultDataDashboardDraft(prompt: string, attachmentMeta?: AttachmentMeta[]): DataDashboardDraft {
+    const datasetNames = (attachmentMeta ?? []).map((item) => item.filename).slice(0, 6);
+    return {
+        dashboardName: prompt.trim().slice(0, 80) || "Data Dashboard",
+        dashboardGoal: prompt.trim().slice(0, 800) || "Explore real project data through grounded KPI, filters, and analytical views.",
+        primaryAudience: "Operations, analysts, or decision makers working on the dataset.",
+        primaryDatasets: datasetNames,
+        mainEntities: [],
+        kpiCandidates: ["Total records", "Key metric summary", "Distribution by category"],
+        questionCandidates: ["What changed over time?", "Which segment is most relevant?", "Which values need attention?"],
+    };
 }
 
 // ── Response parser ───────────────────────────────────────────────────────────
@@ -154,12 +193,76 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
     }
 }
 
+function parseDataDashboardPrefillResponse(
+    raw: string,
+    prompt: string,
+    attachmentMeta?: AttachmentMeta[],
+): { dataDashboardDraft: DataDashboardDraft; confidence: number } {
+    let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+    const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
+
+    try {
+        const parsed = JSON.parse(candidate) as Record<string, unknown>;
+        const dashboardName = typeof parsed.dashboardName === "string" && parsed.dashboardName.trim()
+            ? parsed.dashboardName.trim().slice(0, 120)
+            : prompt.trim().slice(0, 80) || "Data Dashboard";
+        const dashboardGoal = typeof parsed.dashboardGoal === "string" && parsed.dashboardGoal.trim()
+            ? parsed.dashboardGoal.trim().slice(0, 2000)
+            : prompt.trim().slice(0, 800) || "Grounded analytics over attached datasets.";
+        const primaryAudience = typeof parsed.primaryAudience === "string" && parsed.primaryAudience.trim()
+            ? parsed.primaryAudience.trim().slice(0, 300)
+            : "Operations, analysts, or decision makers.";
+        const primaryDatasets = Array.isArray(parsed.primaryDatasets)
+            ? parsed.primaryDatasets.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim().slice(0, 120)).slice(0, 8)
+            : (attachmentMeta ?? []).map((item) => item.filename).slice(0, 8);
+        const mainEntities = Array.isArray(parsed.mainEntities)
+            ? parsed.mainEntities.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim().slice(0, 120)).slice(0, 12)
+            : [];
+        const timeDimension = typeof parsed.timeDimension === "string" && parsed.timeDimension.trim()
+            ? parsed.timeDimension.trim().slice(0, 120)
+            : undefined;
+        const kpiCandidates = Array.isArray(parsed.kpiCandidates)
+            ? parsed.kpiCandidates.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim().slice(0, 120)).slice(0, 8)
+            : [];
+        const questionCandidates = Array.isArray(parsed.questionCandidates)
+            ? parsed.questionCandidates.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim().slice(0, 180)).slice(0, 8)
+            : [];
+        const preferredVisualizationStyle = typeof parsed.preferredVisualizationStyle === "string" && VALID_VIS_STYLES.has(parsed.preferredVisualizationStyle)
+            ? (parsed.preferredVisualizationStyle as DataDashboardDraft["preferredVisualizationStyle"])
+            : undefined;
+        const notes = typeof parsed.notes === "string" && parsed.notes.trim()
+            ? parsed.notes.trim().slice(0, 800)
+            : undefined;
+
+        return {
+            dataDashboardDraft: {
+                dashboardName,
+                dashboardGoal,
+                primaryAudience,
+                primaryDatasets,
+                mainEntities,
+                timeDimension,
+                kpiCandidates,
+                questionCandidates,
+                preferredVisualizationStyle,
+                notes,
+            },
+            confidence: 0.85,
+        };
+    } catch {
+        return { dataDashboardDraft: defaultDataDashboardDraft(prompt, attachmentMeta), confidence: 0 };
+    }
+}
+
 // ── Input / Output ────────────────────────────────────────────────────────────
 
 export interface VibePrefillInput {
     prompt: string;
     /** Pre-built Layer D block from project assets — injected verbatim into the system prompt. */
     layerDContext?: string;
+    /** Dedicated grounded dataset layer used for data-dashboard flows. */
+    layerXDataContext?: string;
+    generationMode?: VibeGenerationMode;
     attachmentMeta?: AttachmentMeta[];
     templateId?: string | null;
     formatHint?: FormatHint | null;
@@ -185,9 +288,19 @@ export class VibePrefill {
         const echoProject = input.projectId ? { projectId: input.projectId } : {};
         const platformConfig = await this.platformConfigRepository.get().catch(() => null);
         const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, "default", TASK_KEY);
+        const resolvedMode = input.generationMode === "data_dashboard" || input.templateId === "data-dashboard" || input.formatHint === "analytics_dashboard"
+            ? "data_dashboard"
+            : "website";
 
         if (!env.vibeClassifierEnabled || !taskSettings.enabled) {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+            return {
+                draft: defaultDraft(input.prompt),
+                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                resolvedMode,
+                confidence: 0,
+                skipped: true,
+                ...echoProject,
+            };
         }
 
         const catalog = await this.getLlmCatalog.execute();
@@ -206,7 +319,14 @@ export class VibePrefill {
             activeProviders[0];
 
         if (!selectedProviderCatalog) {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+            return {
+                draft: defaultDraft(input.prompt),
+                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                resolvedMode,
+                confidence: 0,
+                skipped: true,
+                ...echoProject,
+            };
         }
 
         const providerCatalog = selectedProviderCatalog;
@@ -224,16 +344,24 @@ export class VibePrefill {
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+            return {
+                draft: defaultDraft(input.prompt),
+                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                resolvedMode,
+                confidence: 0,
+                skipped: true,
+                ...echoProject,
+            };
         }
 
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta, input.templateId, input.formatHint);
 
         // Use custom systemTemplate from platform config if set; fall back to hardcoded SYSTEM_PROMPT
-        const basePrompt = taskSettings.systemTemplate?.trim() || SYSTEM_PROMPT;
-        // Extend with Layer D document context when available
-        const systemPrompt = input.layerDContext
-            ? `${basePrompt}\n\n${input.layerDContext}`
+        const defaultSystemPrompt = resolvedMode === "data_dashboard" ? DATA_DASHBOARD_SYSTEM_PROMPT : SYSTEM_PROMPT;
+        const basePrompt = taskSettings.systemTemplate?.trim() || defaultSystemPrompt;
+        const contextLayers = [input.layerDContext, input.layerXDataContext].filter((value): value is string => Boolean(value && value.trim()));
+        const systemPrompt = contextLayers.length > 0
+            ? `${basePrompt}\n\n${contextLayers.join("\n\n")}`
             : basePrompt;
 
         try {
@@ -256,7 +384,14 @@ export class VibePrefill {
             });
 
             if (!response.ok) {
-                return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+                return {
+                    draft: defaultDraft(input.prompt),
+                    dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                    resolvedMode,
+                    confidence: 0,
+                    skipped: true,
+                    ...echoProject,
+                };
             }
 
             const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -306,10 +441,27 @@ export class VibePrefill {
                 });
             }
 
-            const { draft, confidence } = parsePrefillResponse(raw, input.prompt);
-            return { draft, confidence, skipped: false, ...echoProject };
+            const websitePrefill = parsePrefillResponse(raw, input.prompt);
+            const dataPrefill = resolvedMode === "data_dashboard"
+                ? parseDataDashboardPrefillResponse(raw, input.prompt, input.attachmentMeta)
+                : undefined;
+            return {
+                draft: websitePrefill.draft,
+                dataDashboardDraft: dataPrefill?.dataDashboardDraft,
+                resolvedMode,
+                confidence: dataPrefill?.confidence ?? websitePrefill.confidence,
+                skipped: false,
+                ...echoProject,
+            };
         } catch {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+            return {
+                draft: defaultDraft(input.prompt),
+                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                resolvedMode,
+                confidence: 0,
+                skipped: true,
+                ...echoProject,
+            };
         }
     }
 }

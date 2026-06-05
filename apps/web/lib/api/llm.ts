@@ -278,6 +278,7 @@ export interface LlmPromptPreviewDto {
         b_presetModule: string;
         c_styleContext: string;
         d_documentContext: string;
+        x_dataContext?: string;
         e_prePromptTemplate: string;
         f_governance?: string;
         budgetPolicy: string;
