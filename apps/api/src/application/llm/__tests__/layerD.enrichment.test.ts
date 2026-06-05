@@ -337,7 +337,7 @@ describe("buildProjectKnowledgeLayer — Layer D enrichment timing", () => {
         const result = buildProjectKnowledgeLayer([asset]);
         expect(result).toContain("Analytical summary: The dataset looks like an event booking roster");
         expect(result).toContain("Key signals: Ingaggio is the main KPI");
-        expect(result).toContain("Suggested analytical questions: Which genre has the highest total ingaggio?");
+        expect(result).toContain("Questions the generated page SHOULD answer: Which genre has the highest total ingaggio?");
         expect(result).toContain("Grounding cautions: Single-table runtime only");
     });
 

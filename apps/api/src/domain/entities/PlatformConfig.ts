@@ -287,50 +287,6 @@ export const DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY: ProductDocumentContextPoli
     fallbackInlineExtractionMaxAssets: 3,
 };
 
-export function resolveAttachmentPolicyFromConfig(
-    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
-    productKey: string,
-): ProductAttachmentPolicy {
-    const fromDefault = platformConfig?.governanceByProduct?.default?.attachmentPolicy;
-    const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.attachmentPolicy;
-    return {
-        maxAttachmentsPerPrompt:
-            fromProduct?.maxAttachmentsPerPrompt
-            ?? fromDefault?.maxAttachmentsPerPrompt
-            ?? DEFAULT_PRODUCT_ATTACHMENT_POLICY.maxAttachmentsPerPrompt,
-        maxFileSizeBytes:
-            fromProduct?.maxFileSizeBytes
-            ?? fromDefault?.maxFileSizeBytes
-            ?? DEFAULT_PRODUCT_ATTACHMENT_POLICY.maxFileSizeBytes,
-        maxTotalBytes:
-            fromProduct?.maxTotalBytes
-            ?? fromDefault?.maxTotalBytes
-            ?? DEFAULT_PRODUCT_ATTACHMENT_POLICY.maxTotalBytes,
-        warningThresholdBytes:
-            fromProduct?.warningThresholdBytes
-            ?? fromDefault?.warningThresholdBytes
-            ?? DEFAULT_PRODUCT_ATTACHMENT_POLICY.warningThresholdBytes,
-    };
-}
-
-export function resolveDocumentContextPolicyFromConfig(
-    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
-    productKey: string,
-): ProductDocumentContextPolicy {
-    const fromDefault = platformConfig?.governanceByProduct?.default?.documentContextPolicy;
-    const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.documentContextPolicy;
-    return {
-        maxAssetsPerPrompt:
-            fromProduct?.maxAssetsPerPrompt
-            ?? fromDefault?.maxAssetsPerPrompt
-            ?? DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY.maxAssetsPerPrompt,
-        fallbackInlineExtractionMaxAssets:
-            fromProduct?.fallbackInlineExtractionMaxAssets
-            ?? fromDefault?.fallbackInlineExtractionMaxAssets
-            ?? DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY.fallbackInlineExtractionMaxAssets,
-    };
-}
-
 export function resolvePromptTaskSettingFromConfig(
     platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
     productKey: string,

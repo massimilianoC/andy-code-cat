@@ -26,7 +26,7 @@ export interface LlmModel {
     promptTemplate?: string;
     /** Optional model-specific prompt layer appended in focused-edit mode. */
     focusPromptTemplate?: string;
-    /** Provider-advertised request parameters, when exposed by live discovery. */
+    /** Provider-specific OpenAI-compatible supported parameters exposed by live discovery. */
     supportedParameters?: string[];
     /** Cost tier derived from provider pricing data (computed at discovery time via percentile buckets). */
     priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
@@ -34,8 +34,6 @@ export interface LlmModel {
     priceInputUsdPerM?: number;
     /** Actual output price in USD per million tokens (0 = free; undefined = unknown). */
     priceOutputUsdPerM?: number;
-    /** Provider-specific OpenAI-compatible supported parameters exposed by live discovery. */
-    supportedParameters?: string[];
 }
 
 export interface LlmProviderCatalog {
