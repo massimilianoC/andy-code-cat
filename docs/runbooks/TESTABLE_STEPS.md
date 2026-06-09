@@ -254,6 +254,15 @@ These two items are additive roadmap improvements and can be delivered after the
 - For XML datasets, expected: repeated sibling nodes become grounded tables, while non-tabular XML is flattened into a single-row structure with limitations shown explicitly
 - For SQL datasets, expected: `INSERT INTO ... (columns) VALUES (...)` blocks become grounded tables; schema-only SQL or stored procedures must be refused or surfaced as unsupported
 
+### Step 11n - VibeCore Game Preset Matching
+
+- `POST /v1/vibecore/classify` with body `{ "prompt": "voglio un gioco interattivo" }`
+- Expected: `templateId = "videogame"`, `confidence >= 0.65`
+- Expected: project is created/updated with `presetId = "videogame"`
+- Expected: Layer B in the system prompt contains the `VIDEOGAME EXPERIENCE` module
+- Verify: inactive presets (`freerunner`, `data-dashboard`) do NOT appear in the classifier template list — they would split probability mass below the confidence threshold causing Layer B to be empty
+- Verify: a prompt for "endless runner" or other explicit game sub-type still resolves to `videogame`
+
 ---
 
 ## M0.5 - Focused Asset Control

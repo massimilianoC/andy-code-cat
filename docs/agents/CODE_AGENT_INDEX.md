@@ -11,7 +11,7 @@
 7. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
 8. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
 9. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
-10. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 9 typed presets with `outputSpec` and `systemPromptModule`
+10. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 16 presets (14 active, 2 hidden: `freerunner`, `data-dashboard`) with `outputSpec` and `systemPromptModule`
 11. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
 12. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
 
@@ -49,7 +49,7 @@ apps/api/src/
     StyleTag.ts              ← static catalog of 82 tags + VALID_TAG_IDS + MAX_TAGS_PER_CATEGORY
     UserStyleProfile.ts      ← user style profile (10 tag categories + brandBio)
     ProjectMoodboard.ts      ← per-project moodboard (style override + project brief)
-    ProjectPreset.ts         ← static catalog of 9 presets with outputSpec + systemPromptModule
+    ProjectPreset.ts         ← static catalog of 16 presets (14 active, 2 hidden: freerunner, data-dashboard) with outputSpec + systemPromptModule
     ProjectAsset.ts          ← uploaded asset with source user_upload/platform_generated
     PreviewSnapshot.ts       ← artifact versioning for assistant responses
     MediaResolutionTrace.ts  ← mediaManifest resolution audit records linked to ProjectAsset/PreviewSnapshot
@@ -64,6 +64,7 @@ apps/api/src/
     RegisterUser.ts / LoginUser.ts
     CreateConversation.ts / AddMessage.ts / GetConversation.ts / GetConversations.ts
     GetLlmCatalog.ts / SeedLlmCatalog.ts
+    VibeClassify.ts          ← filters PRESET_CATALOG by isActive !== false before building the template list; inactive presets MUST NOT appear in the classifier (they split probability mass below the 0.65 confidence threshold, causing templateId: null and Layer B empty)
     GetLlmPromptConfig.ts / SetLlmPromptConfig.ts
     LogBackgroundTask.ts
     GetUserStyleProfile.ts / UpdateUserStyleProfile.ts
