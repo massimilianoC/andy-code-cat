@@ -122,6 +122,7 @@ Read in this order before making changes:
 | [docs/specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md](specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md) | Alpha-only strategy for the grounded dataset runtime and possible future re-integration, currently detached from the primary Vibe / Zero Effort UX |
 | [docs/specs/PUBLISHED_DATASET_BINDINGS_SPEC.md](specs/PUBLISHED_DATASET_BINDINGS_SPEC.md) | Decision spec for publish-time dataset bindings: original source vs normalized local runtime vs backend query endpoints, with hybrid-mode recommendation, manifest contract, exposure policies, and serial/parallel delivery plan |
 | [docs/specs/ZERO_EFFORT_PREFILL_SPEC.md](specs/ZERO_EFFORT_PREFILL_SPEC.md) | Zero Effort LLM Prefill — one-pass LLM pre-population of all Zero Effort wizard fields, token counter, AI review card, God Mode one-click generation |
+| [docs/specs/GLOBAL_BRAND_IDENTITY_SPEC.md](specs/GLOBAL_BRAND_IDENTITY_SPEC.md) | Global Brand Identity System — hierarchical (platform → user → project) additive brand-asset injection via Layer G; reuses existing storage, auth, and route infrastructure; retrocompatible new layer |
 
 ## VibeCore Components (feat/dashboard-lovable-chat)
 
