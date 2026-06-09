@@ -188,6 +188,8 @@ export interface ProductGovernanceConfig {
     cookieBanner?: ProductCookieBannerConfig;
     legal?: ProductLegalConfig;
     nginx: ProductNginxConfig;
+    attachmentPolicy?: Partial<ProductAttachmentPolicy>;
+    documentContextPolicy?: Partial<ProductDocumentContextPolicy>;
 }
 
 /**
@@ -282,6 +284,32 @@ export const DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY: ProductDocumentContextPoli
     maxAssetsPerPrompt: 5,
     fallbackInlineExtractionMaxAssets: 3,
 };
+
+export function resolveAttachmentPolicyFromConfig(
+    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
+    productKey: string,
+): ProductAttachmentPolicy {
+    const governance = platformConfig?.governanceByProduct?.[productKey];
+    const defaults = DEFAULT_PRODUCT_ATTACHMENT_POLICY;
+    return {
+        maxAttachmentsPerPrompt: governance?.attachmentPolicy?.maxAttachmentsPerPrompt ?? defaults.maxAttachmentsPerPrompt,
+        maxFileSizeBytes: governance?.attachmentPolicy?.maxFileSizeBytes ?? defaults.maxFileSizeBytes,
+        maxTotalBytes: governance?.attachmentPolicy?.maxTotalBytes ?? defaults.maxTotalBytes,
+        warningThresholdBytes: governance?.attachmentPolicy?.warningThresholdBytes ?? defaults.warningThresholdBytes,
+    };
+}
+
+export function resolveDocumentContextPolicyFromConfig(
+    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
+    productKey: string,
+): ProductDocumentContextPolicy {
+    const governance = platformConfig?.governanceByProduct?.[productKey];
+    const defaults = DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY;
+    return {
+        maxAssetsPerPrompt: governance?.documentContextPolicy?.maxAssetsPerPrompt ?? defaults.maxAssetsPerPrompt,
+        fallbackInlineExtractionMaxAssets: governance?.documentContextPolicy?.fallbackInlineExtractionMaxAssets ?? defaults.fallbackInlineExtractionMaxAssets,
+    };
+}
 
 export function resolvePromptTaskSettingFromConfig(
     platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,

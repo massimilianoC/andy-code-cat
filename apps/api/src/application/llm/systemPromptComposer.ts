@@ -1,4 +1,5 @@
 import { buildBaseConstraintsLayer, buildLayerT, buildPresetLayer, type TemplateResolution } from "./systemPromptLayers";
+export type { TemplateResolution };
 
 const LAYER_SEPARATOR = "\n\n---\n\n";
 
@@ -22,6 +23,7 @@ export function composeSystemPrompt(opts: {
     templateResolution?: TemplateResolution | null;
     userTemplatePreprompt?: string;
     styleBlock?: string;
+    brandContextLayer?: string;
     documentContextLayer?: string;
     dataContextLayer?: string;
     prePromptTemplate?: string;
@@ -35,6 +37,7 @@ export function composeSystemPrompt(opts: {
         opts.presetLayer ?? buildPresetLayer(opts.presetId),
         layerT,
         opts.styleBlock ?? "",
+        opts.brandContextLayer ?? "",
         opts.documentContextLayer ?? "",
         opts.dataContextLayer ?? "",
         opts.prePromptTemplate ?? "",
@@ -52,6 +55,7 @@ export interface ResolvedPromptLayers {
     layerB: string;
     layerT: string;
     layerC: string;
+    layerG: string;
     layerD: string;
     layerX: string;
     layerE: string;
@@ -70,6 +74,7 @@ export function composeSystemPromptWithLayers(opts: {
     templateResolution?: TemplateResolution | null;
     userTemplatePreprompt?: string;
     styleBlock?: string;
+    brandContextLayer?: string;
     documentContextLayer?: string;
     dataContextLayer?: string;
     prePromptTemplate?: string;
@@ -81,16 +86,17 @@ export function composeSystemPromptWithLayers(opts: {
     const layerB = opts.presetLayer ?? buildPresetLayer(opts.presetId);
     const layerT = buildLayerT(opts.templateResolution, { userTemplatePreprompt: opts.userTemplatePreprompt });
     const layerC = opts.styleBlock ?? "";
+    const layerG = opts.brandContextLayer ?? "";
     const layerD = opts.documentContextLayer ?? "";
     const layerX = opts.dataContextLayer ?? "";
     const layerE = opts.prePromptTemplate ?? "";
     const layerF = opts.governanceSystemPrompt ?? "";
     const budgetPolicy = opts.outputBudgetPolicy ?? "";
 
-    const composed = [layerA, layerB, layerT, layerC, layerD, layerX, layerE, layerF, budgetPolicy, opts.requestSystemPrompt ?? ""]
+    const composed = [layerA, layerB, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, opts.requestSystemPrompt ?? ""]
         .filter(Boolean)
         .join(LAYER_SEPARATOR)
         .trim();
 
-    return { layerA, layerB, layerT, layerC, layerD, layerX, layerE, layerF, budgetPolicy, composed };
+    return { layerA, layerB, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, composed };
 }

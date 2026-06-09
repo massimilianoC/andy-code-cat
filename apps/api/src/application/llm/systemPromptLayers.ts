@@ -3,6 +3,8 @@ import type { ProjectAsset } from "../../domain/entities/ProjectAsset";
 import type { AssetEnrichmentTrace } from "../../domain/entities/AssetEnrichmentTrace";
 import { FORMAT_HINT_RULES } from "../prompting/formatHintRules";
 import { env } from "../../config";
+import type { ResolvedBrandContext } from "../use-cases/ResolveBrandContext";
+import type { BrandAssetScope, BrandAssetPolicy } from "../../domain/entities/BrandAsset";
 
 /** Default per-asset fragment budget. Tuned so 3 assets fit comfortably under the 50 KB Layer D max. */
 const ASSET_FRAGMENT_DEFAULT_BUDGET = 8_000;
@@ -640,4 +642,77 @@ export function buildLayerT(
         content,
         `<!-- LAYER_T_END -->`,
     ].join("\n");
+}
+
+const SCOPE_LABEL: Record<BrandAssetScope, string> = {
+    platform: "Platform",
+    user: "User",
+    project: "Project",
+};
+
+const POLICY_LABEL: Record<BrandAssetPolicy, string> = {
+    must_use: "MUST USE",
+    prefer: "PREFER",
+    optional: "OPTIONAL",
+};
+
+/**
+ * Layer G — Global Brand Identity
+ *
+ * Injects all active brand assets for the current context (platform → user → project)
+ * with their semantic role, usage policy, and resolved value/URL.
+ * Returns "" when no brand assets are defined, preserving zero behavior change for existing callers.
+ */
+export function buildGlobalBrandLayer(context: ResolvedBrandContext, opts?: { maxChars?: number }): string {
+    if (!context.entries.length) return "";
+
+    const budget = opts?.maxChars ?? 4000;
+
+    const grouped = new Map<string, typeof context.entries>();
+    for (const entry of context.entries) {
+        const key = entry.role === "custom" ? (entry.customRoleLabel ?? "custom") : entry.role;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(entry);
+    }
+
+    const lines: string[] = [
+        "## GLOBAL BRAND IDENTITY",
+        "",
+        "Scope hierarchy: Platform → User → Project  |  must_use items are mandatory.",
+        "",
+    ];
+
+    for (const [roleName, entries] of grouped) {
+        const label = roleName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        lines.push(`### ${label}`);
+        for (const e of entries) {
+            const prefix = `[${POLICY_LABEL[e.policy]} / ${SCOPE_LABEL[e.scope]}]`;
+            const value = e.displayValue || "(not set)";
+            const desc = e.description ? `  — ${e.description}` : "";
+            if (e.valueType === "asset_ref") {
+                lines.push(`${prefix} ${e.originalName ?? roleName}${desc}`);
+                lines.push(`  Asset URL: ${value}`);
+                lines.push(`  Use this URL as the src attribute for ${label} elements in generated HTML.`);
+            } else if (e.valueType === "color_list") {
+                lines.push(`${prefix} ${value}${desc}`);
+                lines.push(`  Use these exact hex values as the brand color palette.`);
+            } else {
+                lines.push(`${prefix} ${value}${desc}`);
+            }
+        }
+        lines.push("");
+    }
+
+    if (context.hasMustUse) {
+        lines.push(
+            "### Mandatory rules",
+            "- Items marked [MUST USE] are non-negotiable — include them in every generated artifact.",
+            "- Never substitute a must_use logo or color with a placeholder or generic alternative.",
+            "- must_use contact details must appear in the appropriate output sections (footer, contact page, etc.).",
+        );
+    }
+
+    const result = lines.join("\n");
+    if (result.length > budget) return "";
+    return result;
 }

@@ -76,6 +76,7 @@ Read in this order before making changes:
 | [docs/specs/SPEC.md](specs/SPEC.md) | Backend API platform and MVP architecture |
 | [docs/specs/DB_PLATFORM_SPEC.md](specs/DB_PLATFORM_SPEC.md) | MongoDB schema design, publication model, and credit system |
 | [docs/specs/COST_TRANSACTION_LEDGER_SPEC.md](specs/COST_TRANSACTION_LEDGER_SPEC.md) | Centralized cost-transaction ledger — atomic per-event billing, configurable rates, policy enforcement, and SuperAdmin cost UI |
+| [docs/specs/COST_PRICING_SSOT_SIMPLIFICATION_PLAN.md](specs/COST_PRICING_SSOT_SIMPLIFICATION_PLAN.md) | Low-overhead implementation plan to standardize pricing around `CostTransactionService`, `PlatformConfig.costRates`, and the `cost_transactions` ledger as the single source of truth |
 | [docs/specs/COST_ANALYTICS_DASHBOARDS_SPEC.md](specs/COST_ANALYTICS_DASHBOARDS_SPEC.md) | User Usage tab and Admin Cost Intelligence dashboard — multi-dimensional cost explorer across providers, models, users, and projects |
 | [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
 | [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | Preprompt engine service and composition flow |
