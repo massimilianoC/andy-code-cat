@@ -19,7 +19,7 @@ import { repairArtifactsForVisibility } from "../../apps/api/src/application/llm
 describe("repairArtifactsForVisibility", () => {
     it("injects aos.js script when data-aos markers are present without it", () => {
         const html = `<!doctype html><html><head>
-<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/aos@2/dist/aos.css'>
+<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css'>
 </head><body>
 <section data-aos='fade-up'><h1>Hello</h1></section>
 </body></html>`;
@@ -32,17 +32,17 @@ describe("repairArtifactsForVisibility", () => {
 
     it("does not duplicate aos.js when already loaded", () => {
         const html = `<body><div data-aos='fade'></div>
-<script src='https://cdn.jsdelivr.net/npm/aos@2/dist/aos.js'></script>
+<script src='https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js'></script>
 <script>AOS.init();</script></body>`;
         const r = repairArtifactsForVisibility({ html, css: "", js: "" });
         assert.equal(r.repairs.includes("aos-script-injected"), false);
     });
 
     it("strips an orphan AOS stylesheet when no markers exist", () => {
-        const html = `<head><link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/aos@2/dist/aos.css'></head><body><h1>Hi</h1></body>`;
+        const html = `<head><link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css'></head><body><h1>Hi</h1></body>`;
         const r = repairArtifactsForVisibility({ html, css: "", js: "" });
         assert.ok(r.repairs.includes("aos-orphan-css-stripped"));
-        assert.doesNotMatch(r.html, /aos@2\/dist\/aos\.css/);
+        assert.doesNotMatch(r.html, /aos@2\.3\.4\/dist\/aos\.css/);
     });
 
     it("unescapes literal \\n / \\t inside the CSS artifact", () => {

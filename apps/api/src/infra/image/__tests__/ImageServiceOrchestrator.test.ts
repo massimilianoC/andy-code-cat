@@ -33,6 +33,10 @@ describe("ImageServiceOrchestrator", () => {
             { query: "modern office", width: 1200, height: 600 },
             {},
             ["pexels"],
-        )).rejects.toThrow("No stock image provider resolved");
+        )).rejects.toMatchObject({
+            message: expect.stringContaining("No stock image provider resolved"),
+            statusCode: 503,
+            code: "STOCK_PROVIDER_UNAVAILABLE",
+        });
     });
 });

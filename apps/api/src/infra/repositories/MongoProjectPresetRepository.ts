@@ -45,6 +45,7 @@ function normalizePreset(input: ProjectPresetUpsertInput, existing?: ProjectPres
             toneTags: input.defaultTags?.toneTags ?? existing?.defaultTags?.toneTags ?? [],
             featureTags: input.defaultTags?.featureTags ?? existing?.defaultTags?.featureTags ?? [],
             audienceTags: input.defaultTags?.audienceTags ?? existing?.defaultTags?.audienceTags ?? [],
+            sectorTags: input.defaultTags?.sectorTags ?? existing?.defaultTags?.sectorTags ?? [],
         },
         briefTemplate: input.briefTemplate ?? existing?.briefTemplate ?? "",
         styleTemplate: input.styleTemplate ?? existing?.styleTemplate ?? "",

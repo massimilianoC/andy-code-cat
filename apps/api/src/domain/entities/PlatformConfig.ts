@@ -168,6 +168,19 @@ export interface ProductNginxConfig {
     extraServerDirectives: string;
 }
 
+export interface ProductAttachmentPolicy {
+    maxAttachmentsPerPrompt: number;
+    maxFileSizeBytes: number;
+    maxTotalBytes: number;
+    warningThresholdBytes: number;
+}
+
+export interface ProductDocumentContextPolicy {
+    maxAssetsPerPrompt: number;
+    fallbackInlineExtractionMaxAssets: number;
+}
+
+
 export interface ProductGovernanceConfig {
     promptTemplates: ProductPromptTemplates;
     promptTaskSettings?: Record<string, PromptTaskSetting>;
@@ -257,6 +270,18 @@ export interface PlatformConfig {
     /** Superadmin media-provider policy for deterministic media orchestration. */
     mediaProviderPolicy?: MediaProviderPolicy;
 }
+
+export const DEFAULT_PRODUCT_ATTACHMENT_POLICY: ProductAttachmentPolicy = {
+    maxAttachmentsPerPrompt: 12,
+    maxFileSizeBytes: 20 * 1024 * 1024,
+    maxTotalBytes: 50 * 1024 * 1024,
+    warningThresholdBytes: 35 * 1024 * 1024,
+};
+
+export const DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY: ProductDocumentContextPolicy = {
+    maxAssetsPerPrompt: 5,
+    fallbackInlineExtractionMaxAssets: 3,
+};
 
 export function resolvePromptTaskSettingFromConfig(
     platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,

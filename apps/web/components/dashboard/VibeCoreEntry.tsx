@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square, Settings } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { VibeGenerationMode } from "@andy-code-cat/contracts";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { VibeCoreBackground } from "./VibeCoreBackground";
 import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
 import { classifyVibeIntent, getVibeConfig, prefillZeroEffort } from "@/lib/api/vibecore";
 import { getZeroEffortConfig } from "@/lib/api/pipelines";
-import { createProject, uploadProjectAsset, renameProject } from "@/lib/api";
+import { createProject, getProjectAsset, uploadProjectAsset, updateProject } from "@/lib/api";
 import { getLlmProviders, type LlmProviderCatalogDto } from "@/lib/api/llm";
 
 const DEFAULT_ATTACHMENT_POLICY = {
@@ -22,13 +23,13 @@ const DEFAULT_ATTACHMENT_POLICY = {
     maxTotalBytes: 100 * 1024 * 1024,
     warningThresholdBytes: 80 * 1024 * 1024,
 };
-const VIBE_MODE_KEY = "vibecore_mode";
 const PIPELINE_MODEL_OVERRIDE_KEY = "vibecore_pipeline_model_override";
 const ACCEPTED_MIME_TYPES = [
     // Documents
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/msword",
+    "application/json",
     "text/plain",
     "text/markdown",
     "text/x-markdown",
@@ -56,17 +57,23 @@ const ACCEPTED_MIME_TYPES = [
     "image/avif",
 ];
 
-type EntryPhase = "idle" | "classifying" | "prefilling" | "creating" | "uploading" | "redirecting";
+type EntryPhase = "idle" | "classifying" | "creating" | "uploading" | "analyzing" | "prefilling" | "redirecting";
+type EntryGenerationMode = Extract<VibeGenerationMode, "auto">;
 
 /** i18n keys for phase labels — translated at render time. */
 const PHASE_LABEL_KEYS: Record<EntryPhase, string> = {
     idle:        "",
     classifying: "vibecore.phase.classifying",
-    prefilling:  "vibecore.phase.prefilling",
     creating:    "vibecore.phase.creating",
     uploading:   "vibecore.phase.uploading",
+    analyzing:   "vibecore.phase.analyzing",
+    prefilling:  "vibecore.phase.prefilling",
     redirecting: "vibecore.phase.redirecting",
 };
+
+const MIN_PROMPT_CHARS = 3;
+const STRUCTURED_ENRICHMENT_POLL_INTERVAL_MS = 800;
+const STRUCTURED_ENRICHMENT_MAX_WAIT_MS = 12_000;
 
 interface FilePill {
     file: File;
@@ -76,24 +83,6 @@ interface FilePill {
 interface PipelineModelOverride {
     provider: string;
     model: string;
-}
-
-function loadMode(): VibeMode {
-    try {
-        const saved = localStorage.getItem(VIBE_MODE_KEY);
-        if (saved === "easy" || saved === "medium" || saved === "hard") return saved;
-    } catch {
-        // ignore
-    }
-    return "easy";
-}
-
-function saveMode(mode: VibeMode) {
-    try {
-        localStorage.setItem(VIBE_MODE_KEY, mode);
-    } catch {
-        // ignore
-    }
 }
 
 function loadPipelineModelOverride(): PipelineModelOverride | null {
@@ -127,6 +116,46 @@ const MODE_GLOW: Record<VibeMode, string> = {
     medium: "#3b82f6",
     hard:   "#10b981",
 };
+
+const STRUCTURED_DATA_MIME_TYPES = new Set([
+    "application/json",
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/xml",
+    "text/xml",
+    "application/sql",
+    "text/sql",
+    "text/x-sql",
+]);
+
+function isStructuredDataMime(mimeType: string): boolean {
+    const mime = mimeType.toLowerCase().split(";")[0]!.trim();
+    return STRUCTURED_DATA_MIME_TYPES.has(mime);
+}
+
+async function waitForStructuredAssetReadiness(
+    token: string,
+    projectId: string,
+    assetIds: string[],
+): Promise<void> {
+    if (assetIds.length === 0) return;
+    const deadline = Date.now() + STRUCTURED_ENRICHMENT_MAX_WAIT_MS;
+    const pending = new Set(assetIds);
+
+    while (pending.size > 0 && Date.now() < deadline) {
+        await Promise.allSettled(Array.from(pending).map(async (assetId) => {
+            const { asset } = await getProjectAsset(token, projectId, assetId);
+            const status = asset.enrichmentTrace?.provenance?.enrichmentStatus;
+            if (status === "ready" || status === "failed" || status === "skipped") {
+                pending.delete(assetId);
+            }
+        }));
+        if (pending.size === 0) return;
+        await new Promise((resolve) => window.setTimeout(resolve, STRUCTURED_ENRICHMENT_POLL_INTERVAL_MS));
+    }
+}
 
 interface VibeCoreEntryProps {
     token: string;
@@ -171,6 +200,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const [pipelineOverride, setPipelineOverride] = useState<PipelineModelOverride | null>(null);
     const [modelOverrideOpen, setModelOverrideOpen] = useState(false);
     const [attachmentPolicy, setAttachmentPolicy] = useState(DEFAULT_ATTACHMENT_POLICY);
+    const generationMode: EntryGenerationMode = "auto";
 
     useEffect(() => {
         setPipelineOverride(loadPipelineModelOverride());
@@ -244,7 +274,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             const projectName = prompt.trim()
                 ? prompt.trim().slice(0, 64)
                 : t("vibecore.newProject", "Nuovo progetto");
-            const projectResult = await createProject(token, projectName, undefined);
+            const projectResult = await createProject(token, projectName);
             const projectId = projectResult.project.id;
 
             if (files.length > 0) {
@@ -303,6 +333,11 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
         );
     }, [attachmentPolicy.maxAttachmentsPerPrompt, attachmentPolicy.maxFileSizeBytes, t]);
 
+    const structuredDatasetCount = files.reduce((count, pill) => {
+        const mime = pill.file.type.toLowerCase().split(";")[0]!.trim();
+        return count + (STRUCTURED_DATA_MIME_TYPES.has(mime) ? 1 : 0);
+    }, 0);
+
     function removeFile(id: string) {
         setFiles((prev) => prev.filter((p) => p.id !== id));
     }
@@ -344,7 +379,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
     async function handleSubmit(e?: React.FormEvent) {
         e?.preventDefault();
-        if (!prompt.trim() || phase !== "idle") return;
+        if (prompt.trim().length < MIN_PROMPT_CHARS || phase !== "idle") return;
         setError(null);
         setServerWarnings([]);
 
@@ -359,11 +394,24 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             const classification = await classifyVibeIntent(token, {
                 prompt: prompt.trim(),
                 attachmentMeta,
+                generationMode,
                 provider: pipelineOverride?.provider,
                 model: pipelineOverride?.model,
             }).catch(() => null);
             if (classification?.warnings?.length) {
                 setServerWarnings(classification.warnings);
+            }
+            const experimentalDataModeDetected = classification?.resolvedMode === "data_dashboard";
+            if (experimentalDataModeDetected) {
+                setServerWarnings((prev) => [
+                    ...new Set([
+                        ...prev,
+                        t(
+                            "vibecore.dataDashboardWarning",
+                            "Data dashboard mode is alpha-only and disabled in the main Vibe flow. Continuing with the standard website pipeline.",
+                        ),
+                    ]),
+                ]);
             }
 
             // Create project early so files (and their Layer D enrichment) can be uploaded
@@ -371,13 +419,24 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             setPhase("creating");
             const projectName = prompt.trim().slice(0, 64) || "Progetto";
             const presetId = classification?.templateId ?? undefined;
-            const projectResult = await createProject(token, projectName, presetId);
-            const projectId = projectResult.project.id;
+            let projectId = classification?.projectId;
+            if (projectId) {
+                const updatedProject = await updateProject(token, projectId, {
+                    name: projectName,
+                    ...(presetId ? { presetId } : {}),
+                });
+                projectId = updatedProject.project.id;
+            } else {
+                const projectResult = await createProject(token, projectName, presetId);
+                projectId = projectResult.project.id;
+            }
 
             // Upload files to the new project (triggers async enrichment pipeline)
+            const uploadedStructuredAssetIds: string[] = [];
+            const uploadedFileNames = files.map((pill) => pill.file.name);
             if (files.length > 0) {
                 setPhase("uploading");
-                await Promise.allSettled(
+                const uploadResults = await Promise.allSettled(
                     files.map((pill) =>
                         uploadProjectAsset(token, projectId, pill.file, {
                             scope: "project",
@@ -385,6 +444,41 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         }),
                     ),
                 );
+                const failedUploadNames: string[] = [];
+                uploadResults.forEach((result, index) => {
+                    if (result.status !== "fulfilled") {
+                        failedUploadNames.push(files[index]?.file.name ?? "file");
+                        return;
+                    }
+                    const sourceFile = files[index]?.file;
+                    if (sourceFile && isStructuredDataMime(sourceFile.type)) {
+                        uploadedStructuredAssetIds.push(result.value.asset.id);
+                    }
+                });
+                if (failedUploadNames.length > 0) {
+                    if (failedUploadNames.length === files.length) {
+                        throw new Error(
+                            t("vibecore.uploadAllFailed", {
+                                files: failedUploadNames.join(", "),
+                                defaultValue: "Unable to upload attached files: {{files}}. Check the session and try again.",
+                            }),
+                        );
+                    }
+                    setServerWarnings((prev) => [
+                        ...new Set([
+                            ...prev,
+                            t("vibecore.uploadPartialFailed", {
+                                files: failedUploadNames.join(", "),
+                                defaultValue: "Some files were not uploaded: {{files}}",
+                            }),
+                        ]),
+                    ]);
+                }
+            }
+
+            if (uploadedStructuredAssetIds.length > 0) {
+                setPhase("analyzing");
+                await waitForStructuredAssetReadiness(token, projectId, uploadedStructuredAssetIds);
             }
 
             // LLM prefill pass — now includes Layer D document context from uploaded assets
@@ -392,9 +486,10 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             const prefillResult = await prefillZeroEffort(token, {
                 prompt: prompt.trim(),
                 projectId,
+                generationMode,
                 attachmentMeta,
-                templateId: classification?.templateId ?? null,
-                formatHint: classification?.formatHint ?? null,
+                templateId: experimentalDataModeDetected ? null : (classification?.templateId ?? null),
+                formatHint: experimentalDataModeDetected ? null : (classification?.formatHint ?? null),
                 provider: pipelineOverride?.provider,
                 model: pipelineOverride?.model,
             }).catch(() => null);
@@ -409,12 +504,18 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 // page and brief prompt start with a clean, meaningful title.
                 const aiName = prefillResult.draft.businessName?.trim();
                 if (aiName && aiName.length >= 2) {
-                    renameProject(token, projectId, aiName.slice(0, 120)).catch(() => { });
+                    updateProject(token, projectId, { name: aiName.slice(0, 120) }).catch(() => { });
                 }
+                const draftForLaunch = {
+                    ...prefillResult.draft,
+                    attachedDocuments: prefillResult.draft.attachedDocuments?.length
+                        ? prefillResult.draft.attachedDocuments
+                        : uploadedFileNames,
+                };
                 try {
                     sessionStorage.setItem(
                         `ze_prefill_${projectId}`,
-                        JSON.stringify(prefillResult.draft),
+                        JSON.stringify(draftForLaunch),
                     );
                 } catch {
                     // sessionStorage unavailable — launch page falls back to manual wizard
@@ -493,6 +594,18 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     {t("vibecore.subtitle", "Descrivi la tua idea — l'AI fa il resto")}
                 </p>
 
+                {structuredDatasetCount > 0 ? (
+                    <div className="mb-4 flex justify-center">
+                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-300">
+                            {t("vibecore.structuredDatasetCount", {
+                                count: structuredDatasetCount,
+                                defaultValue_one: "{{count}} dataset strutturato",
+                                defaultValue_other: "{{count}} dataset strutturati",
+                            })}
+                        </span>
+                    </div>
+                ) : null}
+
                 {/* Glass card */}
                 <form
                     onSubmit={handleSubmit}
@@ -545,7 +658,11 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     {files.length > 0 && (
                         <div className="mt-1 mb-2 space-y-1">
                             <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.45)" }}>
-                                Allegati: {files.length}/{attachmentPolicy.maxAttachmentsPerPrompt}
+                                {t("vibecore.attachCounter", {
+                                    count: files.length,
+                                    max: attachmentPolicy.maxAttachmentsPerPrompt,
+                                    defaultValue: "Attachments: {{count}}/{{max}}",
+                                })}
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                             {files.map((pill) => (
@@ -565,7 +682,10 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                     </span>
                                     <button
                                         type="button"
-                                        aria-label={`Rimuovi ${pill.file.name}`}
+                                        aria-label={t("vibecore.removeFileAria", {
+                                            name: pill.file.name,
+                                            defaultValue: "Remove {{name}}",
+                                        })}
                                         onClick={() => removeFile(pill.id)}
                                         className="ml-0.5 hover:text-white"
                                         style={{ color: "rgba(255,255,255,0.5)" }}
@@ -701,7 +821,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         {/* Submit */}
                         <button
                             type="submit"
-                            disabled={isLoading || !prompt.trim()}
+                            disabled={isLoading || prompt.trim().length < MIN_PROMPT_CHARS}
                             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{
                                 background: isLoading

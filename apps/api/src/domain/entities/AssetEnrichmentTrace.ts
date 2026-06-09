@@ -139,10 +139,64 @@ export interface StructuredSlideData {
     body: string;
 }
 
+export type DatasetColumnValueType = "string" | "number" | "boolean" | "date" | "unknown";
+
+export interface DatasetColumnProfile {
+    key: string;
+    label: string;
+    valueType: DatasetColumnValueType;
+    nonNullCount: number;
+    nullCount: number;
+    nullRatio: number;
+    distinctCount: number;
+    sampleValues: string[];
+    min?: number | string | null;
+    max?: number | string | null;
+    mean?: number | null;
+    sum?: number | null;
+}
+
+export interface DatasetTableProfile {
+    name: string;
+    sourceFormat: "csv" | "xlsx" | "json" | "xml" | "sql";
+    rowCount: number;
+    columnCount: number;
+    columns: DatasetColumnProfile[];
+    sampleHeaders: string[];
+    sampleRows: string[][];
+    notes?: string[];
+}
+
+export interface DatasetFactsEnvelope {
+    rowCount: number;
+    columnCount: number;
+    numericColumnCount: number;
+    categoricalColumnCount: number;
+    booleanColumnCount: number;
+    dateColumnCount: number;
+    supportedAggregations: Array<"count" | "sum" | "avg" | "min" | "max" | "distinct_count" | "top_values">;
+}
+
+export interface DatasetLlmAppendix {
+    analyticalSummary: string;
+    keySignals: string[];
+    suggestedQuestions: string[];
+    cautions: string[];
+}
+
+export interface DatasetStructuredData {
+    sourceFormat: "csv" | "xlsx" | "json" | "xml" | "sql";
+    tables: DatasetTableProfile[];
+    facts: DatasetFactsEnvelope;
+    limitations?: string[];
+    llmAppendix?: DatasetLlmAppendix;
+}
+
 export interface StructuredDataPayload {
-    kind: "spreadsheet" | "presentation" | "table";
+    kind: "spreadsheet" | "presentation" | "table" | "dataset";
     sheets?: StructuredSheetData[];
     slides?: StructuredSlideData[];
+    dataset?: DatasetStructuredData;
 }
 
 // ── Top-level trace ───────────────────────────────────────────────────────

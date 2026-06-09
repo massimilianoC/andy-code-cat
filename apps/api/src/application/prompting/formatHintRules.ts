@@ -59,6 +59,13 @@ export const FORMAT_HINT_RULES: Record<FormatHint, { triggerExamples: string[]; 
             "COLOUR: brand-consistent, min 4.5:1 contrast. " +
             "OUTPUT: suitable for both screen and PDF export.",
     },
+    analytics_dashboard: {
+        triggerExamples: ["dashboard", "kpi", "analytics", "metriche", "dataset", "csv", "json", "xlsx", "sql", "xml"],
+        canonicalRules:
+            "LAYOUT: data-dashboard interface with a clear analytical hierarchy: top KPI row, filter controls, chart area, grounded table browser, and insights panel. " +
+            "DATA RULES: all numerical claims must be backed by deterministic runtime facts, not invented by the model. " +
+            "UX: support exploration, filtering, and question-driven analysis with visible source dimensions and metric labels.",
+    },
 };
 
 /**

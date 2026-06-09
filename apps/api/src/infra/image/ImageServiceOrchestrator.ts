@@ -126,7 +126,19 @@ export async function resolveImageWithTrace(
     }
 
     if (!order.includes("picsum")) {
-        throw new Error(`No stock image provider resolved "${query}" from configured order: ${order.join(", ")}`);
+        throw Object.assign(
+            new Error(`No stock image provider resolved "${query}" from configured order: ${order.join(", ")}`),
+            {
+                statusCode: 503,
+                code: "STOCK_PROVIDER_UNAVAILABLE",
+                userMessage: "No stock image provider is currently available. Check provider keys or enable a fallback provider.",
+                details: {
+                    query,
+                    configuredOrder: order,
+                    attemptedProviders: attempts,
+                },
+            },
+        );
     }
 
     const seed = encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase());

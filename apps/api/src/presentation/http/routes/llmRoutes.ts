@@ -21,7 +21,7 @@ import { buildStyleContextBlock } from "../../../application/llm/styleContextBui
 import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
 import { composeSystemPrompt, composeSystemPromptWithLayers } from "../../../application/llm/systemPromptComposer";
-import { buildPresetLayerFromPreset, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
+import { buildGroundedDataContextLayer, buildPresetLayerFromPreset, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
 import { estimateCost } from "../../../application/llm/costPolicy";
 import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
 import { env } from "../../../config";
@@ -377,6 +377,11 @@ export function createLlmRoutes(): Router {
         const documentContextLayer = buildProjectKnowledgeLayer(contextAssets, {
             includeUnenrichedAssets: selectedAssetIds.size > 0,
         });
+        // Alpha guardrail: grounded dataset Layer X is restricted to explicit
+        // data-dashboard projects and is not injected into the standard website flow.
+        const dataContextLayer = project?.presetId === "data-dashboard"
+            ? buildGroundedDataContextLayer(contextAssets)
+            : "";
 
         const providerCatalog =
             (input.provider
@@ -415,6 +420,7 @@ export function createLlmRoutes(): Router {
             presetLayer,
             styleBlock,
             documentContextLayer: documentContextLayer || undefined,
+            dataContextLayer: dataContextLayer || undefined,
             prePromptTemplate: effectivePrePromptTemplate || undefined,
             outputBudgetPolicy: buildOutputBudgetPolicy(),
             requestSystemPrompt: input.systemPrompt,
@@ -673,11 +679,15 @@ export function createLlmRoutes(): Router {
             const governanceSystemPrompt = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates?.generationSystem || undefined;
             const previewAssets = await assetRepository.listByProject(req.sandbox!.projectId, req.auth!.userId).catch(() => []);
             const documentContextLayer = buildProjectKnowledgeLayer(previewAssets) || undefined;
+            const dataContextLayer = project?.presetId === "data-dashboard"
+                ? (buildGroundedDataContextLayer(previewAssets) || undefined)
+                : undefined;
             const layers = composeSystemPromptWithLayers({
                 presetId: project?.presetId,
                 presetLayer,
                 styleBlock,
                 documentContextLayer,
+                dataContextLayer,
                 prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
                 outputBudgetPolicy: buildOutputBudgetPolicy(),
                 governanceSystemPrompt,
@@ -689,6 +699,7 @@ export function createLlmRoutes(): Router {
                     b_presetModule: layers.layerB,
                     c_styleContext: layers.layerC,
                     d_documentContext: layers.layerD,
+                    x_dataContext: layers.layerX,
                     e_prePromptTemplate: layers.layerE,
                     f_governance: layers.layerF,
                     budgetPolicy: layers.budgetPolicy,

@@ -58,7 +58,7 @@ const AOS_INIT_RE = /\bAOS\s*\.\s*init\s*\(/;
 const AOS_CSS_HIDES_CONTENT_RE = /\[data-aos\][^{]*\{[^}]*opacity\s*:\s*0/i;
 
 const AOS_SCRIPT_TAG =
-    "<script src='https://cdn.jsdelivr.net/npm/aos@2/dist/aos.js'></script>";
+    "<script src='https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js'></script>";
 
 const PHASER_PARENT_RE = /parent\s*:\s*['"`]([A-Za-z][\w-]*)['"`]/g;
 

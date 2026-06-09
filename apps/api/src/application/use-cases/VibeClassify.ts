@@ -1,4 +1,4 @@
-import type { VibeClassifyResponse, AttachmentMeta, FormatHint } from "@andy-code-cat/contracts";
+import type { VibeClassifyResponse, AttachmentMeta, FormatHint, VibeGenerationMode, VibeResolvedMode } from "@andy-code-cat/contracts";
 import { PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
@@ -55,6 +55,61 @@ function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[]): st
     return `${safePart}\n\nAttached files: ${metaPart}`;
 }
 
+function buildManualModeResponse(
+    mode: VibeResolvedMode,
+    projectId?: string,
+): VibeClassifyResponse {
+    if (mode === "data_dashboard") {
+        return {
+            templateId: "data-dashboard",
+            formatHint: "analytics_dashboard",
+            resolvedMode: "data_dashboard",
+            confidence: 1,
+            reasoning: "manual mode override: data dashboard",
+            skipped: false,
+            ...(projectId ? { projectId } : {}),
+        };
+    }
+
+    return {
+        templateId: null,
+        formatHint: null,
+        resolvedMode: "website",
+        confidence: 1,
+        reasoning: "manual mode override: website",
+        skipped: false,
+        ...(projectId ? { projectId } : {}),
+    };
+}
+
+function resolveModeAndTemplate(input: {
+    prompt: string;
+    attachmentMeta?: AttachmentMeta[];
+    requestedMode?: VibeGenerationMode;
+    parsedTemplateId: string | null;
+    parsedFormatHint: FormatHint | null;
+}): {
+    resolvedMode: VibeResolvedMode;
+    templateId: string | null;
+    formatHint: FormatHint | null;
+} {
+    if (input.requestedMode === "website") {
+        return { resolvedMode: "website", templateId: null, formatHint: null };
+    }
+
+    if (input.requestedMode === "data_dashboard") {
+        return { resolvedMode: "data_dashboard", templateId: "data-dashboard", formatHint: "analytics_dashboard" };
+    }
+
+    // Alpha guardrail: the dataset dashboard path must never auto-take over the
+    // standard Vibe flow. Only explicit/manual activation may select it.
+    return {
+        resolvedMode: "website",
+        templateId: input.parsedTemplateId,
+        formatHint: input.parsedFormatHint,
+    };
+}
+
 function parseClassifyResponse(raw: string): Omit<VibeClassifyResponse, "skipped"> {
     let text = raw.trim();
     // Strip optional code fences from models that ignore instructions
@@ -80,6 +135,7 @@ function parseClassifyResponse(raw: string): Omit<VibeClassifyResponse, "skipped
 export interface VibeClassifyInput {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
+    generationMode?: VibeGenerationMode;
     /** Optional one-shot provider override for this pipeline run. */
     provider?: string;
     /** Optional one-shot model override for this pipeline run. */
@@ -98,6 +154,9 @@ export class VibeClassify {
 
     async execute(input: VibeClassifyInput): Promise<VibeClassifyResponse> {
         const echoProject = input.projectId ? { projectId: input.projectId } : {};
+        if (input.generationMode === "website" || input.generationMode === "data_dashboard") {
+            return buildManualModeResponse(input.generationMode, input.projectId);
+        }
         const platformConfig = await this.platformConfigRepository.get().catch(() => null);
         const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, "default", TASK_KEY);
 
@@ -106,8 +165,13 @@ export class VibeClassify {
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier disabled", skipped: true, ...echoProject };
         }
 
+        // Only expose active presets to the classifier — inactive ones (freerunner,
+        // data-dashboard) split probability mass and push game/generic requests below
+        // the confidence threshold, causing templateId to return null and Layer B to be empty.
         const templateListBlock = buildTemplateListBlock(
-            PRESET_CATALOG.map((p) => ({ id: p.id, label: p.label, hint: p.hint ?? "" })),
+            PRESET_CATALOG
+                .filter((p) => p.isActive !== false)
+                .map((p) => ({ id: p.id, label: p.label, hint: p.hint ?? "" })),
         );
 
         // If a custom systemTemplate is set in platform config, use it as template
@@ -234,9 +298,18 @@ export class VibeClassify {
             // Enforce confidence threshold for templateId
             const templateId = parsed.confidence >= CONFIDENCE_THRESHOLD ? parsed.templateId : null;
 
+            const resolution = resolveModeAndTemplate({
+                prompt: input.prompt,
+                attachmentMeta: input.attachmentMeta,
+                requestedMode: input.generationMode,
+                parsedTemplateId: templateId,
+                parsedFormatHint: parsed.formatHint,
+            });
+
             return {
-                templateId,
-                formatHint: parsed.formatHint,
+                templateId: resolution.templateId,
+                formatHint: resolution.formatHint,
+                resolvedMode: resolution.resolvedMode,
                 confidence: parsed.confidence,
                 reasoning: parsed.reasoning,
                 skipped: false,

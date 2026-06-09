@@ -15,7 +15,7 @@ import { AddUrlReference } from "../../../application/use-cases/AddUrlReference"
 import { ListProjectAssets } from "../../../application/use-cases/ListProjectAssets";
 import { DeleteProjectAsset } from "../../../application/use-cases/DeleteProjectAsset";
 import type { RequestWithContext } from "../types";
-import { generateProjectImageSchema, regenerateMediaByKeySchema, regenerateStockProjectImageSchema, suggestProjectImageIdeaSchema, type ProjectAssetDto } from "@andy-code-cat/contracts";
+import { generateProjectImageSchema, regenerateMediaByKeySchema, regenerateStockProjectImageSchema, suggestProjectImageIdeaSchema, type AssetEnrichmentTraceDto, type DatasetFactsEnvelopeDto, type DatasetTableProfileDto, type ProjectAssetDto } from "@andy-code-cat/contracts";
 import { GenerateProjectImage } from "../../../application/use-cases/GenerateProjectImage";
 import { GetProjectAiAnalytics } from "../../../application/use-cases/GetProjectAiAnalytics";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
@@ -33,6 +33,8 @@ import { buildStockProviderOrder, resolveMediaProviderPolicy } from "../../../ap
 import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
 import { RegenerateMediaByKey } from "../../../application/use-cases/RegenerateMediaByKey";
 import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
+import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
+import { LogBackgroundTask } from "../../../application/use-cases/LogBackgroundTask";
 
 // In-memory storage: the use case writes to disk itself after validation.
 const upload = multer({
@@ -95,6 +97,15 @@ function toDto(asset: {
             layoutStyle: string | null; aspectRatioLabel: string | null;
             suggestedWebUse: string[]; suggestedStyleRole: string;
         } | null;
+        structuredData?: {
+            dataset?: {
+                sourceFormat: "csv" | "xlsx" | "json" | "xml" | "sql";
+                tables: import("../../../domain/entities/AssetEnrichmentTrace").DatasetTableProfile[];
+                facts: import("../../../domain/entities/AssetEnrichmentTrace").DatasetFactsEnvelope;
+                limitations?: string[];
+                llmAppendix?: import("../../../domain/entities/AssetEnrichmentTrace").DatasetLlmAppendix;
+            };
+        } | null;
     } | null;
     createdAt: Date;
 }): ProjectAssetDto {
@@ -135,7 +146,16 @@ function toDto(asset: {
             distilledColors: asset.enrichmentTrace.distilledColors,
             documentBrief: asset.enrichmentTrace.documentBrief ?? null,
             designSignals: asset.enrichmentTrace.designSignals ?? null,
-        } : undefined,
+            dataset: asset.enrichmentTrace.structuredData?.dataset
+                ? {
+                    sourceFormat: asset.enrichmentTrace.structuredData.dataset.sourceFormat,
+                    tables: asset.enrichmentTrace.structuredData.dataset.tables as DatasetTableProfileDto[],
+                    facts: asset.enrichmentTrace.structuredData.dataset.facts as DatasetFactsEnvelopeDto,
+                    limitations: asset.enrichmentTrace.structuredData.dataset.limitations,
+                    llmAppendix: asset.enrichmentTrace.structuredData.dataset.llmAppendix,
+                }
+                : null,
+        } as AssetEnrichmentTraceDto : undefined,
         createdAt: asset.createdAt.toISOString(),
     };
 }
@@ -156,6 +176,8 @@ export function createProjectAssetRoutes(): Router {
     const listAssets = new ListProjectAssets(assetRepository);
     const deleteAsset = new DeleteProjectAsset(assetRepository, storage);
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const conversationRepository = new MongoConversationRepository();
+    const logBackgroundTask = new LogBackgroundTask(conversationRepository);
     const serviceKeyRepository = new MongoServiceApiKeyRepository();
     const promptConfigRepository = new MongoLlmPromptConfigRepository();
     const platformConfigRepository = new MongoPlatformConfigRepository();
@@ -271,18 +293,92 @@ export function createProjectAssetRoutes(): Router {
                 // Fire-and-forget enrichment — never blocks the HTTP response
                 if (env.enrichmentEnabled) {
                     const fileBuffer = req.file.buffer;
+                    const conversationId = typeof req.body["conversationId"] === "string" ? req.body["conversationId"].trim() : "";
+                    const messageId = typeof req.body["messageId"] === "string" ? req.body["messageId"].trim() : "";
                     setImmediate(async () => {
+                        let backgroundTaskId: string | undefined;
                         try {
                             const platformConfig = await platformConfigRepository.get().catch(() => null);
+                            if (conversationId && messageId) {
+                                const task = await logBackgroundTask.execute({
+                                    conversationId,
+                                    projectId: req.sandbox!.projectId,
+                                    messageId,
+                                    type: "asset_enrichment",
+                                    pipelineProfile: "attachment_enrichment",
+                                    input: {
+                                        assetId: asset.id,
+                                        originalName: asset.originalName,
+                                        mimeType: asset.mimeType,
+                                    },
+                                    status: "running",
+                                }).catch(() => null);
+                                backgroundTaskId = task?.id;
+                            }
                             const pipeline = new AssetEnrichmentPipeline();
-                            await pipeline.enrich({
+                            const trace = await pipeline.enrich({
                                 asset,
                                 fileBuffer,
                                 getLlmCatalog,
                                 assetRepository,
+                                promptExecutionLogRepository,
+                                sourceContext: {
+                                    conversationId: conversationId || undefined,
+                                    messageId: messageId || undefined,
+                                    backgroundTaskId,
+                                },
                                 platformConfig,
                             });
+                            if (conversationId && messageId && backgroundTaskId) {
+                                await conversationRepository.updateBackgroundTask(
+                                    conversationId,
+                                    messageId,
+                                    backgroundTaskId,
+                                    {
+                                        status: "completed",
+                                        completedAt: new Date(),
+                                        output: {
+                                            assetId: asset.id,
+                                            enrichmentStatus: trace.provenance.enrichmentStatus,
+                                            parserName: trace.provenance.parserName,
+                                            llmProvider: trace.provenance.llmProvider,
+                                            llmModel: trace.provenance.llmModel,
+                                        },
+                                        tokenUsage: trace.provenance.llmTokensUsed != null ? {
+                                            promptTokens: 0,
+                                            completionTokens: 0,
+                                            totalTokens: trace.provenance.llmTokensUsed,
+                                        } : undefined,
+                                        costEstimate: trace.provenance.llmCostEur != null ? {
+                                            currency: "EUR",
+                                            amount: trace.provenance.llmCostEur,
+                                            breakdown: {
+                                                tokenCost: trace.provenance.llmCostEur,
+                                                imageCost: 0,
+                                                videoCost: 0,
+                                            },
+                                            unitRates: {
+                                                textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
+                                                imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
+                                                videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
+                                            },
+                                        } : undefined,
+                                    },
+                                ).catch(() => {});
+                            }
                         } catch (err) {
+                            if (conversationId && messageId && backgroundTaskId) {
+                                await conversationRepository.updateBackgroundTask(
+                                    conversationId,
+                                    messageId,
+                                    backgroundTaskId,
+                                    {
+                                        status: "failed",
+                                        completedAt: new Date(),
+                                        error: err instanceof Error ? err.message : String(err),
+                                    },
+                                ).catch(() => {});
+                            }
                             console.error(`[upload] enrichment pipeline failed for asset ${asset.id}:`, err);
                         }
                     });
@@ -460,7 +556,7 @@ export function createProjectAssetRoutes(): Router {
                     targetSelector: input.targetSelector,
                     targetMode: input.targetMode,
                     scope: input.scope,
-                    allowFallback: false,
+                    allowFallback: true,
                 });
 
                 res.status(201).json({
