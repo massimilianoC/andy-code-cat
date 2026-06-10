@@ -4,37 +4,31 @@ import type { ProjectMoodboardRepository } from "../../domain/repositories/Proje
 import type { ConversationRepository } from "../../domain/repositories/ConversationRepository";
 import { PrepareGenerationWorkspace } from "./PrepareGenerationWorkspace";
 import type { GenerationWorkspace } from "../../domain/entities/GenerationWorkspace";
+import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
 
-function siteTypeLabel(siteType: ZeroEffortLaunchInput["siteType"]): string {
-    switch (siteType) {
-        case "portfolio":
-            return "portfolio site";
-        case "showcase":
-            return "showcase site";
-        case "business_site":
-            return "business website";
-        case "landing_page":
-        default:
-            return "landing page";
-    }
+function presetLabel(presetId: string): string {
+    const preset = PRESET_MAP.get(presetId);
+    return preset?.labelEn ?? preset?.label ?? presetId;
 }
 
 function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
-    const siteLabel = siteTypeLabel(input.siteType);
+    const siteLabel = presetLabel(input.presetId);
+    const outputLanguage = (input as { outputLanguage?: string }).outputLanguage ?? "en";
     const sections: string[] = [];
 
-    // ── [IDENTITÀ] ──────────────────────────────────────────────────────────
+    // ── [IDENTITY] ──────────────────────────────────────────────────────────
     sections.push(
-        `# BRIEF DI PROGETTO — ${input.businessName}\n\n` +
-        `## [IDENTITÀ] Brand e tipo sito\n` +
+        `# PROJECT BRIEF — ${input.businessName}\n\n` +
+        `## [IDENTITY] Brand and template\n` +
         `- **Brand:** ${input.businessName}\n` +
-        `- **Tipo sito:** ${siteLabel}`,
+        `- **Template:** ${siteLabel} (${input.presetId})\n` +
+        `- **Output language:** ${outputLanguage}`,
     );
 
-    // ── [OBIETTIVO] ─────────────────────────────────────────────────────────
+    // ── [GOAL] ──────────────────────────────────────────────────────────────
     if (input.primaryGoal?.trim()) {
         sections.push(
-            `## [OBIETTIVO] Descrizione e obiettivo principale\n\n` +
+            `## [GOAL] Description and primary objective\n\n` +
             input.primaryGoal.trim(),
         );
     }
@@ -42,38 +36,38 @@ function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
     // ── [AUDIENCE] ──────────────────────────────────────────────────────────
     if (input.audience?.trim()) {
         sections.push(
-            `## [AUDIENCE] Target e pubblico di riferimento\n\n` +
+            `## [AUDIENCE] Target audience\n\n` +
             input.audience.trim(),
         );
     }
 
-    // ── [STILE] ─────────────────────────────────────────────────────────────
+    // ── [STYLE] ─────────────────────────────────────────────────────────────
     const styleLines: string[] = [];
     if (input.styleAttributes && input.styleAttributes.length > 0) {
-        styleLines.push(`- **Attributi visivi:** ${input.styleAttributes.join(", ")}`);
+        styleLines.push(`- **Visual attributes:** ${input.styleAttributes.join(", ")}`);
     }
     if (input.tone?.trim()) {
-        styleLines.push(`- **Tono di voce:** ${input.tone.trim()}`);
+        styleLines.push(`- **Tone of voice:** ${input.tone.trim()}`);
     }
     if (input.primaryCta?.trim()) {
-        styleLines.push(`- **CTA principale:** ${input.primaryCta.trim()}`);
+        styleLines.push(`- **Primary CTA:** ${input.primaryCta.trim()}`);
     }
     if (input.styleHint?.trim()) {
-        styleLines.push(`- **Note stilistiche aggiuntive:** ${input.styleHint.trim()}`);
+        styleLines.push(`- **Additional style notes:** ${input.styleHint.trim()}`);
     }
     if (styleLines.length > 0) {
-        sections.push(`## [STILE] Attributi visivi, tono e CTA\n\n${styleLines.join("\n")}`);
+        sections.push(`## [STYLE] Visual attributes, tone and CTA\n\n${styleLines.join("\n")}`);
     }
 
-    // ── [CONTATTI] ──────────────────────────────────────────────────────────
+    // ── [CONTACTS] ──────────────────────────────────────────────────────────
     if (input.contactInfo && input.contactInfo.length > 0) {
         const contactLines = input.contactInfo
             .map((c) => `- **${c.key}:** ${c.value}`)
             .join("\n");
-        sections.push(`## [CONTATTI] Informazioni di contatto e dati salienti\n\n${contactLines}`);
+        sections.push(`## [CONTACTS] Contact information\n\n${contactLines}`);
     }
 
-    const footer = `\n---\n*Brief strutturato Guided Mode · ${siteLabel} · Sezioni: ${sections.length - 1}*`;
+    const footer = `\n---\n*Structured brief — Guided Mode · ${siteLabel} · Sections: ${sections.length - 1}*`;
     return sections.join("\n\n") + footer;
 }
 

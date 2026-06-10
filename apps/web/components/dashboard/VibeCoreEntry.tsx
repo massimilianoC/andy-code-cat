@@ -167,7 +167,7 @@ interface VibeCoreEntryProps {
 
 export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps) {
     const router = useRouter();
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const [prompt, setPrompt] = useState("");
@@ -391,12 +391,14 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 mimeType: p.file.type,
                 sizeBytes: p.file.size,
             }));
+            const uiLanguage = i18n.language?.split("-")[0] ?? "en";
             const classification = await classifyVibeIntent(token, {
                 prompt: prompt.trim(),
                 attachmentMeta,
                 generationMode,
                 provider: pipelineOverride?.provider,
                 model: pipelineOverride?.model,
+                uiLanguage,
             }).catch(() => null);
             if (classification?.warnings?.length) {
                 setServerWarnings(classification.warnings);
@@ -492,6 +494,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 formatHint: experimentalDataModeDetected ? null : (classification?.formatHint ?? null),
                 provider: pipelineOverride?.provider,
                 model: pipelineOverride?.model,
+                uiLanguage,
             }).catch(() => null);
             if (prefillResult?.warnings?.length) {
                 setServerWarnings((prev) => [...new Set([...prev, ...prefillResult.warnings!])]);
@@ -769,23 +772,11 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                     : t("workspace.ui.voiceOnlyChrome")}
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-150"
                             style={{
-                                border: `1px solid ${
-                                    voiceListening
-                                        ? "rgba(248,113,113,0.65)"
-                                        : voiceSupported
-                                            ? "rgba(255,255,255,0.22)"
-                                            : "rgba(255,255,255,0.12)"
-                                }`,
-                                background: voiceListening
-                                    ? "rgba(248,113,113,0.16)"
-                                    : voiceSupported
-                                        ? "rgba(255,255,255,0.04)"
-                                        : "rgba(255,255,255,0.02)",
-                                color: voiceListening
-                                    ? "#f87171"
-                                    : voiceSupported
-                                        ? "rgba(255,255,255,0.7)"
-                                        : "rgba(255,255,255,0.32)",
+                                padding: 0,
+                                border: `1px solid ${voiceListening ? "rgba(248,113,113,0.65)" : "rgba(255,255,255,0.22)"}`,
+                                background: voiceListening ? "rgba(248,113,113,0.16)" : "rgba(255,255,255,0.06)",
+                                color: voiceListening ? "#f87171" : voiceSupported ? "rgba(255,255,255,0.80)" : "rgba(255,255,255,0.55)",
+                                opacity: isLoading ? 0.4 : 1,
                             }}
                         >
                             {voiceListening
@@ -802,10 +793,8 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             {phaseLabel}
                         </span>
 
-                        <Button
+                        <button
                             type="button"
-                            size="icon"
-                            variant={pipelineOverride ? "secondary" : "outline"}
                             disabled={isLoading}
                             onClick={() => setModelOverrideOpen((open) => !open)}
                             aria-label={t("vibecore.modelOverrideLabel", "Modello pipeline")}
@@ -816,10 +805,17 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                     defaultValue: "Pipeline forzata su {{provider}} · {{model}}",
                                 })
                                 : t("vibecore.modelOverrideTitle", "Scegli un modello per tutta la pipeline")}
-                            className="h-9 w-9 shrink-0 border-border bg-secondary/30 text-foreground hover:bg-secondary hover:text-foreground"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-150"
+                            style={{
+                                padding: 0,
+                                border: `1px solid ${modelOverrideOpen || pipelineOverride ? `${glowColor}80` : "rgba(255,255,255,0.22)"}`,
+                                background: modelOverrideOpen || pipelineOverride ? `${glowColor}20` : "rgba(255,255,255,0.06)",
+                                color: modelOverrideOpen || pipelineOverride ? glowColor : "rgba(255,255,255,0.80)",
+                                opacity: isLoading ? 0.4 : 1,
+                            }}
                         >
                             <Settings className="h-4 w-4" />
-                        </Button>
+                        </button>
 
                         {/* Submit */}
                         <button

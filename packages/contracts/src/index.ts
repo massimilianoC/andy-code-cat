@@ -20,3 +20,4 @@ export * from "./userTemplates";
 export * from "./datasets";
 export * from "./datasetBindings";
 export * from "./brandAssets";
+export * from "./userPreferences";

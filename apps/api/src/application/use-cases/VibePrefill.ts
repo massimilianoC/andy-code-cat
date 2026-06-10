@@ -9,7 +9,7 @@ import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
-import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
+import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -17,24 +17,49 @@ const TASK_KEY = "vibe_intent_prefill";
 const FALLBACK_PROVIDER = "siliconflow";
 const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
 const MAX_PROMPT_CHARS = 2000;
-const MAX_TOKENS = 768;
+// MIN_TOKENS: enforce floor regardless of DB task settings — prevents JSON truncation.
+// The system prompt asks for a ~900-2200 char primaryGoal; 768 tokens cannot fit that.
+const MIN_TOKENS = 1200;
+const MAX_TOKENS = 2048;
 
-const VALID_SITE_TYPES = new Set(["landing_page", "portfolio", "showcase", "business_site"]);
+// All valid preset IDs from the catalog — kept in sync at startup.
+const VALID_PRESET_IDS: Set<string> = new Set(PRESET_CATALOG.map((p) => p.id));
+
+// Backward-compat map: old 4-value siteType → new presetId
+const SITE_TYPE_COMPAT: Record<string, string> = {
+    landing_page: "landing",
+    business_site: "website",
+    portfolio: "neutral",
+    showcase: "neutral",
+};
 const VALID_STYLE_ATTRIBUTES = new Set([
     "minimal", "premium", "dark", "bright", "bold",
     "elegant", "corporate", "playful", "tech", "artisan", "luxury", "eco",
 ]);
 const VALID_VIS_STYLES = new Set(["executive", "operations", "exploratory", "monitoring"]);
 
+// ── Language helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Normalize a BCP-47 language code to lowercase base language (e.g. "IT" → "it", "pt-BR" → "pt").
+ * Returns "en" for any null/empty/invalid input.
+ */
+function normalizeLang(raw?: string | null): string {
+    if (!raw || typeof raw !== "string") return "en";
+    const base = raw.trim().toLowerCase().split("-")[0];
+    return /^[a-z]{2,8}$/.test(base ?? "") ? (base ?? "en") : "en";
+}
+
 // ── Default draft ─────────────────────────────────────────────────────────────
 
-function defaultDraft(prompt: string): ZeroEffortDraft {
-    const projectName = prompt.trim().slice(0, 64) || "Progetto";
+function defaultDraft(prompt: string, outputLanguage = "en"): ZeroEffortDraft {
+    const projectName = prompt.trim().slice(0, 64) || "Project";
     return {
         businessName: projectName,
-        siteType: "landing_page",
-        primaryGoal: prompt.trim().slice(0, 500) || "Sito web moderno e professionale.",
-        audience: "Pubblico generale interessato all'attività.",
+        presetId: "landing",
+        primaryGoal: prompt.trim().slice(0, 500) || "Modern, professional website.",
+        audience: "General audience interested in this project.",
+        outputLanguage,
     };
 }
 
@@ -50,13 +75,14 @@ function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" 
 // ── Prompts ───────────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are a web project brief extractor.
-Given a user's free-form description of a website project, return a JSON object that
+Given a user's free-form description of a project, return a JSON object that
 populates a structured project brief.
 
 Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 {
   "businessName": "brand or project name (string, required)",
-  "siteType": "landing_page|portfolio|showcase|business_site (string, required)",
+  "presetId": "one of: neutral|landing|website|form|manifesto|slideshow|keynote|a4poster|infographic|videogame|freerunner|seriousgame|game3d|vr-aframe|interactive-story (string, required)",
+  "outputLanguage": "BCP-47 language code of the content to generate, e.g. 'it', 'en', 'de', 'fr' (string, required)",
   "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
   "audience": "target audience description — 120 to 500 chars when possible (string, required)",
   "tone": "communication tone, e.g. professional, playful (string or null)",
@@ -66,9 +92,28 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
   "styleAttributes": ["minimal"]
 }
 
+presetId guidance — choose the best match:
+  neutral         generic project with no specific template
+  landing         marketing landing page / single page site
+  website         multi-section business website
+  form            guided form, wizard, or survey
+  manifesto       editorial page, manifesto, or long-form statement
+  slideshow       slide deck / presentation / carousel narrative
+  keynote         pitch deck / keynote / investor presentation
+  a4poster        A4 print-ready poster or flyer
+  infographic     data infographic / visual storytelling
+  videogame       2D browser arcade or action game
+  freerunner      open canvas browser game / creative sandbox
+  seriousgame     educational or training serious game
+  game3d          3D WebGL browser game
+  vr-aframe       WebVR / A-Frame immersive experience
+  interactive-story  branching narrative / choose-your-own-adventure
+
 Rules:
 - businessName: extract from the prompt; fall back to "Project" if unclear.
-- siteType: infer from context using only the allowed values; default "landing_page".
+- presetId: infer from the user's intent — use the MOST SPECIFIC matching id.
+  A "slideshow" or "presentation" request MUST use "slideshow" or "keynote", NOT "landing".
+  A "game" request MUST use one of the game presets. Default to "landing" only when no better match.
 - primaryGoal: do not summarize too aggressively. Produce a robust structured brief that can be injected
   into downstream generation prompts. Include:
   1. project intent and desired output,
@@ -77,17 +122,14 @@ Rules:
   4. key functionality/interactions,
   5. success criteria and constraints,
   6. any assumptions needed to make the first generation complete.
+  Adapt to the chosen presetId: a videogame brief describes gameplay and controls;
+  a slideshow brief describes slides and narrative arc; a form brief describes steps and fields.
 - audience: infer who uses or views the result; include needs, context, and expectations.
-- If a Detected template block is present, adapt the fields to that template's real output.
-  For example, a videogame template should produce a primaryGoal describing gameplay,
-  core loop, controls, win/loss conditions, HUD, and target device, not marketing copy.
-  Preserve the template intent in styleHint and tone even when siteType must remain one
-  of the generic allowed values.
-- For non-website templates, keep siteType valid but make primaryGoal and styleHint carry the real
-  artifact type. Examples: slideshow -> slide narrative; infographic -> visual data story;
-  form -> guided steps and fields; manifesto -> editorial stance; game -> playable loop.
+- If a Detected template block is present, its id takes priority as the presetId.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
+- outputLanguage: detect the language the user wants the CONTENT in. If the user writes in Italian but asks "in tedesco" or "in German", outputLanguage must be "de". Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
+- IMPORTANT: write the JSON fields in order — businessName, presetId, outputLanguage first — so critical values are captured even if the response is long.
 - Return ONLY the JSON object.`;
 
 const DATA_DASHBOARD_SYSTEM_PROMPT = `You are a grounded data dashboard brief extractor.
@@ -163,7 +205,7 @@ function defaultDataDashboardDraft(prompt: string, attachmentMeta?: AttachmentMe
 
 // ── Response parser ───────────────────────────────────────────────────────────
 
-function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortDraft; confidence: number } {
+function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string): { draft: ZeroEffortDraft; confidence: number } {
     let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
     const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
 
@@ -172,20 +214,22 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
 
         const businessName = typeof parsed.businessName === "string" && parsed.businessName.trim()
             ? parsed.businessName.trim().slice(0, 120)
-            : prompt.trim().slice(0, 64) || "Progetto";
+            : prompt.trim().slice(0, 64) || "Project";
 
-        const rawSiteType = typeof parsed.siteType === "string" ? parsed.siteType : "";
-        const siteType = VALID_SITE_TYPES.has(rawSiteType)
-            ? (rawSiteType as ZeroEffortDraft["siteType"])
-            : "landing_page";
+        // Accept new presetId field or old siteType for backward compat with cached drafts
+        const rawPreset = typeof parsed.presetId === "string" ? parsed.presetId.trim()
+            : typeof parsed.siteType === "string" ? parsed.siteType.trim() : "";
+        const presetId: string = VALID_PRESET_IDS.has(rawPreset)
+            ? rawPreset
+            : (SITE_TYPE_COMPAT[rawPreset] ?? "landing");
 
         const primaryGoal = typeof parsed.primaryGoal === "string" && parsed.primaryGoal.trim().length >= 8
             ? parsed.primaryGoal.trim().slice(0, 3000)
-            : prompt.trim().slice(0, 500) || "Progetto web moderno.";
+            : prompt.trim().slice(0, 500) || "Modern web project.";
 
         const audience = typeof parsed.audience === "string" && parsed.audience.trim().length >= 3
             ? parsed.audience.trim().slice(0, 1000)
-            : "Pubblico generale.";
+            : "General audience.";
 
         const tone = typeof parsed.tone === "string" && parsed.tone.trim()
             ? parsed.tone.trim().slice(0, 80)
@@ -214,18 +258,45 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
             .filter((s): s is string => typeof s === "string" && VALID_STYLE_ATTRIBUTES.has(s))
             .slice(0, 20);
 
+        // Language: LLM-inferred → uiLanguage hint → "en"
+        const outputLanguage = normalizeLang(
+            typeof parsed.outputLanguage === "string" ? parsed.outputLanguage : uiLanguage
+        );
+
         // Validate with zod to ensure the draft is safe to use downstream
         const zodResult = zeroEffortLaunchSchema.safeParse({
-            businessName, siteType, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes,
+            businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage,
         });
 
         const draft: ZeroEffortDraft = zodResult.success
-            ? zodResult.data
-            : { businessName, siteType, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes };
+            ? { ...zodResult.data, outputLanguage }
+            : { businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage };
 
         return { draft, confidence: 0.85 };
     } catch {
-        return { draft: defaultDraft(prompt), confidence: 0 };
+        // Partial recovery: extract critical fields from truncated JSON using regex.
+        // Truncation occurs when primaryGoal hits the token cap before the JSON is closed.
+        const partialPresetRaw = candidate.match(/"presetId"\s*:\s*"([^"]+)"/)?.[1]?.trim() ?? "";
+        const partialLangRaw   = candidate.match(/"outputLanguage"\s*:\s*"([^"]+)"/)?.[1]?.trim();
+        const partialName      = candidate.match(/"businessName"\s*:\s*"([^"\\]*)"/)?.[1]?.trim();
+        const partialGoal      = candidate.match(/"primaryGoal"\s*:\s*"([^"\\]*)"/)?.[1]?.trim();
+        const partialAudience  = candidate.match(/"audience"\s*:\s*"([^"\\]*)"/)?.[1]?.trim();
+
+        const hasPartial = !!(partialPresetRaw || partialName || partialGoal);
+        if (hasPartial) {
+            const partialPresetId = VALID_PRESET_IDS.has(partialPresetRaw)
+                ? partialPresetRaw
+                : (SITE_TYPE_COMPAT[partialPresetRaw] ?? "landing");
+            const recoveredDraft: ZeroEffortDraft = {
+                businessName: partialName?.slice(0, 120) || prompt.trim().slice(0, 64) || "Project",
+                presetId: partialPresetId,
+                primaryGoal: partialGoal?.slice(0, 3000) || prompt.trim().slice(0, 500) || "Modern web project.",
+                audience: partialAudience?.slice(0, 1000) || "General audience.",
+                outputLanguage: normalizeLang(partialLangRaw ?? uiLanguage),
+            };
+            return { draft: recoveredDraft, confidence: 0.4 };
+        }
+        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage)), confidence: 0 };
     }
 }
 
@@ -310,6 +381,8 @@ export interface VibePrefillInput {
     userId?: string;
     /** When provided together with userId, cost is attributed to this project. */
     projectId?: string;
+    /** BCP-47 UI language from the client (e.g. "it", "en"). Used as fallback when LLM can't infer language. */
+    uiLanguage?: string;
 }
 
 // ── Use-case ──────────────────────────────────────────────────────────────────
@@ -328,9 +401,11 @@ export class VibePrefill {
             ? "data_dashboard"
             : "website";
 
+        const resolvedUiLanguage = normalizeLang(input.uiLanguage);
+
         if (!env.vibeClassifierEnabled || !taskSettings.enabled) {
             return {
-                draft: defaultDraft(input.prompt),
+                draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                 resolvedMode,
                 confidence: 0,
@@ -356,7 +431,7 @@ export class VibePrefill {
 
         if (!selectedProviderCatalog) {
             return {
-                draft: defaultDraft(input.prompt),
+                draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                 resolvedMode,
                 confidence: 0,
@@ -381,7 +456,7 @@ export class VibePrefill {
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
             return {
-                draft: defaultDraft(input.prompt),
+                draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                 resolvedMode,
                 confidence: 0,
@@ -410,7 +485,7 @@ export class VibePrefill {
                 body: JSON.stringify(buildChatCompletionRequestBody({
                     provider: providerCatalog.provider,
                     model: modelId,
-                    maxTokens: Math.min(taskSettings.maxCompletionTokens, MAX_TOKENS),
+                    maxTokens: Math.min(Math.max(taskSettings.maxCompletionTokens, MIN_TOKENS), MAX_TOKENS),
                     temperature: taskSettings.temperature ?? 0.3,
                     messages: [
                         { role: "system" as const, content: systemPrompt },
@@ -421,7 +496,7 @@ export class VibePrefill {
 
             if (!response.ok) {
                 return {
-                    draft: defaultDraft(input.prompt),
+                    draft: defaultDraft(input.prompt, resolvedUiLanguage),
                     dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                     resolvedMode,
                     confidence: 0,
@@ -477,7 +552,7 @@ export class VibePrefill {
                 });
             }
 
-            const websitePrefill = parsePrefillResponse(raw, input.prompt);
+            const websitePrefill = parsePrefillResponse(raw, input.prompt, resolvedUiLanguage);
             const dataPrefill = resolvedMode === "data_dashboard"
                 ? parseDataDashboardPrefillResponse(raw, input.prompt, input.attachmentMeta)
                 : undefined;
@@ -491,7 +566,7 @@ export class VibePrefill {
             };
         } catch {
             return {
-                draft: defaultDraft(input.prompt),
+                draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                 resolvedMode,
                 confidence: 0,

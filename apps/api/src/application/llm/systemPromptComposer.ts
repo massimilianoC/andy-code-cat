@@ -1,4 +1,4 @@
-import { buildBaseConstraintsLayer, buildLayerT, buildPresetLayer, type TemplateResolution } from "./systemPromptLayers";
+import { buildBaseConstraintsLayer, buildLanguageLayer, buildLayerT, buildPresetLayer, type TemplateResolution } from "./systemPromptLayers";
 export type { TemplateResolution };
 
 const LAYER_SEPARATOR = "\n\n---\n\n";
@@ -30,10 +30,14 @@ export function composeSystemPrompt(opts: {
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
     governanceSystemPrompt?: string;
+    /** BCP-47 output language (e.g. "it", "en"). When provided, injects Layer L after Layer A. */
+    outputLanguage?: string | null;
 }): string {
+    const layerL = opts.outputLanguage ? buildLanguageLayer(opts.outputLanguage) : "";
     const layerT = buildLayerT(opts.templateResolution, { userTemplatePreprompt: opts.userTemplatePreprompt });
     return [
         buildBaseConstraintsLayer(),
+        layerL,
         opts.presetLayer ?? buildPresetLayer(opts.presetId),
         layerT,
         opts.styleBlock ?? "",
@@ -52,6 +56,7 @@ export function composeSystemPrompt(opts: {
 
 export interface ResolvedPromptLayers {
     layerA: string;
+    layerL: string;
     layerB: string;
     layerT: string;
     layerC: string;
@@ -81,8 +86,11 @@ export function composeSystemPromptWithLayers(opts: {
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
     governanceSystemPrompt?: string;
+    /** BCP-47 output language (e.g. "it", "en"). When provided, injects Layer L after Layer A. */
+    outputLanguage?: string | null;
 }): ResolvedPromptLayers {
     const layerA = buildBaseConstraintsLayer();
+    const layerL = opts.outputLanguage ? buildLanguageLayer(opts.outputLanguage) : "";
     const layerB = opts.presetLayer ?? buildPresetLayer(opts.presetId);
     const layerT = buildLayerT(opts.templateResolution, { userTemplatePreprompt: opts.userTemplatePreprompt });
     const layerC = opts.styleBlock ?? "";
@@ -93,10 +101,10 @@ export function composeSystemPromptWithLayers(opts: {
     const layerF = opts.governanceSystemPrompt ?? "";
     const budgetPolicy = opts.outputBudgetPolicy ?? "";
 
-    const composed = [layerA, layerB, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, opts.requestSystemPrompt ?? ""]
+    const composed = [layerA, layerL, layerB, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, opts.requestSystemPrompt ?? ""]
         .filter(Boolean)
         .join(LAYER_SEPARATOR)
         .trim();
 
-    return { layerA, layerB, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, composed };
+    return { layerA, layerL, layerB, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, composed };
 }

@@ -46,6 +46,8 @@ export interface VibeClassifyRequest {
      * The resulting projectId is returned in the response.
      */
     projectId?: string;
+    /** BCP-47 UI language from the client (e.g. "it", "en"). Used as output language hint. */
+    uiLanguage?: string;
 }
 
 export interface VibeClassifyResponse {
@@ -78,6 +80,8 @@ export interface VibePrefillRequest {
     attachmentMeta?: AttachmentMeta[];
     templateId?: string | null;
     formatHint?: FormatHint | null;
+    /** BCP-47 UI language from the client (e.g. "it", "en"). Used as output language hint. */
+    uiLanguage?: string;
 }
 
 /**
@@ -86,7 +90,8 @@ export interface VibePrefillRequest {
  */
 export interface ZeroEffortDraft {
     businessName: string;
-    siteType: "landing_page" | "portfolio" | "showcase" | "business_site";
+    /** PRESET_CATALOG id (e.g. "slideshow", "landing", "website", "videogame"). */
+    presetId: string;
     primaryGoal: string;
     audience: string;
     tone?: string;
@@ -96,6 +101,8 @@ export interface ZeroEffortDraft {
     styleAttributes?: string[];
     /** Filenames of project documents that were analysed to generate this draft (informational only). */
     attachedDocuments?: string[];
+    /** BCP-47 output language inferred by the prefill engine (e.g. "it", "en"). */
+    outputLanguage?: string;
 }
 
 export interface VibePrefillResponse {

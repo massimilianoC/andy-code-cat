@@ -42,7 +42,8 @@ interface ContactField {
 
 interface ExtendedForm {
     businessName: string;
-    siteType: ZeroEffortLaunchInput["siteType"];
+    /** PRESET_CATALOG id — drives template layer in generation pipeline. */
+    presetId: string;
     primaryGoal: string;
     audience: string;
     tone?: string;
@@ -50,6 +51,7 @@ interface ExtendedForm {
     styleHint?: string;
     contactFields: ContactField[];
     styleAttributes: string[];
+    outputLanguage: string;
 }
 
 type GenerationPhase =
@@ -59,12 +61,34 @@ type GenerationPhase =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SITE_TYPES: Array<{ value: ZeroEffortLaunchInput["siteType"] }> = [
-    { value: "landing_page" },
-    { value: "business_site" },
-    { value: "portfolio" },
-    { value: "showcase" },
+type PresetGroup = "web" | "presentation" | "game";
+
+const PRESET_OPTIONS: Array<{ id: string; group: PresetGroup }> = [
+    // Web
+    { id: "landing",      group: "web" },
+    { id: "website",      group: "web" },
+    { id: "neutral",      group: "web" },
+    { id: "form",         group: "web" },
+    { id: "manifesto",    group: "web" },
+    // Presentation / Print
+    { id: "slideshow",    group: "presentation" },
+    { id: "keynote",      group: "presentation" },
+    { id: "a4poster",     group: "presentation" },
+    { id: "infographic",  group: "presentation" },
+    // Game / Interactive
+    { id: "videogame",    group: "game" },
+    { id: "freerunner",   group: "game" },
+    { id: "seriousgame",  group: "game" },
+    { id: "game3d",       group: "game" },
+    { id: "vr-aframe",    group: "game" },
+    { id: "interactive-story", group: "game" },
 ];
+
+const PRESET_GROUP_KEYS: Record<PresetGroup, string> = {
+    web:          "launch.presetGroups.web",
+    presentation: "launch.presetGroups.presentation",
+    game:         "launch.presetGroups.game",
+};
 
 const STYLE_ATTRIBUTES: Array<{ id: string }> = [
     { id: "minimal" },
@@ -109,20 +133,29 @@ function Step1Content({ form, onChange, onNext, canProceed }: Step1Props) {
             </div>
 
             <div className="space-y-2">
-                <Label>{t("launch.step1.siteType")}</Label>
-                <div className="grid grid-cols-2 gap-2">
-                    {SITE_TYPES.map((option) => (
-                        <Button
-                            key={option.value}
-                            type="button"
-                            variant={form.siteType === option.value ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => onChange({ siteType: option.value })}
-                        >
-                            {t(`launch.siteTypes.${option.value}`)}
-                        </Button>
-                    ))}
-                </div>
+                <Label>{t("launch.step1.presetId")}</Label>
+                <p className="text-xs text-muted-foreground">{t("launch.step1.presetIdHint")}</p>
+                {(["web", "presentation", "game"] as PresetGroup[]).map((group) => (
+                    <div key={group} className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            {t(PRESET_GROUP_KEYS[group])}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {PRESET_OPTIONS.filter((p) => p.group === group).map((option) => (
+                                <Button
+                                    key={option.id}
+                                    type="button"
+                                    variant={form.presetId === option.id ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => onChange({ presetId: option.id })}
+                                    className="text-xs h-7 px-2.5"
+                                >
+                                    {t(`launch.templates.${option.id}`, { defaultValue: option.id })}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+                ))}
             </div>
 
             <div className="space-y-2">
@@ -244,6 +277,16 @@ function Step2Content({ form, onChange, onNext, onBack, canProceed, addContact, 
     );
 }
 
+const SUPPORTED_LANGUAGES = [
+    { code: "en", labelKey: "launch.languages.en" },
+    { code: "it", labelKey: "launch.languages.it" },
+    { code: "fr", labelKey: "launch.languages.fr" },
+    { code: "de", labelKey: "launch.languages.de" },
+    { code: "es", labelKey: "launch.languages.es" },
+    { code: "pt", labelKey: "launch.languages.pt" },
+    { code: "nl", labelKey: "launch.languages.nl" },
+];
+
 interface Step3Props {
     form: ExtendedForm;
     onChange: (patch: Partial<ExtendedForm>) => void;
@@ -322,6 +365,30 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
                 />
             </div>
 
+            <div className="space-y-2">
+                <Label>{t("launch.step3.outputLanguage", "Output language")}</Label>
+                <p className="text-xs text-muted-foreground">
+                    {t("launch.step3.outputLanguageHint", "Language used for all text in the generated page.")}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                        <button
+                            key={lang.code}
+                            type="button"
+                            onClick={() => onChange({ outputLanguage: lang.code })}
+                            className={cn(
+                                "rounded-md border px-3 py-1.5 text-sm transition-colors",
+                                form.outputLanguage === lang.code
+                                    ? "border-primary bg-primary/10 text-foreground"
+                                    : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                            )}
+                        >
+                            {t(lang.labelKey, lang.code.toUpperCase())}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
             {error ? (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                     {error}
@@ -350,7 +417,7 @@ function buildStructuredBrief(
     templateLabel?: string | null,
     docNames?: string[],
 ): string {
-    const siteLabel = t(`launch.siteTypes.${form.siteType}`);
+    const siteLabel = t(`launch.templates.${form.presetId}`, { defaultValue: form.presetId });
     const brandName = form.businessName.trim() || projectName;
 
     const sections: string[] = [];
@@ -410,7 +477,7 @@ function buildStructuredBrief(
         sections.push(`## ${t("launch.brief.attachments")}\n\n${docList}`);
     }
 
-    const footer = `\n---\n*${t("launch.brief.footer", { siteType: siteLabel, sections: sections.length - 1 })}*`;
+    const footer = `\n---\n*${t("launch.brief.footer", { presetId: form.presetId, siteType: siteLabel, sections: sections.length - 1 })}*`;
     return sections.join("\n\n") + footer;
 }
 
@@ -444,7 +511,7 @@ function templateLabel(templateId: string | null | undefined, t: ReturnType<type
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ZeroEffortLaunchPage() {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const params = useParams<{ projectId: string }>();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -487,9 +554,10 @@ export default function ZeroEffortLaunchPage() {
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const defaultUiLang = i18n.language?.split("-")[0] ?? "en";
     const [form, setForm] = useState<ExtendedForm>({
         businessName: "",
-        siteType: "landing_page",
+        presetId: "landing",
         primaryGoal: "",
         audience: "",
         tone: "clear and modern",
@@ -497,6 +565,7 @@ export default function ZeroEffortLaunchPage() {
         styleHint: "",
         contactFields: [],
         styleAttributes: [],
+        outputLanguage: defaultUiLang,
     });
 
     function patch(update: Partial<ExtendedForm>) {
@@ -531,11 +600,17 @@ export default function ZeroEffortLaunchPage() {
             if (typeof draft.formatHint === "string" && draft.formatHint.trim()) {
                 setPrefillFormatHint(draft.formatHint);
             }
+            // Backward compat: old drafts may have siteType instead of presetId
+            const siteTypeCompat: Record<string, string> = {
+                landing_page: "landing", business_site: "website",
+                portfolio: "neutral", showcase: "neutral",
+            };
+            const rawPreset = typeof draft.presetId === "string" && draft.presetId.trim()
+                ? draft.presetId.trim()
+                : siteTypeCompat[String(draft.siteType ?? "")] ?? "landing";
             patch({
                 businessName:    typeof draft.businessName === "string" ? draft.businessName : "",
-                siteType:        (["landing_page","portfolio","showcase","business_site"].includes(String(draft.siteType))
-                    ? draft.siteType as ZeroEffortLaunchInput["siteType"]
-                    : "landing_page"),
+                presetId:        rawPreset,
                 primaryGoal:     typeof draft.primaryGoal === "string" ? draft.primaryGoal : "",
                 audience:        typeof draft.audience    === "string" ? draft.audience    : "",
                 tone:            typeof draft.tone        === "string" ? draft.tone        : undefined,
@@ -547,6 +622,10 @@ export default function ZeroEffortLaunchPage() {
                         .filter((c) => c && typeof c.key === "string" && typeof c.value === "string")
                         .map((c) => ({ id: `cf-${c.key}`, key: c.key, value: c.value }))
                     : [],
+                // Language inferred by VibePrefill; fall back to UI language
+                outputLanguage: typeof draft.outputLanguage === "string" && draft.outputLanguage.trim()
+                    ? draft.outputLanguage.trim()
+                    : defaultUiLang,
             });
             // Restore the names of documents that the AI used to generate this brief
             if (Array.isArray(draft.attachedDocuments)) {
@@ -581,7 +660,7 @@ export default function ZeroEffortLaunchPage() {
         })
         : null;
     const selectedTemplateOrFormatLabel = selectedTemplateLabel ?? selectedFormatLabel;
-    const selectedOutputLabel = selectedTemplateOrFormatLabel ?? t(`launch.siteTypes.${form.siteType}`);
+    const selectedOutputLabel = selectedTemplateOrFormatLabel ?? t(`launch.templates.${form.presetId}`, { defaultValue: form.presetId });
 
     function completeStep(n: number) {
         setCompletedSteps((prev) => new Set([...prev, n]));
@@ -633,7 +712,7 @@ export default function ZeroEffortLaunchPage() {
         setError(null);
         const payload: ZeroEffortLaunchInput = {
             businessName: form.businessName,
-            siteType: form.siteType,
+            presetId: form.presetId,
             primaryGoal: form.primaryGoal,
             audience: form.audience,
             tone: form.tone,
@@ -643,6 +722,7 @@ export default function ZeroEffortLaunchPage() {
                 .filter((cf) => cf.key.trim() && cf.value.trim())
                 .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
             styleAttributes: form.styleAttributes,
+            outputLanguage: form.outputLanguage,
         };
         try {
             const [briefResult, configResult] = await Promise.all([
@@ -716,7 +796,7 @@ export default function ZeroEffortLaunchPage() {
         setError(null);
         const payload: ZeroEffortLaunchInput = {
             businessName:   form.businessName,
-            siteType:       form.siteType,
+            presetId:       form.presetId,
             primaryGoal:    form.primaryGoal,
             audience:       form.audience,
             tone:           form.tone,

@@ -94,6 +94,8 @@ export const llmChatPreviewSchema = z.object({
     }).optional(),
     focusContext: llmFocusContextSchema.optional(),
     conversationId: z.string().min(1).max(120).optional(),
+    /** BCP-47 UI language from the client (e.g. "it", "en"). When provided, injects Layer L into the system prompt. */
+    uiLanguage: z.string().min(2).max(10).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({
