@@ -42,7 +42,7 @@ export const zeroEffortLaunchSchema = z.object({
     audience: requiredTrimmedString(1000, 3),
     tone: optionalTrimmedString(80),
     primaryCta: optionalTrimmedString(120),
-    styleHint: optionalTrimmedString(400),
+    styleHint: optionalTrimmedString(1000),
     // New fields from guided 4-step flow (all optional for backward compat)
     contactInfo: z.array(zeroEffortContactItemSchema).max(15).optional(),
     styleAttributes: z.array(z.string().trim().max(80)).max(20).optional(),
