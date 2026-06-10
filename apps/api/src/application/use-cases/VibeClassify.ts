@@ -10,6 +10,7 @@ import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { ResourceType } from "../../domain/entities/CostTransaction";
+import { inferDeterministicVibeTemplate } from "../prompting/vibeTemplateIntent";
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -18,7 +19,6 @@ const CONFIDENCE_THRESHOLD = 0.65;
 const MAX_PROMPT_CHARS = 2000;
 
 const VALID_FORMAT_HINTS = new Set<string>(Object.keys(FORMAT_HINT_RULES));
-
 function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none"): string | undefined {
     if (authType === "none") return undefined;
     const key = env.providerApiKeys[providerKey];
@@ -161,6 +161,7 @@ export class VibeClassify {
 
     async execute(input: VibeClassifyInput): Promise<VibeClassifyResponse> {
         const echoProject = input.projectId ? { projectId: input.projectId } : {};
+        const deterministicTemplate = inferDeterministicVibeTemplate(input.prompt);
         if (input.generationMode === "website" || input.generationMode === "data_dashboard") {
             return buildManualModeResponse(input.generationMode, input.projectId);
         }
@@ -213,6 +214,17 @@ export class VibeClassify {
             activeProviders[0];
 
         if (!selectedProviderCatalog) {
+            if (deterministicTemplate) {
+                return {
+                    templateId: deterministicTemplate.templateId,
+                    formatHint: null,
+                    resolvedMode: "website",
+                    confidence: 0.9,
+                    reasoning: `${deterministicTemplate.reasoning}; no active provider`,
+                    skipped: false,
+                    ...echoProject,
+                };
+            }
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "no active provider", skipped: true, ...echoProject };
         }
 
@@ -231,6 +243,17 @@ export class VibeClassify {
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
+            if (deterministicTemplate) {
+                return {
+                    templateId: deterministicTemplate.templateId,
+                    formatHint: null,
+                    resolvedMode: "website",
+                    confidence: 0.9,
+                    reasoning: `${deterministicTemplate.reasoning}; missing API key`,
+                    skipped: false,
+                    ...echoProject,
+                };
+            }
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "missing API key", skipped: true, ...echoProject };
         }
 
@@ -256,6 +279,17 @@ export class VibeClassify {
             });
 
             if (!response.ok) {
+                if (deterministicTemplate) {
+                    return {
+                        templateId: deterministicTemplate.templateId,
+                        formatHint: null,
+                        resolvedMode: "website",
+                        confidence: 0.9,
+                        reasoning: `${deterministicTemplate.reasoning}; provider error ${response.status}`,
+                        skipped: false,
+                        ...echoProject,
+                    };
+                }
                 return { templateId: null, formatHint: null, confidence: 0, reasoning: `provider error ${response.status}`, skipped: true, ...echoProject };
             }
 
@@ -313,8 +347,16 @@ export class VibeClassify {
                 });
             }
 
-            // Enforce confidence threshold for templateId
-            const templateId = parsed.confidence >= CONFIDENCE_THRESHOLD ? parsed.templateId : null;
+            // Enforce confidence threshold for templateId, then apply deterministic
+            // high-signal game/XR routing so playable prompts cannot collapse to web templates.
+            const thresholdTemplateId = parsed.confidence >= CONFIDENCE_THRESHOLD ? parsed.templateId : null;
+            const templateId = deterministicTemplate?.templateId ?? thresholdTemplateId;
+            const confidence = deterministicTemplate
+                ? Math.max(parsed.confidence, 0.9)
+                : parsed.confidence;
+            const reasoning = deterministicTemplate
+                ? `${deterministicTemplate.reasoning}; model: ${parsed.reasoning || "no reasoning"}`
+                : parsed.reasoning;
 
             const resolution = resolveModeAndTemplate({
                 prompt: input.prompt,
@@ -328,12 +370,23 @@ export class VibeClassify {
                 templateId: resolution.templateId,
                 formatHint: resolution.formatHint,
                 resolvedMode: resolution.resolvedMode,
-                confidence: parsed.confidence,
-                reasoning: parsed.reasoning,
+                confidence,
+                reasoning,
                 skipped: false,
                 ...(input.projectId ? { projectId: input.projectId } : {}),
             };
         } catch {
+            if (deterministicTemplate) {
+                return {
+                    templateId: deterministicTemplate.templateId,
+                    formatHint: null,
+                    resolvedMode: "website",
+                    confidence: 0.9,
+                    reasoning: `${deterministicTemplate.reasoning}; classifier error`,
+                    skipped: false,
+                    ...echoProject,
+                };
+            }
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier error", skipped: true, ...echoProject };
         }
     }
