@@ -53,7 +53,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M2.5",
         temperature: 0.7,
-        maxCompletionTokens: 1200,
+        maxCompletionTokens: 32000,
         systemTemplate: "",
     },
     zero_effort_generate: {
@@ -319,13 +319,17 @@ export function resolvePromptTaskSettingFromConfig(
     const defaultTask = (DEFAULT_PROMPT_TASK_SETTINGS[taskKey] ?? DEFAULT_PROMPT_TASK_SETTINGS.optimize_user_prompt)!;
     const fromDefault = platformConfig?.governanceByProduct?.default?.promptTaskSettings?.[taskKey];
     const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.promptTaskSettings?.[taskKey];
+    const configuredMaxCompletionTokens = fromProduct?.maxCompletionTokens ?? fromDefault?.maxCompletionTokens;
+    const maxCompletionTokens = taskKey === "zero_effort_optimize" && configuredMaxCompletionTokens === 1200
+        ? defaultTask.maxCompletionTokens
+        : configuredMaxCompletionTokens ?? defaultTask.maxCompletionTokens;
 
     return {
         enabled: fromProduct?.enabled ?? fromDefault?.enabled ?? defaultTask.enabled,
         provider: fromProduct?.provider || fromDefault?.provider || defaultTask.provider,
         model: fromProduct?.model || fromDefault?.model || defaultTask.model,
         temperature: fromProduct?.temperature ?? fromDefault?.temperature ?? defaultTask.temperature,
-        maxCompletionTokens: fromProduct?.maxCompletionTokens ?? fromDefault?.maxCompletionTokens ?? defaultTask.maxCompletionTokens,
+        maxCompletionTokens,
         systemTemplate: fromProduct?.systemTemplate || fromDefault?.systemTemplate || defaultTask.systemTemplate,
     };
 }
