@@ -9,6 +9,7 @@ import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
+import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -67,9 +68,14 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 
 Rules:
 - businessName: extract from the prompt; fall back to "Progetto" if unclear.
-- siteType: infer from context; default "landing_page".
+- siteType: infer from context using only the allowed values; default "landing_page".
 - primaryGoal: expand the user's text into a detailed project description.
 - audience: infer who the site is for; describe age group, interests, needs.
+- If a Detected template block is present, adapt the fields to that template's real output.
+  For example, a videogame template should produce a primaryGoal describing gameplay,
+  core loop, controls, win/loss conditions, HUD, and target device, not marketing copy.
+  Preserve the template intent in styleHint and tone even when siteType must remain one
+  of the generic allowed values.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
 - Return ONLY the JSON object.`;
@@ -99,6 +105,25 @@ Rules:
 - respect grounded analytics: do not invent exact metric values.
 - Return ONLY the JSON object.`;
 
+function buildPresetContext(templateId?: string | null): string {
+    if (!templateId) return "";
+    const preset = PRESET_MAP.get(templateId);
+    if (!preset) return `Detected template: ${templateId}`;
+
+    return [
+        `Detected template: ${preset.id} — ${preset.labelEn || preset.label}`,
+        `Template category: ${preset.categoryLabel ?? preset.category ?? "custom"}`,
+        `Template hint: ${preset.hint}`,
+        `Template tags: ${(preset.tags ?? []).join(", ")}`,
+        `Output shape: ${preset.outputSpec.pageModel} / ${preset.outputSpec.sectionModel}${preset.outputSpec.printReady ? " / print-ready" : ""}`,
+        `Brief template to adapt: ${preset.briefTemplate.replace(/\s+/g, " ").slice(0, 900)}`,
+        `Style guidance: ${preset.styleTemplate.replace(/\s+/g, " ").slice(0, 500)}`,
+        preset.briefGuideQuestions.length
+            ? `Discovery questions to answer implicitly: ${preset.briefGuideQuestions.join(" | ")}`
+            : "",
+    ].filter(Boolean).join("\n");
+}
+
 function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[], templateId?: string | null, formatHint?: FormatHint | null): string {
     const parts: string[] = [prompt.slice(0, MAX_PROMPT_CHARS)];
     if (attachmentMeta?.length) {
@@ -107,7 +132,8 @@ function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[], tem
             .join(", ");
         parts.push(`\nAttached files: ${metaPart}`);
     }
-    if (templateId) parts.push(`\nDetected template: ${templateId}`);
+    const presetContext = buildPresetContext(templateId);
+    if (presetContext) parts.push(`\n${presetContext}`);
     if (formatHint) parts.push(`\nFormat hint: ${formatHint}`);
     return parts.join("");
 }

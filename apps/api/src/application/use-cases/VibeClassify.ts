@@ -40,6 +40,13 @@ Rules:
 - Set templateId only if confidence >= ${CONFIDENCE_THRESHOLD} against the template catalog below.
 - Set formatHint independently of templateId; it can be non-null even when templateId is null.
 - If neither signal is clear, return both as null.
+- Choose by intended output, not by surface wording. A request for something playable, game-like, arcade,
+  puzzle, challenge, score, controls, levels, HUD, character movement, or interaction loop MUST prefer
+  the most specific active game template. Use "videogame" for generic playable browser games; use
+  "seriousgame" only when learning/training is the main goal; use "game3d" for explicit 3D scenes/games;
+  use "vr-aframe" for explicit VR/immersive A-Frame requests; use "interactive-story" for branching stories.
+- Do not choose "landing" or "website" for a prompt that asks to build a playable experience, even if it
+  also mentions a title, brand, launch page, or presentation copy.
 - Return valid JSON only — no markdown fences, no extra text.
 
 Available templates:
@@ -171,7 +178,18 @@ export class VibeClassify {
         const templateListBlock = buildTemplateListBlock(
             PRESET_CATALOG
                 .filter((p) => p.isActive !== false)
-                .map((p) => ({ id: p.id, label: p.label, hint: p.hint ?? "" })),
+                .map((p) => ({
+                    id: p.id,
+                    label: p.label,
+                    hint: p.hint ?? "",
+                    category: p.category,
+                    tags: p.tags,
+                    pageModel: p.outputSpec.pageModel,
+                    sectionModel: p.outputSpec.sectionModel,
+                    printReady: p.outputSpec.printReady,
+                    briefTemplate: p.briefTemplate,
+                    styleTemplate: p.styleTemplate,
+                })),
         );
 
         // If a custom systemTemplate is set in platform config, use it as template
