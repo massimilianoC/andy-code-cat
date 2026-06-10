@@ -21,3 +21,5 @@ export { ApiError } from "./call";
 export * from "./admin";
 export * from "./cost";
 export * from "./vibecore";
+export * from "./datasets";
+export * from "./brand";

@@ -9,6 +9,7 @@
         "build": "tsc -p tsconfig.json",
         "start": "node dist/index.js",
         "seed": "tsx src/scripts/seed.ts",
+        "seed:presets": "tsx src/scripts/seed-presets.ts",
         "seed:llm": "tsx src/scripts/seed-llm.ts",
         "migrate:db": "tsx src/scripts/migrate-db-rename.ts",
         "sf:probe": "tsx src/scripts/sf-probe.ts",

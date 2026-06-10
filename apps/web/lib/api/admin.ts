@@ -234,6 +234,7 @@ export interface AdminProjectPresetDto {
         toneTags?: string[];
         featureTags?: string[];
         audienceTags?: string[];
+        sectorTags?: string[];
     };
     briefTemplate: string;
     styleTemplate: string;

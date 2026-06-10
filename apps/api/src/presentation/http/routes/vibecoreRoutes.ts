@@ -17,7 +17,7 @@ import { MongoProjectRepository } from "../../../infra/repositories/MongoProject
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { getParser } from "../../../application/documents/parsers/DocumentParserFactory";
-import { buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
+import { buildGroundedDataContextLayer, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
 import { VibePrefill } from "../../../application/use-cases/VibePrefill";
@@ -38,6 +38,7 @@ const attachmentMetaSchema = z.object({
 const classifyBodySchema = z.object({
     prompt: z.string().min(1).max(2000),
     attachmentMeta: z.array(attachmentMetaSchema).max(100).optional(),
+    generationMode: z.enum(["auto", "website", "data_dashboard"]).optional(),
     provider: z.string().min(1).max(80).optional(),
     model: z.string().min(1).max(200).optional(),
     /**
@@ -52,6 +53,7 @@ const prefillBodySchema = z.object({
     prompt: z.string().min(1).max(2000),
     /** If provided, backend loads project assets and builds Layer D document context for the LLM. */
     projectId: z.string().max(128).optional(),
+    generationMode: z.enum(["auto", "website", "data_dashboard"]).optional(),
     provider: z.string().min(1).max(80).optional(),
     model: z.string().min(1).max(200).optional(),
     attachmentMeta: z.array(attachmentMetaSchema).max(100).optional(),
@@ -218,6 +220,7 @@ export function createVibecoreRoutes(): Router {
                 const result = await vibeClassify.execute({
                     prompt: parsed.data.prompt,
                     attachmentMeta,
+                    generationMode: parsed.data.generationMode,
                     provider: parsed.data.provider,
                     model: parsed.data.model,
                     userId,
@@ -245,6 +248,7 @@ export function createVibecoreRoutes(): Router {
 
                 const userId = req.auth!.userId;
                 let layerDContext: string | undefined;
+                let layerXDataContext: string | undefined;
                 const layerDocNames: string[] = [];
 
                 // Double-sandbox: if client passed a projectId they don't own, refuse.
@@ -322,11 +326,23 @@ export function createVibecoreRoutes(): Router {
                             docAssets.forEach((a) => layerDocNames.push(a.originalName));
                         }
                     }
+
+                    if (parsed.data.generationMode === "data_dashboard" || parsed.data.templateId === "data-dashboard" || parsed.data.formatHint === "analytics_dashboard") {
+                        const groundedData = buildGroundedDataContextLayer(assets, {
+                            maxChars: 5000,
+                            maxAssets: documentContextPolicy.maxAssetsPerPrompt,
+                        });
+                        if (groundedData) {
+                            layerXDataContext = groundedData;
+                        }
+                    }
                 }
 
                 const result = await vibePrefill.execute({
                     prompt: parsed.data.prompt,
                     layerDContext,
+                    layerXDataContext,
+                    generationMode: parsed.data.generationMode,
                     attachmentMeta,
                     templateId: parsed.data.templateId ?? null,
                     formatHint: (parsed.data.formatHint ?? null) as import("@andy-code-cat/contracts").FormatHint | null,

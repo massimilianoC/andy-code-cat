@@ -15,7 +15,7 @@ import { AddUrlReference } from "../../../application/use-cases/AddUrlReference"
 import { ListProjectAssets } from "../../../application/use-cases/ListProjectAssets";
 import { DeleteProjectAsset } from "../../../application/use-cases/DeleteProjectAsset";
 import type { RequestWithContext } from "../types";
-import { generateProjectImageSchema, regenerateMediaByKeySchema, regenerateStockProjectImageSchema, suggestProjectImageIdeaSchema, type ProjectAssetDto } from "@andy-code-cat/contracts";
+import { generateProjectImageSchema, regenerateMediaByKeySchema, regenerateStockProjectImageSchema, suggestProjectImageIdeaSchema, type AssetEnrichmentTraceDto, type DatasetFactsEnvelopeDto, type DatasetTableProfileDto, type ProjectAssetDto } from "@andy-code-cat/contracts";
 import { GenerateProjectImage } from "../../../application/use-cases/GenerateProjectImage";
 import { GetProjectAiAnalytics } from "../../../application/use-cases/GetProjectAiAnalytics";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
@@ -33,6 +33,33 @@ import { buildStockProviderOrder, resolveMediaProviderPolicy } from "../../../ap
 import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
 import { RegenerateMediaByKey } from "../../../application/use-cases/RegenerateMediaByKey";
 import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
+import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
+import { LogBackgroundTask } from "../../../application/use-cases/LogBackgroundTask";
+import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
+import { SetBrandAsset } from "../../../application/use-cases/SetBrandAsset";
+import { ListBrandAssets } from "../../../application/use-cases/ListBrandAssets";
+import { DeleteBrandAsset } from "../../../application/use-cases/DeleteBrandAsset";
+import { createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
+import type { BrandAsset } from "../../../domain/entities/BrandAsset";
+import type { BrandAssetDto } from "@andy-code-cat/contracts";
+
+function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
+    const downloadUrl = asset.valueType === "asset_ref"
+        ? (asset.scope === "platform"
+            ? `/v1/admin/brand-assets/${asset.id}/download`
+            : asset.scope === "user"
+            ? `/v1/users/me/brand-assets/${asset.id}/download`
+            : `/v1/projects/${asset.projectId}/brand-assets/${asset.id}/download`)
+        : undefined;
+    return {
+        id: asset.id, scope: asset.scope, ownerUserId: asset.ownerUserId, projectId: asset.projectId,
+        role: asset.role, customRoleLabel: asset.customRoleLabel, policy: asset.policy,
+        valueType: asset.valueType, originalName: asset.originalName, mimeType: asset.mimeType,
+        fileSize: asset.fileSize, textValue: asset.textValue, description: asset.description,
+        isActive: asset.isActive, priority: asset.priority, downloadUrl,
+        createdAt: asset.createdAt.toISOString(), updatedAt: asset.updatedAt.toISOString(),
+    };
+}
 
 // In-memory storage: the use case writes to disk itself after validation.
 const upload = multer({
@@ -95,6 +122,15 @@ function toDto(asset: {
             layoutStyle: string | null; aspectRatioLabel: string | null;
             suggestedWebUse: string[]; suggestedStyleRole: string;
         } | null;
+        structuredData?: {
+            dataset?: {
+                sourceFormat: "csv" | "xlsx" | "json" | "xml" | "sql";
+                tables: import("../../../domain/entities/AssetEnrichmentTrace").DatasetTableProfile[];
+                facts: import("../../../domain/entities/AssetEnrichmentTrace").DatasetFactsEnvelope;
+                limitations?: string[];
+                llmAppendix?: import("../../../domain/entities/AssetEnrichmentTrace").DatasetLlmAppendix;
+            };
+        } | null;
     } | null;
     createdAt: Date;
 }): ProjectAssetDto {
@@ -135,7 +171,16 @@ function toDto(asset: {
             distilledColors: asset.enrichmentTrace.distilledColors,
             documentBrief: asset.enrichmentTrace.documentBrief ?? null,
             designSignals: asset.enrichmentTrace.designSignals ?? null,
-        } : undefined,
+            dataset: asset.enrichmentTrace.structuredData?.dataset
+                ? {
+                    sourceFormat: asset.enrichmentTrace.structuredData.dataset.sourceFormat,
+                    tables: asset.enrichmentTrace.structuredData.dataset.tables as DatasetTableProfileDto[],
+                    facts: asset.enrichmentTrace.structuredData.dataset.facts as DatasetFactsEnvelopeDto,
+                    limitations: asset.enrichmentTrace.structuredData.dataset.limitations,
+                    llmAppendix: asset.enrichmentTrace.structuredData.dataset.llmAppendix,
+                }
+                : null,
+        } as AssetEnrichmentTraceDto : undefined,
         createdAt: asset.createdAt.toISOString(),
     };
 }
@@ -156,6 +201,8 @@ export function createProjectAssetRoutes(): Router {
     const listAssets = new ListProjectAssets(assetRepository);
     const deleteAsset = new DeleteProjectAsset(assetRepository, storage);
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const conversationRepository = new MongoConversationRepository();
+    const logBackgroundTask = new LogBackgroundTask(conversationRepository);
     const serviceKeyRepository = new MongoServiceApiKeyRepository();
     const promptConfigRepository = new MongoLlmPromptConfigRepository();
     const platformConfigRepository = new MongoPlatformConfigRepository();
@@ -200,6 +247,10 @@ export function createProjectAssetRoutes(): Router {
     );
     const mediaResolutionTraceRepository = new MongoMediaResolutionTraceRepository();
     const regenerateMediaByKey = new RegenerateMediaByKey(mediaResolutionTraceRepository, regenerateStockProjectImage);
+    const brandAssetRepo = new MongoBrandAssetRepository();
+    const setBrandAsset = new SetBrandAsset(brandAssetRepo, assetRepository);
+    const listBrandAssets = new ListBrandAssets(brandAssetRepo);
+    const deleteBrandAsset = new DeleteBrandAsset(brandAssetRepo, storage);
 
     router.use(authMiddleware);
 
@@ -271,18 +322,92 @@ export function createProjectAssetRoutes(): Router {
                 // Fire-and-forget enrichment — never blocks the HTTP response
                 if (env.enrichmentEnabled) {
                     const fileBuffer = req.file.buffer;
+                    const conversationId = typeof req.body["conversationId"] === "string" ? req.body["conversationId"].trim() : "";
+                    const messageId = typeof req.body["messageId"] === "string" ? req.body["messageId"].trim() : "";
                     setImmediate(async () => {
+                        let backgroundTaskId: string | undefined;
                         try {
                             const platformConfig = await platformConfigRepository.get().catch(() => null);
+                            if (conversationId && messageId) {
+                                const task = await logBackgroundTask.execute({
+                                    conversationId,
+                                    projectId: req.sandbox!.projectId,
+                                    messageId,
+                                    type: "asset_enrichment",
+                                    pipelineProfile: "attachment_enrichment",
+                                    input: {
+                                        assetId: asset.id,
+                                        originalName: asset.originalName,
+                                        mimeType: asset.mimeType,
+                                    },
+                                    status: "running",
+                                }).catch(() => null);
+                                backgroundTaskId = task?.id;
+                            }
                             const pipeline = new AssetEnrichmentPipeline();
-                            await pipeline.enrich({
+                            const trace = await pipeline.enrich({
                                 asset,
                                 fileBuffer,
                                 getLlmCatalog,
                                 assetRepository,
+                                promptExecutionLogRepository,
+                                sourceContext: {
+                                    conversationId: conversationId || undefined,
+                                    messageId: messageId || undefined,
+                                    backgroundTaskId,
+                                },
                                 platformConfig,
                             });
+                            if (conversationId && messageId && backgroundTaskId) {
+                                await conversationRepository.updateBackgroundTask(
+                                    conversationId,
+                                    messageId,
+                                    backgroundTaskId,
+                                    {
+                                        status: "completed",
+                                        completedAt: new Date(),
+                                        output: {
+                                            assetId: asset.id,
+                                            enrichmentStatus: trace.provenance.enrichmentStatus,
+                                            parserName: trace.provenance.parserName,
+                                            llmProvider: trace.provenance.llmProvider,
+                                            llmModel: trace.provenance.llmModel,
+                                        },
+                                        tokenUsage: trace.provenance.llmTokensUsed != null ? {
+                                            promptTokens: 0,
+                                            completionTokens: 0,
+                                            totalTokens: trace.provenance.llmTokensUsed,
+                                        } : undefined,
+                                        costEstimate: trace.provenance.llmCostEur != null ? {
+                                            currency: "EUR",
+                                            amount: trace.provenance.llmCostEur,
+                                            breakdown: {
+                                                tokenCost: trace.provenance.llmCostEur,
+                                                imageCost: 0,
+                                                videoCost: 0,
+                                            },
+                                            unitRates: {
+                                                textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
+                                                imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
+                                                videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
+                                            },
+                                        } : undefined,
+                                    },
+                                ).catch(() => {});
+                            }
                         } catch (err) {
+                            if (conversationId && messageId && backgroundTaskId) {
+                                await conversationRepository.updateBackgroundTask(
+                                    conversationId,
+                                    messageId,
+                                    backgroundTaskId,
+                                    {
+                                        status: "failed",
+                                        completedAt: new Date(),
+                                        error: err instanceof Error ? err.message : String(err),
+                                    },
+                                ).catch(() => {});
+                            }
                             console.error(`[upload] enrichment pipeline failed for asset ${asset.id}:`, err);
                         }
                     });
@@ -460,7 +585,7 @@ export function createProjectAssetRoutes(): Router {
                     targetSelector: input.targetSelector,
                     targetMode: input.targetMode,
                     scope: input.scope,
-                    allowFallback: false,
+                    allowFallback: true,
                 });
 
                 res.status(201).json({
@@ -651,6 +776,173 @@ export function createProjectAssetRoutes(): Router {
                 stream.pipe(res);
             } catch (error) {
                 next(error);
+            }
+        }
+    );
+
+    // ── Project Brand Assets ────────────────────────────────────────────────────
+
+    /** GET /projects/:projectId/brand-assets */
+    router.get("/projects/:projectId/brand-assets", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        try {
+            const assets = await listBrandAssets.execute({
+                scope: "project",
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+            });
+            res.json({ assets: assets.map(toBrandAssetDto) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** POST /projects/:projectId/brand-assets — text / color / url value */
+    router.post("/projects/:projectId/brand-assets", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        try {
+            const body = createBrandAssetTextSchema.parse(req.body);
+            const asset = await setBrandAsset.createText({
+                scope: "project",
+                ownerUserId: req.auth!.userId,
+                projectId: req.sandbox!.projectId,
+                ...body,
+            });
+            res.status(201).json({ asset: toBrandAssetDto(asset) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** POST /projects/:projectId/brand-assets/upload — multipart file */
+    router.post(
+        "/projects/:projectId/brand-assets/upload",
+        sandboxMiddleware,
+        upload.single("file"),
+        async (req: RequestWithContext, res, next) => {
+            try {
+                if (!req.file) {
+                    res.status(400).json({ error: "No file uploaded" });
+                    return;
+                }
+                const role = createBrandAssetTextSchema.shape.role.parse(req.body["role"]);
+                const policy = createBrandAssetTextSchema.shape.policy.parse(req.body["policy"] ?? "prefer");
+                const { randomUUID } = await import("crypto");
+                const pathMod = await import("path");
+                const safeExt = pathMod.extname(req.file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, "");
+                const safeName = pathMod.basename(req.file.originalname, pathMod.extname(req.file.originalname))
+                    .toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 60);
+                const storedFilename = `${randomUUID()}-${safeName}${safeExt}`;
+                await storage.saveUpload(req.auth!.userId, req.sandbox!.projectId, storedFilename, req.file.buffer, req.file.mimetype);
+                const asset = await setBrandAsset.createFile({
+                    scope: "project",
+                    ownerUserId: req.auth!.userId,
+                    projectId: req.sandbox!.projectId,
+                    role,
+                    policy,
+                    customRoleLabel: typeof req.body["customRoleLabel"] === "string" ? req.body["customRoleLabel"] : undefined,
+                    description: typeof req.body["description"] === "string" ? req.body["description"] : undefined,
+                    isActive: req.body["isActive"] !== "false",
+                    priority: req.body["priority"] ? Number(req.body["priority"]) : 0,
+                    storedFilename,
+                    originalName: req.file.originalname,
+                    mimeType: req.file.mimetype,
+                    fileSize: req.file.size,
+                });
+                res.status(201).json({ asset: toBrandAssetDto(asset) });
+            } catch (err) {
+                next(err);
+            }
+        }
+    );
+
+    /** POST /projects/:projectId/brand-assets/promote — promote project asset to project brand */
+    router.post("/projects/:projectId/brand-assets/promote", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        try {
+            const body = promoteBrandAssetSchema.parse(req.body);
+            const asset = await setBrandAsset.promote({
+                scope: "project",
+                ownerUserId: req.auth!.userId,
+                projectId: req.sandbox!.projectId,
+                role: body.role,
+                customRoleLabel: body.customRoleLabel,
+                policy: body.policy,
+                description: body.description,
+                isActive: body.isActive,
+                priority: body.priority,
+                sourceAssetId: body.sourceAssetId,
+                sourceProjectId: req.sandbox!.projectId,
+                sourceUserId: req.auth!.userId,
+            });
+            res.status(201).json({ asset: toBrandAssetDto(asset) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** PATCH /projects/:projectId/brand-assets/:id */
+    router.patch("/projects/:projectId/brand-assets/:id", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        try {
+            const id = req.params.id;
+            if (!id) { res.status(400).json({ error: "Missing id" }); return; }
+            const existing = await brandAssetRepo.findById(id);
+            if (!existing || existing.scope !== "project"
+                || existing.projectId !== req.sandbox!.projectId
+                || existing.ownerUserId !== req.auth!.userId) {
+                res.status(404).json({ error: "Brand asset not found" });
+                return;
+            }
+            const patch = updateBrandAssetSchema.parse(req.body);
+            const asset = await brandAssetRepo.update(id, patch);
+            res.json({ asset: toBrandAssetDto(asset) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** DELETE /projects/:projectId/brand-assets/:id */
+    router.delete("/projects/:projectId/brand-assets/:id", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+        try {
+            const id = req.params.id;
+            if (!id) { res.status(400).json({ error: "Missing id" }); return; }
+            const existing = await brandAssetRepo.findById(id);
+            if (!existing || existing.scope !== "project"
+                || existing.projectId !== req.sandbox!.projectId
+                || existing.ownerUserId !== req.auth!.userId) {
+                res.status(404).json({ error: "Brand asset not found" });
+                return;
+            }
+            const deleted = await deleteBrandAsset.execute(id, { scopeFolder: req.sandbox!.projectId });
+            res.json({ ok: deleted });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** GET /projects/:projectId/brand-assets/:id/download */
+    router.get(
+        "/projects/:projectId/brand-assets/:id/download",
+        sandboxMiddleware,
+        async (req: RequestWithContext, res, next) => {
+            try {
+                const id = req.params.id;
+                if (!id) { res.status(400).json({ error: "Missing id" }); return; }
+                const asset = await brandAssetRepo.findById(id);
+                if (!asset || asset.scope !== "project"
+                    || asset.projectId !== req.sandbox!.projectId
+                    || asset.valueType !== "asset_ref" || !asset.storedFilename) {
+                    res.status(404).json({ error: "Asset not found or not downloadable" });
+                    return;
+                }
+                const filePath = storage.uploadFilePath(req.auth!.userId, req.sandbox!.projectId, asset.storedFilename);
+                const exists = await storage.fileExists(filePath);
+                if (!exists) { res.status(410).json({ error: "File no longer available" }); return; }
+                const actualSize = await storage.fileSize(filePath).catch(() => asset.fileSize ?? 0);
+                res.setHeader("Content-Type", asset.mimeType ?? "application/octet-stream");
+                res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(asset.originalName ?? asset.storedFilename)}"`);
+                if (actualSize > 0) res.setHeader("Content-Length", actualSize);
+                const stream = await storage.createReadStream(filePath);
+                stream.pipe(res);
+            } catch (err) {
+                next(err);
             }
         }
     );

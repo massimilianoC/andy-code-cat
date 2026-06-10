@@ -64,6 +64,7 @@ export interface ICostTransactionRepository {
     listByUser(userId: string, opts: PageOpts): Promise<PagedResult<CostTransaction>>;
     listAll(filter: AdminCostFilter, opts: PageOpts): Promise<PagedResult<CostTransaction>>;
 
+    summarizeProjectsByUser(userId: string): Promise<Record<string, number>>;
     topProjectsByUser(userId: string, limit?: number): Promise<Array<{ projectId: string; totalEur: number }>>;
     topProjectsPlatform(fromDate?: Date, toDate?: Date, limit?: number): Promise<Array<{ projectId: string; totalEur: number }>>;
 

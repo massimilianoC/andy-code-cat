@@ -59,16 +59,43 @@ export const FORMAT_HINT_RULES: Record<FormatHint, { triggerExamples: string[]; 
             "COLOUR: brand-consistent, min 4.5:1 contrast. " +
             "OUTPUT: suitable for both screen and PDF export.",
     },
+    analytics_dashboard: {
+        triggerExamples: ["dashboard", "kpi", "analytics", "metriche", "dataset", "csv", "json", "xlsx", "sql", "xml"],
+        canonicalRules:
+            "LAYOUT: data-dashboard interface with a clear analytical hierarchy: top KPI row, filter controls, chart area, grounded table browser, and insights panel. " +
+            "DATA RULES: all numerical claims must be backed by deterministic runtime facts, not invented by the model. " +
+            "UX: support exploration, filtering, and question-driven analysis with visible source dimensions and metric labels.",
+    },
 };
 
 /**
  * Builds the template list string injected into the classifier system prompt.
  */
 export function buildTemplateListBlock(
-    templates: Array<{ id: string; label: string; hint?: string }>,
+    templates: Array<{
+        id: string;
+        label: string;
+        hint?: string;
+        category?: string;
+        tags?: string[];
+        pageModel?: string;
+        sectionModel?: string;
+        printReady?: boolean;
+        briefTemplate?: string;
+        styleTemplate?: string;
+    }>,
 ): string {
     if (templates.length === 0) return "(no templates available)";
     return templates
-        .map((t) => `- id: "${t.id}" | label: "${t.label}" | hint: "${t.hint ?? ""}"`)
+        .map((t) => [
+            `- id: "${t.id}"`,
+            `label: "${t.label}"`,
+            `category: "${t.category ?? "uncategorized"}"`,
+            `tags: "${(t.tags ?? []).join(", ")}"`,
+            `output: "${t.pageModel ?? "unknown"} / ${t.sectionModel ?? "unknown"}${t.printReady ? " / print-ready" : ""}"`,
+            `hint: "${t.hint ?? ""}"`,
+            `brief: "${(t.briefTemplate ?? "").replace(/\s+/g, " ").slice(0, 360)}"`,
+            `style: "${(t.styleTemplate ?? "").replace(/\s+/g, " ").slice(0, 220)}"`,
+        ].join(" | "))
         .join("\n");
 }

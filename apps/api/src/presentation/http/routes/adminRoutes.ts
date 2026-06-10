@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { adminDraftProjectTemplateSchema, adminLlmModelPatchSchema, adminProjectPresetPatchSchema, adminSeedLlmRegistrySchema, adminSeedPresetRegistrySchema } from "@andy-code-cat/contracts";
+import { adminDraftProjectTemplateSchema, adminLlmModelPatchSchema, adminProjectPresetPatchSchema, adminSeedLlmRegistrySchema, adminSeedPresetRegistrySchema, createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { requireSuperAdmin } from "../middlewares/requireSuperAdmin";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
@@ -36,6 +36,16 @@ import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoPr
 import { GetAdminAiAnalytics, GetProjectAiAnalytics } from "../../../application/use-cases/GetProjectAiAnalytics";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
 import { CryptoService } from "../../../infra/security/CryptoService";
+import multer from "multer";
+import { randomUUID } from "crypto";
+import path from "path";
+import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
+import { SetBrandAsset } from "../../../application/use-cases/SetBrandAsset";
+import { ListBrandAssets } from "../../../application/use-cases/ListBrandAssets";
+import { DeleteBrandAsset } from "../../../application/use-cases/DeleteBrandAsset";
+import { getFileStorage } from "../../../infra/storage/StorageFactory";
+import type { BrandAsset } from "../../../domain/entities/BrandAsset";
+import type { BrandAssetDto } from "@andy-code-cat/contracts";
 import type { RequestWithContext } from "../types";
 
 /**
@@ -68,6 +78,36 @@ function getRequiredRouteParam(value: string | undefined, name: string): string 
     return value;
 }
 
+function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
+    const downloadUrl = asset.valueType === "asset_ref"
+        ? (asset.scope === "platform"
+            ? `/v1/admin/brand-assets/${asset.id}/download`
+            : asset.scope === "user"
+            ? `/v1/users/me/brand-assets/${asset.id}/download`
+            : `/v1/projects/${asset.projectId}/brand-assets/${asset.id}/download`)
+        : undefined;
+    return {
+        id: asset.id,
+        scope: asset.scope,
+        ownerUserId: asset.ownerUserId,
+        projectId: asset.projectId,
+        role: asset.role,
+        customRoleLabel: asset.customRoleLabel,
+        policy: asset.policy,
+        valueType: asset.valueType,
+        originalName: asset.originalName,
+        mimeType: asset.mimeType,
+        fileSize: asset.fileSize,
+        textValue: asset.textValue,
+        description: asset.description,
+        isActive: asset.isActive,
+        priority: asset.priority,
+        downloadUrl,
+        createdAt: asset.createdAt.toISOString(),
+        updatedAt: asset.updatedAt.toISOString(),
+    };
+}
+
 export function createAdminRoutes(): Router {
     const router = Router();
 
@@ -82,6 +122,12 @@ export function createAdminRoutes(): Router {
     const promptExecutionLogRepo = new MongoPromptExecutionLogRepository();
     const assetRepo = new MongoProjectAssetRepository();
     const serviceKeyRepo = new MongoServiceApiKeyRepository();
+    const brandAssetRepo = new MongoBrandAssetRepository();
+    const brandStorage = getFileStorage();
+    const brandUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+    const setBrandAsset = new SetBrandAsset(brandAssetRepo, assetRepo);
+    const listBrandAssets = new ListBrandAssets(brandAssetRepo);
+    const deleteBrandAsset = new DeleteBrandAsset(brandAssetRepo, brandStorage);
 
     // Use-cases
     const listUsers = new ListUsers(userRepo);
@@ -708,6 +754,145 @@ export function createAdminRoutes(): Router {
             const id = getRequiredRouteParam(req.params.id, "id");
             await serviceKeyRepo.delete(id);
             res.json({ ok: true });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // ── Platform Brand Assets ───────────────────────────────────────────────────
+
+    /** GET /admin/brand-assets */
+    router.get("/admin/brand-assets", async (_req, res, next) => {
+        try {
+            const assets = await listBrandAssets.execute({ scope: "platform" });
+            res.json({ assets: assets.map(toBrandAssetDto) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** POST /admin/brand-assets — text / color / url value */
+    router.post("/admin/brand-assets", async (req: RequestWithContext, res, next) => {
+        try {
+            const body = createBrandAssetTextSchema.parse(req.body);
+            const asset = await setBrandAsset.createText({ scope: "platform", ...body });
+            res.status(201).json({ asset: toBrandAssetDto(asset) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** POST /admin/brand-assets/upload — multipart file */
+    router.post("/admin/brand-assets/upload", brandUpload.single("file"), async (req: RequestWithContext, res, next) => {
+        try {
+            if (!req.file) {
+                res.status(400).json({ error: "No file uploaded" });
+                return;
+            }
+            const role = createBrandAssetTextSchema.shape.role.parse(req.body["role"]);
+            const policy = createBrandAssetTextSchema.shape.policy.parse(req.body["policy"] ?? "prefer");
+            const safeExt = path.extname(req.file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, "");
+            const safeName = path.basename(req.file.originalname, path.extname(req.file.originalname))
+                .toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 60);
+            const storedFilename = `${randomUUID()}-${safeName}${safeExt}`;
+            await brandStorage.saveUpload("platform", "brand", storedFilename, req.file.buffer, req.file.mimetype);
+            const asset = await setBrandAsset.createFile({
+                scope: "platform",
+                role,
+                policy,
+                customRoleLabel: typeof req.body["customRoleLabel"] === "string" ? req.body["customRoleLabel"] : undefined,
+                description: typeof req.body["description"] === "string" ? req.body["description"] : undefined,
+                isActive: req.body["isActive"] !== "false",
+                priority: req.body["priority"] ? Number(req.body["priority"]) : 0,
+                storedFilename,
+                originalName: req.file.originalname,
+                mimeType: req.file.mimetype,
+                fileSize: req.file.size,
+            });
+            res.status(201).json({ asset: toBrandAssetDto(asset) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** POST /admin/brand-assets/promote — promote any project asset to platform brand */
+    router.post("/admin/brand-assets/promote", async (req: RequestWithContext, res, next) => {
+        try {
+            const body = promoteBrandAssetSchema.parse(req.body);
+            const source = await assetRepo.findByIdPublic(body.sourceAssetId);
+            if (!source) {
+                res.status(404).json({ error: "Source asset not found" });
+                return;
+            }
+            if (!source.storedFilename) {
+                res.status(422).json({ error: "Source asset has no stored file" });
+                return;
+            }
+            const asset = await brandAssetRepo.create({
+                scope: "platform",
+                role: body.role,
+                customRoleLabel: body.customRoleLabel,
+                policy: body.policy,
+                valueType: "asset_ref",
+                storedFilename: source.storedFilename,
+                originalName: source.originalName,
+                mimeType: source.mimeType,
+                fileSize: source.fileSize,
+                promotedFromAssetId: source.id,
+                description: body.description,
+                isActive: body.isActive,
+                priority: body.priority,
+            });
+            res.status(201).json({ asset: toBrandAssetDto(asset) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** PATCH /admin/brand-assets/:id */
+    router.patch("/admin/brand-assets/:id", async (req: RequestWithContext, res, next) => {
+        try {
+            const id = getRequiredRouteParam(req.params.id, "id");
+            const patch = updateBrandAssetSchema.parse(req.body);
+            const asset = await brandAssetRepo.update(id, patch);
+            res.json({ asset: toBrandAssetDto(asset) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** DELETE /admin/brand-assets/:id */
+    router.delete("/admin/brand-assets/:id", async (req: RequestWithContext, res, next) => {
+        try {
+            const id = getRequiredRouteParam(req.params.id, "id");
+            const deleted = await deleteBrandAsset.execute(id, { scopeFolder: "brand" });
+            res.json({ ok: deleted });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /** GET /admin/brand-assets/:id/download */
+    router.get("/admin/brand-assets/:id/download", async (req: RequestWithContext, res, next) => {
+        try {
+            const id = getRequiredRouteParam(req.params.id, "id");
+            const asset = await brandAssetRepo.findById(id);
+            if (!asset || asset.scope !== "platform" || asset.valueType !== "asset_ref" || !asset.storedFilename) {
+                res.status(404).json({ error: "Asset not found or not downloadable" });
+                return;
+            }
+            const filePath = brandStorage.uploadFilePath("platform", "brand", asset.storedFilename);
+            const exists = await brandStorage.fileExists(filePath);
+            if (!exists) {
+                res.status(410).json({ error: "File no longer available" });
+                return;
+            }
+            const actualSize = await brandStorage.fileSize(filePath).catch(() => asset.fileSize ?? 0);
+            res.setHeader("Content-Type", asset.mimeType ?? "application/octet-stream");
+            res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(asset.originalName ?? asset.storedFilename)}"`);
+            if (actualSize > 0) res.setHeader("Content-Length", actualSize);
+            const stream = await brandStorage.createReadStream(filePath);
+            stream.pipe(res);
         } catch (err) {
             next(err);
         }

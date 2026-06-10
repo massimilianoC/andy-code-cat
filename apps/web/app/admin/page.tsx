@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import { getToken } from "@/lib/token-store";
 import { getAdminAiAnalytics, getAdminStats, type PlatformStatsDto } from "@/lib/api/admin";
 import type { AiUsageAnalyticsDto } from "@/lib/api/assets";
@@ -111,6 +112,7 @@ function QuickLink({ href, label, description }: { href: string; label: string; 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
+    const { t } = useTranslation();
     const router = useRouter();
     const [stats, setStats] = useState<PlatformStatsDto | null>(null);
     const [aiAnalytics, setAiAnalytics] = useState<AiUsageAnalyticsDto | null>(null);
@@ -211,6 +213,25 @@ export default function AdminDashboardPage() {
                     accentColor="#818cf8"
                     sub="all users combined"
                 />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <h2 style={{ fontSize: "0.8rem", fontWeight: 600, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                    {t("admin.experimental.title")}
+                </h2>
+                <div
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                        gap: "12px",
+                    }}
+                >
+                    <QuickLink
+                        href="/admin/experimental/data-dashboard"
+                        label={t("admin.experimental.dataDashboardLabel")}
+                        description={t("admin.experimental.dataDashboardDescription")}
+                    />
+                </div>
             </div>
 
             <AiUsageSummaryPanel

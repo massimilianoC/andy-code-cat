@@ -287,21 +287,29 @@ async function resolvePreviewAssetUrls(input: {
     return { html, css };
 }
 
-function sanitizeMediaElementPayload(element: SelectedFocusElement) {
-    const safeUrl = (value?: string) => {
-        const trimmed = value?.trim();
-        if (!trimmed || trimmed.startsWith("data:")) return undefined;
-        return trimmed.length > 1500 ? trimmed.slice(0, 1500) : trimmed;
-    };
+function sanitizeRuntimeMediaUrl(value?: string): string | undefined {
+    const trimmed = value?.trim();
+    if (!trimmed || /^data:/i.test(trimmed) || /^asset:\/\/media\//i.test(trimmed)) {
+        return undefined;
+    }
 
+    const scheme = trimmed.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+    if (scheme && !["http", "https", "blob"].includes(scheme)) {
+        return undefined;
+    }
+
+    return trimmed.length > 1500 ? trimmed.slice(0, 1500) : trimmed;
+}
+
+function sanitizeMediaElementPayload(element: SelectedFocusElement) {
     return {
         stableNodeId: element.stableNodeId,
         selector: element.selector,
         tag: element.tag,
         textSnippet: clipFocusValue(element.textSnippet, 500),
-        currentSrc: safeUrl(element.currentSrc),
+        currentSrc: sanitizeRuntimeMediaUrl(element.currentSrc),
         currentAlt: clipFocusValue(element.currentAlt, 300),
-        backgroundImageUrl: safeUrl(element.backgroundImageUrl),
+        backgroundImageUrl: sanitizeRuntimeMediaUrl(element.backgroundImageUrl),
         mediaMode: element.mediaMode,
         originalWidth: element.originalWidth,
         originalHeight: element.originalHeight,
@@ -323,7 +331,7 @@ function inferStockImageQuery(element: SelectedFocusElement, fallbackPrompt: str
         }
     }
 
-    const src = element.currentSrc || element.backgroundImageUrl || "";
+    const src = sanitizeRuntimeMediaUrl(element.currentSrc) || sanitizeRuntimeMediaUrl(element.backgroundImageUrl) || "";
     try {
         const url = new URL(src);
         if (url.hostname.includes("loremflickr.com")) {
@@ -384,9 +392,9 @@ function sanitizeSelectedElementForFocus(
 
     const textSnippet = clipFocusValue(element.textSnippet, MAX_FOCUS_TEXT_LEN);
     const outerHtml = clipFocusValue(element.outerHtml, MAX_FOCUS_OUTER_HTML_LEN);
-    const currentSrc = clipFocusValue(element.currentSrc, 1500);
+    const currentSrc = sanitizeRuntimeMediaUrl(clipFocusValue(element.currentSrc, 1500));
     const currentAlt = clipFocusValue(element.currentAlt, 300);
-    const backgroundImageUrl = clipFocusValue(element.backgroundImageUrl, 1500);
+    const backgroundImageUrl = sanitizeRuntimeMediaUrl(clipFocusValue(element.backgroundImageUrl, 1500));
     const mediaMode = element.mediaMode === "foreground" || element.mediaMode === "background"
         ? element.mediaMode
         : ((currentSrc || backgroundImageUrl) ? "none" : undefined);
@@ -519,6 +527,15 @@ export default function WorkspacePage() {
     const preferredProviderRef = useRef(searchParams?.get("preferredProvider") ?? "");
     const preferredModelRef = useRef(searchParams?.get("preferredModel") ?? "");
     const preferredModelAppliedRef = useRef(false);
+    // Track whether we arrived from the Zero Effort / Vibe pipeline.
+    // True when a sessionStorage handoff key exists for the conv param (new path)
+    // or when an autoPrompt URL param is present (legacy/fallback path).
+    const fromZeroEffortRef = useRef(!!(searchParams?.get("conv") && (
+        typeof sessionStorage !== "undefined"
+            ? !!sessionStorage.getItem(`pipeline_handoff_${searchParams.get("conv")}`)
+            : false
+    ) || searchParams?.get("autoPrompt")));
+    const projectAssetsBootstrappedRef = useRef(false);
     // voiceListening, voiceSupported, voiceError are provided by useSpeechDictation below
     const [chatAttachedFiles, setChatAttachedFiles] = useState<ChatAttachedFile[]>([]);
     const [isDragOverChat, setIsDragOverChat] = useState(false);
@@ -1009,14 +1026,29 @@ export default function WorkspacePage() {
             .catch(() => undefined);
     }, [token, loadProjectConversation, projectId]);
 
-    // ── Zero Effort auto-send: read param and pre-fill prompt ─────────────────
+    // ── Zero Effort auto-send: read prompt from sessionStorage (primary) or URL param (fallback) ──
     useEffect(() => {
+        const convId = searchParams?.get("conv");
+        // Primary path: sessionStorage handoff (avoids URI-length limits and encoding errors).
+        const handoffKey = convId ? `pipeline_handoff_${convId}` : null;
+        const storedPrompt = handoffKey ? sessionStorage.getItem(handoffKey) : null;
+        if (storedPrompt) {
+            sessionStorage.removeItem(handoffKey!);
+            setPrompt(storedPrompt);
+            setAutoPromptPending(true);
+            return;
+        }
+        // Fallback: legacy URL param (short prompts / direct deep-links).
         const rawAutoPrompt = searchParams?.get("autoPrompt");
         if (!rawAutoPrompt) return;
-        const decoded = decodeURIComponent(rawAutoPrompt);
-        if (!decoded.trim()) return;
-        setPrompt(decoded);
-        setAutoPromptPending(true);
+        try {
+            const decoded = decodeURIComponent(rawAutoPrompt);
+            if (!decoded.trim()) return;
+            setPrompt(decoded);
+            setAutoPromptPending(true);
+        } catch {
+            // Malformed URI — skip silently, do not crash the page.
+        }
         // Remove the param so a page refresh does not re-trigger the auto-send.
         router.replace(`/workspace/${projectId}`, { scroll: false } as Parameters<typeof router.replace>[1]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1233,6 +1265,28 @@ export default function WorkspacePage() {
         void loadProjectAssets(token);
         void loadProjectAiUsage(token);
     }, [token, loadProjectAssets, loadProjectAiUsage]);
+
+    // Bridge Zero Effort project assets into the chat attachment strip on first load.
+    // Runs once after projectAssets settles so that files uploaded during the Vibe/ZE
+    // pipeline appear as active chat attachments without the user having to re-attach them.
+    useEffect(() => {
+        if (!fromZeroEffortRef.current) return;
+        if (projectAssetsBootstrappedRef.current) return;
+        if (projectAssets.length === 0) return;
+        projectAssetsBootstrappedRef.current = true;
+        const candidates = projectAssets.filter((a) => a.useInProject);
+        if (candidates.length === 0) return;
+        setChatAttachedFiles((prev) => {
+            if (prev.length > 0) return prev; // already populated, do not override
+            return candidates.map((a) => ({
+                id: a.id,
+                name: a.label ?? a.originalName,
+                mimeType: a.mimeType,
+                fileSize: a.fileSize,
+            }));
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectAssets]);
 
     useEffect(() => {
         if (!token || !editMode || !selectedElement) return;
@@ -3056,7 +3110,10 @@ export default function WorkspacePage() {
                         ? (existingAsset.useInProject
                             ? { asset: existingAsset }
                             : { asset: (await updateProjectAsset(tok, projectId, existingAsset.id, { useInProject: true })).asset })
-                        : await uploadProjectAsset(tok, projectId, file, { useInProject: true });
+                        : await uploadProjectAsset(tok, projectId, file, {
+                            useInProject: true,
+                            conversationId: activeConvId ?? undefined,
+                        });
                     const asset = uploadResult.asset;
 
                     if (uploadResult.warnings?.length) {
@@ -3084,7 +3141,7 @@ export default function WorkspacePage() {
         } finally {
             setAttachingFile(false);
         }
-    }, [addChatAttachedFile, addNotification, loadProjectAssets, projectAssets, projectId, t, updateNotification]);
+    }, [activeConvId, addChatAttachedFile, addNotification, loadProjectAssets, projectAssets, projectId, t, updateNotification]);
 
     const handleRemoveChatFile = useCallback((assetId: string) => {
         setChatAttachedFiles((prev) => prev.filter((f) => f.id !== assetId));
@@ -4507,6 +4564,15 @@ export default function WorkspacePage() {
                                             content={promptPreview.layers.d_documentContext || t("workspace.ui.layers.layerDEmpty")}
                                             empty={!promptPreview.layers.d_documentContext}
                                         />
+                                        {promptPreview.layers.x_dataContext && (
+                                            <PromptLayerBlock
+                                                label={t("workspace.ui.layers.layerX", "Layer X")}
+                                                badge={t("workspace.ui.layers.layerXBadge", "Grounded data")}
+                                                badgeColor="#38bdf8"
+                                                source={t("workspace.ui.layers.layerXSource", "Dataset runtime envelope")}
+                                                content={promptPreview.layers.x_dataContext}
+                                            />
+                                        )}
                                         {promptPreview.layers.e_prePromptTemplate && (
                                             <PromptLayerBlock
                                                 label={t("workspace.ui.layers.layerE")}
@@ -4577,7 +4643,7 @@ function getElementTargetType(
     return "html";
 }
 
-const TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"><\/script>';
+const TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com/3.4.17"><\/script>';
 const TAILWIND_CLASS_RE = /class=["'][^"']*(?:flex|grid|py-|px-|text-|bg-|font-|rounded|shadow|container|mx-auto)/i;
 // Match only LOCAL placeholder stylesheet/script references (not CDN URLs starting with http/https//)
 const EXTERNAL_CSS_RE = /<link[^>]+href=["'](?!https?:\/\/|\/\/)[^"']*\.css["'][^>]*\/?>/gi;

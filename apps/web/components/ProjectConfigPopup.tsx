@@ -33,6 +33,8 @@ import {
 } from "@/lib/api";
 import { getToken } from "@/lib/token-store";
 import { cn } from "@/lib/utils";
+import { DisclosurePanel } from "@/components/ui/disclosure-panel";
+import { BrandAssetsManager } from "@/components/brand/BrandAssetsManager";
 
 // ── Tag category → moodboard field mapping ────────────────────────────────────
 
@@ -577,6 +579,21 @@ export default function ProjectConfigPopup({
                                             </div>
                                         );
                                     })}
+
+                                    {/* Brand Identity — project scope */}
+                                    {token ? (
+                                        <DisclosurePanel
+                                            title="Brand Identity"
+                                            subtitle="Project-scoped brand assets injected into prompts"
+                                        >
+                                            <BrandAssetsManager
+                                                scope="project"
+                                                projectId={projectId}
+                                                token={token}
+                                                allowFileUpload={false}
+                                            />
+                                        </DisclosurePanel>
+                                    ) : null}
                                 </div>
                             </ScrollArea>
 

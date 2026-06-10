@@ -1,4 +1,4 @@
-import type { VibeClassifyResponse, AttachmentMeta, FormatHint } from "@andy-code-cat/contracts";
+import type { VibeClassifyResponse, AttachmentMeta, FormatHint, VibeGenerationMode, VibeResolvedMode } from "@andy-code-cat/contracts";
 import { PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
@@ -10,6 +10,7 @@ import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { ResourceType } from "../../domain/entities/CostTransaction";
+import { inferDeterministicVibeTemplate } from "../prompting/vibeTemplateIntent";
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -18,7 +19,6 @@ const CONFIDENCE_THRESHOLD = 0.65;
 const MAX_PROMPT_CHARS = 2000;
 
 const VALID_FORMAT_HINTS = new Set<string>(Object.keys(FORMAT_HINT_RULES));
-
 function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none"): string | undefined {
     if (authType === "none") return undefined;
     const key = env.providerApiKeys[providerKey];
@@ -40,6 +40,13 @@ Rules:
 - Set templateId only if confidence >= ${CONFIDENCE_THRESHOLD} against the template catalog below.
 - Set formatHint independently of templateId; it can be non-null even when templateId is null.
 - If neither signal is clear, return both as null.
+- Choose by intended output, not by surface wording. A request for something playable, game-like, arcade,
+  puzzle, challenge, score, controls, levels, HUD, character movement, or interaction loop MUST prefer
+  the most specific active game template. Use "videogame" for generic playable browser games; use
+  "seriousgame" only when learning/training is the main goal; use "game3d" for explicit 3D scenes/games;
+  use "vr-aframe" for explicit VR/immersive A-Frame requests; use "interactive-story" for branching stories.
+- Do not choose "landing" or "website" for a prompt that asks to build a playable experience, even if it
+  also mentions a title, brand, launch page, or presentation copy.
 - Return valid JSON only — no markdown fences, no extra text.
 
 Available templates:
@@ -53,6 +60,61 @@ function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[]): st
         .map((a) => `[${a.filename} — ${a.mimeType}, ${(a.sizeBytes / 1024).toFixed(0)} KB]`)
         .join(", ");
     return `${safePart}\n\nAttached files: ${metaPart}`;
+}
+
+function buildManualModeResponse(
+    mode: VibeResolvedMode,
+    projectId?: string,
+): VibeClassifyResponse {
+    if (mode === "data_dashboard") {
+        return {
+            templateId: "data-dashboard",
+            formatHint: "analytics_dashboard",
+            resolvedMode: "data_dashboard",
+            confidence: 1,
+            reasoning: "manual mode override: data dashboard",
+            skipped: false,
+            ...(projectId ? { projectId } : {}),
+        };
+    }
+
+    return {
+        templateId: null,
+        formatHint: null,
+        resolvedMode: "website",
+        confidence: 1,
+        reasoning: "manual mode override: website",
+        skipped: false,
+        ...(projectId ? { projectId } : {}),
+    };
+}
+
+function resolveModeAndTemplate(input: {
+    prompt: string;
+    attachmentMeta?: AttachmentMeta[];
+    requestedMode?: VibeGenerationMode;
+    parsedTemplateId: string | null;
+    parsedFormatHint: FormatHint | null;
+}): {
+    resolvedMode: VibeResolvedMode;
+    templateId: string | null;
+    formatHint: FormatHint | null;
+} {
+    if (input.requestedMode === "website") {
+        return { resolvedMode: "website", templateId: null, formatHint: null };
+    }
+
+    if (input.requestedMode === "data_dashboard") {
+        return { resolvedMode: "data_dashboard", templateId: "data-dashboard", formatHint: "analytics_dashboard" };
+    }
+
+    // Alpha guardrail: the dataset dashboard path must never auto-take over the
+    // standard Vibe flow. Only explicit/manual activation may select it.
+    return {
+        resolvedMode: "website",
+        templateId: input.parsedTemplateId,
+        formatHint: input.parsedFormatHint,
+    };
 }
 
 function parseClassifyResponse(raw: string): Omit<VibeClassifyResponse, "skipped"> {
@@ -80,6 +142,7 @@ function parseClassifyResponse(raw: string): Omit<VibeClassifyResponse, "skipped
 export interface VibeClassifyInput {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
+    generationMode?: VibeGenerationMode;
     /** Optional one-shot provider override for this pipeline run. */
     provider?: string;
     /** Optional one-shot model override for this pipeline run. */
@@ -98,6 +161,10 @@ export class VibeClassify {
 
     async execute(input: VibeClassifyInput): Promise<VibeClassifyResponse> {
         const echoProject = input.projectId ? { projectId: input.projectId } : {};
+        const deterministicTemplate = inferDeterministicVibeTemplate(input.prompt);
+        if (input.generationMode === "website" || input.generationMode === "data_dashboard") {
+            return buildManualModeResponse(input.generationMode, input.projectId);
+        }
         const platformConfig = await this.platformConfigRepository.get().catch(() => null);
         const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, "default", TASK_KEY);
 
@@ -106,8 +173,24 @@ export class VibeClassify {
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier disabled", skipped: true, ...echoProject };
         }
 
+        // Only expose active presets to the classifier — inactive ones (freerunner,
+        // data-dashboard) split probability mass and push game/generic requests below
+        // the confidence threshold, causing templateId to return null and Layer B to be empty.
         const templateListBlock = buildTemplateListBlock(
-            PRESET_CATALOG.map((p) => ({ id: p.id, label: p.label, hint: p.hint ?? "" })),
+            PRESET_CATALOG
+                .filter((p) => p.isActive !== false)
+                .map((p) => ({
+                    id: p.id,
+                    label: p.label,
+                    hint: p.hint ?? "",
+                    category: p.category,
+                    tags: p.tags,
+                    pageModel: p.outputSpec.pageModel,
+                    sectionModel: p.outputSpec.sectionModel,
+                    printReady: p.outputSpec.printReady,
+                    briefTemplate: p.briefTemplate,
+                    styleTemplate: p.styleTemplate,
+                })),
         );
 
         // If a custom systemTemplate is set in platform config, use it as template
@@ -131,6 +214,17 @@ export class VibeClassify {
             activeProviders[0];
 
         if (!selectedProviderCatalog) {
+            if (deterministicTemplate) {
+                return {
+                    templateId: deterministicTemplate.templateId,
+                    formatHint: null,
+                    resolvedMode: "website",
+                    confidence: 0.9,
+                    reasoning: `${deterministicTemplate.reasoning}; no active provider`,
+                    skipped: false,
+                    ...echoProject,
+                };
+            }
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "no active provider", skipped: true, ...echoProject };
         }
 
@@ -149,6 +243,17 @@ export class VibeClassify {
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
+            if (deterministicTemplate) {
+                return {
+                    templateId: deterministicTemplate.templateId,
+                    formatHint: null,
+                    resolvedMode: "website",
+                    confidence: 0.9,
+                    reasoning: `${deterministicTemplate.reasoning}; missing API key`,
+                    skipped: false,
+                    ...echoProject,
+                };
+            }
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "missing API key", skipped: true, ...echoProject };
         }
 
@@ -174,6 +279,17 @@ export class VibeClassify {
             });
 
             if (!response.ok) {
+                if (deterministicTemplate) {
+                    return {
+                        templateId: deterministicTemplate.templateId,
+                        formatHint: null,
+                        resolvedMode: "website",
+                        confidence: 0.9,
+                        reasoning: `${deterministicTemplate.reasoning}; provider error ${response.status}`,
+                        skipped: false,
+                        ...echoProject,
+                    };
+                }
                 return { templateId: null, formatHint: null, confidence: 0, reasoning: `provider error ${response.status}`, skipped: true, ...echoProject };
             }
 
@@ -231,18 +347,46 @@ export class VibeClassify {
                 });
             }
 
-            // Enforce confidence threshold for templateId
-            const templateId = parsed.confidence >= CONFIDENCE_THRESHOLD ? parsed.templateId : null;
+            // Enforce confidence threshold for templateId, then apply deterministic
+            // high-signal game/XR routing so playable prompts cannot collapse to web templates.
+            const thresholdTemplateId = parsed.confidence >= CONFIDENCE_THRESHOLD ? parsed.templateId : null;
+            const templateId = deterministicTemplate?.templateId ?? thresholdTemplateId;
+            const confidence = deterministicTemplate
+                ? Math.max(parsed.confidence, 0.9)
+                : parsed.confidence;
+            const reasoning = deterministicTemplate
+                ? `${deterministicTemplate.reasoning}; model: ${parsed.reasoning || "no reasoning"}`
+                : parsed.reasoning;
+
+            const resolution = resolveModeAndTemplate({
+                prompt: input.prompt,
+                attachmentMeta: input.attachmentMeta,
+                requestedMode: input.generationMode,
+                parsedTemplateId: templateId,
+                parsedFormatHint: parsed.formatHint,
+            });
 
             return {
-                templateId,
-                formatHint: parsed.formatHint,
-                confidence: parsed.confidence,
-                reasoning: parsed.reasoning,
+                templateId: resolution.templateId,
+                formatHint: resolution.formatHint,
+                resolvedMode: resolution.resolvedMode,
+                confidence,
+                reasoning,
                 skipped: false,
                 ...(input.projectId ? { projectId: input.projectId } : {}),
             };
         } catch {
+            if (deterministicTemplate) {
+                return {
+                    templateId: deterministicTemplate.templateId,
+                    formatHint: null,
+                    resolvedMode: "website",
+                    confidence: 0.9,
+                    reasoning: `${deterministicTemplate.reasoning}; classifier error`,
+                    skipped: false,
+                    ...echoProject,
+                };
+            }
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier error", skipped: true, ...echoProject };
         }
     }

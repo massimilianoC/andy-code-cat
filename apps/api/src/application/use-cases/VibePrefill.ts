@@ -1,4 +1,4 @@
-import type { VibePrefillResponse, AttachmentMeta, FormatHint, ZeroEffortDraft } from "@andy-code-cat/contracts";
+import type { DataDashboardDraft, VibeGenerationMode, VibePrefillResponse, AttachmentMeta, FormatHint, ZeroEffortDraft } from "@andy-code-cat/contracts";
 import { zeroEffortLaunchSchema } from "@andy-code-cat/contracts";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
@@ -9,6 +9,7 @@ import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
+import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ const VALID_STYLE_ATTRIBUTES = new Set([
     "minimal", "premium", "dark", "bright", "bold",
     "elegant", "corporate", "playful", "tech", "artisan", "luxury", "eco",
 ]);
+const VALID_VIS_STYLES = new Set(["executive", "operations", "exploratory", "monitoring"]);
 
 // ── Default draft ─────────────────────────────────────────────────────────────
 
@@ -55,23 +57,82 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 {
   "businessName": "brand or project name (string, required)",
   "siteType": "landing_page|portfolio|showcase|business_site (string, required)",
-  "primaryGoal": "full project description and main objective — at least 20 chars (string, required)",
-  "audience": "target audience description — at least 10 chars (string, required)",
+  "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
+  "audience": "target audience description — 120 to 500 chars when possible (string, required)",
   "tone": "communication tone, e.g. professional, playful (string or null)",
   "primaryCta": "main call-to-action button text (string or null)",
-  "styleHint": "visual style notes (string or null)",
+  "styleHint": "visual, UX, interaction, and production notes — 180 to 900 chars when useful (string or null)",
   "contactInfo": [{"key": "Email", "value": "..."}],
   "styleAttributes": ["minimal"]
 }
 
 Rules:
-- businessName: extract from the prompt; fall back to "Progetto" if unclear.
-- siteType: infer from context; default "landing_page".
-- primaryGoal: expand the user's text into a detailed project description.
-- audience: infer who the site is for; describe age group, interests, needs.
+- businessName: extract from the prompt; fall back to "Project" if unclear.
+- siteType: infer from context using only the allowed values; default "landing_page".
+- primaryGoal: do not summarize too aggressively. Produce a robust structured brief that can be injected
+  into downstream generation prompts. Include:
+  1. project intent and desired output,
+  2. selected template interpretation,
+  3. required sections/screens/states or content modules,
+  4. key functionality/interactions,
+  5. success criteria and constraints,
+  6. any assumptions needed to make the first generation complete.
+- audience: infer who uses or views the result; include needs, context, and expectations.
+- If a Detected template block is present, adapt the fields to that template's real output.
+  For example, a videogame template should produce a primaryGoal describing gameplay,
+  core loop, controls, win/loss conditions, HUD, and target device, not marketing copy.
+  Preserve the template intent in styleHint and tone even when siteType must remain one
+  of the generic allowed values.
+- For non-website templates, keep siteType valid but make primaryGoal and styleHint carry the real
+  artifact type. Examples: slideshow -> slide narrative; infographic -> visual data story;
+  form -> guided steps and fields; manifesto -> editorial stance; game -> playable loop.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
 - Return ONLY the JSON object.`;
+
+const DATA_DASHBOARD_SYSTEM_PROMPT = `You are a grounded data dashboard brief extractor.
+Given a user's free-form description of an analytical dashboard project, return a JSON object that
+describes how the dataset-backed dashboard should be shaped.
+
+Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
+{
+  "dashboardName": "short dashboard name (string, required)",
+  "dashboardGoal": "what analytical outcome the dashboard must support (string, required)",
+  "primaryAudience": "who uses the dashboard (string, required)",
+  "primaryDatasets": ["dataset names or logical sources"],
+  "mainEntities": ["main entities or business objects represented in the data"],
+  "timeDimension": "time/date field name or null",
+  "kpiCandidates": ["up to 8 KPI labels"],
+  "questionCandidates": ["up to 8 analytical questions the dashboard should answer"],
+  "preferredVisualizationStyle": "executive|operations|exploratory|monitoring|null",
+  "notes": "optional implementation notes or grounding cautions"
+}
+
+Rules:
+- infer a serious operational dashboard, not a marketing landing page.
+- prefer concise KPI names and concrete analytical questions.
+- if a dataset/table/field is unknown, keep labels generic and safe.
+- respect grounded analytics: do not invent exact metric values.
+- Return ONLY the JSON object.`;
+
+function buildPresetContext(templateId?: string | null): string {
+    if (!templateId) return "";
+    const preset = PRESET_MAP.get(templateId);
+    if (!preset) return `Detected template: ${templateId}`;
+
+    return [
+        `Detected template: ${preset.id} — ${preset.labelEn || preset.label}`,
+        `Template category: ${preset.categoryLabel ?? preset.category ?? "custom"}`,
+        `Template hint: ${preset.hint}`,
+        `Template tags: ${(preset.tags ?? []).join(", ")}`,
+        `Output shape: ${preset.outputSpec.pageModel} / ${preset.outputSpec.sectionModel}${preset.outputSpec.printReady ? " / print-ready" : ""}`,
+        `Brief template to adapt: ${preset.briefTemplate.replace(/\s+/g, " ").slice(0, 900)}`,
+        `Style guidance: ${preset.styleTemplate.replace(/\s+/g, " ").slice(0, 500)}`,
+        preset.briefGuideQuestions.length
+            ? `Discovery questions to answer implicitly: ${preset.briefGuideQuestions.join(" | ")}`
+            : "",
+    ].filter(Boolean).join("\n");
+}
 
 function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[], templateId?: string | null, formatHint?: FormatHint | null): string {
     const parts: string[] = [prompt.slice(0, MAX_PROMPT_CHARS)];
@@ -81,9 +142,23 @@ function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[], tem
             .join(", ");
         parts.push(`\nAttached files: ${metaPart}`);
     }
-    if (templateId) parts.push(`\nDetected template: ${templateId}`);
+    const presetContext = buildPresetContext(templateId);
+    if (presetContext) parts.push(`\n${presetContext}`);
     if (formatHint) parts.push(`\nFormat hint: ${formatHint}`);
     return parts.join("");
+}
+
+function defaultDataDashboardDraft(prompt: string, attachmentMeta?: AttachmentMeta[]): DataDashboardDraft {
+    const datasetNames = (attachmentMeta ?? []).map((item) => item.filename).slice(0, 6);
+    return {
+        dashboardName: prompt.trim().slice(0, 80) || "Data Dashboard",
+        dashboardGoal: prompt.trim().slice(0, 800) || "Explore real project data through grounded KPI, filters, and analytical views.",
+        primaryAudience: "Operations, analysts, or decision makers working on the dataset.",
+        primaryDatasets: datasetNames,
+        mainEntities: [],
+        kpiCandidates: ["Total records", "Key metric summary", "Distribution by category"],
+        questionCandidates: ["What changed over time?", "Which segment is most relevant?", "Which values need attention?"],
+    };
 }
 
 // ── Response parser ───────────────────────────────────────────────────────────
@@ -121,7 +196,7 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
             : undefined;
 
         const styleHint = typeof parsed.styleHint === "string" && parsed.styleHint.trim()
-            ? parsed.styleHint.trim().slice(0, 400)
+            ? parsed.styleHint.trim().slice(0, 1000)
             : undefined;
 
         const rawContacts = Array.isArray(parsed.contactInfo) ? parsed.contactInfo : [];
@@ -154,12 +229,76 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
     }
 }
 
+function parseDataDashboardPrefillResponse(
+    raw: string,
+    prompt: string,
+    attachmentMeta?: AttachmentMeta[],
+): { dataDashboardDraft: DataDashboardDraft; confidence: number } {
+    let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+    const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
+
+    try {
+        const parsed = JSON.parse(candidate) as Record<string, unknown>;
+        const dashboardName = typeof parsed.dashboardName === "string" && parsed.dashboardName.trim()
+            ? parsed.dashboardName.trim().slice(0, 120)
+            : prompt.trim().slice(0, 80) || "Data Dashboard";
+        const dashboardGoal = typeof parsed.dashboardGoal === "string" && parsed.dashboardGoal.trim()
+            ? parsed.dashboardGoal.trim().slice(0, 2000)
+            : prompt.trim().slice(0, 800) || "Grounded analytics over attached datasets.";
+        const primaryAudience = typeof parsed.primaryAudience === "string" && parsed.primaryAudience.trim()
+            ? parsed.primaryAudience.trim().slice(0, 300)
+            : "Operations, analysts, or decision makers.";
+        const primaryDatasets = Array.isArray(parsed.primaryDatasets)
+            ? parsed.primaryDatasets.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim().slice(0, 120)).slice(0, 8)
+            : (attachmentMeta ?? []).map((item) => item.filename).slice(0, 8);
+        const mainEntities = Array.isArray(parsed.mainEntities)
+            ? parsed.mainEntities.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim().slice(0, 120)).slice(0, 12)
+            : [];
+        const timeDimension = typeof parsed.timeDimension === "string" && parsed.timeDimension.trim()
+            ? parsed.timeDimension.trim().slice(0, 120)
+            : undefined;
+        const kpiCandidates = Array.isArray(parsed.kpiCandidates)
+            ? parsed.kpiCandidates.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim().slice(0, 120)).slice(0, 8)
+            : [];
+        const questionCandidates = Array.isArray(parsed.questionCandidates)
+            ? parsed.questionCandidates.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim().slice(0, 180)).slice(0, 8)
+            : [];
+        const preferredVisualizationStyle = typeof parsed.preferredVisualizationStyle === "string" && VALID_VIS_STYLES.has(parsed.preferredVisualizationStyle)
+            ? (parsed.preferredVisualizationStyle as DataDashboardDraft["preferredVisualizationStyle"])
+            : undefined;
+        const notes = typeof parsed.notes === "string" && parsed.notes.trim()
+            ? parsed.notes.trim().slice(0, 800)
+            : undefined;
+
+        return {
+            dataDashboardDraft: {
+                dashboardName,
+                dashboardGoal,
+                primaryAudience,
+                primaryDatasets,
+                mainEntities,
+                timeDimension,
+                kpiCandidates,
+                questionCandidates,
+                preferredVisualizationStyle,
+                notes,
+            },
+            confidence: 0.85,
+        };
+    } catch {
+        return { dataDashboardDraft: defaultDataDashboardDraft(prompt, attachmentMeta), confidence: 0 };
+    }
+}
+
 // ── Input / Output ────────────────────────────────────────────────────────────
 
 export interface VibePrefillInput {
     prompt: string;
     /** Pre-built Layer D block from project assets — injected verbatim into the system prompt. */
     layerDContext?: string;
+    /** Dedicated grounded dataset layer used for data-dashboard flows. */
+    layerXDataContext?: string;
+    generationMode?: VibeGenerationMode;
     attachmentMeta?: AttachmentMeta[];
     templateId?: string | null;
     formatHint?: FormatHint | null;
@@ -185,9 +324,19 @@ export class VibePrefill {
         const echoProject = input.projectId ? { projectId: input.projectId } : {};
         const platformConfig = await this.platformConfigRepository.get().catch(() => null);
         const taskSettings = resolvePromptTaskSettingFromConfig(platformConfig, "default", TASK_KEY);
+        const resolvedMode = input.generationMode === "data_dashboard" || input.templateId === "data-dashboard" || input.formatHint === "analytics_dashboard"
+            ? "data_dashboard"
+            : "website";
 
         if (!env.vibeClassifierEnabled || !taskSettings.enabled) {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+            return {
+                draft: defaultDraft(input.prompt),
+                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                resolvedMode,
+                confidence: 0,
+                skipped: true,
+                ...echoProject,
+            };
         }
 
         const catalog = await this.getLlmCatalog.execute();
@@ -206,7 +355,14 @@ export class VibePrefill {
             activeProviders[0];
 
         if (!selectedProviderCatalog) {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+            return {
+                draft: defaultDraft(input.prompt),
+                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                resolvedMode,
+                confidence: 0,
+                skipped: true,
+                ...echoProject,
+            };
         }
 
         const providerCatalog = selectedProviderCatalog;
@@ -224,16 +380,24 @@ export class VibePrefill {
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+            return {
+                draft: defaultDraft(input.prompt),
+                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                resolvedMode,
+                confidence: 0,
+                skipped: true,
+                ...echoProject,
+            };
         }
 
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta, input.templateId, input.formatHint);
 
         // Use custom systemTemplate from platform config if set; fall back to hardcoded SYSTEM_PROMPT
-        const basePrompt = taskSettings.systemTemplate?.trim() || SYSTEM_PROMPT;
-        // Extend with Layer D document context when available
-        const systemPrompt = input.layerDContext
-            ? `${basePrompt}\n\n${input.layerDContext}`
+        const defaultSystemPrompt = resolvedMode === "data_dashboard" ? DATA_DASHBOARD_SYSTEM_PROMPT : SYSTEM_PROMPT;
+        const basePrompt = taskSettings.systemTemplate?.trim() || defaultSystemPrompt;
+        const contextLayers = [input.layerDContext, input.layerXDataContext].filter((value): value is string => Boolean(value && value.trim()));
+        const systemPrompt = contextLayers.length > 0
+            ? `${basePrompt}\n\n${contextLayers.join("\n\n")}`
             : basePrompt;
 
         try {
@@ -256,7 +420,14 @@ export class VibePrefill {
             });
 
             if (!response.ok) {
-                return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+                return {
+                    draft: defaultDraft(input.prompt),
+                    dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                    resolvedMode,
+                    confidence: 0,
+                    skipped: true,
+                    ...echoProject,
+                };
             }
 
             const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -306,10 +477,27 @@ export class VibePrefill {
                 });
             }
 
-            const { draft, confidence } = parsePrefillResponse(raw, input.prompt);
-            return { draft, confidence, skipped: false, ...echoProject };
+            const websitePrefill = parsePrefillResponse(raw, input.prompt);
+            const dataPrefill = resolvedMode === "data_dashboard"
+                ? parseDataDashboardPrefillResponse(raw, input.prompt, input.attachmentMeta)
+                : undefined;
+            return {
+                draft: websitePrefill.draft,
+                dataDashboardDraft: dataPrefill?.dataDashboardDraft,
+                resolvedMode,
+                confidence: dataPrefill?.confidence ?? websitePrefill.confidence,
+                skipped: false,
+                ...echoProject,
+            };
         } catch {
-            return { draft: defaultDraft(input.prompt), confidence: 0, skipped: true, ...echoProject };
+            return {
+                draft: defaultDraft(input.prompt),
+                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                resolvedMode,
+                confidence: 0,
+                skipped: true,
+                ...echoProject,
+            };
         }
     }
 }

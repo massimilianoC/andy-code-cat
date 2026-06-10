@@ -17,3 +17,6 @@ export * from "./pipeline";
 export * from "./cost";
 export * from "./vibecore";
 export * from "./userTemplates";
+export * from "./datasets";
+export * from "./datasetBindings";
+export * from "./brandAssets";

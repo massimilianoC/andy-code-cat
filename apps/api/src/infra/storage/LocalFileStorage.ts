@@ -132,7 +132,9 @@ export class LocalFileStorage implements IFileStorage {
         await this.ensureDir(dir);
         const written: string[] = [];
         for (const [filename, content] of Object.entries(files)) {
-            await fs.writeFile(path.join(dir, filename), content, "utf-8");
+            const target = path.join(dir, filename);
+            await this.ensureDir(path.dirname(target));
+            await fs.writeFile(target, content, "utf-8");
             written.push(filename);
         }
         return written;

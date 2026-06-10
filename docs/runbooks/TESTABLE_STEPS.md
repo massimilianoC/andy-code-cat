@@ -1,7 +1,13 @@
 # Testable Steps
 
-> Follow the milestones in order. Each step must pass before moving to the next one.
-> For the full plan, see [`docs/DEVELOPMENT_PLAN.md`](../DEVELOPMENT_PLAN.md).
+> This runbook now mixes three layers:
+> 1. established platform baseline checks,
+> 2. current active validation tracks,
+> 3. older deferred milestone sections kept as backlog references.
+>
+> Do not assume every section below is the current delivery priority.
+> For active milestone focus, use [`docs/DEVELOPMENT_PLAN.md`](../DEVELOPMENT_PLAN.md)
+> and [`docs/project/ROADMAP.md`](../project/ROADMAP.md).
 
 ---
 
@@ -122,6 +128,10 @@
 - Open `/admin/presets`
 - Click `Sync presets → Mongo`
 - Expected: the preset seed is persisted and editable from the superadmin UI
+- Alternative CLI reseed: `npm run seed:presets`
+- Docker/Droplet reseed procedure: [`docs/runbooks/PRESET_RESEED.md`](PRESET_RESEED.md)
+- Expected after current seed: `freerunner` and `data-dashboard` are present in admin but hidden from the standard dashboard picker (`isActive=false`)
+- Expected after current seed: preset default feature tags use the valid `feat:*` prefix
 - Change category, short hint, sort order, or recommended model for one preset and save
 - Expected: the preset remains visible in the registry with the updated metadata
 - Open `/dashboard`
@@ -167,7 +177,130 @@ These two items are additive roadmap improvements and can be delivered after the
 
 ---
 
+## CURRENT ACTIVE VALIDATION TRACKS
+
+### Step 11h - VibeCore Config Surface
+
+- `GET /v1/vibecore/config` with authenticated user
+- Expected: response includes `attachmentPolicy` and `documentContextPolicy`
+- If `projectId` is provided, verify the project must belong to the authenticated user
+- Expected: unauthorized project access returns `403`
+
+### Step 11i - VibeCore Classify
+
+- `POST /v1/vibecore/classify`
+- body: `{ "prompt": "portfolio per studio creativo", "attachmentMeta": [] }`
+- Expected: authenticated request succeeds and returns `projectId`
+- Expected: response may include `templateId`, `formatHint`, `confidence`, `warnings`, and `attachmentPolicy`
+- Expected: if no `projectId` is supplied, the backend creates or pins a real owned draft project so follow-up calls stay in a valid sandbox
+
+### Step 11j - VibeCore Prefill
+
+- `POST /v1/vibecore/prefill`
+- body: `{ "prompt": "landing page per consulente SEO con CTA contatti", "projectId": "..." }`
+- Expected: response includes `draft`, `confidence`, `projectId`, and optional `warnings`
+- Expected: if the project contains eligible document assets, Layer D document context can enrich the resulting draft
+- Expected: invalid foreign `projectId` returns `403`
+
+### Step 11k - Dashboard Entry and Launch Handoff
+
+- Open `/dashboard`
+- Expected: VibeCore entry is visible above the legacy dashboard content
+- Expected: the initial chat has no manual `Auto` / `Website` selector; template and flow routing are classifier-owned
+- Switch between `easy`, `medium`, and `hard`
+- Expected:
+  - `easy` stays on the entry surface
+  - `medium` opens the guided project-creation dialog/launch path
+  - `hard` routes toward the advanced workspace flow
+- From the VibeCore flow, complete a project creation path that redirects to `/launch/[projectId]`
+- Expected: guided handoff uses the same project identity later openable in `/workspace/[projectId]`
+- Attach at least one structured dataset (`csv`, `xlsx`, `json`) in the VibeCore entry
+- Expected: a dataset-count badge appears, enrichment waits for readiness, and any upload warnings/errors are localized in both `it` and `en`
+
+### Step 11l - Notifications Surface
+
+- Trigger a backend notification event, for example via media fallback/failure or publish/export unresolved-media blocking
+- `GET /v1/notifications`
+- Expected: unread items are returned for the owning user
+- If logged in as superadmin, `GET /v1/admin/notifications`
+- Expected: admin-visible notification stream is available for operational review
+
+### Step 11m - Grounded Data Dashboard Runtime
+
+- Open `/dashboard/data/:projectId`
+- Upload one `CSV`, `XLSX`, `JSON`, simple tabular `XML`, or supported `SQL` dump asset
+- Expected: upload succeeds through the existing asset route and the dataset appears in the left-side picker
+- Expected: the dataset card reports profile/cache readiness, with cache becoming reusable after enrichment or first runtime load
+- Select the uploaded dataset
+- Expected: the page loads a grounded profile with row count, column count, inferred types, sample rows, and deterministic column statistics
+- If the dataset exposes multiple tables or sheets, switch the selected table
+- Expected: schema, insights, suggestions, and sample rows all update to the selected grounded table
+- Run a manual query such as `sum` or `avg` on a numeric column
+- Expected: response includes `facts[]`, `rowCountBeforeFilters`, `rowCountAfterFilters`, and a deterministic result
+- Add a grounded filter on one column before running the query
+- Expected: the filter is reflected in the executed payload and the result changes deterministically with updated `rowCountAfterFilters`
+- Add a second grounded filter and a sort direction on one visible column
+- Expected: runtime browsing and manual query payloads remain explicit, with no hidden heuristics; sorting changes row order deterministically without changing aggregated facts unless filters also change
+- Use the row browser on the selected table
+- Expected: runtime rows load with deterministic pagination, `offset` advances with `Next`, and filtered browsing changes `totalRowsAfterFilters` without inventing or summarizing unseen rows
+- Expected: row browsing honors the selected sort and up to two grounded filters while preserving the raw row values as source of truth
+- Ask a supported question such as `What is the total <numeric_column>?`
+- Expected: the answer is grounded, references the interpreted operation, and can attach the executed query payload
+- Ask an unsupported question such as a causal or speculative question
+- Expected: the runtime refuses explicitly and does not invent numerical claims
+- Open dashboard suggestions
+- Expected: KPI/bar/line/table suggestions are derived only from the detected schema and column types
+- For nested JSON datasets, expected: nested objects are exposed as dotted columns (for example `telemetry.output.kwh`) and nested arrays are called out in limitations instead of being hallucinated as direct numeric facts
+- For XML datasets, expected: repeated sibling nodes become grounded tables, while non-tabular XML is flattened into a single-row structure with limitations shown explicitly
+- For SQL datasets, expected: `INSERT INTO ... (columns) VALUES (...)` blocks become grounded tables; schema-only SQL or stored procedures must be refused or surfaced as unsupported
+
+### Step 11n - VibeCore Game Preset Matching
+
+- `POST /v1/vibecore/classify` with body `{ "prompt": "voglio un gioco interattivo" }`
+- Expected: `templateId = "videogame"`, `confidence >= 0.65`
+- Expected: project is created/updated with `presetId = "videogame"`
+- Expected: Layer B in the system prompt contains the `VIDEOGAME EXPERIENCE` module
+- Verify: inactive presets (`freerunner`, `data-dashboard`) do NOT appear in the classifier template list — they would split probability mass below the confidence threshold causing Layer B to be empty
+- Verify: a prompt for "endless runner" or other explicit game sub-type still resolves to `videogame`
+
+### Step 11o - Global Brand Identity: Platform Scope (Admin)
+
+- `POST /v1/admin/brand-assets` with body `{ "role": "company_name", "policy": "must_use", "valueType": "text", "textValue": "Acme Corp" }`
+  - Expected: 201, `{ asset: { id, scope: "platform", role: "company_name", policy: "must_use", ... } }`
+- `POST /v1/admin/brand-assets` with body `{ "role": "brand_color_palette", "policy": "must_use", "valueType": "color_list", "textValue": "#FF0000,#00FF00,#0000FF" }`
+  - Expected: 201, `{ asset: { role: "brand_color_palette", valueType: "color_list", ... } }`
+- `GET /v1/admin/brand-assets` — Expected: returns the two assets above
+- `GET /v1/projects/:projectId/llm/prompt-preview` — Expected: `layers.g_brandContext` contains both assets with `[MUST USE / Platform]` prefix
+- Verify: Layer G appears in `composed` between Layer C and Layer D
+
+### Step 11p - Global Brand Identity: User Scope
+
+- `POST /v1/users/me/brand-assets` with body `{ "role": "social_instagram", "policy": "prefer", "valueType": "url", "textValue": "https://instagram.com/acmecorp" }`
+  - Expected: 201, `{ asset: { scope: "user", ownerUserId: <userId>, ... } }`
+- `GET /v1/users/me/brand-assets` — Expected: returns the asset above
+- `GET /v1/projects/:projectId/llm/prompt-preview` — Expected: `layers.g_brandContext` now contains both platform AND user assets, ordered platform → user
+
+### Step 11q - Global Brand Identity: Project Scope
+
+- `POST /v1/projects/:projectId/brand-assets` with body `{ "role": "client_logo", "policy": "must_use", "valueType": "text", "textValue": "Client Logo Label" }`
+  - Expected: 201, `{ asset: { scope: "project", projectId: "<projectId>", ... } }`
+- `GET /v1/projects/:projectId/brand-assets` — Expected: returns the asset above
+- `GET /v1/projects/:projectId/llm/prompt-preview` — Expected: `layers.g_brandContext` contains platform + user + project assets in that order
+
+### Step 11r - Global Brand Identity: Must-Use Mandatory Section and Retrocompatibility
+
+- Verify: when any asset has `policy: "must_use"`, Layer G ends with a `MANDATORY RULES` section listing must-use roles
+- Verify: `PATCH /v1/admin/brand-assets/:id` with `{ "isActive": false }` stops the asset from appearing in Layer G
+- Verify: `DELETE /v1/admin/brand-assets/:id` removes the asset and it no longer appears in Layer G
+- Retrocompatibility: `GET /v1/projects/:projectId/llm/prompt-preview` on a project with NO brand assets configured returns `g_brandContext: ""` and the composed prompt is identical to what it was before the feature was deployed
+
+---
+
 ## M0.5 - Focused Asset Control
+
+> Historical naming note: the sections below retain the older `M0.5` / `M1` / `M2` labels
+> because linked specs and older handoff notes still reference them. They should be read as
+> backlog or deferred validation tracks unless the current development plan explicitly reactivates them.
 
 ### Step 12 - Preview Inspect Toggle
 

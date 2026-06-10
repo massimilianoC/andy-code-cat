@@ -2,11 +2,13 @@ import { createHash, randomUUID } from "crypto";
 import type { SiteDeployment } from "../../domain/entities/SiteDeployment";
 import type { SiteDeploymentRepository } from "../../domain/repositories/SiteDeploymentRepository";
 import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
+import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAssetRepository";
 import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 import type { PublishHistoryRepository } from "../../domain/repositories/PublishHistoryRepository";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
 import { SystemNotifier } from "../services/SystemNotifier";
+import { buildPublishedDatasetBindingPackage } from "../datasets/PublishedDatasetBindings";
 
 // ---------------------------------------------------------------------------
 // Artifact post-processing (same logic as ExportLayer1Zip, minimal version)
@@ -214,6 +216,7 @@ export class PublishProject {
         private deploymentRepo: SiteDeploymentRepository,
         private snapshotRepo: PreviewSnapshotRepository,
         private storage: LocalFileStorage,
+        private assetRepository?: ProjectAssetRepository,
         private historyRepo?: PublishHistoryRepository,
         private platformConfigRepo?: PlatformConfigRepository,
     ) { }
@@ -246,7 +249,7 @@ export class PublishProject {
         const existing = await this.deploymentRepo.findActiveByProjectId(input.projectId);
 
         if (existing) {
-            return this.republish(existing, snapshot.id, snapshot.artifacts, input.userId, input.projectId, input.customSlug, input.presetId);
+            return this.republish(existing, snapshot.id, snapshot.artifacts, snapshot.metadata, input.userId, input.projectId, input.customSlug, input.presetId);
         }
 
         // 4. Generate publish ID
@@ -272,6 +275,17 @@ export class PublishProject {
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;
         if (processed.js) files["script.js"] = processed.js;
+        const datasetPackage = this.assetRepository
+            ? await buildPublishedDatasetBindingPackage({
+                publishId,
+                projectId: input.projectId,
+                userId: input.userId,
+                metadata: snapshot.metadata,
+                assetRepository: this.assetRepository,
+                storage: this.storage,
+            })
+            : { files: {}, limitations: [], writtenBindings: [] };
+        Object.assign(files, datasetPackage.files);
 
         const filesDeployed = await this.storage.writePublishFiles(publishId, files);
 
@@ -314,6 +328,7 @@ export class PublishProject {
         existing: SiteDeployment,
         snapshotId: string,
         artifacts: { html: string; css: string; js: string },
+        metadata: import("../../domain/entities/PreviewSnapshot").PreviewSnapshotMetadata | undefined,
         userId: string,
         projectId: string,
         newCustomSlug?: string,
@@ -338,6 +353,17 @@ export class PublishProject {
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;
         if (processed.js) files["script.js"] = processed.js;
+        const datasetPackage = this.assetRepository
+            ? await buildPublishedDatasetBindingPackage({
+                publishId: existing.publishId,
+                projectId,
+                userId,
+                metadata,
+                assetRepository: this.assetRepository,
+                storage: this.storage,
+            })
+            : { files: {}, limitations: [], writtenBindings: [] };
+        Object.assign(files, datasetPackage.files);
 
         const filesDeployed = await this.storage.writePublishFiles(existing.publishId, files);
 

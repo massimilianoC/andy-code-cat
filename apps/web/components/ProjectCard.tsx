@@ -19,6 +19,7 @@ import CostBadge from "@/components/cost/CostBadge";
 interface ProjectCardProps {
     project: Project;
     onOpen: (project: Project) => void;
+    onOpenData?: (project: Project) => void;
     onDuplicate: (project: Project) => void;
     onDelete: (project: Project) => void;
     onCopyPrompt?: (project: Project) => void;
@@ -69,7 +70,7 @@ async function fetchThumbnailBlobUrl(projectId: string, snapshotId: string): Pro
     }
 }
 
-export default function ProjectCard({ project, onOpen, onDuplicate, onDelete, onCopyPrompt }: ProjectCardProps) {
+export default function ProjectCard({ project, onOpen, onOpenData, onDuplicate, onDelete, onCopyPrompt }: ProjectCardProps) {
     const { t } = useTranslation();
     const gradientIndex = project.id.charCodeAt(0) % GRADIENT_PALETTES.length;
     const gradient = GRADIENT_PALETTES[gradientIndex];
@@ -215,6 +216,14 @@ export default function ProjectCard({ project, onOpen, onDuplicate, onDelete, on
                                 </svg>
                                 {t("card.menu.duplicate")}
                             </DropdownMenuItem>
+                            {onOpenData && (
+                                <DropdownMenuItem onClick={() => onOpenData(project)} className="gap-2 cursor-pointer">
+                                    <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 19h16M4 15h10M4 11h16M4 7h7" />
+                                    </svg>
+                                    {t("card.menu.openData")}
+                                </DropdownMenuItem>
+                            )}
                             {onCopyPrompt && (
                                 <DropdownMenuItem onClick={() => onCopyPrompt(project)} className="gap-2 cursor-pointer">
                                     <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

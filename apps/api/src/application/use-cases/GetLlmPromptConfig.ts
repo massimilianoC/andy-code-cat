@@ -56,34 +56,75 @@ which is the #1 source of parse failures. Single quotes are valid HTML and need 
 Only use CDNs from this list. Do not reference any other external URLs.
 
 ### UI & Styling
-- Tailwind CSS (utility classes): <script src="https://cdn.tailwindcss.com"></script>
-  Use for: layout, spacing, color, typography. Combine with custom <style> for complex effects.
+- Tailwind CSS 3.4.17 (utility classes): <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  Use for: layout, spacing, color, typography. Put complex reusable effects in artifacts.css.
+  Pattern: use utility classes in HTML; put reusable custom rules in artifacts.css.
 
 ### Interactivity (no-build reactive UI)
-- Alpine.js: <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+- Alpine.js 3.15.12: <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.15.12/dist/cdn.min.js"></script>
   Use for: dropdowns, tabs, accordions, toggling, simple state.
   Pattern: <div x-data="{ open: false }"><button @click="open=!open">...</button><div x-show="open">...</div></div>
 
 ### Animation
-- GSAP: <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+- GSAP 3.15.0: <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
   Use for: entrance animations, staggered reveals, scroll-triggered effects.
   Pattern: gsap.from(".card", { opacity: 0, y: 40, stagger: 0.1, duration: 0.6 });
 
 ### Data Visualization
-- Chart.js: <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+- Chart.js 4.5.1: <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
   Use for: bar, line, pie, doughnut charts.
   Pattern: new Chart(document.getElementById("myChart"), { type: "bar", data: { labels: [...], datasets: [{ data: [...] }] } });
 
 ### Icons
-- Lucide: <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+- Lucide 0.468.0: <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  Use for: interface icons, feature icons, empty states, lightweight visual labels.
   Pattern: after including script, call lucide.createIcons(); and use <i data-lucide="icon-name"></i>
 
 ### Scroll & Reveal
 - AOS (Animate on Scroll) — REQUIRES BOTH CSS AND JS, otherwise content stays invisible:
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2/dist/aos.css">
-  <script src="https://cdn.jsdelivr.net/npm/aos@2/dist/aos.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">
+  <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
   Pattern: AOS.init(); on elements: <div data-aos="fade-up">...</div>
   CRITICAL: If you write \`data-aos="..."\` anywhere or include the AOS stylesheet, you MUST also include the AOS script tag AND call AOS.init() in artifacts.js. The AOS CSS sets opacity:0 on every \`[data-aos]\` element — without the JS that adds the \`aos-animate\` class, the entire page is permanently invisible. Prefer pure CSS animations / GSAP for hero reveals when you can.
+
+### Interactive App / Carousel
+- Swiper 12.2.0:
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@12.2.0/swiper-bundle.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/swiper@12.2.0/swiper-bundle.min.js"></script>
+  Use for: touch carousels, paginated galleries, mobile-friendly slide panels.
+  Pattern: new Swiper(".swiper", { loop: true, pagination: { el: ".swiper-pagination" } });
+
+- GLightbox 3.3.1:
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/glightbox@3.3.1/dist/css/glightbox.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/glightbox@3.3.1/dist/js/glightbox.min.js"></script>
+  Use for: image/video lightboxes and portfolio previews.
+  Pattern: const lightbox = GLightbox({ selector: ".glightbox" });
+
+### Game / Canvas / XR
+- Phaser 3.90.0:
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+  Use for: 2D arcade games, platformers, runners, collision-based prototypes.
+  Pattern: new Phaser.Game({ parent: "game-root", width: 960, height: 540, scene: { preload, create, update } });
+
+- Matter.js 0.20.0:
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
+  Use for: lightweight 2D physics, puzzle mechanics, collision demos without a full game engine.
+  Pattern: const { Engine, Render, Bodies, Composite } = Matter; const engine = Engine.create();
+
+- p5.js 2.3.0:
+  <script src="https://cdn.jsdelivr.net/npm/p5@2.3.0/lib/p5.min.js"></script>
+  Use for: generative art, simple sketches, educational canvas interactions.
+  Pattern: new p5((p) => { p.setup = () => p.createCanvas(800, 450); p.draw = () => {}; }, "sketch-root");
+
+- Three.js 0.160.0 (global build; chosen because newer Three.js versions are module-first):
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  Use for: lightweight 3D scenes that must work without type="module".
+  Pattern: const scene = new THREE.Scene(); const renderer = new THREE.WebGLRenderer({ antialias: true });
+
+- A-Frame 1.7.1:
+  <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+  Use for: WebXR/VR scenes, tours, showrooms, gaze/cursor interactions.
+  Pattern: use <a-scene embedded> with <a-camera>, <a-entity>, <a-sky>, and cursor/gaze-friendly targets.
 
 ## LIBRARY PAIRING — CSS+JS MUST SHIP TOGETHER (critical visibility rule)
 Several libraries hide content by default via CSS and rely on JS to reveal it.
@@ -93,11 +134,9 @@ BOTH or NEITHER:
 
 | Library | CSS link | JS script | HTML markers |
 |---|---|---|---|
-| AOS | aos.css | aos.js + \`AOS.init()\` | \`data-aos="..."\` |
-| WOW.js | animate.css | wow.min.js + \`new WOW().init()\` | \`.wow\` class |
-| ScrollReveal | (none) | scrollreveal.min.js + \`ScrollReveal().reveal(...)\` | any selector |
-| Swiper | swiper-bundle.min.css | swiper-bundle.min.js + \`new Swiper(...)\` | \`.swiper\` class |
-| GLightbox | glightbox.min.css | glightbox.min.js + \`GLightbox()\` | \`.glightbox\` class |
+| AOS | https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css | https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js + \`AOS.init()\` | \`data-aos="..."\` |
+| Swiper | https://cdn.jsdelivr.net/npm/swiper@12.2.0/swiper-bundle.min.css | https://cdn.jsdelivr.net/npm/swiper@12.2.0/swiper-bundle.min.js + \`new Swiper(...)\` | \`.swiper\` class |
+| GLightbox | https://cdn.jsdelivr.net/npm/glightbox@3.3.1/dist/css/glightbox.min.css | https://cdn.jsdelivr.net/npm/glightbox@3.3.1/dist/js/glightbox.min.js + \`GLightbox(...)\` | \`.glightbox\` class |
 
 Rule: before emitting the HTML, audit it for these markers. If a marker is present,
 the matching script MUST be in the HTML head/body AND the matching init call MUST
@@ -110,7 +149,14 @@ back to vanilla CSS animations or remove the marker attributes entirely.
 - Needs visual impact / animation: add GSAP or AOS (not both).
 - Needs charts or data: add Chart.js.
 - Needs icons throughout: add Lucide.
+- Needs 2D arcade/game loop: add Phaser.
+- Needs lightweight 2D physics without a full engine: add Matter.js.
+- Needs generative canvas/sketch: add p5.js.
+- Needs 3D scene without ES modules: add Three.js 0.160.0 global build.
+- Needs WebXR/VR scene: add A-Frame.
 - Never include a library unless you actually use it.
+- Do not use ES module imports, import maps, npm package names, or type="module" scripts in generated artifacts.
+- For game/3D/XR output, the HTML still needs a visible fallback container and artifacts.js owns all custom initialization code.
 
 ## artifacts.css and artifacts.js — MANDATORY SPLIT (critical)
 You MUST always populate artifacts.css and artifacts.js as separate fields.

@@ -131,9 +131,17 @@
         "version_other": "{{count}} versioni",
         "menu": {
             "open": "Apri",
+            "openData": "Data dashboard",
             "duplicate": "Duplica",
             "copyPrompt": "Copia prompt",
             "delete": "Elimina"
+        }
+    },
+    "admin": {
+        "experimental": {
+            "title": "Sperimentale",
+            "dataDashboardLabel": "Data Dashboard Alpha",
+            "dataDashboardDescription": "Console separata, solo superadmin, per esperimenti con dataset grounded fuori dalla UX principale."
         }
     },
     "guide": {
@@ -291,6 +299,87 @@
         "title": "Generazione guidata",
         "subtitle": "{{name}} · Compila i 3 step e rivedi il brief prima di avviare.",
         "project": "Il tuo progetto",
+        "stepLabel": "Step {{number}} — {{title}}",
+        "siteTypes": {
+            "landing_page": "Landing",
+            "business_site": "Business",
+            "portfolio": "Portfolio",
+            "showcase": "Showcase"
+        },
+        "templates": {
+            "neutral": "Blank",
+            "landing": "Landing page",
+            "website": "Sito web",
+            "form": "Form interattivo",
+            "manifesto": "Manifesto",
+            "a4poster": "Poster A4",
+            "infographic": "Infografica",
+            "slideshow": "Slideshow",
+            "keynote": "Keynote visiva",
+            "videogame": "Videogioco",
+            "seriousgame": "Serious Game",
+            "game3d": "Gioco 3D",
+            "vr-aframe": "Esperienza VR A-Frame",
+            "interactive-story": "Storia interattiva"
+        },
+        "formatHints": {
+            "one_pager": "One pager",
+            "a3_document": "Documento A3",
+            "ratio_1_1": "Formato 1:1",
+            "ratio_16_9": "Formato 16:9",
+            "interactive_form": "Form interattivo",
+            "portfolio": "Portfolio",
+            "brochure": "Brochure",
+            "analytics_dashboard": "Dashboard analytics"
+        },
+        "styleAttributes": {
+            "minimal": "Minimal",
+            "premium": "Premium",
+            "dark": "Dark / Notte",
+            "bright": "Chiaro / Luminoso",
+            "bold": "Bold / Impattante",
+            "elegant": "Elegante",
+            "corporate": "Corporate",
+            "playful": "Giocoso / Creativo",
+            "tech": "Tech / Moderno",
+            "artisan": "Artigianale",
+            "luxury": "Luxury",
+            "eco": "Eco / Naturale"
+        },
+        "contactSuggestions": {
+            "email": "Email",
+            "phone": "Telefono",
+            "address": "Indirizzo",
+            "instagram": "Instagram",
+            "facebook": "Facebook",
+            "linkedin": "LinkedIn",
+            "youtube": "YouTube",
+            "whatsapp": "WhatsApp",
+            "website": "Sito web",
+            "vat": "P.IVA"
+        },
+        "phase": {
+            "review": "Pronto per la generazione",
+            "optimizing": "Ottimizzazione prompt...",
+            "optimized": "Prompt ottimizzato — continua in Guided Mode per generare"
+        },
+        "brief": {
+            "title": "BRIEF DI PROGETTO — {{brand}}",
+            "identity": "[IDENTITÀ] Brand e tipo sito",
+            "brand": "Brand",
+            "template": "Template",
+            "siteType": "Tipo sito",
+            "goal": "[OBIETTIVO] Descrizione e obiettivo principale",
+            "audience": "[AUDIENCE] Target e pubblico di riferimento",
+            "style": "[STILE] Attributi visivi, tono e CTA",
+            "visualAttributes": "Attributi visivi",
+            "tone": "Tono di voce",
+            "cta": "CTA principale",
+            "styleNotes": "Note stilistiche aggiuntive",
+            "contacts": "[CONTATTI] Informazioni di contatto e dati salienti",
+            "attachments": "[ALLEGATI] Documenti analizzati per il brief",
+            "footer": "Brief strutturato Guided Mode · {{siteType}} · Sezioni: {{sections}}"
+        },
         "steps": {
             "1": {
                 "title": "Descrizione",
@@ -342,13 +431,53 @@
         "step4": {
             "title": "Step 4 — Revisione brief",
             "subtitle": "Il brief è pronto. Modificalo se vuoi, poi avvia la sessione.",
+            "generationTitle": "Step 4 — Avvia generazione",
             "prepared": "Preparato con successo",
             "briefLabel": "Brief generato — modificabile (Markdown)",
+            "structuredBriefLabel": "Brief strutturato — modificabile prima dell'ottimizzazione",
+            "optimizeHint": "Il brief verrà ottimizzato in prompt, poi usato per generare il sito.",
+            "optimizing": "Ottimizzazione...",
+            "startGeneration": "Avvia generazione",
+            "promptReady": "Prompt pronto",
+            "optimizedPromptLabel": "Prompt ottimizzato — modificabile prima della generazione",
+            "backToBrief": "Torna al brief",
+            "readyPrefix": "Il prompt è pronto. Clicca",
+            "continueInGuided": "Continua in Guided Mode",
+            "readySuffix": "per generare il sito con salvataggio completo dell'artefatto, preview e strumenti di modifica.",
+            "dashboard": "Dashboard",
             "backToDashboard": "Torna alla dashboard",
             "continueInWorkspace": "Continua nel workspace"
         },
+        "workspaceModeBadge": "God Mode",
+        "openGodMode": "Apri God Mode",
+        "review": {
+            "badge": "Rivedi e genera",
+            "prefillTitle": "✦ Pre-compilato dall'AI",
+            "templateBadge": "Template: {{template}}",
+            "description": "L'AI ha estratto i dati dalla tua richiesta. Genera subito oppure modifica prima i campi.",
+            "generating": "Generazione in corso…",
+            "summary": {
+                "brand": "Brand",
+                "goal": "Obiettivo",
+                "audience": "Audience",
+                "style": "Stile",
+                "contacts": "Contatti"
+            }
+        },
+        "upload": {
+            "uploading": "Caricamento in corso...",
+            "attachContext": "Allega documenti di contesto",
+            "attachHint": "PDF, DOCX, TXT, MD, immagini — trascinali qui o clicca per sfogliare",
+            "failedBadgeTitle": "Caricamento fallito: {{name}}",
+            "failedCount_one": "{{count}} file non caricato — verifica la sessione",
+            "failedCount_other": "{{count}} file non caricati — verifica la sessione"
+        },
         "loadError": "Impossibile caricare il progetto.",
-        "submitError": "Impossibile preparare il flusso di lancio."
+        "submitError": "Impossibile preparare il flusso di lancio.",
+        "errors": {
+            "optimizePrompt": "Errore durante l'ottimizzazione del prompt.",
+            "startGeneration": "Impossibile avviare la generazione."
+        }
     },
     "config": {
         "title": "Configurazione Progetto",
@@ -413,6 +542,7 @@
         "dropHere": "Rilascia qui",
         "newProject": "Nuovo progetto",
         "error": "Si è verificato un errore. Riprova.",
+        "attachLimitError": "Alcuni file non sono supportati o superano i limiti consentiti.",
         "removeFile": "Rimuovi",
         "modelOverrideLabel": "Modello pipeline",
         "modelOverrideTitle": "Scegli un modello per tutta la pipeline",
@@ -421,11 +551,19 @@
         "modelOverrideReset": "Default",
         "modelOverridePlaceholder": "Seleziona provider e modello",
         "modelOverrideSearch": "Cerca provider o modello",
+        "structuredDatasetCount_one": "{{count}} dataset strutturato",
+        "structuredDatasetCount_other": "{{count}} dataset strutturati",
+        "attachCounter": "Allegati: {{count}}/{{max}}",
+        "removeFileAria": "Rimuovi {{name}}",
+        "dataDashboardWarning": "La modalità data dashboard è solo alpha ed è disattivata nel flusso Vibe principale. Continuo con la pipeline website standard.",
+        "uploadAllFailed": "Impossibile caricare i file allegati: {{files}}. Verifica la sessione e riprova.",
+        "uploadPartialFailed": "Alcuni file non sono stati caricati: {{files}}",
         "phase": {
             "classifying": "Analisi della richiesta…",
             "prefilling": "Pre-compilazione campi AI…",
             "creating": "Creazione del workspace…",
             "uploading": "Carico i file…",
+            "analyzing": "Analizzo i dataset…",
             "redirecting": "Apertura…",
             "hints": {
                 "classifying": [
@@ -450,6 +588,10 @@
                     "Carico i tuoi file…",
                     "Processo i documenti…",
                     "Avvio la pipeline di arricchimento…"
+                ],
+                "analyzing": [
+                    "Aspetto l'arricchimento strutturato…",
+                    "Leggo i dataset caricati…"
                 ],
                 "redirecting": [
                     "Quasi pronto…",

@@ -263,6 +263,21 @@ export class MongoCostTransactionRepository implements ICostTransactionRepositor
         return { items: docs.map(toEntity), total, page: opts.page, limit: opts.limit };
     }
 
+    async summarizeProjectsByUser(userId: string): Promise<Record<string, number>> {
+        const db = await getDb();
+        const col = db.collection<CostTransactionDocument>(COLLECTION);
+        const rows = await col.aggregate<{ _id: string; totalEur: number }>([
+            { $match: { userId, status: "settled" } },
+            { $group: { _id: "$projectId", totalEur: { $sum: "$totalEur" } } },
+        ]).toArray();
+
+        const result: Record<string, number> = {};
+        for (const row of rows) {
+            result[row._id] = row.totalEur ?? 0;
+        }
+        return result;
+    }
+
     async topProjectsByUser(userId: string, limit = 10): Promise<Array<{ projectId: string; totalEur: number }>> {
         const db = await getDb();
         const col = db.collection<CostTransactionDocument>(COLLECTION);

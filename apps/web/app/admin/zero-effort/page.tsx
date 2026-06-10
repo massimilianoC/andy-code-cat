@@ -34,7 +34,7 @@ const CLASSIFY_DEFAULT_PROMPT =
 Given a user prompt and optional file metadata, return a JSON object:
 {
   "templateId": "<id from catalog or null>",
-  "formatHint": "<one of: one_pager, a3_document, ratio_1_1, ratio_16_9, interactive_form, portfolio, brochure or null>",
+  "formatHint": "<one of: one_pager, a3_document, ratio_1_1, ratio_16_9, interactive_form, portfolio, brochure, analytics_dashboard or null>",
   "confidence": <number 0.0–1.0>,
   "reasoning": "<one sentence>"
 }
@@ -43,6 +43,13 @@ Rules:
 - Set templateId only if confidence >= 0.65 against the template catalog below.
 - Set formatHint independently of templateId; it can be non-null even when templateId is null.
 - If neither signal is clear, return both as null.
+- Choose by intended output, not by surface wording. A request for something playable, game-like, arcade,
+  puzzle, challenge, score, controls, levels, HUD, character movement, or interaction loop MUST prefer
+  the most specific active game template. Use "videogame" for generic playable browser games; use
+  "seriousgame" only when learning/training is the main goal; use "game3d" for explicit 3D scenes/games;
+  use "vr-aframe" for explicit VR/immersive A-Frame requests; use "interactive-story" for branching stories.
+- Do not choose "landing" or "website" for a prompt that asks to build a playable experience, even if it
+  also mentions a title, brand, launch page, or presentation copy.
 - Return valid JSON only — no markdown fences, no extra text.
 
 Available templates:

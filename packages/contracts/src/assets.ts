@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { DatasetFactsEnvelopeDto, DatasetTableProfileDto } from "./datasets";
 
 const optionalTrimmedString = (max: number) =>
     z.preprocess(
@@ -138,6 +139,18 @@ export interface AssetEnrichmentTraceDto {
     distilledColors?: string[];
     documentBrief?: DocumentBriefDto | null;
     designSignals?: ImageDesignSignalsDto | null;
+    dataset?: {
+        sourceFormat: "csv" | "xlsx" | "json" | "xml" | "sql";
+        tables: DatasetTableProfileDto[];
+        facts: DatasetFactsEnvelopeDto;
+        limitations?: string[];
+        llmAppendix?: {
+            analyticalSummary: string;
+            keySignals: string[];
+            suggestedQuestions: string[];
+            cautions: string[];
+        };
+    } | null;
 }
 
 export interface ProjectAssetDto {

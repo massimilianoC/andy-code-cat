@@ -4,14 +4,14 @@
 
 1. `AGENTS.md` — non-negotiable rules, layer boundaries, isolation model
 2. `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md` — layer ownership map, frozen zones, PP-NNN rule IDs, and collision-prevention checklist for all agents touching the prompting pipeline
-3. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (R1→R4 active)
+3. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (`R1` delivered, `R2`/`R3` active)
 4. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — current codebase structure
 5. `docs/architecture/PIPELINE_LAYERS.md` — 2-layer architecture and transition mechanism
 6. `docs/security/SECURITY_BASELINE.md` — auth and isolation baseline
 7. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
 8. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
 9. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
-10. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 9 typed presets with `outputSpec` and `systemPromptModule`
+10. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 16 presets (14 active, 2 hidden: `freerunner`, `data-dashboard`) with `outputSpec` and `systemPromptModule`
 11. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
 12. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
 
@@ -19,16 +19,17 @@
 
 ## Active Development Focus
 
-**R1 - Prompt Architecture Layer** is the current priority milestone.
-Goal: structure the system prompt as a composition of 4 layers of architectural constraints.
-See `docs/DEVELOPMENT_PLAN.md §2.2` and §R1 for details.
+The current focus is no longer first-time R1 delivery.
+Use `docs/DEVELOPMENT_PLAN.md` and `docs/project/ROADMAP.md` as the source of truth for milestone status.
 
-**Key files for R1:**
+Current active platform tracks:
 
-- `apps/api/src/presentation/http/routes/llmRoutes.ts` — `buildMessagesWithHistory()` (to be modularized)
-- `apps/api/src/application/llm/styleContextBuilder.ts` — Layer C already implemented
-- `apps/api/src/domain/entities/ProjectPreset.ts` — static preset catalog (Layer B source)
-- `docs/specs/PRESET_TYPED_SPECS.md` — full specification of the 9 presets with `systemPromptModule`
+- **R2 - Observability and cost visibility**: execution logs, usage summaries, dashboard surfaces, operational auditability
+- **R3 - Publish hardening and domain management**: path publish stabilization, slug/domain controls, nginx/SSL completion
+- **Artifact Media Orchestrator continuation**: media resolution reliability, trace completeness, resolver expansion, browser E2E
+- **Guided entry / Zero Effort / VibeCore evolution**: additive intake flows that reuse the same backend orchestration and project model
+
+When touching prompting code, treat the prompt architecture as an implemented foundation to extend carefully, not as an unbuilt milestone.
 
 ---
 
@@ -48,7 +49,7 @@ apps/api/src/
     StyleTag.ts              ← static catalog of 82 tags + VALID_TAG_IDS + MAX_TAGS_PER_CATEGORY
     UserStyleProfile.ts      ← user style profile (10 tag categories + brandBio)
     ProjectMoodboard.ts      ← per-project moodboard (style override + project brief)
-    ProjectPreset.ts         ← static catalog of 9 presets with outputSpec + systemPromptModule
+    ProjectPreset.ts         ← static catalog of 16 presets (14 active, 2 hidden: freerunner, data-dashboard) with outputSpec + systemPromptModule
     ProjectAsset.ts          ← uploaded asset with source user_upload/platform_generated
     PreviewSnapshot.ts       ← artifact versioning for assistant responses
     MediaResolutionTrace.ts  ← mediaManifest resolution audit records linked to ProjectAsset/PreviewSnapshot
@@ -63,6 +64,7 @@ apps/api/src/
     RegisterUser.ts / LoginUser.ts
     CreateConversation.ts / AddMessage.ts / GetConversation.ts / GetConversations.ts
     GetLlmCatalog.ts / SeedLlmCatalog.ts
+    VibeClassify.ts          ← filters PRESET_CATALOG by isActive !== false before building the template list; inactive presets MUST NOT appear in the classifier (they split probability mass below the 0.65 confidence threshold, causing templateId: null and Layer B empty)
     GetLlmPromptConfig.ts / SetLlmPromptConfig.ts
     LogBackgroundTask.ts
     GetUserStyleProfile.ts / UpdateUserStyleProfile.ts

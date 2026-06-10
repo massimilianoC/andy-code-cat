@@ -21,7 +21,7 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [README.md](../README.md) | Public project overview, quick start, and positioning |
-| [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Stable planning entry point for agents and contributors |
+| [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Current development-state summary: `R1` delivered, `R2`/`R3` active, live cross-cutting tracks |
 | [docs/project/ROADMAP.md](project/ROADMAP.md) | Project roadmap and release direction |
 | [docs/project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md](project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md) | Reuse-first implementation plan for zero-effort flows, backend orchestration, and future node-based pipelines |
 | [docs/PRIVATE_CONFIG_GUIDE.md](PRIVATE_CONFIG_GUIDE.md) | Owner-only guidance for public/private repo hygiene |
@@ -32,7 +32,7 @@ Read in this order before making changes:
 
 | Document | Description |
 | --- | --- |
-| [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) | Current services, route map, storage adapters, and governance status |
+| [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) | Current implementation shape: services, route surface, frontend modes, media/storage, and governance baseline |
 | [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) | Layer 1 preview flow, Layer 2 generation pipeline, and transition mechanics |
 | [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, and operational security rules |
 
@@ -52,7 +52,9 @@ Read in this order before making changes:
 
 | Document | Description |
 | --- | --- |
-| [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Testable steps per milestone |
+| [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Baseline checks plus current active validation tracks and deferred backlog verification steps |
+| [docs/runbooks/PRESET_RESEED.md](runbooks/PRESET_RESEED.md) | Local, deploy-stack, and Droplet procedure for reseeding project template models from the static preset catalog |
+| [docs/runbooks/CDN_COMPATIBILITY.md](runbooks/CDN_COMPATIBILITY.md) | Verified CDN whitelist and compatibility notes for generated interactive, game, 3D, and VR artifacts |
 | [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Production hardening and deployment safety guidance |
 | [docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md](runbooks/BETA_LAUNCH_HARDENING_PLAN.md) | Beta-readiness checklist |
 | [install.sh](../install.sh) | Self-configuring one-file installer — local and domain modes, auto SSL via certbot |
@@ -74,6 +76,7 @@ Read in this order before making changes:
 | [docs/specs/SPEC.md](specs/SPEC.md) | Backend API platform and MVP architecture |
 | [docs/specs/DB_PLATFORM_SPEC.md](specs/DB_PLATFORM_SPEC.md) | MongoDB schema design, publication model, and credit system |
 | [docs/specs/COST_TRANSACTION_LEDGER_SPEC.md](specs/COST_TRANSACTION_LEDGER_SPEC.md) | Centralized cost-transaction ledger — atomic per-event billing, configurable rates, policy enforcement, and SuperAdmin cost UI |
+| [docs/specs/COST_PRICING_SSOT_SIMPLIFICATION_PLAN.md](specs/COST_PRICING_SSOT_SIMPLIFICATION_PLAN.md) | Low-overhead implementation plan to standardize pricing around `CostTransactionService`, `PlatformConfig.costRates`, and the `cost_transactions` ledger as the single source of truth |
 | [docs/specs/COST_ANALYTICS_DASHBOARDS_SPEC.md](specs/COST_ANALYTICS_DASHBOARDS_SPEC.md) | User Usage tab and Admin Cost Intelligence dashboard — multi-dimensional cost explorer across providers, models, users, and projects |
 | [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
 | [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | Preprompt engine service and composition flow |
@@ -116,22 +119,27 @@ Read in this order before making changes:
 | [docs/specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md](specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md) | Multi-domain deployment implementation plan — R3.1–R3.4, nginx vhost generation, SSL automation, domain admin API/UI |
 | [docs/specs/USER_SETTINGS_AND_API_KEYS_SPEC.md](specs/USER_SETTINGS_AND_API_KEYS_SPEC.md) | R3.5 — User-owned API keys (programmatic access) and unified role-scoped settings panel |
 | [docs/specs/DASHBOARD_LOVABLE_CHAT_SPEC.md](specs/DASHBOARD_LOVABLE_CHAT_SPEC.md) | Dashboard Lovable Chat — ChatPanel reusable component, entry-point chat, and LLM intent-to-template classifier |
+| `apps/web/app/admin/experimental/data-dashboard/[projectId]/page.tsx` | Superadmin-only alpha console for the grounded dataset runtime: deterministic queries, browsing, insights, and dashboard experimentation detached from the main UX |
+| [docs/specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md](specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md) | Alpha-only strategy for the grounded dataset runtime and possible future re-integration, currently detached from the primary Vibe / Zero Effort UX |
+| [docs/specs/PUBLISHED_DATASET_BINDINGS_SPEC.md](specs/PUBLISHED_DATASET_BINDINGS_SPEC.md) | Decision spec for publish-time dataset bindings: original source vs normalized local runtime vs backend query endpoints, with hybrid-mode recommendation, manifest contract, exposure policies, and serial/parallel delivery plan |
 | [docs/specs/ZERO_EFFORT_PREFILL_SPEC.md](specs/ZERO_EFFORT_PREFILL_SPEC.md) | Zero Effort LLM Prefill — one-pass LLM pre-population of all Zero Effort wizard fields, token counter, AI review card, God Mode one-click generation |
+| [docs/specs/GLOBAL_BRAND_IDENTITY_SPEC.md](specs/GLOBAL_BRAND_IDENTITY_SPEC.md) | Global Brand Identity System — hierarchical (platform → user → project) additive brand-asset injection via Layer G; reuses existing storage, auth, and route infrastructure; retrocompatible new layer |
 
 ## VibeCore Components (feat/dashboard-lovable-chat)
 
 | Path | Description |
 | --- | --- |
-| `apps/web/components/dashboard/VibeCoreEntry.tsx` | Full-screen glass card entry — textarea, file drag-drop, mode selector, phase state machine, Layer Φ classify → createProject → upload → redirect |
+| `apps/web/components/dashboard/VibeCoreEntry.tsx` | Full-screen glass card entry — classifier-led textarea intake, file drag-drop, phase state machine, Layer Φ classify → createProject → upload → redirect |
 | `apps/web/components/dashboard/VibeCoreBackground.tsx` | CSS-only SVG blob background (4 ellipses, 45–60 s drift, feGaussianBlur) |
 | `apps/web/components/dashboard/ModeSelector.tsx` | Segmented EASY / MEDIUM / HARD pill with per-mode glow ring |
 | `apps/web/components/dashboard/ScrollBlurOverlay.tsx` | Fixed overlay that fades + blurs the VibeCore section as user scrolls down |
 | `apps/web/hooks/useScrollRatio.ts` | Hook returning scroll progress ratio (0–1) between two pixel offsets |
-| `apps/web/lib/api/vibecore.ts` | Web client for `POST /v1/vibecore/classify` and `POST /v1/vibecore/prefill` |
+| `apps/web/lib/api/vibecore.ts` | Web client for `GET /v1/vibecore/config`, `POST /v1/vibecore/classify`, and `POST /v1/vibecore/prefill` |
 | `packages/contracts/src/vibecore.ts` | Shared VibeCore types: `FormatHint`, `AttachmentMeta`, `VibeClassifyRequest/Response` |
 | `apps/api/src/application/use-cases/VibeClassify.ts` | Layer Φ intent + format classifier use-case (LLM call, confidence threshold, graceful skip) |
+| `apps/api/src/application/use-cases/VibePrefill.ts` | Structured Zero Effort brief prefill use-case with optional Layer D document context |
 | `apps/api/src/application/prompting/formatHintRules.ts` | Format hint catalog (7 categories) and template list block builder |
-| `apps/api/src/presentation/http/routes/vibecoreRoutes.ts` | `POST /v1/vibecore/classify` — auth-protected, no sandbox (pre-project) |
+| `apps/api/src/presentation/http/routes/vibecoreRoutes.ts` | `GET /v1/vibecore/config` + `POST /v1/vibecore/classify` + `POST /v1/vibecore/prefill` — auth-protected, project-aware vibe entry surface |
 
 ---
 
@@ -142,6 +150,8 @@ Read in this order before making changes:
 | [docs/reports/E2E_DCL_REPORT_2026-05-14.md](reports/E2E_DCL_REPORT_2026-05-14.md) | Autonomous E2E session — DCL pipeline, Zero Effort flow, Layer D verification, 5 bugs found and fixed |
 | [docs/reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md](reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md) | Current implementation certification for Artifact Media Orchestrator: verified defaults, Docker smoke status, file map, human-test path, open gaps, and future development anchors |
 | [docs/reports/MINIMAX_M3_PARITY_IMPLEMENTATION_2026-06-02.md](reports/MINIMAX_M3_PARITY_IMPLEMENTATION_2026-06-02.md) | Wave-1 implementation report for MiniMax M3 conversation/media parity: message-to-snapshot linkage, first-class asset lineage, MongoDB query paths, and audit correlation strategy |
+| [docs/reports/DATA_DASHBOARD_ARCHITECTURAL_STATUS_2026-06-04.md](reports/DATA_DASHBOARD_ARCHITECTURAL_STATUS_2026-06-04.md) | Architectural report for the grounded data-dashboard work: implementation status, integration with the native generative pipeline, additive vs native boundaries, and remaining convergence gaps toward public runtime completion |
+| [docs/reports/DATA_DASHBOARD_ALPHA_RESCOPING_2026-06-05.md](reports/DATA_DASHBOARD_ALPHA_RESCOPING_2026-06-05.md) | Scope-correction report: detach data-dashboard from the main UX, keep it admin-experimental only, and clarify what runtime value is reusable for Layer D vs what remains separate |
 
 ---
 
