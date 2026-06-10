@@ -67,7 +67,7 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 }
 
 Rules:
-- businessName: extract from the prompt; fall back to "Progetto" if unclear.
+- businessName: extract from the prompt; fall back to "Project" if unclear.
 - siteType: infer from context using only the allowed values; default "landing_page".
 - primaryGoal: do not summarize too aggressively. Produce a robust structured brief that can be injected
   into downstream generation prompts. Include:
