@@ -4,32 +4,24 @@ import type { ProjectMoodboardRepository } from "../../domain/repositories/Proje
 import type { ConversationRepository } from "../../domain/repositories/ConversationRepository";
 import { PrepareGenerationWorkspace } from "./PrepareGenerationWorkspace";
 import type { GenerationWorkspace } from "../../domain/entities/GenerationWorkspace";
+import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
 
-function siteTypeLabel(siteType: ZeroEffortLaunchInput["siteType"]): string {
-    switch (siteType) {
-        case "portfolio":
-            return "portfolio site";
-        case "showcase":
-            return "showcase site";
-        case "business_site":
-            return "business website";
-        case "landing_page":
-        default:
-            return "landing page";
-    }
+function presetLabel(presetId: string): string {
+    const preset = PRESET_MAP.get(presetId);
+    return preset?.labelEn ?? preset?.label ?? presetId;
 }
 
 function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
-    const siteLabel = siteTypeLabel(input.siteType);
+    const siteLabel = presetLabel(input.presetId);
     const outputLanguage = (input as { outputLanguage?: string }).outputLanguage ?? "en";
     const sections: string[] = [];
 
     // ── [IDENTITY] ──────────────────────────────────────────────────────────
     sections.push(
         `# PROJECT BRIEF — ${input.businessName}\n\n` +
-        `## [IDENTITY] Brand and site type\n` +
+        `## [IDENTITY] Brand and template\n` +
         `- **Brand:** ${input.businessName}\n` +
-        `- **Site type:** ${siteLabel}\n` +
+        `- **Template:** ${siteLabel} (${input.presetId})\n` +
         `- **Output language:** ${outputLanguage}`,
     );
 

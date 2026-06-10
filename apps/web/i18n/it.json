@@ -317,10 +317,16 @@
             "slideshow": "Slideshow",
             "keynote": "Keynote visiva",
             "videogame": "Videogioco",
+            "freerunner": "Gioco libero",
             "seriousgame": "Serious Game",
             "game3d": "Gioco 3D",
             "vr-aframe": "Esperienza VR A-Frame",
             "interactive-story": "Storia interattiva"
+        },
+        "presetGroups": {
+            "web": "Web e contenuto",
+            "presentation": "Presentazione e stampa",
+            "game": "Gioco e interattivo"
         },
         "formatHints": {
             "one_pager": "One pager",
@@ -397,7 +403,8 @@
         "step1": {
             "businessName": "Nome brand o azienda",
             "businessNamePlaceholder": "es. Acme Studio",
-            "siteType": "Tipo sito",
+            "presetId": "Template",
+            "presetIdHint": "L'AI sceglie il template più adatto alla tua descrizione. Puoi cambiarlo qui.",
             "goal": "Descrizione e obiettivo principale",
             "goalHint": "Descrivi liberamente il progetto. Puoi usare elenchi puntati (- elemento), grassetto (**testo**) o incollare da Word.",
             "goalPlaceholder": "es. Acme Studio è un brand di accessori premium.\n- Obiettivo: aumentare le vendite online\n- Pubblico: appassionati tra 25-45 anni\n- Punto di forza: design e qualità",

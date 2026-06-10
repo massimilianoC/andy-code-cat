@@ -9,7 +9,7 @@ import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
-import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
+import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -19,7 +19,16 @@ const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
 const MAX_PROMPT_CHARS = 2000;
 const MAX_TOKENS = 768;
 
-const VALID_SITE_TYPES = new Set(["landing_page", "portfolio", "showcase", "business_site"]);
+// All valid preset IDs from the catalog — kept in sync at startup.
+const VALID_PRESET_IDS: Set<string> = new Set(PRESET_CATALOG.map((p) => p.id));
+
+// Backward-compat map: old 4-value siteType → new presetId
+const SITE_TYPE_COMPAT: Record<string, string> = {
+    landing_page: "landing",
+    business_site: "website",
+    portfolio: "neutral",
+    showcase: "neutral",
+};
 const VALID_STYLE_ATTRIBUTES = new Set([
     "minimal", "premium", "dark", "bright", "bold",
     "elegant", "corporate", "playful", "tech", "artisan", "luxury", "eco",
@@ -44,7 +53,7 @@ function defaultDraft(prompt: string, outputLanguage = "en"): ZeroEffortDraft {
     const projectName = prompt.trim().slice(0, 64) || "Project";
     return {
         businessName: projectName,
-        siteType: "landing_page",
+        presetId: "landing",
         primaryGoal: prompt.trim().slice(0, 500) || "Modern, professional website.",
         audience: "General audience interested in this project.",
         outputLanguage,
@@ -63,13 +72,13 @@ function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" 
 // ── Prompts ───────────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are a web project brief extractor.
-Given a user's free-form description of a website project, return a JSON object that
+Given a user's free-form description of a project, return a JSON object that
 populates a structured project brief.
 
 Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 {
   "businessName": "brand or project name (string, required)",
-  "siteType": "landing_page|portfolio|showcase|business_site (string, required)",
+  "presetId": "one of: neutral|landing|website|form|manifesto|slideshow|keynote|a4poster|infographic|videogame|freerunner|seriousgame|game3d|vr-aframe|interactive-story (string, required)",
   "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
   "audience": "target audience description — 120 to 500 chars when possible (string, required)",
   "tone": "communication tone, e.g. professional, playful (string or null)",
@@ -80,9 +89,28 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
   "outputLanguage": "BCP-47 language code inferred from the user's input language, e.g. 'it', 'en', 'fr' (string, required)"
 }
 
+presetId guidance — choose the best match:
+  neutral         generic project with no specific template
+  landing         marketing landing page / single page site
+  website         multi-section business website
+  form            guided form, wizard, or survey
+  manifesto       editorial page, manifesto, or long-form statement
+  slideshow       slide deck / presentation / carousel narrative
+  keynote         pitch deck / keynote / investor presentation
+  a4poster        A4 print-ready poster or flyer
+  infographic     data infographic / visual storytelling
+  videogame       2D browser arcade or action game
+  freerunner      open canvas browser game / creative sandbox
+  seriousgame     educational or training serious game
+  game3d          3D WebGL browser game
+  vr-aframe       WebVR / A-Frame immersive experience
+  interactive-story  branching narrative / choose-your-own-adventure
+
 Rules:
 - businessName: extract from the prompt; fall back to "Project" if unclear.
-- siteType: infer from context using only the allowed values; default "landing_page".
+- presetId: infer from the user's intent — use the MOST SPECIFIC matching id.
+  A "slideshow" or "presentation" request MUST use "slideshow" or "keynote", NOT "landing".
+  A "game" request MUST use one of the game presets. Default to "landing" only when no better match.
 - primaryGoal: do not summarize too aggressively. Produce a robust structured brief that can be injected
   into downstream generation prompts. Include:
   1. project intent and desired output,
@@ -91,15 +119,10 @@ Rules:
   4. key functionality/interactions,
   5. success criteria and constraints,
   6. any assumptions needed to make the first generation complete.
+  Adapt to the chosen presetId: a videogame brief describes gameplay and controls;
+  a slideshow brief describes slides and narrative arc; a form brief describes steps and fields.
 - audience: infer who uses or views the result; include needs, context, and expectations.
-- If a Detected template block is present, adapt the fields to that template's real output.
-  For example, a videogame template should produce a primaryGoal describing gameplay,
-  core loop, controls, win/loss conditions, HUD, and target device, not marketing copy.
-  Preserve the template intent in styleHint and tone even when siteType must remain one
-  of the generic allowed values.
-- For non-website templates, keep siteType valid but make primaryGoal and styleHint carry the real
-  artifact type. Examples: slideshow -> slide narrative; infographic -> visual data story;
-  form -> guided steps and fields; manifesto -> editorial stance; game -> playable loop.
+- If a Detected template block is present, its id takes priority as the presetId.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
 - outputLanguage: detect the language of the user's input (e.g. "it" for Italian, "en" for English, "fr" for French). Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
@@ -189,10 +212,12 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string):
             ? parsed.businessName.trim().slice(0, 120)
             : prompt.trim().slice(0, 64) || "Project";
 
-        const rawSiteType = typeof parsed.siteType === "string" ? parsed.siteType : "";
-        const siteType = VALID_SITE_TYPES.has(rawSiteType)
-            ? (rawSiteType as ZeroEffortDraft["siteType"])
-            : "landing_page";
+        // Accept new presetId field or old siteType for backward compat with cached drafts
+        const rawPreset = typeof parsed.presetId === "string" ? parsed.presetId.trim()
+            : typeof parsed.siteType === "string" ? parsed.siteType.trim() : "";
+        const presetId: string = VALID_PRESET_IDS.has(rawPreset)
+            ? rawPreset
+            : (SITE_TYPE_COMPAT[rawPreset] ?? "landing");
 
         const primaryGoal = typeof parsed.primaryGoal === "string" && parsed.primaryGoal.trim().length >= 8
             ? parsed.primaryGoal.trim().slice(0, 3000)
@@ -236,12 +261,12 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string):
 
         // Validate with zod to ensure the draft is safe to use downstream
         const zodResult = zeroEffortLaunchSchema.safeParse({
-            businessName, siteType, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage,
+            businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage,
         });
 
         const draft: ZeroEffortDraft = zodResult.success
             ? { ...zodResult.data, outputLanguage }
-            : { businessName, siteType, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage };
+            : { businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage };
 
         return { draft, confidence: 0.85 };
     } catch {

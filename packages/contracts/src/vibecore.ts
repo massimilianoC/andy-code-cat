@@ -90,7 +90,8 @@ export interface VibePrefillRequest {
  */
 export interface ZeroEffortDraft {
     businessName: string;
-    siteType: "landing_page" | "portfolio" | "showcase" | "business_site";
+    /** PRESET_CATALOG id (e.g. "slideshow", "landing", "website", "videogame"). */
+    presetId: string;
     primaryGoal: string;
     audience: string;
     tone?: string;

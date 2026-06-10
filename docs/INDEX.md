@@ -125,6 +125,7 @@ Read in this order before making changes:
 | [docs/specs/PUBLISHED_DATASET_BINDINGS_SPEC.md](specs/PUBLISHED_DATASET_BINDINGS_SPEC.md) | Decision spec for publish-time dataset bindings: original source vs normalized local runtime vs backend query endpoints, with hybrid-mode recommendation, manifest contract, exposure policies, and serial/parallel delivery plan |
 | [docs/specs/ZERO_EFFORT_PREFILL_SPEC.md](specs/ZERO_EFFORT_PREFILL_SPEC.md) | Zero Effort LLM Prefill — one-pass LLM pre-population of all Zero Effort wizard fields, token counter, AI review card, God Mode one-click generation |
 | [docs/specs/GLOBAL_BRAND_IDENTITY_SPEC.md](specs/GLOBAL_BRAND_IDENTITY_SPEC.md) | Global Brand Identity System — hierarchical (platform → user → project) additive brand-asset injection via Layer G; reuses existing storage, auth, and route infrastructure; retrocompatible new layer |
+| [docs/specs/DIDACTIC_MODE_SPEC.md](specs/DIDACTIC_MODE_SPEC.md) | Didactic Mode — parallel, additive, read-only artifact-interrogation layer over the workstation: per-snapshot LLM-generated knowledge (overview, topics, quizzes) cached by `groundingHash`, click-to-ask via the existing inspect engine and Monaco, standalone reusable dual-view; reuses snapshots, prompting trace, and the LLM engine without touching the generation pipeline |
 
 ## VibeCore Components (feat/dashboard-lovable-chat)
 

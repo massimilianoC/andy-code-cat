@@ -22,13 +22,6 @@ const requiredTrimmedString = (max: number, min = 1) =>
 export const uxModeSchema = z.enum(["zero-effort", "godmode"]);
 export type UxMode = z.infer<typeof uxModeSchema>;
 
-export const zeroEffortSiteTypeSchema = z.enum([
-    "landing_page",
-    "portfolio",
-    "showcase",
-    "business_site",
-]);
-
 export const zeroEffortContactItemSchema = z.object({
     key: requiredTrimmedString(60),
     value: requiredTrimmedString(200),
@@ -36,7 +29,8 @@ export const zeroEffortContactItemSchema = z.object({
 
 export const zeroEffortLaunchSchema = z.object({
     businessName: requiredTrimmedString(120, 2),
-    siteType: zeroEffortSiteTypeSchema.default("landing_page"),
+    /** PRESET_CATALOG id (e.g. "slideshow", "landing", "website"). Defaults to "landing". */
+    presetId: z.string().min(2).max(60).default("landing"),
     // Increased limit: accepts free-form rich description (paste from docs, MD, etc.)
     primaryGoal: requiredTrimmedString(3000, 8),
     audience: requiredTrimmedString(1000, 3),

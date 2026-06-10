@@ -1,11 +1,10 @@
 import { call } from "./call";
 import type { GenerationWorkspaceDto, ZeroEffortLaunchResultDto } from "@andy-code-cat/contracts";
 
-export type ZeroEffortSiteType = "landing_page" | "portfolio" | "showcase" | "business_site";
-
 export interface ZeroEffortLaunchInput {
     businessName: string;
-    siteType: ZeroEffortSiteType;
+    /** PRESET_CATALOG id (e.g. "slideshow", "landing", "website", "videogame"). */
+    presetId: string;
     primaryGoal: string;
     audience: string;
     tone?: string;
