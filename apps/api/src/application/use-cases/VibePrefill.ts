@@ -17,7 +17,10 @@ const TASK_KEY = "vibe_intent_prefill";
 const FALLBACK_PROVIDER = "siliconflow";
 const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
 const MAX_PROMPT_CHARS = 2000;
-const MAX_TOKENS = 768;
+// MIN_TOKENS: enforce floor regardless of DB task settings — prevents JSON truncation.
+// The system prompt asks for a ~900-2200 char primaryGoal; 768 tokens cannot fit that.
+const MIN_TOKENS = 1200;
+const MAX_TOKENS = 2048;
 
 // All valid preset IDs from the catalog — kept in sync at startup.
 const VALID_PRESET_IDS: Set<string> = new Set(PRESET_CATALOG.map((p) => p.id));
@@ -79,14 +82,14 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 {
   "businessName": "brand or project name (string, required)",
   "presetId": "one of: neutral|landing|website|form|manifesto|slideshow|keynote|a4poster|infographic|videogame|freerunner|seriousgame|game3d|vr-aframe|interactive-story (string, required)",
+  "outputLanguage": "BCP-47 language code of the content to generate, e.g. 'it', 'en', 'de', 'fr' (string, required)",
   "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
   "audience": "target audience description — 120 to 500 chars when possible (string, required)",
   "tone": "communication tone, e.g. professional, playful (string or null)",
   "primaryCta": "main call-to-action button text (string or null)",
   "styleHint": "visual, UX, interaction, and production notes — 180 to 900 chars when useful (string or null)",
   "contactInfo": [{"key": "Email", "value": "..."}],
-  "styleAttributes": ["minimal"],
-  "outputLanguage": "BCP-47 language code inferred from the user's input language, e.g. 'it', 'en', 'fr' (string, required)"
+  "styleAttributes": ["minimal"]
 }
 
 presetId guidance — choose the best match:
@@ -125,7 +128,8 @@ Rules:
 - If a Detected template block is present, its id takes priority as the presetId.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
-- outputLanguage: detect the language of the user's input (e.g. "it" for Italian, "en" for English, "fr" for French). Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
+- outputLanguage: detect the language the user wants the CONTENT in. If the user writes in Italian but asks "in tedesco" or "in German", outputLanguage must be "de". Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
+- IMPORTANT: write the JSON fields in order — businessName, presetId, outputLanguage first — so critical values are captured even if the response is long.
 - Return ONLY the JSON object.`;
 
 const DATA_DASHBOARD_SYSTEM_PROMPT = `You are a grounded data dashboard brief extractor.
@@ -270,6 +274,28 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string):
 
         return { draft, confidence: 0.85 };
     } catch {
+        // Partial recovery: extract critical fields from truncated JSON using regex.
+        // Truncation occurs when primaryGoal hits the token cap before the JSON is closed.
+        const partialPresetRaw = candidate.match(/"presetId"\s*:\s*"([^"]+)"/)?.[1]?.trim() ?? "";
+        const partialLangRaw   = candidate.match(/"outputLanguage"\s*:\s*"([^"]+)"/)?.[1]?.trim();
+        const partialName      = candidate.match(/"businessName"\s*:\s*"([^"\\]*)"/)?.[1]?.trim();
+        const partialGoal      = candidate.match(/"primaryGoal"\s*:\s*"([^"\\]*)"/)?.[1]?.trim();
+        const partialAudience  = candidate.match(/"audience"\s*:\s*"([^"\\]*)"/)?.[1]?.trim();
+
+        const hasPartial = !!(partialPresetRaw || partialName || partialGoal);
+        if (hasPartial) {
+            const partialPresetId = VALID_PRESET_IDS.has(partialPresetRaw)
+                ? partialPresetRaw
+                : (SITE_TYPE_COMPAT[partialPresetRaw] ?? "landing");
+            const recoveredDraft: ZeroEffortDraft = {
+                businessName: partialName?.slice(0, 120) || prompt.trim().slice(0, 64) || "Project",
+                presetId: partialPresetId,
+                primaryGoal: partialGoal?.slice(0, 3000) || prompt.trim().slice(0, 500) || "Modern web project.",
+                audience: partialAudience?.slice(0, 1000) || "General audience.",
+                outputLanguage: normalizeLang(partialLangRaw ?? uiLanguage),
+            };
+            return { draft: recoveredDraft, confidence: 0.4 };
+        }
         return { draft: defaultDraft(prompt, normalizeLang(uiLanguage)), confidence: 0 };
     }
 }
@@ -459,7 +485,7 @@ export class VibePrefill {
                 body: JSON.stringify(buildChatCompletionRequestBody({
                     provider: providerCatalog.provider,
                     model: modelId,
-                    maxTokens: Math.min(taskSettings.maxCompletionTokens, MAX_TOKENS),
+                    maxTokens: Math.min(Math.max(taskSettings.maxCompletionTokens, MIN_TOKENS), MAX_TOKENS),
                     temperature: taskSettings.temperature ?? 0.3,
                     messages: [
                         { role: "system" as const, content: systemPrompt },

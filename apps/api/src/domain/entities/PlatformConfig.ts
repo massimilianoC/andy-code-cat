@@ -94,9 +94,9 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     vibe_intent_prefill: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "google/gemma-4-12B-it",
         temperature: 0.3,
-        maxCompletionTokens: 768,
+        maxCompletionTokens: 2048,
         systemTemplate: "",
     },
     // Vibe Mode — final generation step (workspace model when arriving from Vibe Mode expert path)
