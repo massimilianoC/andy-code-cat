@@ -84,6 +84,7 @@ Read in this order before making changes:
 | [docs/specs/UX_SPEC.md](specs/UX_SPEC.md) | End-to-end UX and product screen map |
 | [docs/specs/EXECUTION_LOG_SPEC.md](specs/EXECUTION_LOG_SPEC.md) | Structured operational audit logging |
 | [docs/specs/FOCUSED_EDIT_SPEC.md](specs/FOCUSED_EDIT_SPEC.md) | Focused editing behavior and constraints |
+| [docs/specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md](specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md) | Output language control — Layer L, per-mode resolution chain, contract changes, UI selector, God Mode fallback |
 
 ---
 
