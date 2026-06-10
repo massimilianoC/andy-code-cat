@@ -324,6 +324,8 @@ export function createLlmRoutes(): Router {
         capability?: string;
         assetIds?: string[];
         systemPrompt?: string;
+        /** BCP-47 output language for Layer L injection (e.g. "it", "en"). When absent, Layer L is omitted. */
+        outputLanguage?: string;
     }): Promise<LlmRuntimeContext> {
         const catalog = await getLlmCatalog.execute();
         const promptConfig = await getLlmPromptConfig.execute(input.projectId);
@@ -435,6 +437,7 @@ export function createLlmRoutes(): Router {
             outputBudgetPolicy: buildOutputBudgetPolicy(),
             requestSystemPrompt: input.systemPrompt,
             governanceSystemPrompt,
+            outputLanguage: input.outputLanguage ?? null,
         });
 
         const governanceFocusedSystemPrompt = [
@@ -711,6 +714,7 @@ export function createLlmRoutes(): Router {
                 presetId: project?.presetId ?? null,
                 layers: {
                     a_baseConstraints: layers.layerA,
+                    l_outputLanguage: layers.layerL,
                     b_presetModule: layers.layerB,
                     c_styleContext: layers.layerC,
                     g_brandContext: layers.layerG,
@@ -764,6 +768,7 @@ export function createLlmRoutes(): Router {
                 capability: body.capability,
                 assetIds: body.assetIds,
                 systemPrompt: body.systemPrompt,
+                outputLanguage: body.uiLanguage,
             });
 
             const isFocusedMode = Boolean(
@@ -1160,6 +1165,7 @@ export function createLlmRoutes(): Router {
                 capability: body.capability,
                 assetIds: body.assetIds,
                 systemPrompt: body.systemPrompt,
+                outputLanguage: body.uiLanguage,
             });
 
             const isFocusedMode = Boolean(

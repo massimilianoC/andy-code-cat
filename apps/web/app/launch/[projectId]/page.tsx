@@ -50,6 +50,7 @@ interface ExtendedForm {
     styleHint?: string;
     contactFields: ContactField[];
     styleAttributes: string[];
+    outputLanguage: string;
 }
 
 type GenerationPhase =
@@ -244,6 +245,16 @@ function Step2Content({ form, onChange, onNext, onBack, canProceed, addContact, 
     );
 }
 
+const SUPPORTED_LANGUAGES = [
+    { code: "en", labelKey: "launch.languages.en" },
+    { code: "it", labelKey: "launch.languages.it" },
+    { code: "fr", labelKey: "launch.languages.fr" },
+    { code: "de", labelKey: "launch.languages.de" },
+    { code: "es", labelKey: "launch.languages.es" },
+    { code: "pt", labelKey: "launch.languages.pt" },
+    { code: "nl", labelKey: "launch.languages.nl" },
+];
+
 interface Step3Props {
     form: ExtendedForm;
     onChange: (patch: Partial<ExtendedForm>) => void;
@@ -320,6 +331,30 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
                     onChange={(e) => onChange({ styleHint: e.target.value })}
                     placeholder={t("launch.step3.styleNotesPlaceholder")}
                 />
+            </div>
+
+            <div className="space-y-2">
+                <Label>{t("launch.step3.outputLanguage", "Output language")}</Label>
+                <p className="text-xs text-muted-foreground">
+                    {t("launch.step3.outputLanguageHint", "Language used for all text in the generated page.")}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                        <button
+                            key={lang.code}
+                            type="button"
+                            onClick={() => onChange({ outputLanguage: lang.code })}
+                            className={cn(
+                                "rounded-md border px-3 py-1.5 text-sm transition-colors",
+                                form.outputLanguage === lang.code
+                                    ? "border-primary bg-primary/10 text-foreground"
+                                    : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                            )}
+                        >
+                            {t(lang.labelKey, lang.code.toUpperCase())}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {error ? (
@@ -444,7 +479,7 @@ function templateLabel(templateId: string | null | undefined, t: ReturnType<type
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ZeroEffortLaunchPage() {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const params = useParams<{ projectId: string }>();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -487,6 +522,7 @@ export default function ZeroEffortLaunchPage() {
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const defaultUiLang = i18n.language?.split("-")[0] ?? "en";
     const [form, setForm] = useState<ExtendedForm>({
         businessName: "",
         siteType: "landing_page",
@@ -497,6 +533,7 @@ export default function ZeroEffortLaunchPage() {
         styleHint: "",
         contactFields: [],
         styleAttributes: [],
+        outputLanguage: defaultUiLang,
     });
 
     function patch(update: Partial<ExtendedForm>) {
@@ -547,6 +584,10 @@ export default function ZeroEffortLaunchPage() {
                         .filter((c) => c && typeof c.key === "string" && typeof c.value === "string")
                         .map((c) => ({ id: `cf-${c.key}`, key: c.key, value: c.value }))
                     : [],
+                // Language inferred by VibePrefill; fall back to UI language
+                outputLanguage: typeof draft.outputLanguage === "string" && draft.outputLanguage.trim()
+                    ? draft.outputLanguage.trim()
+                    : defaultUiLang,
             });
             // Restore the names of documents that the AI used to generate this brief
             if (Array.isArray(draft.attachedDocuments)) {
@@ -643,6 +684,7 @@ export default function ZeroEffortLaunchPage() {
                 .filter((cf) => cf.key.trim() && cf.value.trim())
                 .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
             styleAttributes: form.styleAttributes,
+            outputLanguage: form.outputLanguage,
         };
         try {
             const [briefResult, configResult] = await Promise.all([

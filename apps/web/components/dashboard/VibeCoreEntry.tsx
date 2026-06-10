@@ -167,7 +167,7 @@ interface VibeCoreEntryProps {
 
 export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps) {
     const router = useRouter();
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const [prompt, setPrompt] = useState("");
@@ -391,12 +391,14 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 mimeType: p.file.type,
                 sizeBytes: p.file.size,
             }));
+            const uiLanguage = i18n.language?.split("-")[0] ?? "en";
             const classification = await classifyVibeIntent(token, {
                 prompt: prompt.trim(),
                 attachmentMeta,
                 generationMode,
                 provider: pipelineOverride?.provider,
                 model: pipelineOverride?.model,
+                uiLanguage,
             }).catch(() => null);
             if (classification?.warnings?.length) {
                 setServerWarnings(classification.warnings);
@@ -492,6 +494,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 formatHint: experimentalDataModeDetected ? null : (classification?.formatHint ?? null),
                 provider: pipelineOverride?.provider,
                 model: pipelineOverride?.model,
+                uiLanguage,
             }).catch(() => null);
             if (prefillResult?.warnings?.length) {
                 setServerWarnings((prev) => [...new Set([...prev, ...prefillResult.warnings!])]);

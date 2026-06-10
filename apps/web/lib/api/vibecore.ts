@@ -14,6 +14,8 @@ export interface VibeClassifyInput {
     generationMode?: VibeGenerationMode;
     provider?: string;
     model?: string;
+    /** BCP-47 UI language from the client (e.g. "it", "en"). */
+    uiLanguage?: string;
 }
 
 export function classifyVibeIntent(

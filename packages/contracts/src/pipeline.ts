@@ -46,6 +46,8 @@ export const zeroEffortLaunchSchema = z.object({
     // New fields from guided 4-step flow (all optional for backward compat)
     contactInfo: z.array(zeroEffortContactItemSchema).max(15).optional(),
     styleAttributes: z.array(z.string().trim().max(80)).max(20).optional(),
+    // Output language: BCP-47 code (e.g. "it", "en", "fr"). Default "en".
+    outputLanguage: z.string().min(2).max(10).toLowerCase().optional(),
 });
 
 export const executeProjectPipelineSchema = z.object({

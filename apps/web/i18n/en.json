@@ -424,9 +424,20 @@
             "ctaPlaceholder": "e.g. Buy now, Learn more",
             "styleNotes": "Additional style notes",
             "styleNotesPlaceholder": "e.g. aluminum frame, brand colors",
+            "outputLanguage": "Output language",
+            "outputLanguageHint": "Language used for all text in the generated page.",
             "back": "Back",
             "generate": "Generate brief",
             "generating": "Generating brief..."
+        },
+        "languages": {
+            "en": "English",
+            "it": "Italian",
+            "fr": "French",
+            "de": "German",
+            "es": "Spanish",
+            "pt": "Portuguese",
+            "nl": "Dutch"
         },
         "step4": {
             "title": "Step 4 — Review brief",

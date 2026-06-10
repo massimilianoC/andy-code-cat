@@ -26,15 +26,28 @@ const VALID_STYLE_ATTRIBUTES = new Set([
 ]);
 const VALID_VIS_STYLES = new Set(["executive", "operations", "exploratory", "monitoring"]);
 
+// ── Language helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Normalize a BCP-47 language code to lowercase base language (e.g. "IT" → "it", "pt-BR" → "pt").
+ * Returns "en" for any null/empty/invalid input.
+ */
+function normalizeLang(raw?: string | null): string {
+    if (!raw || typeof raw !== "string") return "en";
+    const base = raw.trim().toLowerCase().split("-")[0];
+    return /^[a-z]{2,8}$/.test(base ?? "") ? (base ?? "en") : "en";
+}
+
 // ── Default draft ─────────────────────────────────────────────────────────────
 
-function defaultDraft(prompt: string): ZeroEffortDraft {
-    const projectName = prompt.trim().slice(0, 64) || "Progetto";
+function defaultDraft(prompt: string, outputLanguage = "en"): ZeroEffortDraft {
+    const projectName = prompt.trim().slice(0, 64) || "Project";
     return {
         businessName: projectName,
         siteType: "landing_page",
-        primaryGoal: prompt.trim().slice(0, 500) || "Sito web moderno e professionale.",
-        audience: "Pubblico generale interessato all'attività.",
+        primaryGoal: prompt.trim().slice(0, 500) || "Modern, professional website.",
+        audience: "General audience interested in this project.",
+        outputLanguage,
     };
 }
 
@@ -63,7 +76,8 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
   "primaryCta": "main call-to-action button text (string or null)",
   "styleHint": "visual, UX, interaction, and production notes — 180 to 900 chars when useful (string or null)",
   "contactInfo": [{"key": "Email", "value": "..."}],
-  "styleAttributes": ["minimal"]
+  "styleAttributes": ["minimal"],
+  "outputLanguage": "BCP-47 language code inferred from the user's input language, e.g. 'it', 'en', 'fr' (string, required)"
 }
 
 Rules:
@@ -88,6 +102,7 @@ Rules:
   form -> guided steps and fields; manifesto -> editorial stance; game -> playable loop.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
+- outputLanguage: detect the language of the user's input (e.g. "it" for Italian, "en" for English, "fr" for French). Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
 - Return ONLY the JSON object.`;
 
 const DATA_DASHBOARD_SYSTEM_PROMPT = `You are a grounded data dashboard brief extractor.
@@ -163,7 +178,7 @@ function defaultDataDashboardDraft(prompt: string, attachmentMeta?: AttachmentMe
 
 // ── Response parser ───────────────────────────────────────────────────────────
 
-function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortDraft; confidence: number } {
+function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string): { draft: ZeroEffortDraft; confidence: number } {
     let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
     const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
 
@@ -172,7 +187,7 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
 
         const businessName = typeof parsed.businessName === "string" && parsed.businessName.trim()
             ? parsed.businessName.trim().slice(0, 120)
-            : prompt.trim().slice(0, 64) || "Progetto";
+            : prompt.trim().slice(0, 64) || "Project";
 
         const rawSiteType = typeof parsed.siteType === "string" ? parsed.siteType : "";
         const siteType = VALID_SITE_TYPES.has(rawSiteType)
@@ -181,11 +196,11 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
 
         const primaryGoal = typeof parsed.primaryGoal === "string" && parsed.primaryGoal.trim().length >= 8
             ? parsed.primaryGoal.trim().slice(0, 3000)
-            : prompt.trim().slice(0, 500) || "Progetto web moderno.";
+            : prompt.trim().slice(0, 500) || "Modern web project.";
 
         const audience = typeof parsed.audience === "string" && parsed.audience.trim().length >= 3
             ? parsed.audience.trim().slice(0, 1000)
-            : "Pubblico generale.";
+            : "General audience.";
 
         const tone = typeof parsed.tone === "string" && parsed.tone.trim()
             ? parsed.tone.trim().slice(0, 80)
@@ -214,18 +229,23 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
             .filter((s): s is string => typeof s === "string" && VALID_STYLE_ATTRIBUTES.has(s))
             .slice(0, 20);
 
+        // Language: LLM-inferred → uiLanguage hint → "en"
+        const outputLanguage = normalizeLang(
+            typeof parsed.outputLanguage === "string" ? parsed.outputLanguage : uiLanguage
+        );
+
         // Validate with zod to ensure the draft is safe to use downstream
         const zodResult = zeroEffortLaunchSchema.safeParse({
-            businessName, siteType, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes,
+            businessName, siteType, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage,
         });
 
         const draft: ZeroEffortDraft = zodResult.success
-            ? zodResult.data
-            : { businessName, siteType, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes };
+            ? { ...zodResult.data, outputLanguage }
+            : { businessName, siteType, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage };
 
         return { draft, confidence: 0.85 };
     } catch {
-        return { draft: defaultDraft(prompt), confidence: 0 };
+        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage)), confidence: 0 };
     }
 }
 
@@ -310,6 +330,8 @@ export interface VibePrefillInput {
     userId?: string;
     /** When provided together with userId, cost is attributed to this project. */
     projectId?: string;
+    /** BCP-47 UI language from the client (e.g. "it", "en"). Used as fallback when LLM can't infer language. */
+    uiLanguage?: string;
 }
 
 // ── Use-case ──────────────────────────────────────────────────────────────────
@@ -328,9 +350,11 @@ export class VibePrefill {
             ? "data_dashboard"
             : "website";
 
+        const resolvedUiLanguage = normalizeLang(input.uiLanguage);
+
         if (!env.vibeClassifierEnabled || !taskSettings.enabled) {
             return {
-                draft: defaultDraft(input.prompt),
+                draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                 resolvedMode,
                 confidence: 0,
@@ -356,7 +380,7 @@ export class VibePrefill {
 
         if (!selectedProviderCatalog) {
             return {
-                draft: defaultDraft(input.prompt),
+                draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                 resolvedMode,
                 confidence: 0,
@@ -381,7 +405,7 @@ export class VibePrefill {
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
             return {
-                draft: defaultDraft(input.prompt),
+                draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                 resolvedMode,
                 confidence: 0,
@@ -421,7 +445,7 @@ export class VibePrefill {
 
             if (!response.ok) {
                 return {
-                    draft: defaultDraft(input.prompt),
+                    draft: defaultDraft(input.prompt, resolvedUiLanguage),
                     dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                     resolvedMode,
                     confidence: 0,
@@ -477,7 +501,7 @@ export class VibePrefill {
                 });
             }
 
-            const websitePrefill = parsePrefillResponse(raw, input.prompt);
+            const websitePrefill = parsePrefillResponse(raw, input.prompt, resolvedUiLanguage);
             const dataPrefill = resolvedMode === "data_dashboard"
                 ? parseDataDashboardPrefillResponse(raw, input.prompt, input.attachmentMeta)
                 : undefined;
@@ -491,7 +515,7 @@ export class VibePrefill {
             };
         } catch {
             return {
-                draft: defaultDraft(input.prompt),
+                draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
                 resolvedMode,
                 confidence: 0,

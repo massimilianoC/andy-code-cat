@@ -13,6 +13,8 @@ export interface ZeroEffortLaunchInput {
     styleHint?: string;
     contactInfo?: Array<{ key: string; value: string }>;
     styleAttributes?: string[];
+    /** BCP-47 output language directive (e.g. "it", "en", "fr"). */
+    outputLanguage?: string;
 }
 
 export interface ProjectPipelineRunSummary {

@@ -4,10 +4,13 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { MongoUserStyleProfileRepository } from "../../../infra/repositories/MongoUserStyleProfileRepository";
+import { MongoUserPreferencesRepository } from "../../../infra/repositories/MongoUserPreferencesRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { GetUserStyleProfile } from "../../../application/use-cases/GetUserStyleProfile";
 import { UpdateUserStyleProfile } from "../../../application/use-cases/UpdateUserStyleProfile";
+import { GetUserPreferences } from "../../../application/use-cases/GetUserPreferences";
+import { UpdateUserPreferences } from "../../../application/use-cases/UpdateUserPreferences";
 import { ListUserMediaLibrary } from "../../../application/use-cases/ListUserMediaLibrary";
 import { SetBrandAsset } from "../../../application/use-cases/SetBrandAsset";
 import { ListBrandAssets } from "../../../application/use-cases/ListBrandAssets";
@@ -17,7 +20,7 @@ import { STYLE_TAG_CATALOG } from "../../../domain/entities/StyleTag";
 import { createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
 import type { BrandAsset } from "../../../domain/entities/BrandAsset";
 import type { RequestWithContext } from "../types";
-import type { BrandAssetDto, ProjectAssetDto } from "@andy-code-cat/contracts";
+import type { BrandAssetDto, ProjectAssetDto, UserPreferencesDto } from "@andy-code-cat/contracts";
 
 function mapToDto(profile: import("../../../domain/entities/UserStyleProfile").UserStyleProfile) {
     return {
@@ -63,12 +66,15 @@ function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
 export function createUserProfileRoutes(): Router {
     const router = Router();
     const profileRepo = new MongoUserStyleProfileRepository();
+    const preferencesRepo = new MongoUserPreferencesRepository();
     const assetRepo = new MongoProjectAssetRepository();
     const brandAssetRepo = new MongoBrandAssetRepository();
     const brandStorage = getFileStorage();
     const brandUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
     const getProfile = new GetUserStyleProfile(profileRepo);
     const updateProfile = new UpdateUserStyleProfile(profileRepo);
+    const getPreferences = new GetUserPreferences(preferencesRepo);
+    const updatePreferences = new UpdateUserPreferences(preferencesRepo);
     const listUserLibrary = new ListUserMediaLibrary(assetRepo);
     const setBrandAsset = new SetBrandAsset(brandAssetRepo, assetRepo);
     const listBrandAssets = new ListBrandAssets(brandAssetRepo);
@@ -102,6 +108,44 @@ export function createUserProfileRoutes(): Router {
         try {
             const profile = await updateProfile.execute(req.auth!.userId, req.body);
             res.json({ profile: mapToDto(profile) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // ── User Preferences ────────────────────────────────────────────────────────
+
+    router.get("/users/me/preferences", async (req: RequestWithContext, res, next) => {
+        try {
+            const prefs = await getPreferences.execute(req.auth!.userId);
+            const dto: UserPreferencesDto = {
+                id: prefs.id,
+                userId: prefs.userId,
+                preferredLanguage: prefs.preferredLanguage,
+                preferredModel: prefs.preferredModel,
+                preferredProvider: prefs.preferredProvider,
+                createdAt: prefs.createdAt.toISOString(),
+                updatedAt: prefs.updatedAt.toISOString(),
+            };
+            res.json({ preferences: dto });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.put("/users/me/preferences", async (req: RequestWithContext, res, next) => {
+        try {
+            const prefs = await updatePreferences.execute(req.auth!.userId, req.body);
+            const dto: UserPreferencesDto = {
+                id: prefs.id,
+                userId: prefs.userId,
+                preferredLanguage: prefs.preferredLanguage,
+                preferredModel: prefs.preferredModel,
+                preferredProvider: prefs.preferredProvider,
+                createdAt: prefs.createdAt.toISOString(),
+                updatedAt: prefs.updatedAt.toISOString(),
+            };
+            res.json({ preferences: dto });
         } catch (err) {
             next(err);
         }

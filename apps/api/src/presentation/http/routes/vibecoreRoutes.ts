@@ -47,6 +47,8 @@ const classifyBodySchema = z.object({
      * Returned in the response so the client can pin subsequent calls to it.
      */
     projectId: z.string().max(128).optional(),
+    /** BCP-47 UI language from the client (e.g. "it", "en"). */
+    uiLanguage: z.string().min(2).max(10).optional(),
 });
 
 const prefillBodySchema = z.object({
@@ -59,6 +61,8 @@ const prefillBodySchema = z.object({
     attachmentMeta: z.array(attachmentMetaSchema).max(100).optional(),
     templateId: z.string().max(120).nullable().optional(),
     formatHint: z.string().max(50).nullable().optional(),
+    /** BCP-47 UI language from the client (e.g. "it", "en"). */
+    uiLanguage: z.string().min(2).max(10).optional(),
 });
 
 export function createVibecoreRoutes(): Router {
@@ -350,6 +354,7 @@ export function createVibecoreRoutes(): Router {
                     model: parsed.data.model,
                     userId,
                     projectId,
+                    uiLanguage: parsed.data.uiLanguage,
                 });
 
                 // Attach document names that contributed to the brief (informational, shown to user)

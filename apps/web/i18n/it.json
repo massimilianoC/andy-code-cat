@@ -424,9 +424,20 @@
             "ctaPlaceholder": "es. Acquista ora, Scopri di più",
             "styleNotes": "Note stilistiche aggiuntive",
             "styleNotesPlaceholder": "es. frame in alluminio, colori brand",
+            "outputLanguage": "Lingua di output",
+            "outputLanguageHint": "Lingua usata per tutto il testo nella pagina generata.",
             "back": "Indietro",
             "generate": "Genera brief",
             "generating": "Generazione brief..."
+        },
+        "languages": {
+            "en": "Inglese",
+            "it": "Italiano",
+            "fr": "Francese",
+            "de": "Tedesco",
+            "es": "Spagnolo",
+            "pt": "Portoghese",
+            "nl": "Olandese"
         },
         "step4": {
             "title": "Step 4 — Revisione brief",
