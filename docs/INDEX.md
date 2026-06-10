@@ -78,6 +78,8 @@ Read in this order before making changes:
 | [docs/specs/COST_TRANSACTION_LEDGER_SPEC.md](specs/COST_TRANSACTION_LEDGER_SPEC.md) | Centralized cost-transaction ledger — atomic per-event billing, configurable rates, policy enforcement, and SuperAdmin cost UI |
 | [docs/specs/COST_PRICING_SSOT_SIMPLIFICATION_PLAN.md](specs/COST_PRICING_SSOT_SIMPLIFICATION_PLAN.md) | Low-overhead implementation plan to standardize pricing around `CostTransactionService`, `PlatformConfig.costRates`, and the `cost_transactions` ledger as the single source of truth |
 | [docs/specs/COST_ANALYTICS_DASHBOARDS_SPEC.md](specs/COST_ANALYTICS_DASHBOARDS_SPEC.md) | User Usage tab and Admin Cost Intelligence dashboard — multi-dimensional cost explorer across providers, models, users, and projects |
+| [docs/specs/DIDACTIC_MODE_SPEC.md](specs/DIDACTIC_MODE_SPEC.md) | Didactic Mode — read-only artifact interrogation layer: knowledge generation, Q&A, quizzes, dual-view, and cost tracking |
+| [docs/DIDACTIC_MODE_PROGRESS.md](DIDACTIC_MODE_PROGRESS.md) | Implementation progress log for Didactic Mode (branch `feat/didactic-mode`)
 | [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
 | [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | Preprompt engine service and composition flow |
 | [docs/specs/WORKFLOWS.md](specs/WORKFLOWS.md) | Automated workflow definitions WF-01 to WF-10 |
