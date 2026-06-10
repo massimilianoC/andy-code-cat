@@ -53,7 +53,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M2.5",
         temperature: 0.7,
-        maxCompletionTokens: 1200,
+        maxCompletionTokens: 32000,
         systemTemplate: "",
     },
     zero_effort_generate: {
@@ -188,6 +188,8 @@ export interface ProductGovernanceConfig {
     cookieBanner?: ProductCookieBannerConfig;
     legal?: ProductLegalConfig;
     nginx: ProductNginxConfig;
+    attachmentPolicy?: Partial<ProductAttachmentPolicy>;
+    documentContextPolicy?: Partial<ProductDocumentContextPolicy>;
 }
 
 /**
@@ -283,6 +285,32 @@ export const DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY: ProductDocumentContextPoli
     fallbackInlineExtractionMaxAssets: 3,
 };
 
+export function resolveAttachmentPolicyFromConfig(
+    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
+    productKey: string,
+): ProductAttachmentPolicy {
+    const governance = platformConfig?.governanceByProduct?.[productKey];
+    const defaults = DEFAULT_PRODUCT_ATTACHMENT_POLICY;
+    return {
+        maxAttachmentsPerPrompt: governance?.attachmentPolicy?.maxAttachmentsPerPrompt ?? defaults.maxAttachmentsPerPrompt,
+        maxFileSizeBytes: governance?.attachmentPolicy?.maxFileSizeBytes ?? defaults.maxFileSizeBytes,
+        maxTotalBytes: governance?.attachmentPolicy?.maxTotalBytes ?? defaults.maxTotalBytes,
+        warningThresholdBytes: governance?.attachmentPolicy?.warningThresholdBytes ?? defaults.warningThresholdBytes,
+    };
+}
+
+export function resolveDocumentContextPolicyFromConfig(
+    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
+    productKey: string,
+): ProductDocumentContextPolicy {
+    const governance = platformConfig?.governanceByProduct?.[productKey];
+    const defaults = DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY;
+    return {
+        maxAssetsPerPrompt: governance?.documentContextPolicy?.maxAssetsPerPrompt ?? defaults.maxAssetsPerPrompt,
+        fallbackInlineExtractionMaxAssets: governance?.documentContextPolicy?.fallbackInlineExtractionMaxAssets ?? defaults.fallbackInlineExtractionMaxAssets,
+    };
+}
+
 export function resolvePromptTaskSettingFromConfig(
     platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
     productKey: string,
@@ -291,13 +319,17 @@ export function resolvePromptTaskSettingFromConfig(
     const defaultTask = (DEFAULT_PROMPT_TASK_SETTINGS[taskKey] ?? DEFAULT_PROMPT_TASK_SETTINGS.optimize_user_prompt)!;
     const fromDefault = platformConfig?.governanceByProduct?.default?.promptTaskSettings?.[taskKey];
     const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.promptTaskSettings?.[taskKey];
+    const configuredMaxCompletionTokens = fromProduct?.maxCompletionTokens ?? fromDefault?.maxCompletionTokens;
+    const maxCompletionTokens = taskKey === "zero_effort_optimize" && configuredMaxCompletionTokens === 1200
+        ? defaultTask.maxCompletionTokens
+        : configuredMaxCompletionTokens ?? defaultTask.maxCompletionTokens;
 
     return {
         enabled: fromProduct?.enabled ?? fromDefault?.enabled ?? defaultTask.enabled,
         provider: fromProduct?.provider || fromDefault?.provider || defaultTask.provider,
         model: fromProduct?.model || fromDefault?.model || defaultTask.model,
         temperature: fromProduct?.temperature ?? fromDefault?.temperature ?? defaultTask.temperature,
-        maxCompletionTokens: fromProduct?.maxCompletionTokens ?? fromDefault?.maxCompletionTokens ?? defaultTask.maxCompletionTokens,
+        maxCompletionTokens,
         systemTemplate: fromProduct?.systemTemplate || fromDefault?.systemTemplate || defaultTask.systemTemplate,
     };
 }

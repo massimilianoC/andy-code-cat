@@ -59,31 +59,31 @@ type GenerationPhase =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SITE_TYPES: Array<{ value: ZeroEffortLaunchInput["siteType"]; label: string }> = [
-    { value: "landing_page", label: "Landing" },
-    { value: "business_site", label: "Business" },
-    { value: "portfolio", label: "Portfolio" },
-    { value: "showcase", label: "Showcase" },
+const SITE_TYPES: Array<{ value: ZeroEffortLaunchInput["siteType"] }> = [
+    { value: "landing_page" },
+    { value: "business_site" },
+    { value: "portfolio" },
+    { value: "showcase" },
 ];
 
-const STYLE_ATTRIBUTES: Array<{ id: string; label: string }> = [
-    { id: "minimal", label: "Minimal" },
-    { id: "premium", label: "Premium" },
-    { id: "dark", label: "Dark / Night" },
-    { id: "bright", label: "Chiaro / Luminoso" },
-    { id: "bold", label: "Bold / Impattante" },
-    { id: "elegant", label: "Elegante" },
-    { id: "corporate", label: "Corporate" },
-    { id: "playful", label: "Giocoso / Creativo" },
-    { id: "tech", label: "Tech / Moderno" },
-    { id: "artisan", label: "Artigianale" },
-    { id: "luxury", label: "Luxury" },
-    { id: "eco", label: "Eco / Naturale" },
+const STYLE_ATTRIBUTES: Array<{ id: string }> = [
+    { id: "minimal" },
+    { id: "premium" },
+    { id: "dark" },
+    { id: "bright" },
+    { id: "bold" },
+    { id: "elegant" },
+    { id: "corporate" },
+    { id: "playful" },
+    { id: "tech" },
+    { id: "artisan" },
+    { id: "luxury" },
+    { id: "eco" },
 ];
 
 const CONTACT_SUGGESTIONS = [
-    "Email", "Telefono", "Indirizzo", "Instagram", "Facebook",
-    "LinkedIn", "YouTube", "WhatsApp", "Sito web", "P.IVA",
+    "email", "phone", "address", "instagram", "facebook",
+    "linkedin", "youtube", "whatsapp", "website", "vat",
 ];
 
 // ─── Step sub-components ──────────────────────────────────────────────────────
@@ -95,20 +95,21 @@ interface Step1Props {
     canProceed: boolean;
 }
 function Step1Content({ form, onChange, onNext, canProceed }: Step1Props) {
+    const { t } = useTranslation();
     return (
         <div className="space-y-4">
             <div className="space-y-2">
-                <Label htmlFor="businessName">Nome del brand o dell&apos;azienda</Label>
+                <Label htmlFor="businessName">{t("launch.step1.businessName")}</Label>
                 <Input
                     id="businessName"
                     value={form.businessName}
                     onChange={(e) => onChange({ businessName: e.target.value })}
-                    placeholder="Es. KTM Machina Style"
+                    placeholder={t("launch.step1.businessNamePlaceholder")}
                 />
             </div>
 
             <div className="space-y-2">
-                <Label>Tipo di sito</Label>
+                <Label>{t("launch.step1.siteType")}</Label>
                 <div className="grid grid-cols-2 gap-2">
                     {SITE_TYPES.map((option) => (
                         <Button
@@ -118,29 +119,29 @@ function Step1Content({ form, onChange, onNext, canProceed }: Step1Props) {
                             size="sm"
                             onClick={() => onChange({ siteType: option.value })}
                         >
-                            {option.label}
+                            {t(`launch.siteTypes.${option.value}`)}
                         </Button>
                     ))}
                 </div>
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="primaryGoal">Descrizione e obiettivo principale</Label>
+                <Label htmlFor="primaryGoal">{t("launch.step1.goal")}</Label>
                 <p className="text-xs text-muted-foreground">
-                    Descrivi liberamente il progetto. Puoi usare elenchi puntati (- elemento), grassetto (**testo**) o incollare da Word.
+                    {t("launch.step1.goalHint")}
                 </p>
                 <textarea
                     id="primaryGoal"
                     className="w-full min-h-[180px] rounded-md border border-input bg-background px-3 py-2 text-sm font-mono leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
                     value={form.primaryGoal}
                     onChange={(e) => onChange({ primaryGoal: e.target.value })}
-                    placeholder={"Es. KTM Machina Style è un brand di accessori premium per motociclisti.\n- Obiettivo: aumentare le vendite online\n- Pubblico: appassionati di moto tra 25-45 anni\n- Punto di forza: materiali innovativi e design austriaco"}
+                    placeholder={t("launch.step1.goalPlaceholder")}
                 />
             </div>
 
             <div className="flex justify-end pt-2">
                 <Button type="button" onClick={onNext} disabled={!canProceed} className="gap-2">
-                    Avanti <ChevronRight className="h-4 w-4" />
+                    {t("launch.step1.next")} <ChevronRight className="h-4 w-4" />
                 </Button>
             </div>
         </div>
@@ -158,37 +159,38 @@ interface Step2Props {
     removeContact: (id: string) => void;
 }
 function Step2Content({ form, onChange, onNext, onBack, canProceed, addContact, updateContact, removeContact }: Step2Props) {
+    const { t } = useTranslation();
     return (
         <div className="space-y-4">
             <div className="space-y-2">
-                <Label htmlFor="audience">Audience e target</Label>
+                <Label htmlFor="audience">{t("launch.step2.audience")}</Label>
                 <p className="text-xs text-muted-foreground">
-                    Chi sono i destinatari? Descrivi età, interessi, bisogni, lingua.
+                    {t("launch.step2.audienceHint")}
                 </p>
                 <textarea
                     id="audience"
                     className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
                     value={form.audience}
                     onChange={(e) => onChange({ audience: e.target.value })}
-                    placeholder="es. Motociclisti appassionati tra 25-45 anni, italiani e europei, amanti del design e della qualità"
+                    placeholder={t("launch.step2.audiencePlaceholder")}
                 />
             </div>
 
             <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                    <Label>Informazioni di contatto e dati salienti</Label>
+                    <Label>{t("launch.step2.contacts")}</Label>
                     <Button type="button" variant="outline" size="sm" onClick={addContact} className="gap-1.5">
                         <Plus className="h-3.5 w-3.5" />
-                        Aggiungi
+                        {t("launch.step2.add")}
                     </Button>
                 </div>
                 <p className="text-xs text-muted-foreground -mt-2">
-                    Email, telefono, indirizzo, social — dati che devono apparire nel sito.
+                    {t("launch.step2.contactsHint")}
                 </p>
 
                 {form.contactFields.length === 0 && (
                     <div className="rounded-md border border-dashed border-border p-4 text-center">
-                        <p className="text-sm text-muted-foreground">Nessun dato aggiunto.</p>
+                        <p className="text-sm text-muted-foreground">{t("launch.step2.noData")}</p>
                         <div className="flex flex-wrap justify-center gap-1.5 mt-2">
                             {CONTACT_SUGGESTIONS.map((s) => (
                                 <button
@@ -197,7 +199,7 @@ function Step2Content({ form, onChange, onNext, onBack, canProceed, addContact, 
                                     onClick={() => addContact()}
                                     className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
                                 >
-                                    + {s}
+                                    + {t(`launch.contactSuggestions.${s}`)}
                                 </button>
                             ))}
                         </div>
@@ -210,11 +212,11 @@ function Step2Content({ form, onChange, onNext, onBack, canProceed, addContact, 
                             <Input
                                 value={cf.key}
                                 onChange={(e) => updateContact(cf.id, "key", e.target.value)}
-                                placeholder="Email"
+                                placeholder={t("launch.step2.keyPlaceholder")}
                                 list="contact-suggestions"
                             />
                             <datalist id="contact-suggestions">
-                                {CONTACT_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                                {CONTACT_SUGGESTIONS.map((s) => <option key={s} value={t(`launch.contactSuggestions.${s}`)} />)}
                             </datalist>
                         </div>
                         <Input
@@ -232,10 +234,10 @@ function Step2Content({ form, onChange, onNext, onBack, canProceed, addContact, 
 
             <div className="flex justify-between pt-2">
                 <Button type="button" variant="outline" onClick={onBack} className="gap-2">
-                    <ChevronRight className="h-4 w-4 rotate-180" /> Indietro
+                    <ChevronRight className="h-4 w-4 rotate-180" /> {t("launch.step2.back")}
                 </Button>
                 <Button type="button" onClick={onNext} disabled={!canProceed} className="gap-2">
-                    Avanti <ChevronRight className="h-4 w-4" />
+                    {t("launch.step2.next")} <ChevronRight className="h-4 w-4" />
                 </Button>
             </div>
         </div>
@@ -252,13 +254,14 @@ interface Step3Props {
     toggleStyle: (attr: string) => void;
 }
 function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, toggleStyle }: Step3Props) {
+    const { t } = useTranslation();
     const selected = form.styleAttributes ?? [];
     return (
         <div className="space-y-4">
             <div className="space-y-2">
-                <Label>Attributi visivi</Label>
+                <Label>{t("launch.step3.visualAttributes")}</Label>
                 <p className="text-xs text-muted-foreground">
-                    Seleziona uno o più stili che caratterizzano il progetto.
+                    {t("launch.step3.visualHint")}
                 </p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {STYLE_ATTRIBUTES.map((attr) => {
@@ -281,7 +284,7 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
                                 )}>
                                     {isOn && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                                 </div>
-                                {attr.label}
+                                {t(`launch.styleAttributes.${attr.id}`)}
                             </button>
                         );
                     })}
@@ -290,32 +293,32 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
 
             <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                    <Label htmlFor="tone">Tono di voce</Label>
+                    <Label htmlFor="tone">{t("launch.step3.tone")}</Label>
                     <Input
                         id="tone"
                         value={form.tone ?? ""}
                         onChange={(e) => onChange({ tone: e.target.value })}
-                        placeholder="Es. chiaro e moderno"
+                        placeholder={t("launch.step3.tonePlaceholder")}
                     />
                 </div>
                 <div className="space-y-2">
-                    <Label htmlFor="primaryCta">CTA principale</Label>
+                    <Label htmlFor="primaryCta">{t("launch.step3.cta")}</Label>
                     <Input
                         id="primaryCta"
                         value={form.primaryCta ?? ""}
                         onChange={(e) => onChange({ primaryCta: e.target.value })}
-                        placeholder="Es. Acquista ora, Scopri di più"
+                        placeholder={t("launch.step3.ctaPlaceholder")}
                     />
                 </div>
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="styleHint">Note stilistiche aggiuntive</Label>
+                <Label htmlFor="styleHint">{t("launch.step3.styleNotes")}</Label>
                 <Input
                     id="styleHint"
                     value={form.styleHint ?? ""}
                     onChange={(e) => onChange({ styleHint: e.target.value })}
-                    placeholder="Es. Telaio in alluminio, primo e-bike per ÖAMTC, colori brand KTM"
+                    placeholder={t("launch.step3.styleNotesPlaceholder")}
                 />
             </div>
 
@@ -327,11 +330,11 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
 
             <div className="flex justify-between pt-2">
                 <Button type="button" variant="outline" onClick={onBack} className="gap-2">
-                    <ChevronRight className="h-4 w-4 rotate-180" /> Indietro
+                    <ChevronRight className="h-4 w-4 rotate-180" /> {t("launch.step3.back")}
                 </Button>
                 <Button type="button" onClick={onSubmit} disabled={submitting} className="gap-2">
                     <Rocket className="h-4 w-4" />
-                    {submitting ? "Preparazione brief..." : "Prepara Brief"}
+                    {submitting ? t("launch.step3.generating") : t("launch.step3.generate")}
                 </Button>
             </div>
         </div>
@@ -340,98 +343,102 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
 
 // ─── Structured brief builder ─────────────────────────────────────────────────
 
-function buildStructuredBrief(form: ExtendedForm, projectName: string, docNames?: string[]): string {
-    const siteTypeLabels: Record<string, string> = {
-        landing_page: "Landing Page",
-        business_site: "Business Site",
-        portfolio: "Portfolio",
-        showcase: "Showcase",
-    };
-    const siteLabel = siteTypeLabels[form.siteType] ?? form.siteType;
+function buildStructuredBrief(
+    form: ExtendedForm,
+    projectName: string,
+    t: ReturnType<typeof useTranslation>["t"],
+    templateLabel?: string | null,
+    docNames?: string[],
+): string {
+    const siteLabel = t(`launch.siteTypes.${form.siteType}`);
     const brandName = form.businessName.trim() || projectName;
 
     const sections: string[] = [];
 
-    // ── [IDENTITÀ] ──────────────────────────────────────────────────────────
     sections.push(
-        `# BRIEF DI PROGETTO — ${brandName}\n\n` +
-        `## [IDENTITÀ] Brand e tipo sito\n` +
-        `- **Brand:** ${brandName}\n` +
-        `- **Tipo sito:** ${siteLabel}`,
+        `# ${t("launch.brief.title", { brand: brandName })}\n\n` +
+        `## ${t("launch.brief.identity")}\n` +
+        `- **${t("launch.brief.brand")}:** ${brandName}\n` +
+        (templateLabel ? `- **${t("launch.brief.template")}:** ${templateLabel}\n` : "") +
+        `- **${t("launch.brief.siteType")}:** ${siteLabel}`,
     );
 
-    // ── [OBIETTIVO] ─────────────────────────────────────────────────────────
     if (form.primaryGoal.trim()) {
         sections.push(
-            `## [OBIETTIVO] Descrizione e obiettivo principale\n\n` +
+            `## ${t("launch.brief.goal")}\n\n` +
             form.primaryGoal.trim(),
         );
     }
 
-    // ── [AUDIENCE] ──────────────────────────────────────────────────────────
     if (form.audience.trim()) {
         sections.push(
-            `## [AUDIENCE] Target e pubblico di riferimento\n\n` +
+            `## ${t("launch.brief.audience")}\n\n` +
             form.audience.trim(),
         );
     }
 
-    // ── [STILE] ─────────────────────────────────────────────────────────────
     const styleLines: string[] = [];
     const selectedStyles = STYLE_ATTRIBUTES
         .filter((a) => form.styleAttributes.includes(a.id))
-        .map((a) => a.label);
+        .map((a) => t(`launch.styleAttributes.${a.id}`));
     if (selectedStyles.length > 0) {
-        styleLines.push(`- **Attributi visivi:** ${selectedStyles.join(", ")}`);
+        styleLines.push(`- **${t("launch.brief.visualAttributes")}:** ${selectedStyles.join(", ")}`);
     }
     if (form.tone?.trim()) {
-        styleLines.push(`- **Tono di voce:** ${form.tone.trim()}`);
+        styleLines.push(`- **${t("launch.brief.tone")}:** ${form.tone.trim()}`);
     }
     if (form.primaryCta?.trim()) {
-        styleLines.push(`- **CTA principale:** ${form.primaryCta.trim()}`);
+        styleLines.push(`- **${t("launch.brief.cta")}:** ${form.primaryCta.trim()}`);
     }
     if (form.styleHint?.trim()) {
-        styleLines.push(`- **Note stilistiche aggiuntive:** ${form.styleHint.trim()}`);
+        styleLines.push(`- **${t("launch.brief.styleNotes")}:** ${form.styleHint.trim()}`);
     }
     if (styleLines.length > 0) {
-        sections.push(`## [STILE] Attributi visivi, tono e CTA\n\n${styleLines.join("\n")}`);
+        sections.push(`## ${t("launch.brief.style")}\n\n${styleLines.join("\n")}`);
     }
 
-    // ── [CONTATTI] ──────────────────────────────────────────────────────────
     const validContacts = form.contactFields.filter((cf) => cf.key.trim() && cf.value.trim());
     if (validContacts.length > 0) {
         const contactLines = validContacts
             .map((cf) => `- **${cf.key.trim()}:** ${cf.value.trim()}`)
             .join("\n");
-        sections.push(`## [CONTATTI] Informazioni di contatto e dati salienti\n\n${contactLines}`);
+        sections.push(`## ${t("launch.brief.contacts")}\n\n${contactLines}`);
     }
 
-    // ── [ALLEGATI] ──────────────────────────────────────────────────────────
     if (docNames && docNames.length > 0) {
         const docList = docNames.map((d) => `- ${d}`).join("\n");
-        sections.push(`## [ALLEGATI] Documenti analizzati per il brief\n\n${docList}`);
+        sections.push(`## ${t("launch.brief.attachments")}\n\n${docList}`);
     }
 
-    const footer = `\n---\n*Brief strutturato Guided Mode · ${siteLabel} · Sezioni: ${sections.length - 1}*`;
+    const footer = `\n---\n*${t("launch.brief.footer", { siteType: siteLabel, sections: sections.length - 1 })}*`;
     return sections.join("\n\n") + footer;
 }
 
 // ─── Step config ──────────────────────────────────────────────────────────────
 
 const STEPS = [
-    { number: 1, title: "Descrizione", subtitle: "Brand, tipo sito e obiettivo principale", icon: FileText },
-    { number: 2, title: "Target & Dati", subtitle: "Audience, contatti e info salienti", icon: Target },
-    { number: 3, title: "Stile visivo", subtitle: "Attributi estetici, tono e CTA", icon: Palette },
+    { number: 1, titleKey: "launch.steps.1.title", subtitleKey: "launch.steps.1.subtitle", icon: FileText },
+    { number: 2, titleKey: "launch.steps.2.title", subtitleKey: "launch.steps.2.subtitle", icon: Target },
+    { number: 3, titleKey: "launch.steps.3.title", subtitleKey: "launch.steps.3.subtitle", icon: Palette },
 ] as const;
 
 // ─── Phase label helpers ──────────────────────────────────────────────────────
 
-function phaseLabel(phase: GenerationPhase): string {
+function phaseLabel(phase: GenerationPhase, t: ReturnType<typeof useTranslation>["t"]): string {
     switch (phase) {
-        case "review": return "Pronto per la generazione";
-        case "optimizing": return "Ottimizzazione prompt...";
-        case "optimized": return "Prompt ottimizzato — continua in Guided Mode per generare";
+        case "review": return t("launch.phase.review");
+        case "optimizing": return t("launch.phase.optimizing");
+        case "optimized": return t("launch.phase.optimized");
     }
+}
+
+function templateLabel(templateId: string | null | undefined, t: ReturnType<typeof useTranslation>["t"]): string | null {
+    if (!templateId) return null;
+    const fallback = templateId
+        .split("-")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+    return t(`launch.templates.${templateId}`, { defaultValue: fallback });
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -461,6 +468,8 @@ export default function ZeroEffortLaunchPage() {
 
     // AI-prefilled review mode
     const [aiPrefilled, setAiPrefilled] = useState(false);
+    const [prefillTemplateId, setPrefillTemplateId] = useState<string | null>(searchParams?.get("templateId") ?? null);
+    const [prefillFormatHint, setPrefillFormatHint] = useState<string | null>(searchParams?.get("formatHint") ?? null);
 
     // brief editor
     const [editedBrief, setEditedBrief] = useState("");
@@ -501,6 +510,7 @@ export default function ZeroEffortLaunchPage() {
         void getProject(currentToken, projectId)
             .then((res) => {
                 setProject(res.project);
+                setPrefillTemplateId((prev) => prev || res.project.presetId || null);
                 setForm((prev) => ({ ...prev, businessName: prev.businessName || res.project.name }));
             })
             .catch(() => setError("Unable to load the project."))
@@ -515,6 +525,12 @@ export default function ZeroEffortLaunchPage() {
             if (!raw) return;
             sessionStorage.removeItem(`ze_prefill_${projectId}`);
             const draft = JSON.parse(raw) as Record<string, unknown>;
+            if (typeof draft.templateId === "string" && draft.templateId.trim()) {
+                setPrefillTemplateId(draft.templateId);
+            }
+            if (typeof draft.formatHint === "string" && draft.formatHint.trim()) {
+                setPrefillFormatHint(draft.formatHint);
+            }
             patch({
                 businessName:    typeof draft.businessName === "string" ? draft.businessName : "",
                 siteType:        (["landing_page","portfolio","showcase","business_site"].includes(String(draft.siteType))
@@ -557,6 +573,15 @@ export default function ZeroEffortLaunchPage() {
         [form.businessName, form.primaryGoal],
     );
     const step2Valid = useMemo(() => form.audience.trim().length >= 3, [form.audience]);
+    const selectedTemplateId = prefillTemplateId || project?.presetId || null;
+    const selectedTemplateLabel = templateLabel(selectedTemplateId, t);
+    const selectedFormatLabel = !selectedTemplateLabel && prefillFormatHint
+        ? t(`launch.formatHints.${prefillFormatHint}`, {
+            defaultValue: prefillFormatHint.replace(/_/g, " "),
+        })
+        : null;
+    const selectedTemplateOrFormatLabel = selectedTemplateLabel ?? selectedFormatLabel;
+    const selectedOutputLabel = selectedTemplateOrFormatLabel ?? t(`launch.siteTypes.${form.siteType}`);
 
     function completeStep(n: number) {
         setCompletedSteps((prev) => new Set([...prev, n]));
@@ -627,7 +652,7 @@ export default function ZeroEffortLaunchPage() {
             setResult(briefResult);
             // Build the structured brief client-side from the full form data
             // so every section and long-text field is included verbatim.
-            setEditedBrief(buildStructuredBrief(form, project?.name ?? "", attachedFiles));
+            setEditedBrief(buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles));
             setPipelineConfig(configResult);
             setCompletedSteps(new Set([1, 2, 3]));
             setPhase("review");
@@ -655,7 +680,7 @@ export default function ZeroEffortLaunchPage() {
             setEditedOptimizedPrompt(optimizeRes.optimizedPrompt);
             setPhase("optimized");
         } catch (err) {
-            setGenError(err instanceof Error ? err.message : "Errore ottimizzazione prompt");
+            setGenError(err instanceof Error ? err.message : t("launch.errors.optimizePrompt"));
             setPhase("review");
         }
     }
@@ -708,7 +733,7 @@ export default function ZeroEffortLaunchPage() {
                 getZeroEffortConfig(token, projectId).catch(() => null),
             ]);
             const localConfig = configResult;
-            const brief = buildStructuredBrief(form, project?.name ?? "", attachedFiles);
+            const brief = buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles);
 
             // Always run one optimization pass — the structured brief (AI-prefilled or manual)
             // needs to be rewritten with system-layer context before entering Guided Mode.
@@ -735,7 +760,7 @@ export default function ZeroEffortLaunchPage() {
                 `/workspace/${projectId}?conv=${convId}${skipParam}${modelParams}`,
             );
         } catch (e) {
-            const message = e instanceof Error ? e.message : "Impossibile avviare la generazione.";
+            const message = e instanceof Error ? e.message : t("launch.errors.startGeneration");
             setError(message);
             setSubmitting(false);
         }
@@ -786,7 +811,7 @@ export default function ZeroEffortLaunchPage() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <CardTitle className="text-base flex items-center gap-2">
-                                        <span>✦ Pre-compilato dall&apos;AI</span>
+                                        <span>{t("launch.review.prefillTitle")}</span>
                                         <Badge variant="accent" className="text-xs font-normal">{t("launch.review.badge")}</Badge>
                                     </CardTitle>
                                     <CardDescription className="text-xs mt-0.5">
@@ -802,7 +827,7 @@ export default function ZeroEffortLaunchPage() {
                                     <span className="text-muted-foreground text-xs w-24 shrink-0">{t("launch.review.summary.brand")}</span>
                                     <span className="font-medium text-foreground truncate">{form.businessName || "—"}</span>
                                     <Badge variant="secondary" className="text-xs font-normal capitalize ml-auto">
-                                        {form.siteType.replace("_", " ")}
+                                        {t("launch.review.templateBadge", { template: selectedOutputLabel })}
                                     </Badge>
                                 </div>
                                 {form.primaryGoal && (
@@ -905,7 +930,7 @@ export default function ZeroEffortLaunchPage() {
                                         "hidden text-xs font-medium sm:block",
                                         step.number === currentStep ? "text-foreground" : "text-muted-foreground",
                                     )}>
-                                        {step.title}
+                                    {t(step.titleKey)}
                                     </span>
                                     {index < STEPS.length - 1 && (
                                         <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-1" />
@@ -944,8 +969,8 @@ export default function ZeroEffortLaunchPage() {
                                         {isDone ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold">Step {step.number} — {step.title}</p>
-                                        <p className="text-xs text-muted-foreground">{step.subtitle}</p>
+                                        <p className="text-sm font-semibold">{t("launch.stepLabel", { number: step.number, title: t(step.titleKey) })}</p>
+                                        <p className="text-xs text-muted-foreground">{t(step.subtitleKey)}</p>
                                     </div>
                                     <ChevronRight className={cn(
                                         "h-4 w-4 text-muted-foreground transition-transform",
@@ -1021,10 +1046,10 @@ export default function ZeroEffortLaunchPage() {
                             </div>
                             <div className="text-center">
                                 <p className="text-sm font-medium">
-                                    {uploadingFiles ? "Caricamento in corso..." : "Allega documenti di contesto"}
+                                    {uploadingFiles ? t("launch.upload.uploading") : t("launch.upload.attachContext")}
                                 </p>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    PDF, DOCX, TXT, MD, immagini — trascinali qui o clicca per sfogliare
+                                    {t("launch.upload.attachHint")}
                                 </p>
                             </div>
                             {attachedFiles.length > 0 && (
@@ -1072,7 +1097,7 @@ export default function ZeroEffortLaunchPage() {
                     </CardContent>
                 </Card>
 
-                {/* ── Step 4 — Generazione automatica (appare dopo API success) ── */}
+                {/* Automatic generation appears after the API prepares the brief. */}
                 {result && (
                     <Card ref={step4Ref} className={cn(
                         "border-primary/40 transition-all",
@@ -1089,13 +1114,13 @@ export default function ZeroEffortLaunchPage() {
                                      <Sparkles className="h-4 w-4" />}
                                 </div>
                                 <div className="flex-1">
-                                    <CardTitle className="text-base">Step 4 — Avvia Generazione</CardTitle>
+                                    <CardTitle className="text-base">{t("launch.step4.generationTitle")}</CardTitle>
                                     <CardDescription className="text-xs">
-                                        {phaseLabel(phase)}
+                                        {phaseLabel(phase, t)}
                                     </CardDescription>
                                 </div>
                                 <Badge variant={phase === "optimized" ? "success" : "secondary"} className="ml-auto text-xs">
-                                    {phase === "optimized" ? "Prompt pronto" : `${pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model ?? "MiniMax-M2.5"}`}
+                                    {phase === "optimized" ? t("launch.step4.promptReady") : `${pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model ?? "MiniMax-M2.5"}`}
                                 </Badge>
                             </div>
                         </CardHeader>
@@ -1107,7 +1132,7 @@ export default function ZeroEffortLaunchPage() {
                                 <>
                                     <div className="space-y-1.5">
                                         <Label className="text-xs text-muted-foreground">
-                                            Brief strutturato — modificabile prima dell&apos;ottimizzazione
+                                            {t("launch.step4.structuredBriefLabel")}
                                         </Label>
                                         <div className="rounded-md border border-border overflow-hidden h-[340px]">
                                             <MonacoEditor
@@ -1137,7 +1162,7 @@ export default function ZeroEffortLaunchPage() {
 
                                     <div className="flex items-center justify-between pt-1">
                                         <p className="text-xs text-muted-foreground">
-                                            Il brief verrà ottimizzato in prompt, poi usato per generare il sito.
+                                            {t("launch.step4.optimizeHint")}
                                         </p>
                                         <Button
                                             onClick={handleOptimize}
@@ -1145,9 +1170,9 @@ export default function ZeroEffortLaunchPage() {
                                             className="gap-2"
                                         >
                                             {phase === "optimizing" ? (
-                                                <><Loader2 className="h-4 w-4 animate-spin" /> Ottimizzazione...</>
+                                                <><Loader2 className="h-4 w-4 animate-spin" /> {t("launch.step4.optimizing")}</>
                                             ) : (
-                                                <><Wand2 className="h-4 w-4" /> Avvia Generazione</>
+                                                <><Wand2 className="h-4 w-4" /> {t("launch.step4.startGeneration")}</>
                                             )}
                                         </Button>
                                     </div>
@@ -1160,14 +1185,14 @@ export default function ZeroEffortLaunchPage() {
                                     <div className="space-y-1.5">
                                         <div className="flex items-center justify-between">
                                             <Label className="text-xs text-muted-foreground">
-                                                Prompt ottimizzato — modificabile prima della generazione
+                                                {t("launch.step4.optimizedPromptLabel")}
                                             </Label>
                                             <button
                                                 type="button"
                                                 onClick={() => setPhase("review")}
                                                 className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
                                             >
-                                                Torna al brief
+                                                {t("launch.step4.backToBrief")}
                                             </button>
                                         </div>
                                         <div className="rounded-md border border-border overflow-hidden h-[220px]">
@@ -1199,7 +1224,7 @@ export default function ZeroEffortLaunchPage() {
                                         <div className="flex items-start gap-3">
                                             <Sparkles className="mt-0.5 h-4 w-4 text-primary shrink-0" />
                                             <p className="text-xs text-muted-foreground">
-                                                Il prompt è pronto. Clicca <strong className="text-foreground">Continua in Guided Mode</strong> per generare il sito con salvataggio completo dell&apos;artefatto, preview e strumenti di modifica.
+                                                {t("launch.step4.readyPrefix")} <strong className="text-foreground">{t("launch.step4.continueInGuided")}</strong> {t("launch.step4.readySuffix")}
                                             </p>
                                         </div>
                                     </div>
@@ -1210,11 +1235,11 @@ export default function ZeroEffortLaunchPage() {
                                         </Badge>
                                         <div className="ml-auto flex gap-2">
                                             <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")}>
-                                                Dashboard
+                                                {t("launch.step4.dashboard")}
                                             </Button>
                                             <Button size="sm" onClick={handleGoToGodMode} className="gap-2">
                                                 <Rocket className="h-3.5 w-3.5" />
-                                                Continua in Guided Mode
+                                                {t("launch.step4.continueInGuided")}
                                             </Button>
                                         </div>
                                     </div>

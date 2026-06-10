@@ -98,31 +98,40 @@ function computeBreakdown(
     ratesSnapshot: CostRatesSnapshot;
 } {
     const rates = resolveRates(dbRates, input.resourceType);
+    const fixedFeeEur = Number(rates.fixedFeeEur.toFixed(6));
 
     const ratesSnapshot: CostRatesSnapshot = {
         usdToEurRate:        rates.usdToEurRate,
         platformMarkupPct:   rates.markupPct,
         infraCostPct:        rates.infraPct,
-        fixedFeeEur:         rates.fixedFeeEur,
+        fixedFeeEur,
         textEurPer1kTokens:  rates.textEurPer1kTokens,
         imageEurPerAsset:    rates.imageEurPerAsset,
         videoEurPerAsset:    rates.videoEurPerAsset,
     };
 
-    // Use pre-computed total from estimateCost() when available — avoids double computation
+    const providerCostEur = Number(((input.providerCostUsd ?? 0) * rates.usdToEurRate).toFixed(6));
+
+    // Legacy compatibility: some call sites still pass a precomputed total from estimateCost().
+    // Preserve those totals when they are provider-based, but back-fill the component fields so
+    // the persisted ledger row remains internally consistent.
     if (input.precomputedTotalEur !== undefined && input.precomputedTotalEur > 0) {
-        const providerCostEur = Number(((input.providerCostUsd ?? 0) * rates.usdToEurRate).toFixed(6));
-        const knownBase = providerCostEur > 0
-            ? providerCostEur
-            : input.precomputedTotalEur / (1 + rates.infraPct + rates.markupPct);
-        const infraCostEur = Number((knownBase * rates.infraPct).toFixed(6));
-        const platformMarkupEur = Number(((knownBase * rates.markupPct) + rates.fixedFeeEur).toFixed(6));
-        const totalEur = Number((input.precomputedTotalEur + rates.fixedFeeEur).toFixed(6));
-        return { providerCostEur, infraCostEur, platformMarkupEur, totalEur, ratesSnapshot };
+        if (providerCostEur > 0) {
+            const infraCostEur = Number((providerCostEur * rates.infraPct).toFixed(6));
+            const totalEur = Number((input.precomputedTotalEur + fixedFeeEur).toFixed(6));
+            const platformMarkupEur = Number((totalEur - providerCostEur - infraCostEur).toFixed(6));
+            return { providerCostEur, infraCostEur, platformMarkupEur, totalEur, ratesSnapshot };
+        }
+
+        const baseCostEur = Number(input.precomputedTotalEur.toFixed(6));
+        const derivedProviderCostEur = baseCostEur;
+        const infraCostEur = Number((baseCostEur * rates.infraPct).toFixed(6));
+        const platformMarkupEur = Number((((baseCostEur + infraCostEur) * rates.markupPct) + fixedFeeEur).toFixed(6));
+        const totalEur = Number((baseCostEur + infraCostEur + platformMarkupEur).toFixed(6));
+        return { providerCostEur: derivedProviderCostEur, infraCostEur, platformMarkupEur, totalEur, ratesSnapshot };
     }
 
     // Compute from scratch
-    const providerCostEur = Number(((input.providerCostUsd ?? 0) * rates.usdToEurRate).toFixed(6));
     let baseCostEur = providerCostEur;
 
     if (baseCostEur === 0) {
@@ -137,11 +146,12 @@ function computeBreakdown(
         ).toFixed(6));
     }
 
+    const resolvedProviderCostEur = providerCostEur > 0 ? providerCostEur : baseCostEur;
     const infraCostEur = Number((baseCostEur * rates.infraPct).toFixed(6));
-    const platformMarkupEur = Number(((baseCostEur + infraCostEur) * rates.markupPct + rates.fixedFeeEur).toFixed(6));
+    const platformMarkupEur = Number((((baseCostEur + infraCostEur) * rates.markupPct) + fixedFeeEur).toFixed(6));
     const totalEur = Number((baseCostEur + infraCostEur + platformMarkupEur).toFixed(6));
 
-    return { providerCostEur, infraCostEur, platformMarkupEur, totalEur, ratesSnapshot };
+    return { providerCostEur: resolvedProviderCostEur, infraCostEur, platformMarkupEur, totalEur, ratesSnapshot };
 }
 
 export class CostTransactionService {

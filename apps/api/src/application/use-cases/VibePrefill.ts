@@ -9,6 +9,7 @@ import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
+import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -56,20 +57,35 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 {
   "businessName": "brand or project name (string, required)",
   "siteType": "landing_page|portfolio|showcase|business_site (string, required)",
-  "primaryGoal": "full project description and main objective — at least 20 chars (string, required)",
-  "audience": "target audience description — at least 10 chars (string, required)",
+  "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
+  "audience": "target audience description — 120 to 500 chars when possible (string, required)",
   "tone": "communication tone, e.g. professional, playful (string or null)",
   "primaryCta": "main call-to-action button text (string or null)",
-  "styleHint": "visual style notes (string or null)",
+  "styleHint": "visual, UX, interaction, and production notes — 180 to 900 chars when useful (string or null)",
   "contactInfo": [{"key": "Email", "value": "..."}],
   "styleAttributes": ["minimal"]
 }
 
 Rules:
-- businessName: extract from the prompt; fall back to "Progetto" if unclear.
-- siteType: infer from context; default "landing_page".
-- primaryGoal: expand the user's text into a detailed project description.
-- audience: infer who the site is for; describe age group, interests, needs.
+- businessName: extract from the prompt; fall back to "Project" if unclear.
+- siteType: infer from context using only the allowed values; default "landing_page".
+- primaryGoal: do not summarize too aggressively. Produce a robust structured brief that can be injected
+  into downstream generation prompts. Include:
+  1. project intent and desired output,
+  2. selected template interpretation,
+  3. required sections/screens/states or content modules,
+  4. key functionality/interactions,
+  5. success criteria and constraints,
+  6. any assumptions needed to make the first generation complete.
+- audience: infer who uses or views the result; include needs, context, and expectations.
+- If a Detected template block is present, adapt the fields to that template's real output.
+  For example, a videogame template should produce a primaryGoal describing gameplay,
+  core loop, controls, win/loss conditions, HUD, and target device, not marketing copy.
+  Preserve the template intent in styleHint and tone even when siteType must remain one
+  of the generic allowed values.
+- For non-website templates, keep siteType valid but make primaryGoal and styleHint carry the real
+  artifact type. Examples: slideshow -> slide narrative; infographic -> visual data story;
+  form -> guided steps and fields; manifesto -> editorial stance; game -> playable loop.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
 - Return ONLY the JSON object.`;
@@ -99,6 +115,25 @@ Rules:
 - respect grounded analytics: do not invent exact metric values.
 - Return ONLY the JSON object.`;
 
+function buildPresetContext(templateId?: string | null): string {
+    if (!templateId) return "";
+    const preset = PRESET_MAP.get(templateId);
+    if (!preset) return `Detected template: ${templateId}`;
+
+    return [
+        `Detected template: ${preset.id} — ${preset.labelEn || preset.label}`,
+        `Template category: ${preset.categoryLabel ?? preset.category ?? "custom"}`,
+        `Template hint: ${preset.hint}`,
+        `Template tags: ${(preset.tags ?? []).join(", ")}`,
+        `Output shape: ${preset.outputSpec.pageModel} / ${preset.outputSpec.sectionModel}${preset.outputSpec.printReady ? " / print-ready" : ""}`,
+        `Brief template to adapt: ${preset.briefTemplate.replace(/\s+/g, " ").slice(0, 900)}`,
+        `Style guidance: ${preset.styleTemplate.replace(/\s+/g, " ").slice(0, 500)}`,
+        preset.briefGuideQuestions.length
+            ? `Discovery questions to answer implicitly: ${preset.briefGuideQuestions.join(" | ")}`
+            : "",
+    ].filter(Boolean).join("\n");
+}
+
 function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[], templateId?: string | null, formatHint?: FormatHint | null): string {
     const parts: string[] = [prompt.slice(0, MAX_PROMPT_CHARS)];
     if (attachmentMeta?.length) {
@@ -107,7 +142,8 @@ function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[], tem
             .join(", ");
         parts.push(`\nAttached files: ${metaPart}`);
     }
-    if (templateId) parts.push(`\nDetected template: ${templateId}`);
+    const presetContext = buildPresetContext(templateId);
+    if (presetContext) parts.push(`\n${presetContext}`);
     if (formatHint) parts.push(`\nFormat hint: ${formatHint}`);
     return parts.join("");
 }
@@ -160,7 +196,7 @@ function parsePrefillResponse(raw: string, prompt: string): { draft: ZeroEffortD
             : undefined;
 
         const styleHint = typeof parsed.styleHint === "string" && parsed.styleHint.trim()
-            ? parsed.styleHint.trim().slice(0, 400)
+            ? parsed.styleHint.trim().slice(0, 1000)
             : undefined;
 
         const rawContacts = Array.isArray(parsed.contactInfo) ? parsed.contactInfo : [];

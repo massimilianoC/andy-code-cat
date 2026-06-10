@@ -13,6 +13,7 @@ const NAV_LINKS = [
     { href: "/admin/governance", label: "Preprompting" },
     { href: "/admin/integrations", label: "Integrations" },
     { href: "/admin/zero-effort", label: "Zero Effort" },
+    { href: "/admin/brand", label: "Brand" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

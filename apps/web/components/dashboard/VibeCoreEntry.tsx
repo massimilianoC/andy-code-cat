@@ -309,7 +309,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
             router.push(`/workspace/${projectId}?${query.toString()}`);
         } catch {
-            setError(t("vibecore.error", "Si è verificato un errore. Riprova."));
+            setError(t("vibecore.error", "An error occurred. Please try again."));
             setPhase("idle");
         }
     }
@@ -321,7 +321,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             (f) => f.size <= maxFileSizeBytes && ACCEPTED_MIME_TYPES.includes(f.type),
         );
         if (valid.length < incoming.length) {
-            setError("Alcuni file non sono supportati o superano i limiti consentiti.");
+            setError(t("vibecore.attachLimitError", "Some files are unsupported or exceed the allowed limits."));
         } else {
             setError(null);
         }
@@ -417,7 +417,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             // Create project early so files (and their Layer D enrichment) can be uploaded
             // before the LLM prefill pass runs
             setPhase("creating");
-            const projectName = prompt.trim().slice(0, 64) || "Progetto";
+            const projectName = prompt.trim().slice(0, 64) || t("vibecore.newProject", "New project");
             const presetId = classification?.templateId ?? undefined;
             let projectId = classification?.projectId;
             if (projectId) {
@@ -508,6 +508,8 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 }
                 const draftForLaunch = {
                     ...prefillResult.draft,
+                    templateId: experimentalDataModeDetected ? null : (classification?.templateId ?? null),
+                    formatHint: experimentalDataModeDetected ? null : (classification?.formatHint ?? null),
                     attachedDocuments: prefillResult.draft.attachedDocuments?.length
                         ? prefillResult.draft.attachedDocuments
                         : uploadedFileNames,
@@ -528,11 +530,12 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 autoPrompt: prompt.trim().slice(0, 2000),
             });
             if (classification?.formatHint) query.set("formatHint", classification.formatHint);
+            if (classification?.templateId) query.set("templateId", classification.templateId);
             if (hasPrefill) query.set("prefilled", "1");
             applyPipelineModelParams(query);
             router.push(`/launch/${projectId}?${query.toString()}`);
         } catch {
-            setError("Si è verificato un errore. Riprova.");
+            setError(t("vibecore.error", "An error occurred. Please try again."));
             setPhase("idle");
         }
     }
@@ -718,7 +721,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             }}
                             title={t(
                                 "vibecore.attachHint",
-                                "Trascina file o clicca per allegare documenti e immagini",
+                                "Drag files or click to attach documents and images",
                             )}
                         >
                             {isDragOver ? (
@@ -728,8 +731,8 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             )}
                             <span>
                                 {isDragOver
-                                    ? t("vibecore.dropHere", "Rilascia qui")
-                                    : t("vibecore.attach", "Allega")}
+                                    ? t("vibecore.dropHere", "Drop here")
+                                    : t("vibecore.attach", "Attach")}
                             </span>
                             <span
                                 className="hidden md:inline"

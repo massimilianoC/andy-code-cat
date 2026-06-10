@@ -34,6 +34,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { BrandAssetsManager } from "@/components/brand/BrandAssetsManager";
 
 const RECENT_KEY = "pf_recent_projects";
 const MAX_RECENTS = 3;
@@ -106,6 +107,7 @@ export default function DashboardPage() {
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
     const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
     const [canAccessSuperadmin, setCanAccessSuperadmin] = useState(false);
+    const [brandOpen, setBrandOpen] = useState(false);
     // VibeCore mode: lifted here so MEDIUM opens dialog overlay, HARD resets on return
     const [vibeMode, setVibeMode] = useState<VibeMode>("easy");
     const createInputRef = useRef<HTMLInputElement>(null);
@@ -291,6 +293,19 @@ export default function DashboardPage() {
                     onCompleted={() => setPasswordChangeRequiredState(false)}
                 />
             ) : null}
+            {token ? (
+                <Dialog open={brandOpen} onOpenChange={setBrandOpen}>
+                    <DialogContent className="max-w-lg w-full">
+                        <DialogHeader>
+                            <DialogTitle>My Brand Identity</DialogTitle>
+                            <DialogDescription className="text-xs">
+                                User-scoped brand assets are injected into all your projects, after platform-level assets and before project-specific ones.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <BrandAssetsManager scope="user" token={token} allowFileUpload={true} />
+                    </DialogContent>
+                </Dialog>
+            ) : null}
 
             {/* Fixed header — always above everything (z-50) */}
             <header className="fixed top-0 left-0 right-0 z-50 h-[56px] bg-card border-b border-border px-6 flex items-center justify-between">
@@ -300,6 +315,9 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher className="mr-1" />
+                    {token ? (
+                        <Button variant="ghost" size="sm" onClick={() => setBrandOpen(true)}>Brand</Button>
+                    ) : null}
                     {canAccessSuperadmin ? (
                         <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>{t("dashboard.superadmin")}</Button>
                     ) : null}

@@ -299,6 +299,87 @@
         "title": "Guided generation",
         "subtitle": "{{name}} · Complete 3 steps and review the brief before launching.",
         "project": "Your project",
+        "stepLabel": "Step {{number}} — {{title}}",
+        "siteTypes": {
+            "landing_page": "Landing",
+            "business_site": "Business",
+            "portfolio": "Portfolio",
+            "showcase": "Showcase"
+        },
+        "templates": {
+            "neutral": "Blank",
+            "landing": "Landing page",
+            "website": "Website",
+            "form": "Interactive form",
+            "manifesto": "Manifesto",
+            "a4poster": "A4 poster",
+            "infographic": "Infographic",
+            "slideshow": "Slideshow",
+            "keynote": "Visual keynote",
+            "videogame": "Videogame",
+            "seriousgame": "Serious Game",
+            "game3d": "3D Game",
+            "vr-aframe": "VR A-Frame Experience",
+            "interactive-story": "Interactive Story"
+        },
+        "formatHints": {
+            "one_pager": "One pager",
+            "a3_document": "A3 document",
+            "ratio_1_1": "1:1 format",
+            "ratio_16_9": "16:9 format",
+            "interactive_form": "Interactive form",
+            "portfolio": "Portfolio",
+            "brochure": "Brochure",
+            "analytics_dashboard": "Analytics dashboard"
+        },
+        "styleAttributes": {
+            "minimal": "Minimal",
+            "premium": "Premium",
+            "dark": "Dark / Night",
+            "bright": "Bright / Light",
+            "bold": "Bold / High-impact",
+            "elegant": "Elegant",
+            "corporate": "Corporate",
+            "playful": "Playful / Creative",
+            "tech": "Tech / Modern",
+            "artisan": "Artisan",
+            "luxury": "Luxury",
+            "eco": "Eco / Natural"
+        },
+        "contactSuggestions": {
+            "email": "Email",
+            "phone": "Phone",
+            "address": "Address",
+            "instagram": "Instagram",
+            "facebook": "Facebook",
+            "linkedin": "LinkedIn",
+            "youtube": "YouTube",
+            "whatsapp": "WhatsApp",
+            "website": "Website",
+            "vat": "VAT"
+        },
+        "phase": {
+            "review": "Ready for generation",
+            "optimizing": "Optimizing prompt...",
+            "optimized": "Prompt optimized — continue in Guided Mode to generate"
+        },
+        "brief": {
+            "title": "PROJECT BRIEF — {{brand}}",
+            "identity": "[IDENTITY] Brand and site type",
+            "brand": "Brand",
+            "template": "Template",
+            "siteType": "Site type",
+            "goal": "[GOAL] Description and main objective",
+            "audience": "[AUDIENCE] Target audience",
+            "style": "[STYLE] Visual attributes, tone and CTA",
+            "visualAttributes": "Visual attributes",
+            "tone": "Voice tone",
+            "cta": "Primary CTA",
+            "styleNotes": "Additional style notes",
+            "contacts": "[CONTACTS] Contact information and key data",
+            "attachments": "[ATTACHMENTS] Documents analysed for the brief",
+            "footer": "Structured Guided Mode brief · {{siteType}} · Sections: {{sections}}"
+        },
         "steps": {
             "1": {
                 "title": "Description",
@@ -350,8 +431,20 @@
         "step4": {
             "title": "Step 4 — Review brief",
             "subtitle": "The brief is ready. Edit it if needed, then launch the session.",
+            "generationTitle": "Step 4 — Start generation",
             "prepared": "Prepared successfully",
             "briefLabel": "Generated brief — editable (Markdown)",
+            "structuredBriefLabel": "Structured brief — editable before optimization",
+            "optimizeHint": "The brief will be optimized into a prompt, then used to generate the site.",
+            "optimizing": "Optimizing...",
+            "startGeneration": "Start generation",
+            "promptReady": "Prompt ready",
+            "optimizedPromptLabel": "Optimized prompt — editable before generation",
+            "backToBrief": "Back to brief",
+            "readyPrefix": "The prompt is ready. Click",
+            "continueInGuided": "Continue in Guided Mode",
+            "readySuffix": "to generate the site with complete artifact saving, preview, and editing tools.",
+            "dashboard": "Dashboard",
             "backToDashboard": "Back to dashboard",
             "continueInWorkspace": "Continue in workspace"
         },
@@ -359,6 +452,8 @@
         "openGodMode": "Open God Mode",
         "review": {
             "badge": "Review and generate",
+            "prefillTitle": "✦ AI pre-filled",
+            "templateBadge": "Template: {{template}}",
             "description": "The AI extracted the key data from your request. Generate now or adjust the fields first.",
             "generating": "Generation in progress…",
             "summary": {
@@ -370,12 +465,19 @@
             }
         },
         "upload": {
+            "uploading": "Uploading...",
+            "attachContext": "Attach context documents",
+            "attachHint": "PDF, DOCX, TXT, MD, images — drag them here or click to browse",
             "failedBadgeTitle": "Upload failed: {{name}}",
             "failedCount_one": "{{count}} file not uploaded — check the session",
             "failedCount_other": "{{count}} files not uploaded — check the session"
         },
         "loadError": "Unable to load the project.",
-        "submitError": "Unable to prepare the launch flow."
+        "submitError": "Unable to prepare the launch flow.",
+        "errors": {
+            "optimizePrompt": "Prompt optimization failed.",
+            "startGeneration": "Unable to start generation."
+        }
     },
     "config": {
         "title": "Project configuration",
@@ -440,6 +542,7 @@
         "dropHere": "Drop here",
         "newProject": "New project",
         "error": "An error occurred. Please try again.",
+        "attachLimitError": "Some files are unsupported or exceed the allowed limits.",
         "removeFile": "Remove",
         "modelOverrideLabel": "Pipeline model",
         "modelOverrideTitle": "Choose one model for the full pipeline",

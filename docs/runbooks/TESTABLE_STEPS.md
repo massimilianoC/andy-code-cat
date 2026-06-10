@@ -263,6 +263,37 @@ These two items are additive roadmap improvements and can be delivered after the
 - Verify: inactive presets (`freerunner`, `data-dashboard`) do NOT appear in the classifier template list — they would split probability mass below the confidence threshold causing Layer B to be empty
 - Verify: a prompt for "endless runner" or other explicit game sub-type still resolves to `videogame`
 
+### Step 11o - Global Brand Identity: Platform Scope (Admin)
+
+- `POST /v1/admin/brand-assets` with body `{ "role": "company_name", "policy": "must_use", "valueType": "text", "textValue": "Acme Corp" }`
+  - Expected: 201, `{ asset: { id, scope: "platform", role: "company_name", policy: "must_use", ... } }`
+- `POST /v1/admin/brand-assets` with body `{ "role": "brand_color_palette", "policy": "must_use", "valueType": "color_list", "textValue": "#FF0000,#00FF00,#0000FF" }`
+  - Expected: 201, `{ asset: { role: "brand_color_palette", valueType: "color_list", ... } }`
+- `GET /v1/admin/brand-assets` — Expected: returns the two assets above
+- `GET /v1/projects/:projectId/llm/prompt-preview` — Expected: `layers.g_brandContext` contains both assets with `[MUST USE / Platform]` prefix
+- Verify: Layer G appears in `composed` between Layer C and Layer D
+
+### Step 11p - Global Brand Identity: User Scope
+
+- `POST /v1/users/me/brand-assets` with body `{ "role": "social_instagram", "policy": "prefer", "valueType": "url", "textValue": "https://instagram.com/acmecorp" }`
+  - Expected: 201, `{ asset: { scope: "user", ownerUserId: <userId>, ... } }`
+- `GET /v1/users/me/brand-assets` — Expected: returns the asset above
+- `GET /v1/projects/:projectId/llm/prompt-preview` — Expected: `layers.g_brandContext` now contains both platform AND user assets, ordered platform → user
+
+### Step 11q - Global Brand Identity: Project Scope
+
+- `POST /v1/projects/:projectId/brand-assets` with body `{ "role": "client_logo", "policy": "must_use", "valueType": "text", "textValue": "Client Logo Label" }`
+  - Expected: 201, `{ asset: { scope: "project", projectId: "<projectId>", ... } }`
+- `GET /v1/projects/:projectId/brand-assets` — Expected: returns the asset above
+- `GET /v1/projects/:projectId/llm/prompt-preview` — Expected: `layers.g_brandContext` contains platform + user + project assets in that order
+
+### Step 11r - Global Brand Identity: Must-Use Mandatory Section and Retrocompatibility
+
+- Verify: when any asset has `policy: "must_use"`, Layer G ends with a `MANDATORY RULES` section listing must-use roles
+- Verify: `PATCH /v1/admin/brand-assets/:id` with `{ "isActive": false }` stops the asset from appearing in Layer G
+- Verify: `DELETE /v1/admin/brand-assets/:id` removes the asset and it no longer appears in Layer G
+- Retrocompatibility: `GET /v1/projects/:projectId/llm/prompt-preview` on a project with NO brand assets configured returns `g_brandContext: ""` and the composed prompt is identical to what it was before the feature was deployed
+
 ---
 
 ## M0.5 - Focused Asset Control
