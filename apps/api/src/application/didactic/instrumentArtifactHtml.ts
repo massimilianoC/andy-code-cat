@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import type { AnyNode } from "domhandler";
 
 interface IdIndexEntry {
     tag: string;
@@ -20,7 +21,7 @@ const BLOCK_TAGS = new Set([
 
 const MEDIA_TAGS = new Set(["img", "video", "audio", "canvas", "svg", "picture", "iframe"]);
 
-function isSignificant(el: cheerio.Cheerio<cheerio.Element>): boolean {
+function isSignificant(el: cheerio.Cheerio<AnyNode>): boolean {
     const tag = el.prop("tagName")?.toLowerCase() ?? "";
     if (!tag || tag === "html" || tag === "body" || tag === "head" || tag === "script" || tag === "style" || tag === "meta" || tag === "link") {
         return false;

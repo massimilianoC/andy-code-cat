@@ -105,9 +105,9 @@ export function createDidacticRoutes(): Router {
     // GET /v1/projects/:projectId/didactic/knowledge?snapshotId=...
     router.get("/projects/:projectId/didactic/knowledge", async (req: RequestWithContext, res, next) => {
         try {
-            const projectId = req.params.projectId;
+            const projectId = z.string().min(1).parse(req.params.projectId);
             const snapshotId = z.string().min(1).parse(req.query.snapshotId);
-            const snapshot = await snapshotRepo.findById(snapshotId);
+            const snapshot = await snapshotRepo.findById(projectId, snapshotId);
             if (!snapshot || snapshot.projectId !== projectId) {
                 res.status(404).json({ error: "Snapshot not found" });
                 return;
@@ -123,9 +123,9 @@ export function createDidacticRoutes(): Router {
     // POST /v1/projects/:projectId/didactic/knowledge/generate
     router.post("/projects/:projectId/didactic/knowledge/generate", async (req: RequestWithContext, res, next) => {
         try {
-            const projectId = req.params.projectId;
+            const projectId = z.string().min(1).parse(req.params.projectId);
             const body = generateDidacticKnowledgeSchema.parse(req.body);
-            const snapshot = await snapshotRepo.findById(body.snapshotId);
+            const snapshot = await snapshotRepo.findById(projectId, body.snapshotId);
             if (!snapshot || snapshot.projectId !== projectId) {
                 res.status(404).json({ error: "Snapshot not found" });
                 return;
@@ -157,9 +157,9 @@ export function createDidacticRoutes(): Router {
     // POST /v1/projects/:projectId/didactic/ask/stream
     router.post("/projects/:projectId/didactic/ask/stream", async (req: RequestWithContext, res, next) => {
         try {
-            const projectId = req.params.projectId;
+            const projectId = z.string().min(1).parse(req.params.projectId);
             const body = askDidacticQuestionSchema.parse(req.body);
-            const snapshot = await snapshotRepo.findById(body.snapshotId);
+            const snapshot = await snapshotRepo.findById(projectId, body.snapshotId);
             if (!snapshot || snapshot.projectId !== projectId) {
                 res.status(404).json({ error: "Snapshot not found" });
                 return;
@@ -267,7 +267,7 @@ export function createDidacticRoutes(): Router {
     // GET /v1/projects/:projectId/didactic/qna
     router.get("/projects/:projectId/didactic/qna", async (req: RequestWithContext, res, next) => {
         try {
-            const projectId = req.params.projectId;
+            const projectId = z.string().min(1).parse(req.params.projectId);
             const useCase = new ListDidacticQna(qnaRepo);
             const entries = await useCase.execute({ projectId });
             res.json({
