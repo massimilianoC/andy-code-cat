@@ -772,6 +772,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                     : t("workspace.ui.voiceOnlyChrome")}
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-150"
                             style={{
+                                padding: 0,
                                 border: `1px solid ${voiceListening ? "rgba(248,113,113,0.65)" : "rgba(255,255,255,0.22)"}`,
                                 background: voiceListening ? "rgba(248,113,113,0.16)" : "rgba(255,255,255,0.06)",
                                 color: voiceListening ? "#f87171" : voiceSupported ? "rgba(255,255,255,0.80)" : "rgba(255,255,255,0.55)",
@@ -806,6 +807,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                 : t("vibecore.modelOverrideTitle", "Scegli un modello per tutta la pipeline")}
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-150"
                             style={{
+                                padding: 0,
                                 border: `1px solid ${modelOverrideOpen || pipelineOverride ? `${glowColor}80` : "rgba(255,255,255,0.22)"}`,
                                 background: modelOverrideOpen || pipelineOverride ? `${glowColor}20` : "rgba(255,255,255,0.06)",
                                 color: modelOverrideOpen || pipelineOverride ? glowColor : "rgba(255,255,255,0.80)",
