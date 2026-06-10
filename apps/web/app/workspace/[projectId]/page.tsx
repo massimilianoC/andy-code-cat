@@ -78,6 +78,7 @@ import { Separator } from "@/components/ui/separator";
 import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
+import { DidacticPanel } from "../../../components/didactic/DidacticPanel";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
 import type { PreviewViewport } from "../../../components/workspace/PreviewViewportSelector";
 import { SnapshotHistoryPanel } from "../../../components/workspace/SnapshotHistoryPanel";
@@ -3228,6 +3229,7 @@ export default function WorkspacePage() {
             style={{ gridTemplateColumns: `${leftWidth}% 8px minmax(0, 1fr)` }}
         >
             <aside className="workspace-chat-panel">
+                {workMode === "build" ? (<>
                 <div className="workspace-chat-header">
                     {/* Project name + cog */}
                     <div className="row" style={{ gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem" }}>
@@ -3801,7 +3803,13 @@ export default function WorkspacePage() {
                     </div>
                 </form>
                 </div>{/* /workspace-chat-body */}
-            </aside>
+            </>) : (
+                <DidacticPanel
+                    projectId={projectId}
+                    snapshotId={selectedBackendSnapshotId}
+                    token={token ?? ""}
+                />
+            )}</aside>
 
             <div
                 className="workspace-resizer"

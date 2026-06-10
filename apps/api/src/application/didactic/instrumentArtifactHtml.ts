@@ -36,7 +36,7 @@ function isSignificant(el: cheerio.Cheerio<cheerio.Element>): boolean {
 }
 
 export function instrumentArtifactHtml(rawHtml: string): InstrumentHtmlResult {
-    const $ = cheerio.load(rawHtml, { _useHtmlParser2: true });
+    const $ = cheerio.load(rawHtml);
     const idIndex = new Map<string, IdIndexEntry>();
     let counter = 0;
 

@@ -1,12 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
-import { generateDidacticKnowledgeSchema, askDidacticQuestionSchema } from "@andy-code-cat/contracts";
+import {
+    generateDidacticKnowledgeSchema,
+    askDidacticQuestionSchema,
+} from "@andy-code-cat/contracts";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoDidacticArtifactKnowledgeRepository } from "../../../infra/repositories/MongoDidacticArtifactKnowledgeRepository";
 import { MongoDidacticQnaRepository } from "../../../infra/repositories/MongoDidacticQnaRepository";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
+import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { GetDidacticKnowledge } from "../../../application/use-cases/GetDidacticKnowledge";
@@ -24,7 +28,7 @@ function sendSse(res: RequestWithContext["res"], payload: unknown) {
     (res as any).write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-function dedupeModelsById(models: Array<{ id: string; isDefault?: boolean; isActive?: boolean }>) {
+function dedupeModelsById(models: Array<{ id: string; role: string; isDefault?: boolean; isFallback?: boolean; isActive?: boolean }>) {
     const byId = new Map<string, (typeof models)[number]>();
     for (const m of models) {
         if (!m.isActive || !m.id) continue;
@@ -34,15 +38,32 @@ function dedupeModelsById(models: Array<{ id: string; isDefault?: boolean; isAct
     return [...byId.values()];
 }
 
+function pickDialogueModel(models: Array<{ id: string; role: string; isDefault?: boolean; isFallback?: boolean; isActive?: boolean }>) {
+    return (
+        models.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
+        models.find((m) => m.role === "dialogue" && m.isFallback && m.isActive) ??
+        models.find((m) => m.isActive)
+    );
+}
+
 async function resolveLlmContext(userId: string) {
-    const catalog = await new GetLlmCatalog(new MongoLlmCatalogRepository()).execute();
+    const catalog = await new GetLlmCatalog(
+        env.LLM_CATALOG_SOURCE,
+        env.SILICONFLOW_BASE_URL,
+        env.LMSTUDIO_BASE_URL,
+        env.OPENROUTER_BASE_URL,
+        new MongoLlmCatalogRepository(),
+        Boolean(env.providerApiKeys["openrouter"]),
+        env.providerApiKeys,
+        env.LLM_DEFAULT_PROVIDER,
+    ).execute();
     const userRepo = new MongoUserRepository();
     const user = await userRepo.findById(userId);
     const prefs = user?.llmPreferences;
 
     const providerCatalog =
-        (prefs?.provider
-            ? catalog.providers.find((p) => p.provider === prefs.provider && p.isActive)
+        (prefs?.defaultProvider
+            ? catalog.providers.find((p) => p.provider === prefs.defaultProvider && p.isActive)
             : undefined) ??
         catalog.providers.find((p) => p.provider === env.LLM_DEFAULT_PROVIDER) ??
         catalog.providers[0];
@@ -50,11 +71,11 @@ async function resolveLlmContext(userId: string) {
     if (!providerCatalog) throw new Error("No LLM provider available");
 
     const models = dedupeModelsById(providerCatalog.models);
-    const explicitModel = prefs?.model ? models.find((m) => m.id === prefs.model) : undefined;
+    const roleOverride = prefs?.roleModelOverrides?.["dialogue"];
+    const explicitModel = roleOverride ? models.find((m) => m.id === roleOverride) : undefined;
     const roleModel =
         explicitModel ??
-        models.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
-        models.find((m) => m.isActive);
+        pickDialogueModel(models);
 
     if (!roleModel) throw new Error("No LLM model available");
 
@@ -71,7 +92,7 @@ async function resolveLlmContext(userId: string) {
 
 export function createDidacticRoutes(): Router {
     const router = Router();
-    const sandbox = createSandboxMiddleware();
+    const sandbox = createSandboxMiddleware(new MongoProjectRepository());
 
     // All didactic routes are auth + sandbox protected
     router.use(authMiddleware);
