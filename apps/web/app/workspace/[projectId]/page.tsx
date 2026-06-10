@@ -555,6 +555,7 @@ export default function WorkspacePage() {
     const [isDraggingVChat, setIsDraggingVChat] = useState(false);
     const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("desktop");
     const [previewTab, setPreviewTab] = useState<"preview" | "html" | "css" | "js" | "prompt">("preview");
+    const [workMode, setWorkMode] = useState<"build" | "didactic">("build");
     const [promptTemplate, setPromptTemplate] = useState("");
     const [promptEnabled, setPromptEnabled] = useState(true);
     const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -3219,6 +3220,8 @@ export default function WorkspacePage() {
             projectId={projectId}
             onConfigOpen={() => setConfigOpen(true)}
             onDashboard={() => router.push("/dashboard")}
+            workMode={workMode}
+            onWorkModeChange={setWorkMode}
         />
         <div
             className="workspace-shell workspace-shell-resizable"
