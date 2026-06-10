@@ -57,6 +57,7 @@ Read in this order before making changes:
 | [docs/runbooks/CDN_COMPATIBILITY.md](runbooks/CDN_COMPATIBILITY.md) | Verified CDN whitelist and compatibility notes for generated interactive, game, 3D, and VR artifacts |
 | [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Production hardening and deployment safety guidance |
 | [docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md](runbooks/BETA_LAUNCH_HARDENING_PLAN.md) | Beta-readiness checklist |
+| [docs/runbooks/CLOUD_DEPLOY_UPDATE.md](runbooks/CLOUD_DEPLOY_UPDATE.md) | Release update runbook for 2 cloud droplets — rebuild, health check, rollback |
 | [install.sh](../install.sh) | Self-configuring one-file installer — local and domain modes, auto SSL via certbot |
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker workflow for dev and deploy-like stacks |
 | [docs/guides/AGENT_RELEASE_CHECKLIST.md](guides/AGENT_RELEASE_CHECKLIST.md) | Release and branch checklist for agents |
