@@ -306,6 +306,32 @@
             "portfolio": "Portfolio",
             "showcase": "Showcase"
         },
+        "templates": {
+            "neutral": "Blank",
+            "landing": "Landing page",
+            "website": "Sito web",
+            "form": "Form interattivo",
+            "manifesto": "Manifesto",
+            "a4poster": "Poster A4",
+            "infographic": "Infografica",
+            "slideshow": "Slideshow",
+            "keynote": "Keynote visiva",
+            "videogame": "Videogioco",
+            "seriousgame": "Serious Game",
+            "game3d": "Gioco 3D",
+            "vr-aframe": "Esperienza VR A-Frame",
+            "interactive-story": "Storia interattiva"
+        },
+        "formatHints": {
+            "one_pager": "One pager",
+            "a3_document": "Documento A3",
+            "ratio_1_1": "Formato 1:1",
+            "ratio_16_9": "Formato 16:9",
+            "interactive_form": "Form interattivo",
+            "portfolio": "Portfolio",
+            "brochure": "Brochure",
+            "analytics_dashboard": "Dashboard analytics"
+        },
         "styleAttributes": {
             "minimal": "Minimal",
             "premium": "Premium",
@@ -341,6 +367,7 @@
             "title": "BRIEF DI PROGETTO — {{brand}}",
             "identity": "[IDENTITÀ] Brand e tipo sito",
             "brand": "Brand",
+            "template": "Template",
             "siteType": "Tipo sito",
             "goal": "[OBIETTIVO] Descrizione e obiettivo principale",
             "audience": "[AUDIENCE] Target e pubblico di riferimento",
@@ -425,6 +452,8 @@
         "openGodMode": "Apri God Mode",
         "review": {
             "badge": "Rivedi e genera",
+            "prefillTitle": "✦ Pre-compilato dall'AI",
+            "templateBadge": "Template: {{template}}",
             "description": "L'AI ha estratto i dati dalla tua richiesta. Genera subito oppure modifica prima i campi.",
             "generating": "Generazione in corso…",
             "summary": {

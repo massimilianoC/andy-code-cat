@@ -508,6 +508,8 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 }
                 const draftForLaunch = {
                     ...prefillResult.draft,
+                    templateId: experimentalDataModeDetected ? null : (classification?.templateId ?? null),
+                    formatHint: experimentalDataModeDetected ? null : (classification?.formatHint ?? null),
                     attachedDocuments: prefillResult.draft.attachedDocuments?.length
                         ? prefillResult.draft.attachedDocuments
                         : uploadedFileNames,
@@ -528,6 +530,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 autoPrompt: prompt.trim().slice(0, 2000),
             });
             if (classification?.formatHint) query.set("formatHint", classification.formatHint);
+            if (classification?.templateId) query.set("templateId", classification.templateId);
             if (hasPrefill) query.set("prefilled", "1");
             applyPipelineModelParams(query);
             router.push(`/launch/${projectId}?${query.toString()}`);

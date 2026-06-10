@@ -347,6 +347,7 @@ function buildStructuredBrief(
     form: ExtendedForm,
     projectName: string,
     t: ReturnType<typeof useTranslation>["t"],
+    templateLabel?: string | null,
     docNames?: string[],
 ): string {
     const siteLabel = t(`launch.siteTypes.${form.siteType}`);
@@ -358,6 +359,7 @@ function buildStructuredBrief(
         `# ${t("launch.brief.title", { brand: brandName })}\n\n` +
         `## ${t("launch.brief.identity")}\n` +
         `- **${t("launch.brief.brand")}:** ${brandName}\n` +
+        (templateLabel ? `- **${t("launch.brief.template")}:** ${templateLabel}\n` : "") +
         `- **${t("launch.brief.siteType")}:** ${siteLabel}`,
     );
 
@@ -430,6 +432,15 @@ function phaseLabel(phase: GenerationPhase, t: ReturnType<typeof useTranslation>
     }
 }
 
+function templateLabel(templateId: string | null | undefined, t: ReturnType<typeof useTranslation>["t"]): string | null {
+    if (!templateId) return null;
+    const fallback = templateId
+        .split("-")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+    return t(`launch.templates.${templateId}`, { defaultValue: fallback });
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ZeroEffortLaunchPage() {
@@ -457,6 +468,8 @@ export default function ZeroEffortLaunchPage() {
 
     // AI-prefilled review mode
     const [aiPrefilled, setAiPrefilled] = useState(false);
+    const [prefillTemplateId, setPrefillTemplateId] = useState<string | null>(searchParams?.get("templateId") ?? null);
+    const [prefillFormatHint, setPrefillFormatHint] = useState<string | null>(searchParams?.get("formatHint") ?? null);
 
     // brief editor
     const [editedBrief, setEditedBrief] = useState("");
@@ -497,6 +510,7 @@ export default function ZeroEffortLaunchPage() {
         void getProject(currentToken, projectId)
             .then((res) => {
                 setProject(res.project);
+                setPrefillTemplateId((prev) => prev || res.project.presetId || null);
                 setForm((prev) => ({ ...prev, businessName: prev.businessName || res.project.name }));
             })
             .catch(() => setError("Unable to load the project."))
@@ -511,6 +525,12 @@ export default function ZeroEffortLaunchPage() {
             if (!raw) return;
             sessionStorage.removeItem(`ze_prefill_${projectId}`);
             const draft = JSON.parse(raw) as Record<string, unknown>;
+            if (typeof draft.templateId === "string" && draft.templateId.trim()) {
+                setPrefillTemplateId(draft.templateId);
+            }
+            if (typeof draft.formatHint === "string" && draft.formatHint.trim()) {
+                setPrefillFormatHint(draft.formatHint);
+            }
             patch({
                 businessName:    typeof draft.businessName === "string" ? draft.businessName : "",
                 siteType:        (["landing_page","portfolio","showcase","business_site"].includes(String(draft.siteType))
@@ -553,6 +573,15 @@ export default function ZeroEffortLaunchPage() {
         [form.businessName, form.primaryGoal],
     );
     const step2Valid = useMemo(() => form.audience.trim().length >= 3, [form.audience]);
+    const selectedTemplateId = prefillTemplateId || project?.presetId || null;
+    const selectedTemplateLabel = templateLabel(selectedTemplateId, t);
+    const selectedFormatLabel = !selectedTemplateLabel && prefillFormatHint
+        ? t(`launch.formatHints.${prefillFormatHint}`, {
+            defaultValue: prefillFormatHint.replace(/_/g, " "),
+        })
+        : null;
+    const selectedTemplateOrFormatLabel = selectedTemplateLabel ?? selectedFormatLabel;
+    const selectedOutputLabel = selectedTemplateOrFormatLabel ?? t(`launch.siteTypes.${form.siteType}`);
 
     function completeStep(n: number) {
         setCompletedSteps((prev) => new Set([...prev, n]));
@@ -623,7 +652,7 @@ export default function ZeroEffortLaunchPage() {
             setResult(briefResult);
             // Build the structured brief client-side from the full form data
             // so every section and long-text field is included verbatim.
-            setEditedBrief(buildStructuredBrief(form, project?.name ?? "", t, attachedFiles));
+            setEditedBrief(buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles));
             setPipelineConfig(configResult);
             setCompletedSteps(new Set([1, 2, 3]));
             setPhase("review");
@@ -704,7 +733,7 @@ export default function ZeroEffortLaunchPage() {
                 getZeroEffortConfig(token, projectId).catch(() => null),
             ]);
             const localConfig = configResult;
-            const brief = buildStructuredBrief(form, project?.name ?? "", t, attachedFiles);
+            const brief = buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles);
 
             // Always run one optimization pass — the structured brief (AI-prefilled or manual)
             // needs to be rewritten with system-layer context before entering Guided Mode.
@@ -782,7 +811,7 @@ export default function ZeroEffortLaunchPage() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <CardTitle className="text-base flex items-center gap-2">
-                                        <span>✦ Pre-compilato dall&apos;AI</span>
+                                        <span>{t("launch.review.prefillTitle")}</span>
                                         <Badge variant="accent" className="text-xs font-normal">{t("launch.review.badge")}</Badge>
                                     </CardTitle>
                                     <CardDescription className="text-xs mt-0.5">
@@ -798,7 +827,7 @@ export default function ZeroEffortLaunchPage() {
                                     <span className="text-muted-foreground text-xs w-24 shrink-0">{t("launch.review.summary.brand")}</span>
                                     <span className="font-medium text-foreground truncate">{form.businessName || "—"}</span>
                                     <Badge variant="secondary" className="text-xs font-normal capitalize ml-auto">
-                                        {form.siteType.replace("_", " ")}
+                                        {t("launch.review.templateBadge", { template: selectedOutputLabel })}
                                     </Badge>
                                 </div>
                                 {form.primaryGoal && (
