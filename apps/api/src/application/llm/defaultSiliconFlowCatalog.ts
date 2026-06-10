@@ -6,7 +6,8 @@ const DEFAULT_MODELS: Record<PipelineModelRole, string> = {
     coding: "deepseek-ai/DeepSeek-V3.2",
     coding_fast: "Qwen/Qwen3-Coder-30B-A3B-Instruct",
     dialogue: "MiniMaxAI/MiniMax-M2.5",
-    dialogue_fast: "Qwen/Qwen3-8B",
+    // Qwen3-8B replaced: intermittent timeouts observed in production testing (June 2026)
+    dialogue_fast: "google/gemma-4-12B-it",
     vision: "Qwen/Qwen3-VL-32B-Instruct",
     vision_fast: "Qwen/Qwen3-VL-8B-Instruct",
     quality_check: "deepseek-ai/DeepSeek-V3",
@@ -17,9 +18,9 @@ const DEFAULT_MODELS: Record<PipelineModelRole, string> = {
 
 const FALLBACK_MODELS: Partial<Record<PipelineModelRole, string>> = {
     coding: "Qwen/Qwen3-Coder-30B-A3B-Instruct",
-    coding_fast: "Qwen/Qwen3-8B",
+    coding_fast: "Qwen/Qwen3-14B",
     dialogue: "moonshotai/Kimi-K2.5",
-    dialogue_fast: "zai-org/GLM-4.5-Air",
+    dialogue_fast: "Qwen/Qwen3-14B",
     vision: "Qwen/Qwen3-VL-30B-A3B-Instruct",
     vision_fast: "zai-org/GLM-5V-Turbo",
     quality_check: "Qwen/Qwen2.5-72B-Instruct",
@@ -34,9 +35,11 @@ const FALLBACK_MODELS: Partial<Record<PipelineModelRole, string>> = {
  * IDs are deduplicated against DEFAULT_MODELS + FALLBACK_MODELS at build time.
  */
 const SUPPLEMENTAL_MODELS: Array<{ id: string; capabilities: string[] }> = [
-    // Google — Gemma 4
+    // Google — Gemma 4 (12B is dialogue_fast default; 26B/31B are supplemental)
     { id: "google/gemma-4-31B-it", capabilities: ["chat"] },
     { id: "google/gemma-4-26B-A4B-it", capabilities: ["chat"] },
+    // Qwen3-8B kept as supplemental for manual override (may be intermittent)
+    { id: "Qwen/Qwen3-8B", capabilities: ["chat"] },
     // Qwen — extra reasoning / large models
     { id: "Qwen/Qwen3-32B", capabilities: ["chat"] },
     { id: "Qwen/Qwen3.6-35B-A3B", capabilities: ["chat"] },

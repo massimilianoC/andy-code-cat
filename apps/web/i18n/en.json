@@ -317,10 +317,16 @@
             "slideshow": "Slideshow",
             "keynote": "Visual keynote",
             "videogame": "Videogame",
+            "freerunner": "Free canvas game",
             "seriousgame": "Serious Game",
             "game3d": "3D Game",
             "vr-aframe": "VR A-Frame Experience",
             "interactive-story": "Interactive Story"
+        },
+        "presetGroups": {
+            "web": "Web & content",
+            "presentation": "Presentation & print",
+            "game": "Game & interactive"
         },
         "formatHints": {
             "one_pager": "One pager",
@@ -397,7 +403,8 @@
         "step1": {
             "businessName": "Brand or company name",
             "businessNamePlaceholder": "e.g. Acme Studio",
-            "siteType": "Site type",
+            "presetId": "Template",
+            "presetIdHint": "AI infers the best template from your description. You can change it here.",
             "goal": "Description and main goal",
             "goalHint": "Describe the project freely. You can use bullet points (- item), bold (**text**) or paste from a document.",
             "goalPlaceholder": "e.g. Acme Studio is a premium accessories brand.\n- Goal: grow online sales\n- Audience: 25–45 year old enthusiasts\n- Strength: innovative materials and premium design",
@@ -424,9 +431,20 @@
             "ctaPlaceholder": "e.g. Buy now, Learn more",
             "styleNotes": "Additional style notes",
             "styleNotesPlaceholder": "e.g. aluminum frame, brand colors",
+            "outputLanguage": "Output language",
+            "outputLanguageHint": "Language used for all text in the generated page.",
             "back": "Back",
             "generate": "Generate brief",
             "generating": "Generating brief..."
+        },
+        "languages": {
+            "en": "English",
+            "it": "Italian",
+            "fr": "French",
+            "de": "German",
+            "es": "Spanish",
+            "pt": "Portuguese",
+            "nl": "Dutch"
         },
         "step4": {
             "title": "Step 4 — Review brief",

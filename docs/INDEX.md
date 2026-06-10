@@ -84,6 +84,7 @@ Read in this order before making changes:
 | [docs/specs/UX_SPEC.md](specs/UX_SPEC.md) | End-to-end UX and product screen map |
 | [docs/specs/EXECUTION_LOG_SPEC.md](specs/EXECUTION_LOG_SPEC.md) | Structured operational audit logging |
 | [docs/specs/FOCUSED_EDIT_SPEC.md](specs/FOCUSED_EDIT_SPEC.md) | Focused editing behavior and constraints |
+| [docs/specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md](specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md) | Output language control — Layer L, per-mode resolution chain, contract changes, UI selector, God Mode fallback |
 
 ---
 
@@ -123,7 +124,10 @@ Read in this order before making changes:
 | [docs/specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md](specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md) | Alpha-only strategy for the grounded dataset runtime and possible future re-integration, currently detached from the primary Vibe / Zero Effort UX |
 | [docs/specs/PUBLISHED_DATASET_BINDINGS_SPEC.md](specs/PUBLISHED_DATASET_BINDINGS_SPEC.md) | Decision spec for publish-time dataset bindings: original source vs normalized local runtime vs backend query endpoints, with hybrid-mode recommendation, manifest contract, exposure policies, and serial/parallel delivery plan |
 | [docs/specs/ZERO_EFFORT_PREFILL_SPEC.md](specs/ZERO_EFFORT_PREFILL_SPEC.md) | Zero Effort LLM Prefill — one-pass LLM pre-population of all Zero Effort wizard fields, token counter, AI review card, God Mode one-click generation |
+| [docs/specs/GEN_AI_MEDIA_MODE_SPEC.md](specs/GEN_AI_MEDIA_MODE_SPEC.md) | Gen AI Media Mode — extension of Vibe/Zero Effort/God Mode to support podcast, video, and music generation via external engine REST APIs, async job tracking, and HTML artifact containers |
+| [docs/specs/GEN_AI_MEDIA_MODE_INTERFACE_STANDARDS.md](specs/GEN_AI_MEDIA_MODE_INTERFACE_STANDARDS.md) | Interface standards analysis (MCP, A2A, OpenAPI, CLI) and REST contract for external podcast/video/music engines; dual-mode integration strategy (Direct API + Standard Adapter) |
 | [docs/specs/GLOBAL_BRAND_IDENTITY_SPEC.md](specs/GLOBAL_BRAND_IDENTITY_SPEC.md) | Global Brand Identity System — hierarchical (platform → user → project) additive brand-asset injection via Layer G; reuses existing storage, auth, and route infrastructure; retrocompatible new layer |
+| [docs/specs/DIDACTIC_MODE_SPEC.md](specs/DIDACTIC_MODE_SPEC.md) | Didactic Mode — parallel, additive, read-only artifact-interrogation layer over the workstation: per-snapshot LLM-generated knowledge (overview, topics, quizzes) cached by `groundingHash`, click-to-ask via the existing inspect engine and Monaco, standalone reusable dual-view; reuses snapshots, prompting trace, and the LLM engine without touching the generation pipeline |
 
 ## VibeCore Components (feat/dashboard-lovable-chat)
 

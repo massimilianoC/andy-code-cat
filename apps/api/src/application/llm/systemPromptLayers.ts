@@ -175,6 +175,54 @@ export interface TemplateResolution {
     source: "layer_phi" | "user_explicit" | "zero_effort_form";
 }
 
+const LANGUAGE_NAMES: Record<string, string> = {
+    en: "English",
+    it: "Italian",
+    fr: "French",
+    de: "German",
+    es: "Spanish",
+    pt: "Portuguese",
+    nl: "Dutch",
+    pl: "Polish",
+    ru: "Russian",
+    zh: "Chinese",
+    ja: "Japanese",
+    ko: "Korean",
+    ar: "Arabic",
+    tr: "Turkish",
+    sv: "Swedish",
+    da: "Danish",
+    fi: "Finnish",
+    nb: "Norwegian",
+    cs: "Czech",
+    ro: "Romanian",
+    hu: "Hungarian",
+    el: "Greek",
+    he: "Hebrew",
+    uk: "Ukrainian",
+    vi: "Vietnamese",
+    th: "Thai",
+};
+
+/**
+ * Layer L — Output language directive.
+ * Injected immediately after Layer A (base constraints) and before Layer B (preset).
+ * Only present when an explicit output language is resolved (never injected in God Mode).
+ */
+export function buildLanguageLayer(bcp47: string): string {
+    const code = bcp47.toLowerCase().split("-")[0]!;
+    const name = LANGUAGE_NAMES[code] ?? bcp47;
+    return [
+        "## LAYER L — OUTPUT LANGUAGE",
+        "",
+        `Produce all user-visible copy, labels, navigation, headings, body text,`,
+        `calls-to-action, and placeholder content in: **${name}** (${code}).`,
+        "",
+        "This directive applies to all text in the generated artifact.",
+        "It overrides any language implied by template names or style labels.",
+    ].join("\n");
+}
+
 /**
  * Layer A — Base architectural constraints common to ALL Layer 1 output.
  * Always injected as the first element of the system message.

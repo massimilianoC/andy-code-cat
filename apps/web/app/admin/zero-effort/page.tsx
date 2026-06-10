@@ -57,29 +57,51 @@ Available templates:
 
 const PREFILL_DEFAULT_PROMPT =
 `You are a web project brief extractor.
-Given a user's free-form description of a website project, return a JSON object that
+Given a user's free-form description of a project, return a JSON object that
 populates a structured project brief.
 
 Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 {
   "businessName": "brand or project name (string, required)",
-  "siteType": "landing_page|portfolio|showcase|business_site (string, required)",
-  "primaryGoal": "full project description and main objective — at least 20 chars (string, required)",
-  "audience": "target audience description — at least 10 chars (string, required)",
+  "presetId": "one of: neutral|landing|website|form|manifesto|slideshow|keynote|a4poster|infographic|videogame|freerunner|seriousgame|game3d|vr-aframe|interactive-story (string, required)",
+  "outputLanguage": "BCP-47 language code of the content to generate, e.g. 'it', 'en', 'de', 'fr' (string, required)",
+  "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
+  "audience": "target audience description — 120 to 500 chars when possible (string, required)",
   "tone": "communication tone, e.g. professional, playful (string or null)",
   "primaryCta": "main call-to-action button text (string or null)",
-  "styleHint": "visual style notes (string or null)",
+  "styleHint": "visual, UX, interaction, and production notes — 180 to 900 chars when useful (string or null)",
   "contactInfo": [{"key": "Email", "value": "..."}],
   "styleAttributes": ["minimal"]
 }
 
+presetId guidance — choose the best match:
+  neutral         generic project with no specific template
+  landing         marketing landing page / single page site
+  website         multi-section business website
+  form            guided form, wizard, or survey
+  manifesto       editorial page, manifesto, or long-form statement
+  slideshow       slide deck / presentation / carousel narrative
+  keynote         pitch deck / keynote / investor presentation
+  a4poster        A4 print-ready poster or flyer
+  infographic     data infographic / visual storytelling
+  videogame       2D browser arcade or action game
+  freerunner      open canvas browser game / creative sandbox
+  seriousgame     educational or training serious game
+  game3d          3D WebGL browser game
+  vr-aframe       WebVR / A-Frame immersive experience
+  interactive-story  branching narrative / choose-your-own-adventure
+
 Rules:
-- businessName: extract from the prompt; fall back to "Progetto" if unclear.
-- siteType: infer from context; default "landing_page".
-- primaryGoal: expand the user's text into a detailed project description.
-- audience: infer who the site is for; describe age group, interests, needs.
+- businessName: extract from the prompt; fall back to "Project" if unclear.
+- presetId: infer from the user's intent — use the MOST SPECIFIC matching id.
+  A "slideshow" or "presentation" request MUST use "slideshow" or "keynote", NOT "landing".
+  A "game" request MUST use one of the game presets. Default to "landing" only when no better match.
+- outputLanguage: detect the language the user wants the CONTENT in. If the user writes in Italian but asks "in tedesco" or "in German", outputLanguage must be "de". Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
+- primaryGoal: produce a robust structured brief that can be injected into downstream generation prompts. Include: project intent, selected template interpretation, required sections/screens, key functionality, success criteria, assumptions needed.
+- audience: infer who uses or views the result; include needs, context, and expectations.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
+- IMPORTANT: write fields in order shown — businessName, presetId, outputLanguage first.
 - Return ONLY the JSON object.`;
 
 const OPTIMIZE_DEFAULT_PROMPT =
@@ -119,7 +141,7 @@ const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
         provider: "",
         model: "",
         temperature: 0.3,
-        maxCompletionTokens: 768,
+        maxCompletionTokens: 2048,
         systemTemplate: PREFILL_DEFAULT_PROMPT,
     },
     [OPTIMIZE_TASK_KEY]: {

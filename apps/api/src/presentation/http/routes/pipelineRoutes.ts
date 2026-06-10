@@ -67,6 +67,14 @@ export function createPipelineRoutes(): Router {
     const runZeroEffort = async (req: RequestWithContext, res: Response, next: NextFunction) => {
         try {
             const intake = zeroEffortLaunchSchema.parse(req.body);
+
+            // Propagate inferred presetId to the project so Layer T picks the right template
+            if (intake.presetId) {
+                await projectRepository.update(req.sandbox!.projectId, req.auth!.userId, {
+                    presetId: intake.presetId,
+                }).catch(() => {});
+            }
+
             const result = await launchZeroEffortProject.execute({
                 userId: req.auth!.userId,
                 projectId: req.sandbox!.projectId,
