@@ -57,6 +57,16 @@
 - ✅ Frontend (`apps/web`): `npx tsc --noEmit` — clean
 - ✅ Backend (`apps/api`): `npx tsc --noEmit` — clean
 
+## Docker deploy / test status
+- Stack attivo: `andy-code-cat` deploy stack (mongodb, redis, api, web, nginx, minio)
+- API rebuild: `docker compose -f docker-compose.deploy.yml up -d --build --no-deps api` → ✅ successo
+- Web rebuild: `docker compose -f docker-compose.deploy.yml up -d --build --no-deps web` → ✅ successo
+- Smoke tests:
+  - `GET /health` → 200
+  - `GET /v1/projects/123/didactic/knowledge?snapshotId=abc` → 401 (auth required, route exists)
+  - `GET http://localhost/` (via nginx) → 200
+- ⚠️ Test funzionali E2E (generazione knowledge, Q&A streaming) richiedono login + progetto con snapshot.
+
 ## Remaining TODO (Wave 4 / next agent)
 1. **Click-to-ask routing in Didactic mode**
    - In `page.tsx`, when `workMode === "didactic"`, route `pf-select` (preview click) and Monaco `onCodeSelectionChange` to set the DidacticPanel focus chip instead of opening the build inspector/focus context.
