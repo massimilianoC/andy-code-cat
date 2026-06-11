@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { jsonrepair } from "jsonrepair";
 import { env } from "../../config";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { instrumentArtifactHtml, validateAnchors } from "../didactic/instrumentArtifactHtml";
@@ -70,19 +71,35 @@ function parseDidacticJson(raw: string): { overview: string; topics: DidacticTop
         const lastFence = trimmed.lastIndexOf("```");
         if (lastFence > 0) trimmed = trimmed.slice(0, lastFence).trim();
     }
-    const candidate = extractFirstJsonObject(trimmed);
-    if (!candidate) return null;
-    try {
-        const parsed = JSON.parse(candidate);
-        if (!parsed.overview || !Array.isArray(parsed.topics) || !Array.isArray(parsed.quizzes)) return null;
-        return {
-            overview: String(parsed.overview),
-            topics: parsed.topics as DidacticTopic[],
-            quizzes: parsed.quizzes as DidacticQuiz[],
-        };
-    } catch {
-        return null;
+
+    const candidates: (string | null)[] = [
+        extractFirstJsonObject(trimmed),
+        trimmed.startsWith("{") ? trimmed : null,
+    ];
+
+    for (const candidate of candidates) {
+        if (!candidate) continue;
+        const strategies = [
+            () => candidate,
+            () => jsonrepair(candidate),
+            () => candidate.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t"),
+        ];
+        for (const getText of strategies) {
+            try {
+                const text = getText();
+                const parsed = JSON.parse(text);
+                if (!parsed.overview || !Array.isArray(parsed.topics) || !Array.isArray(parsed.quizzes)) continue;
+                return {
+                    overview: String(parsed.overview),
+                    topics: parsed.topics as DidacticTopic[],
+                    quizzes: parsed.quizzes as DidacticQuiz[],
+                };
+            } catch {
+                continue;
+            }
+        }
     }
+    return null;
 }
 
 export class GenerateDidacticKnowledge {
@@ -142,6 +159,7 @@ export class GenerateDidacticKnowledge {
         // 4. Parse JSON
         const parsed = parseDidacticJson(rawReply);
         if (!parsed) {
+            console.error("[Didactic] Failed to parse JSON. Raw reply (first 2000 chars):", rawReply.slice(0, 2000));
             throw new Error("Failed to parse didactic knowledge JSON");
         }
 

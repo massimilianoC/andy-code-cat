@@ -71,7 +71,19 @@ export function DidacticExploreTab({ status, knowledge, onGenerate, onRegenerate
     const grouped = groupByCategory(knowledge.topics);
 
     return (
-        <div className="p-4 space-y-5">
+        <div className="p-4 space-y-5 relative">
+            {generating && (
+                <div className="absolute inset-0 z-20 bg-card/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-6 space-y-3">
+                    <Loader2 className="animate-spin text-primary" size={40} />
+                    <div className="space-y-1">
+                        <p className="text-sm font-medium">Analisi didattica in corso...</p>
+                        <p className="text-xs text-muted-foreground max-w-[260px]">
+                            L&apos;AI sta esaminando l&apos;artifact e generando argomenti, quiz e spiegazioni.
+                            Questo può richiedere 10-30 secondi.
+                        </p>
+                    </div>
+                </div>
+            )}
             {status === "stale" && (
                 <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 flex items-center gap-2">
                     <Sparkles size={12} />
