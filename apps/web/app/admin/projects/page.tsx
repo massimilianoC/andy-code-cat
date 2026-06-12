@@ -369,7 +369,7 @@ export default function AdminProjectsPage() {
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    onClick={() => router.push(`/admin/users?highlight=${selectedProject.ownerUserId}`)}
+                                                    onClick={() => router.push(`/admin/users/${selectedProject.ownerUserId}`)}
                                                 >
                                                     View owner in Users →
                                                 </Button>
