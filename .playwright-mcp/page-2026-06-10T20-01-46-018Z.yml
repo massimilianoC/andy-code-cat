@@ -1,0 +1,39 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - link "🐱 ANDY" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: 🐱
+        - generic [ref=e6]: ANDY
+      - generic [ref=e7]:
+        - group "Language selector" [ref=e8]:
+          - button "Italiano" [pressed] [ref=e9] [cursor=pointer]: 🇮🇹
+          - button "English" [ref=e10] [cursor=pointer]: 🇬🇧
+        - button "Stato API" [ref=e11] [cursor=pointer]:
+          - img [ref=e12]
+        - link "Accedi" [ref=e14] [cursor=pointer]:
+          - /url: /login
+        - link "Crea account" [ref=e15] [cursor=pointer]:
+          - /url: /register
+    - main [ref=e16]:
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - heading "Accedi" [level=3] [ref=e20]
+          - paragraph [ref=e21]: Inserisci email e password per accedere al tuo account.
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - generic [ref=e25]: Email *
+            - textbox "Email *" [ref=e26]:
+              - /placeholder: mario@example.com
+              - text: owner@andy-code-cat.local
+          - generic [ref=e27]:
+            - generic [ref=e28]: Password *
+            - textbox "Password *" [ref=e29]:
+              - /placeholder: ••••••••
+              - text: ChangeMe123!
+          - button "Accedi" [ref=e30] [cursor=pointer]
+        - paragraph [ref=e32]:
+          - text: Non hai un account?
+          - link "Crea account →" [ref=e33] [cursor=pointer]:
+            - /url: /register
+  - alert [ref=e34]

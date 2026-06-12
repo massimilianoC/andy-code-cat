@@ -24,6 +24,8 @@ const RESOURCE_TYPE_LABELS: Record<string, string> = {
     "llm.template_draft": "Bozza template LLM",
     "llm.embedding": "Embedding LLM",
     "llm.background": "LLM background",
+    "llm.didactic.knowledge": "Didattica — analisi artifact",
+    "llm.didactic.ask": "Didattica — Q&A",
     "image.gen": "Generazione immagine",
     "image.prompt_opt": "Ottimizzazione prompt immagine",
     "image.suggest": "Suggerimento immagine",

@@ -25,6 +25,7 @@ import { createCostRoutes } from "./presentation/http/routes/costRoutes";
 import { createVibecoreRoutes } from "./presentation/http/routes/vibecoreRoutes";
 import { createNotificationRoutes } from "./presentation/http/routes/notificationRoutes";
 import { createDatasetRoutes } from "./presentation/http/routes/datasetRoutes";
+import { createDidacticRoutes } from "./presentation/http/routes/didacticRoutes";
 
 export function createApp() {
     const app = express();
@@ -77,6 +78,7 @@ export function createApp() {
     app.use("/v1", createCostRoutes());
     app.use("/v1", createVibecoreRoutes());
     app.use("/v1", createNotificationRoutes());
+    app.use("/v1", createDidacticRoutes());
     app.use("/v1", createDatasetRoutes());
 
     // Public media serving must be mounted before publish static routes.
