@@ -1,0 +1,355 @@
+<html><head><meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Global E-Commerce Customer Analytics 2024 — Dataset &amp; Insights</title>
+  <meta name="description" content="Dataset reale di 1.200 clienti e-commerce globali: churn, loyalty tier, RFM, segmentazione e canali di acquisizione. Pronto per analisi e modelli predittivi.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=70f5da7f">
+
+</head><body><header class="fixed top-0 inset-x-0 z-50 backdrop-blur-md bg-[#0a0f1c]/80 border-b border-white/5" data-pf-id="fda2aa">
+    <div class="max-w-7xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between" data-pf-id="0f51f0">
+      <a href="#top" class="flex items-center gap-2 group" data-pf-id="f5d48a">
+        <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20" data-pf-id="812136">
+          <i data-lucide="bar-chart-3" class="w-5 h-5 text-white"></i>
+        </span>
+        <span class="font-bold tracking-tight text-white text-lg" data-pf-id="3a6152">Analytics<span class="text-cyan-400" data-pf-id="ebf4c6">·24</span></span>
+      </a>
+      <nav class="hidden md:flex items-center gap-7 text-sm text-slate-300" data-pf-id="8229aa">
+        <a href="#kpi" class="hover:text-cyan-400 transition" data-pf-id="d000d3">KPI</a>
+        <a href="#charts" class="hover:text-cyan-400 transition" data-pf-id="04c6e6">Analisi</a>
+        <a href="#insights" class="hover:text-cyan-400 transition" data-pf-id="511b89">Insight</a>
+        <a href="#schema" class="hover:text-cyan-400 transition" data-pf-id="689dab">Schema</a>
+        <a href="#contatti" class="hover:text-cyan-400 transition" data-pf-id="ef485d">Contatti</a>
+      </nav>
+      <a href="#download" class="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#0a0f1c] text-sm font-semibold transition shadow-lg shadow-cyan-500/20" data-pf-id="2fef94">
+        <i data-lucide="download" class="w-4 h-4"></i> Esplora il Dataset
+      </a>
+      <button id="menuBtn" class="md:hidden p-2 text-slate-200" aria-label="Menu">
+        <i data-lucide="menu" class="w-6 h-6"></i>
+      </button>
+    </div>
+    <div id="mobileMenu" class="md:hidden hidden border-t border-white/5 bg-[#0a0f1c]/95" data-pf-id="096032">
+      <nav class="px-5 py-4 flex flex-col gap-3 text-sm" data-pf-id="b28e8e">
+        <a href="#kpi" class="py-1 text-slate-300" data-pf-id="c8e30e">KPI</a>
+        <a href="#charts" class="py-1 text-slate-300" data-pf-id="1f829a">Analisi</a>
+        <a href="#insights" class="py-1 text-slate-300" data-pf-id="dde838">Insight</a>
+        <a href="#schema" class="py-1 text-slate-300" data-pf-id="686c22">Schema</a>
+        <a href="#contatti" class="py-1 text-slate-300" data-pf-id="602b86">Contatti</a>
+        <a href="#download" class="mt-2 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 text-[#0a0f1c] font-semibold" data-pf-id="914979">Esplora il Dataset</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top" data-pf-id="24b689">
+
+    <section class="relative pt-32 pb-20 lg:pt-40 lg:pb-28 overflow-hidden" data-pf-id="387e4b">
+      <div class="absolute inset-0 hero-grid" data-media-key="hero-bg" data-pf-id="55a8ec"></div>
+      <div class="absolute inset-0 bg-gradient-to-b from-transparent via-[#0a0f1c]/40 to-[#0a0f1c]" data-pf-id="194e98"></div>
+      <div class="relative max-w-7xl mx-auto px-5 lg:px-8" data-pf-id="b287be">
+        <div class="max-w-3xl" data-pf-id="95cecc">
+          <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-xs font-mono uppercase tracking-widest" data-pf-id="503e33">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" data-pf-id="748cc8"></span>
+            Dataset · 2024 Release
+          </span>
+          <h1 class="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.05]" data-pf-id="b9f65d">
+            1.200 clienti, <span class="text-cyan-400" data-pf-id="37d4c6">15 paesi</span>, un unico dataset.
+          </h1>
+          <p class="mt-6 text-lg lg:text-xl text-slate-300 leading-relaxed max-w-2xl" data-pf-id="1585f8">
+            <span class="text-white font-semibold" data-pf-id="adacef">Global E-Commerce Customer Analytics 2024</span> è un dataset reale, pulito e licenziato CC0, pensato per chi costruisce modelli di churn prediction, segmentazione RFM e analisi CRM su retail B2C.
+          </p>
+          <div class="mt-8 flex flex-col sm:flex-row gap-3" data-pf-id="0c5727">
+            <a href="#download" class="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#0a0f1c] font-semibold transition shadow-xl shadow-cyan-500/25" data-pf-id="fb9748">
+              <i data-lucide="database" class="w-5 h-5"></i>
+              Esplora il Dataset
+            </a>
+            <a href="#charts" class="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg border border-white/15 hover:border-cyan-400/50 hover:bg-white/5 text-white font-semibold transition" data-pf-id="15be39">
+              <i data-lucide="line-chart" class="w-5 h-5"></i>
+              Vedi le analisi
+            </a>
+          </div>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-slate-400 font-mono" data-pf-id="2349e7">
+            <span class="flex items-center gap-2" data-pf-id="fd8e95"><i data-lucide="check-circle-2" class="w-4 h-4 text-cyan-400"></i>CC0-1.0</span>
+            <span class="flex items-center gap-2" data-pf-id="30e1de"><i data-lucide="check-circle-2" class="w-4 h-4 text-cyan-400"></i>25 colonne</span>
+            <span class="flex items-center gap-2" data-pf-id="2cfe67"><i data-lucide="check-circle-2" class="w-4 h-4 text-cyan-400"></i>Zero null</span>
+            <span class="flex items-center gap-2" data-pf-id="2d2ce7"><i data-lucide="check-circle-2" class="w-4 h-4 text-cyan-400"></i>CSV + Dictionary</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="kpi" class="py-16 lg:py-20 border-t border-white/5" data-pf-id="da5ec6">
+      <div class="max-w-7xl mx-auto px-5 lg:px-8" data-pf-id="1e1e6e">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6" data-pf-id="18bfe8">
+          <div class="kpi-card" data-pf-id="e503ba">
+            <div class="kpi-label" data-pf-id="c91749">Clienti unici</div>
+            <div class="kpi-value" data-target="1200" data-suffix="" data-pf-id="0645ad">1,200</div>
+            <div class="kpi-sub" data-pf-id="e8e935">ID anonimi · CUST-00001 → CUST-01200</div>
+          </div>
+          <div class="kpi-card" data-pf-id="26099f">
+            <div class="kpi-label" data-pf-id="bdad19">Spesa media</div>
+            <div class="kpi-value" data-target="5300" data-prefix="$" data-suffix="" data-pf-id="89d49b">$5,300</div>
+            <div class="kpi-sub" data-pf-id="d92605">Lifetime value medio per cliente</div>
+          </div>
+          <div class="kpi-card" data-pf-id="4b4e37">
+            <div class="kpi-label" data-pf-id="4b0b70">Lifetime medio</div>
+            <div class="kpi-value" data-target="640" data-suffix=" gg" data-pf-id="83530b">640 gg</div>
+            <div class="kpi-sub" data-pf-id="5a61b1">Customer lifetime, range 119–1.519</div>
+          </div>
+          <div class="kpi-card" data-pf-id="26241e">
+            <div class="kpi-label" data-pf-id="36d73b">Geografia</div>
+            <div class="kpi-value" data-pf-id="7904c9">15<span class="text-cyan-400" data-pf-id="8191f6">·</span>4</div>
+            <div class="kpi-sub" data-pf-id="800cf9">Paesi · Regioni coperte</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="charts" class="py-16 lg:py-24 border-t border-white/5" data-pf-id="526d5c">
+      <div class="max-w-7xl mx-auto px-5 lg:px-8" data-pf-id="771b74">
+        <div class="max-w-2xl mb-12" data-pf-id="901b2a">
+          <p class="font-mono text-xs uppercase tracking-widest text-cyan-400" data-pf-id="fd6423">02 · Analisi</p>
+          <h2 class="mt-3 text-3xl lg:text-4xl font-bold text-white tracking-tight" data-pf-id="9da50b">Quattro viste, una fotografia del cliente globale.</h2>
+          <p class="mt-4 text-slate-400" data-pf-id="ab3db5">Loyalty tier, distribuzione churn, metodi di pagamento e revenue per regione — calcolati su tutto il campione.</p>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6" data-pf-id="2c926b">
+          <div class="chart-card" data-pf-id="e53c0a">
+            <div class="flex items-start justify-between mb-4" data-pf-id="d2acb6">
+              <div data-pf-id="93d353">
+                <h3 class="text-white font-semibold" data-pf-id="fd4d20">Loyalty Tier</h3>
+                <p class="text-xs text-slate-500 font-mono mt-1" data-pf-id="419684">% clienti per livello</p>
+              </div>
+              <span class="tag tag-cyan" data-pf-id="05a418">Segmentazione</span>
+            </div>
+            <div class="chart-wrap" data-pf-id="dd5b44"><canvas id="chartLoyalty" data-pf-id="ad318e"></canvas></div>
+          </div>
+          <div class="chart-card" data-pf-id="c3c7b6">
+            <div class="flex items-start justify-between mb-4" data-pf-id="60bb12">
+              <div data-pf-id="5cd435">
+                <h3 class="text-white font-semibold" data-pf-id="73c624">Tasso di Churn</h3>
+                <p class="text-xs text-slate-500 font-mono mt-1" data-pf-id="1b0137">% per loyalty tier</p>
+              </div>
+              <span class="tag tag-rose" data-pf-id="ec4faf">Rischio</span>
+            </div>
+            <div class="chart-wrap" data-pf-id="124272"><canvas id="chartChurn" data-pf-id="193a09"></canvas></div>
+          </div>
+          <div class="chart-card" data-pf-id="17b97a">
+            <div class="flex items-start justify-between mb-4" data-pf-id="6aa163">
+              <div data-pf-id="e07884">
+                <h3 class="text-white font-semibold" data-pf-id="bed6af">Metodi di pagamento</h3>
+                <p class="text-xs text-slate-500 font-mono mt-1" data-pf-id="953183">Distribuzione utilizzo</p>
+              </div>
+              <span class="tag tag-amber" data-pf-id="2e8354">Transazioni</span>
+            </div>
+            <div class="chart-wrap" data-pf-id="e12b4d"><canvas id="chartPay" data-pf-id="1bc021"></canvas></div>
+          </div>
+          <div class="chart-card" data-pf-id="8aed28">
+            <div class="flex items-start justify-between mb-4" data-pf-id="98b7f8">
+              <div data-pf-id="bf9254">
+                <h3 class="text-white font-semibold" data-pf-id="10b563">Revenue per Regione</h3>
+                <p class="text-xs text-slate-500 font-mono mt-1" data-pf-id="653c3a">Spesa totale USD</p>
+              </div>
+              <span class="tag tag-emerald" data-pf-id="b36a56">Geo</span>
+            </div>
+            <div class="chart-wrap" data-pf-id="fc12c0"><canvas id="chartRegion" data-pf-id="9329e1"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="insights" class="py-16 lg:py-24 border-t border-white/5 bg-white/[0.015]" data-pf-id="fc0179">
+      <div class="max-w-7xl mx-auto px-5 lg:px-8" data-pf-id="f890af">
+        <div class="max-w-2xl mb-12" data-pf-id="8cd472">
+          <p class="font-mono text-xs uppercase tracking-widest text-cyan-400" data-pf-id="a08621">03 · Insight</p>
+          <h2 class="mt-3 text-3xl lg:text-4xl font-bold text-white tracking-tight" data-pf-id="c39b9b">Cosa racconta il dataset.</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-pf-id="2e2ba0">
+          <article class="insight-card" data-pf-id="ad6780">
+            <div class="insight-icon bg-cyan-500/10 text-cyan-400" data-pf-id="a962bb"><i data-lucide="crown" class="w-6 h-6"></i></div>
+            <h3 class="insight-title" data-pf-id="00fff0">Il tier Platinum vale 7× il Bronze</h3>
+            <p class="insight-body" data-pf-id="b6b975">I clienti Platinum hanno il più alto AOV e il maggior total spent. Engagement e valore sono strettamente legati al livello di loyalty.</p>
+            <span class="insight-meta" data-pf-id="c13e5d">loyalty_tier · total_spent_usd</span>
+          </article>
+          <article class="insight-card" data-pf-id="8c7e13">
+            <div class="insight-icon bg-rose-500/10 text-rose-400" data-pf-id="4c4978"><i data-lucide="user-minus" class="w-6 h-6"></i></div>
+            <h3 class="insight-title" data-pf-id="54c736">Churn concentrato in Bronze &amp; Silver</h3>
+            <p class="insight-body" data-pf-id="847465">La variazione di churn tra tier è significativa. Oltre 500 giorni dall'ultimo acquisto il rischio cresce in modo esponenziale.</p>
+            <span class="insight-meta" data-pf-id="4a3395">churn · days_since_last_purchase</span>
+          </article>
+          <article class="insight-card" data-pf-id="cef66a">
+            <div class="insight-icon bg-amber-500/10 text-amber-400" data-pf-id="81259e"><i data-lucide="credit-card" class="w-6 h-6"></i></div>
+            <h3 class="insight-title" data-pf-id="31a74f">BNPL ha un churn più alto</h3>
+            <p class="insight-body" data-pf-id="f081d4">Chi usa <em>Buy Now Pay Later</em> mostra tassi di abbandono superiori, segnale di pressione finanziaria o frizione nel checkout.</p>
+            <span class="insight-meta" data-pf-id="0fbc8e">payment_method · churn</span>
+          </article>
+          <article class="insight-card" data-pf-id="b76069">
+            <div class="insight-icon bg-indigo-500/10 text-indigo-400" data-pf-id="5a272b"><i data-lucide="monitor" class="w-6 h-6"></i></div>
+            <h3 class="insight-title" data-pf-id="7f5b2d">Desktop = engagement più profondo</h3>
+            <p class="insight-body" data-pf-id="3d09e5">Sessioni più lunghe e più pagine visitate su Desktop. Mobile porta traffico, Desktop porta conversione di qualità.</p>
+            <span class="insight-meta" data-pf-id="4511d2">device_type · session_duration</span>
+          </article>
+          <article class="insight-card" data-pf-id="4b9511">
+            <div class="insight-icon bg-emerald-500/10 text-emerald-400" data-pf-id="c2a9a6"><i data-lucide="megaphone" class="w-6 h-6"></i></div>
+            <h3 class="insight-title" data-pf-id="624a44">Paid Ads → AOV più alto</h3>
+            <p class="insight-body" data-pf-id="1fbe78">Social &amp; Email sono i canali più comuni, ma i clienti da Paid Ads mostrano un carrello medio sensibilmente superiore.</p>
+            <span class="insight-meta" data-pf-id="8dac6a">referral_source · avg_order_value</span>
+          </article>
+          <article class="insight-card" data-pf-id="a2ca39">
+            <div class="insight-icon bg-fuchsia-500/10 text-fuchsia-400" data-pf-id="06abf6"><i data-lucide="wallet" class="w-6 h-6"></i></div>
+            <h3 class="insight-title" data-pf-id="dd342c">Fascia $150K+ guida la spesa</h3>
+            <p class="insight-body" data-pf-id="d26c67">I clienti nella fascia di reddito più alta hanno il total spent e l'AOV massimi. Il potere d'acquisto si traduce in valore.</p>
+            <span class="insight-meta" data-pf-id="49aee4">income_bracket · total_spent_usd</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="schema" class="py-16 lg:py-24 border-t border-white/5" data-pf-id="0c7a1f">
+      <div class="max-w-7xl mx-auto px-5 lg:px-8" data-pf-id="ac63f0">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-10" data-pf-id="1abd0c">
+          <div class="lg:col-span-1" data-pf-id="035b6d">
+            <p class="font-mono text-xs uppercase tracking-widest text-cyan-400" data-pf-id="3bce55">04 · Schema</p>
+            <h2 class="mt-3 text-3xl lg:text-4xl font-bold text-white tracking-tight" data-pf-id="e77771">25 feature, già pulite.</h2>
+            <p class="mt-4 text-slate-400" data-pf-id="f61c6e">12 numeriche, 10 categoriche, 3 date. Nessun valore mancante. Pronto per pipelines Pandas, SQL, BigQuery o notebook Jupyter.</p>
+            <div class="mt-6 flex flex-wrap gap-2" data-pf-id="d39a5a">
+              <span class="chip" data-pf-id="1f7d65">customer_id</span>
+              <span class="chip" data-pf-id="3d4d36">age</span>
+              <span class="chip" data-pf-id="afb0b0">gender</span>
+              <span class="chip" data-pf-id="76b9f8">country</span>
+              <span class="chip" data-pf-id="d31828">region</span>
+              <span class="chip" data-pf-id="9d4933">income_bracket</span>
+              <span class="chip" data-pf-id="ee9e1a">signup_date</span>
+              <span class="chip" data-pf-id="2bd14b">last_purchase_date</span>
+              <span class="chip" data-pf-id="da3e5f">total_spent_usd</span>
+              <span class="chip" data-pf-id="5df751">loyalty_tier</span>
+              <span class="chip" data-pf-id="6b1ed1">churn</span>
+              <span class="chip" data-pf-id="c24f67">+13 altre</span>
+            </div>
+          </div>
+          <div class="lg:col-span-2" data-pf-id="d97047">
+            <div class="rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden" data-pf-id="a1910c">
+              <div class="px-5 py-3 border-b border-white/10 flex items-center justify-between bg-white/[0.03]" data-pf-id="d709ea">
+                <div class="flex items-center gap-2" data-pf-id="058ed3">
+                  <span class="w-2.5 h-2.5 rounded-full bg-rose-400" data-pf-id="3dc2ed"></span>
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-400" data-pf-id="e37ffd"></span>
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-400" data-pf-id="03516f"></span>
+                </div>
+                <span class="font-mono text-xs text-slate-500" data-pf-id="95c8b6">data_dictionary.csv</span>
+              </div>
+              <div class="overflow-x-auto" data-pf-id="031a5a">
+                <table class="w-full text-sm" data-pf-id="3f0d5b">
+                  <thead class="bg-white/[0.02] text-slate-400 text-xs uppercase tracking-wider">
+                    <tr><th class="text-left px-5 py-3 font-semibold">Colonna</th><th class="text-left px-5 py-3 font-semibold">Tipo</th><th class="text-left px-5 py-3 font-semibold">Descrizione</th></tr>
+                  </thead>
+                  <tbody class="divide-y divide-white/5 text-slate-300">
+                    <tr><td class="px-5 py-3 font-mono text-cyan-300">customer_id</td><td class="px-5 py-3"><span class="dtype dtype-str" data-pf-id="7592f2">string</span></td><td class="px-5 py-3 text-slate-400">Identificativo univoco CUST-00001…CUST-01200</td></tr>
+                    <tr><td class="px-5 py-3 font-mono text-cyan-300">age</td><td class="px-5 py-3"><span class="dtype dtype-int" data-pf-id="32efd8">int</span></td><td class="px-5 py-3 text-slate-400">Età del cliente · 18–75</td></tr>
+                    <tr><td class="px-5 py-3 font-mono text-cyan-300">total_spent_usd</td><td class="px-5 py-3"><span class="dtype dtype-num" data-pf-id="d157c2">float</span></td><td class="px-5 py-3 text-slate-400">Spesa totale in USD, range 369.65–98.978</td></tr>
+                    <tr><td class="px-5 py-3 font-mono text-cyan-300">loyalty_tier</td><td class="px-5 py-3"><span class="dtype dtype-cat" data-pf-id="fa80f7">cat</span></td><td class="px-5 py-3 text-slate-400">Bronze · Silver · Gold · Platinum</td></tr>
+                    <tr><td class="px-5 py-3 font-mono text-cyan-300">churn</td><td class="px-5 py-3"><span class="dtype dtype-cat" data-pf-id="48c624">cat</span></td><td class="px-5 py-3 text-slate-400">Stato di abbandono / rischio</td></tr>
+                    <tr><td class="px-5 py-3 font-mono text-cyan-300">signup_date</td><td class="px-5 py-3"><span class="dtype dtype-date" data-pf-id="634a22">date</span></td><td class="px-5 py-3 text-slate-400">Data di iscrizione</td></tr>
+                    <tr><td class="px-5 py-3 font-mono text-cyan-300">avg_session_minutes</td><td class="px-5 py-3"><span class="dtype dtype-num" data-pf-id="eb1c6d">float</span></td><td class="px-5 py-3 text-slate-400">Durata media sessione in minuti</td></tr>
+                    <tr><td class="px-5 py-3 font-mono text-cyan-300">satisfaction_score</td><td class="px-5 py-3"><span class="dtype dtype-int" data-pf-id="ffa826">int</span></td><td class="px-5 py-3 text-slate-400">Soddisfazione post-acquisto · 1–5</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contatti" class="py-16 lg:py-24 border-t border-white/5 bg-white/[0.015]" data-pf-id="d4d513">
+      <div class="max-w-7xl mx-auto px-5 lg:px-8" data-pf-id="056193">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16" data-pf-id="c1e052">
+          <div data-pf-id="c34f31">
+            <p class="font-mono text-xs uppercase tracking-widest text-cyan-400" data-pf-id="c42662">05 · Contatti</p>
+            <h2 class="mt-3 text-3xl lg:text-4xl font-bold text-white tracking-tight" data-pf-id="15e5e3">Hai un use case in mente?</h2>
+            <p class="mt-4 text-slate-400 max-w-md" data-pf-id="343c86">Raccontaci come useresti il dataset. Notebook, integrazione BigQuery, modelli di churn su misura: rispondiamo entro 48h.</p>
+            <ul class="mt-8 space-y-3 text-slate-300" data-pf-id="23267f">
+              <li class="flex items-center gap-3" data-pf-id="87d53a"><i data-lucide="mail" class="w-4 h-4 text-cyan-400"></i> hello@analytics24.io</li>
+              <li class="flex items-center gap-3" data-pf-id="9070e9"><i data-lucide="github" class="w-4 h-4 text-cyan-400"></i> github.com/analytics24</li>
+              <li class="flex items-center gap-3" data-pf-id="8bd0d6"><i data-lucide="shield-check" class="w-4 h-4 text-cyan-400"></i> Licenza CC0-1.0 · uso commerciale libero</li>
+            </ul>
+          </div>
+          <form id="contactForm" class="form-card" novalidate="" data-pf-id="797b76">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" data-pf-id="1fbca1">
+              <div data-pf-id="414768">
+                <label class="form-label">Nome</label>
+                <input required="" name="name" type="text" placeholder="Ada Lovelace" class="form-input">
+              </div>
+              <div data-pf-id="46e98c">
+                <label class="form-label">Email</label>
+                <input required="" name="email" type="email" placeholder="ada@team.io" class="form-input">
+              </div>
+            </div>
+            <div class="mt-4" data-pf-id="3d1687">
+              <label class="form-label">Ruolo</label>
+              <select name="role" class="form-input">
+                <option>Data Analyst</option>
+                <option>Data Scientist</option>
+                <option>Marketing / CRM</option>
+                <option>Product Manager</option>
+                <option>Altro</option>
+              </select>
+            </div>
+            <div class="mt-4" data-pf-id="2847d5">
+              <label class="form-label">Use case</label>
+              <textarea required="" name="message" rows="4" placeholder="Voglio costruire un modello di churn sui tier Bronze…" class="form-input"></textarea>
+            </div>
+            <button type="submit" class="mt-5 w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#0a0f1c] font-semibold transition">
+              <i data-lucide="send" class="w-4 h-4"></i> Invia richiesta
+            </button>
+            <p id="formStatus" class="mt-3 text-sm text-emerald-400 hidden" data-pf-id="f56a21">Grazie! Ti ricontattiamo a breve.</p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="py-20 border-t border-white/5" data-pf-id="c06e55">
+      <div class="max-w-5xl mx-auto px-5 lg:px-8 text-center" data-pf-id="f2c6d9">
+        <h2 class="text-3xl lg:text-5xl font-extrabold text-white tracking-tight" data-pf-id="0def42">Pronto a esplorare <span class="text-cyan-400" data-pf-id="702fe4">1.200 storie</span> di clienti?</h2>
+        <p class="mt-5 text-slate-400 max-w-2xl mx-auto" data-pf-id="5ddb23">Scarica il dataset, il data dictionary e un notebook di starter analysis. Tutto in CC0, anche per uso commerciale.</p>
+        <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center" data-pf-id="697e55">
+          <a href="#" class="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#0a0f1c] font-semibold transition shadow-xl shadow-cyan-500/25" data-pf-id="d22916">
+            <i data-lucide="download-cloud" class="w-5 h-5"></i> Scarica CSV + Notebook
+          </a>
+          <a href="#schema" class="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg border border-white/15 hover:border-cyan-400/50 text-white font-semibold transition" data-pf-id="11d7fc">
+            <i data-lucide="book-open" class="w-5 h-5"></i> Leggi la docs
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="border-t border-white/5 py-10" data-pf-id="7b4ac9">
+    <div class="max-w-7xl mx-auto px-5 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-500" data-pf-id="34626d">
+      <div class="flex items-center gap-2" data-pf-id="e16c91">
+        <span class="w-6 h-6 rounded bg-gradient-to-br from-cyan-400 to-blue-600" data-pf-id="db5567"></span>
+        <span class="text-slate-300 font-semibold" data-pf-id="5eedb5">Analytics·24</span>
+        <span data-pf-id="740934">· © 2024</span>
+      </div>
+      <div class="flex items-center gap-5" data-pf-id="a6ddd6">
+        <a href="#" class="hover:text-cyan-400 transition" data-pf-id="760227">Privacy</a>
+        <a href="#" class="hover:text-cyan-400 transition" data-pf-id="a75262">License CC0-1.0</a>
+        <a href="#" class="hover:text-cyan-400 transition" data-pf-id="7fe17e">Changelog</a>
+      </div>
+    </div>
+  </footer>
+
+  <noscript>
+    <div style='position:fixed;inset:0;display:grid;place-items:center;background:#0a0f1c;color:#e2e8f0;font-family:Inter,sans-serif;padding:2rem;text-align:center;'>
+      <div>
+        <h1 style='color:#22d3ee;'>Global E-Commerce Customer Analytics 2024</h1>
+        <p>Dataset di 1.200 clienti, 15 paesi, 4 regioni. Abilita JavaScript per visualizzazioni interattive e form di contatto.</p>
+      </div>
+    </div>
+  </noscript>
+
+  <script src="script.js?v=70f5da7f"></script>
+
+</body></html>

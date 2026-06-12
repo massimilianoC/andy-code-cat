@@ -117,6 +117,22 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 14000,
         systemTemplate: "",
     },
+    didactic_knowledge_generate: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.4,
+        maxCompletionTokens: 8000,
+        systemTemplate: "",
+    },
+    didactic_ask: {
+        enabled: true,
+        provider: "siliconflow",
+        model: "MiniMaxAI/MiniMax-M2.5",
+        temperature: 0.3,
+        maxCompletionTokens: 4000,
+        systemTemplate: "",
+    },
 };
 
 export interface ProductInjectionConfig {
@@ -271,6 +287,11 @@ export interface PlatformConfig {
     costRates?: PlatformCostRates;
     /** Superadmin media-provider policy for deterministic media orchestration. */
     mediaProviderPolicy?: MediaProviderPolicy;
+    /** Feature flags — additive, never breaking. */
+    features?: {
+        /** Kill-switch for Didactic Mode. Defaults to true (enabled). */
+        didacticMode?: boolean;
+    };
 }
 
 export const DEFAULT_PRODUCT_ATTACHMENT_POLICY: ProductAttachmentPolicy = {

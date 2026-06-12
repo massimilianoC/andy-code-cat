@@ -20,6 +20,8 @@ export const ResourceType = {
     LLM_TEMPLATE_DRAFT: "llm.template_draft",
     LLM_EMBEDDING: "llm.embedding",
     LLM_BACKGROUND: "llm.background",
+    LLM_DIDACTIC_KNOWLEDGE: "llm.didactic.knowledge",
+    LLM_DIDACTIC_ASK: "llm.didactic.ask",
     // Image / Video
     IMAGE_GEN: "image.gen",
     IMAGE_PROMPT_OPT: "image.prompt_opt",

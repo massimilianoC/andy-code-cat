@@ -24,3 +24,4 @@ export * from "./vibecore";
 export * from "./datasets";
 export * from "./brand";
 export * from "./preferences";
+export * from "./didactic";

@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import dynamic from "next/dynamic";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import {
     getOrCreateProjectConversation,
     getConversation,
@@ -62,12 +62,13 @@ import {
 } from "../../../lib/api";
 import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
+import { getProjectCostSummary } from "../../../lib/api/cost";
 import { saveThumbnail, savePromptExcerpt, incrementSnapCount } from "../../../lib/thumbnail";
 import ProjectConfigPopup from "../../../components/ProjectConfigPopup";
 import MediaInspectorPanel from "../../../components/MediaInspectorPanel";
 import { LlmProviderErrorDialog, type LlmProviderErrorDialogState } from "../../../components/LlmProviderErrorDialog";
 import { MediaGrid, type MediaItem } from "@/components/media";
-import { ChevronDown, FileText, ImageIcon, Loader2, Mic, Paperclip, RefreshCw, Settings, Square, X } from "lucide-react";
+import { ChevronDown, Columns2, FileText, ImageIcon, Loader2, Mic, Paperclip, RefreshCw, Settings, Square, X } from "lucide-react";
 import { uploadProjectAsset, getProjectAsset, updateProjectAsset } from "../../../lib/api/assets";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
 import { Button } from "@/components/ui/button";
@@ -78,9 +79,11 @@ import { Separator } from "@/components/ui/separator";
 import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
+import { DidacticPanel } from "../../../components/didactic/DidacticPanel";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
 import type { PreviewViewport } from "../../../components/workspace/PreviewViewportSelector";
 import { SnapshotHistoryPanel } from "../../../components/workspace/SnapshotHistoryPanel";
+import { DualView } from "../../../components/workspace/DualView";
 import { PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT } from "./iframe-scripts";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
@@ -555,6 +558,8 @@ export default function WorkspacePage() {
     const [isDraggingVChat, setIsDraggingVChat] = useState(false);
     const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("desktop");
     const [previewTab, setPreviewTab] = useState<"preview" | "html" | "css" | "js" | "prompt">("preview");
+    const [workMode, setWorkMode] = useState<"build" | "didactic">("build");
+    const [splitMode, setSplitMode] = useState(false);
     const [promptTemplate, setPromptTemplate] = useState("");
     const [promptEnabled, setPromptEnabled] = useState(true);
     const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -597,6 +602,8 @@ export default function WorkspacePage() {
     const [selectedImageSteps, setSelectedImageSteps] = useState(4);
     const [projectAiAnalytics, setProjectAiAnalytics] = useState<AiUsageAnalyticsDto | null>(null);
     const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
+    // DB-backed total for the project — includes didactic costs; refreshed on load and after each didactic op.
+    const [projectDbCostEur, setProjectDbCostEur] = useState(0);
     const [codeEditorSelection, setCodeEditorSelection] = useState<LlmFocusContext["codeSelection"] | null>(null);
     const [previewAssetResolved, setPreviewAssetResolved] = useState<{
         sourceHtml: string;
@@ -1260,11 +1267,22 @@ export default function WorkspacePage() {
         }
     }, [token, projectId]);
 
+    const refreshProjectDbCost = useCallback(async () => {
+        if (!projectId) return;
+        try {
+            const summary = await getProjectCostSummary(projectId);
+            setProjectDbCostEur(summary.summary.totalEur);
+        } catch {
+            // non-blocking — leave previous value
+        }
+    }, [projectId]);
+
     useEffect(() => {
         if (!token) return;
         void loadProjectAssets(token);
         void loadProjectAiUsage(token);
-    }, [token, loadProjectAssets, loadProjectAiUsage]);
+        void refreshProjectDbCost();
+    }, [token, loadProjectAssets, loadProjectAiUsage, refreshProjectDbCost]);
 
     // Bridge Zero Effort project assets into the chat attachment strip on first load.
     // Runs once after projectAssets settles so that files uploaded during the Vibe/ZE
@@ -2231,14 +2249,14 @@ export default function WorkspacePage() {
 
     // Inject inspect infrastructure script so the iframe is always ready to receive postMessages.
     // When EDIT mode is active, also inject PF_EDIT_SCRIPT for contentEditable WYSIWYG.
-    const previewDocWithInspect = previewDoc
-        ? (() => {
-               const scripts = PF_INSPECT_SCRIPT + (editMode ? PF_EDIT_SCRIPT : "");
-               return previewDoc.includes("</body>")
-                   ? previewDoc.replace(/<\/body>/i, `${scripts}</body>`)
-                   : `${previewDoc}${scripts}`;
-          })()
-        : "";
+    // Memoized to prevent spurious srcDoc changes (and iframe reloads) on unrelated re-renders.
+    const previewDocWithInspect = useMemo(() => {
+        if (!previewDoc) return "";
+        const scripts = PF_INSPECT_SCRIPT + (editMode ? PF_EDIT_SCRIPT : "");
+        return previewDoc.includes("</body>")
+            ? previewDoc.replace(/<\/body>/i, `${scripts}</body>`)
+            : `${previewDoc}${scripts}`;
+    }, [previewDoc, editMode]);
 
     // ── Drag resize ─────────────────────────────────────────────────────────
     useEffect(() => {
@@ -3207,6 +3225,268 @@ export default function WorkspacePage() {
         abortControllerRef.current?.abort();
     }
 
+    const PreviewCanvas = () => (
+        <div style={{ display: "flex", flex: 1, minHeight: 0, gap: 0, position: "relative" }}>
+            <div style={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+                position: "relative",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                overflowY: viewportDimensions(previewViewport) ? "auto" : "hidden",
+                padding: viewportDimensions(previewViewport) ? "16px 0 24px" : 0,
+            }}>
+                <div style={{
+                    width: viewportDimensions(previewViewport)?.w ?? "100%",
+                    height: viewportDimensions(previewViewport)?.h,
+                    maxWidth: "100%",
+                    flex: viewportDimensions(previewViewport) ? "none" : 1,
+                    minHeight: viewportDimensions(previewViewport) ? undefined : 0,
+                    position: "relative",
+                    display: "flex",
+                    flexDirection: "column",
+                    transition: "width 0.2s ease, height 0.2s ease",
+                    boxShadow: viewportDimensions(previewViewport) ? "0 8px 40px rgba(0,0,0,0.55), 0 0 0 1px var(--border)" : undefined,
+                    borderRadius: viewportDimensions(previewViewport) ? "var(--radius)" : undefined,
+                    overflow: viewportDimensions(previewViewport) ? "hidden" : undefined,
+                }}>
+                    {previewRefreshing && (
+                        <div
+                            style={{
+                                position: "absolute",
+                                inset: 0,
+                                zIndex: 50,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                background: "rgba(10,15,26,0.52)",
+                                borderRadius: "var(--radius)",
+                                backdropFilter: "blur(2px)",
+                                pointerEvents: "none",
+                            }}
+                        >
+                            <span
+                                style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "0.55rem",
+                                    background: "rgba(15,21,35,0.88)",
+                                    border: "1px solid var(--border)",
+                                    borderRadius: "var(--radius)",
+                                    padding: "0.45rem 1rem",
+                                    color: "#7dd3fc",
+                                    fontSize: "0.82rem",
+                                    fontWeight: 600,
+                                    boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        width: 14,
+                                        height: 14,
+                                        border: "2px solid #7dd3fc",
+                                        borderTopColor: "transparent",
+                                        borderRadius: "50%",
+                                        animation: "pf-spin 0.7s linear infinite",
+                                        display: "inline-block",
+                                        flexShrink: 0,
+                                    }}
+                                />
+                                {t("workspace.ui.previewRefreshing")}
+                            </span>
+                        </div>
+                    )}
+                    <iframe
+                        key={`${artifactsKey}-${previewForceKey}`}
+                        ref={iframeRef}
+                        title="preview"
+                        srcDoc={previewDocWithInspect}
+                        className="workspace-preview-iframe"
+                        sandbox="allow-scripts"
+                        onLoad={() => {
+                            iframeLoadedRef.current = true;
+                            setPreviewRefreshing(false);
+                            if (inspectMode) {
+                                setTimeout(() => {
+                                    iframeRef.current?.contentWindow?.postMessage({ type: "pf-inspect", on: true }, "*");
+                                }, 100);
+                            }
+                            if (editMode) {
+                                setTimeout(() => {
+                                    iframeRef.current?.contentWindow?.postMessage({ type: "pf-edit", on: true }, "*");
+                                }, 130);
+                            }
+                        }}
+                    />
+                </div>
+            </div>
+            {editMode && editMediaList.length > 0 && (
+                <MediaGrid
+                    items={editMediaList}
+                    selectedId={
+                        selectedElement?.selector
+                            ? editMediaList.find((m) => m.meta?.selector === selectedElement.selector)?.id ?? null
+                            : null
+                    }
+                    onSelect={(item) => {
+                        const selector = item.meta?.selector as string | undefined;
+                        const pfId = item.meta?.stableNodeId as string | undefined;
+                        iframeRef.current?.contentWindow?.postMessage({
+                            type: "pf-edit-scroll-to",
+                            selector: selector || "",
+                            pfId: pfId?.startsWith("pf:") ? pfId.slice(3) : undefined,
+                        }, "*");
+                    }}
+                    title="🖼 Assets"
+                    columns={1}
+                    filters={[
+                        { key: "img", label: t("workspace.editMediaFilters.images"), match: (i) => i.mediaType === "image" },
+                        { key: "bg", label: t("workspace.editMediaFilters.backgrounds"), match: (i) => i.mediaType === "background" },
+                    ]}
+                    headerActions={
+                        <button
+                            type="button"
+                            onClick={() => iframeRef.current?.contentWindow?.postMessage({ type: "pf-edit-scan-media" }, "*")}
+                            className="bg-transparent border-none cursor-pointer text-muted-foreground text-[0.7rem] px-1 hover:text-foreground transition-colors"
+                            title={t("workspace.ui.rescanImages")}
+                        >↻</button>
+                    }
+                    className="w-[160px] min-w-[160px]"
+                />
+            )}
+        </div>
+    );
+
+    const PromptCanvas = () => (
+        <div
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+                background: "#0b1220",
+            }}
+        >
+            <div
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.6rem",
+                    padding: "0.35rem 0.75rem",
+                    borderBottom: "1px solid var(--border)",
+                    flexShrink: 0,
+                }}
+            >
+                <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
+                    {t("workspace.ui.promptPanelDesc")}
+                    {promptPreview && (
+                        <span style={{ color: "var(--accent, #7dd3fc)", marginLeft: "0.75rem" }}>
+                            {t("workspace.ui.promptPanelTokensPreset", { tokens: promptPreview.tokenEstimate, preset: promptPreview.presetId ?? t("workspace.ui.promptPanelNone") })}
+                        </span>
+                    )}
+                </span>
+                <button
+                    type="button"
+                    disabled={loadingPromptPreview}
+                    onClick={() => void loadPromptPreview()}
+                    style={{
+                        marginLeft: "auto",
+                        fontSize: "0.78rem",
+                        padding: "0.25rem 0.75rem",
+                        background: "transparent",
+                        color: "var(--accent, #7dd3fc)",
+                        border: "1px solid var(--accent, #7dd3fc)",
+                        borderRadius: "var(--radius)",
+                        cursor: loadingPromptPreview ? "wait" : "pointer",
+                        fontWeight: 600,
+                    }}
+                >
+                    {loadingPromptPreview ? t("workspace.ui.promptPanelLoading") : t("workspace.ui.promptPanelReload")}
+                </button>
+            </div>
+            <div
+                style={{
+                    flex: 1,
+                    overflowY: "auto",
+                    padding: "1rem",
+                }}
+            >
+                {!promptPreview && !loadingPromptPreview && (
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
+                        {t("workspace.ui.promptPanelHint")}
+                    </p>
+                )}
+                {loadingPromptPreview && (
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.ui.promptPanelLoading")}</p>
+                )}
+                {promptPreview && (
+                    <>
+                        <PromptLayerBlock
+                            label={t("workspace.ui.layers.layerA")}
+                            badge={t("workspace.ui.layers.layerABadge")}
+                            badgeColor="#7dd3fc"
+                            source={t("workspace.ui.layers.layerASource")}
+                            content={promptPreview.layers.a_baseConstraints}
+                        />
+                        <PromptLayerBlock
+                            label={t("workspace.ui.layers.layerB")}
+                            badge={promptPreview.presetId ? t("workspace.ui.layers.layerBBadge", { presetId: promptPreview.presetId }) : t("workspace.ui.layers.layerBBadgeNone")}
+                            badgeColor={promptPreview.layers.b_presetModule ? "#a3e635" : "#6b7280"}
+                            source={t("workspace.ui.layers.layerBSource")}
+                            content={promptPreview.layers.b_presetModule || t("workspace.ui.layers.layerBEmpty")}
+                            empty={!promptPreview.layers.b_presetModule}
+                        />
+                        <PromptLayerBlock
+                            label={t("workspace.ui.layers.layerC")}
+                            badge={promptPreview.layers.c_styleContext ? t("workspace.ui.layers.layerCBadge") : t("workspace.ui.layers.layerCBadgeEmpty")}
+                            badgeColor={promptPreview.layers.c_styleContext ? "#fb923c" : "#6b7280"}
+                            source={t("workspace.ui.layers.layerCSource")}
+                            content={promptPreview.layers.c_styleContext || t("workspace.ui.layers.layerCEmpty")}
+                            empty={!promptPreview.layers.c_styleContext}
+                        />
+                        <PromptLayerBlock
+                            label={t("workspace.ui.layers.layerD")}
+                            badge={promptPreview.layers.d_documentContext ? t("workspace.ui.layers.layerDBadge") : t("workspace.ui.layers.layerDEmpty")}
+                            badgeColor={promptPreview.layers.d_documentContext ? "#34d399" : "#6b7280"}
+                            source={t("workspace.ui.layers.layerDSource")}
+                            content={promptPreview.layers.d_documentContext || t("workspace.ui.layers.layerDEmpty")}
+                            empty={!promptPreview.layers.d_documentContext}
+                        />
+                        {promptPreview.layers.x_dataContext && (
+                            <PromptLayerBlock
+                                label={t("workspace.ui.layers.layerX", "Layer X")}
+                                badge={t("workspace.ui.layers.layerXBadge", "Grounded data")}
+                                badgeColor="#38bdf8"
+                                source={t("workspace.ui.layers.layerXSource", "Dataset runtime envelope")}
+                                content={promptPreview.layers.x_dataContext}
+                            />
+                        )}
+                        {promptPreview.layers.e_prePromptTemplate && (
+                            <PromptLayerBlock
+                                label={t("workspace.ui.layers.layerE")}
+                                badge={t("workspace.ui.layers.layerEBadge")}
+                                badgeColor="#f59e0b"
+                                source={t("workspace.ui.layers.layerESource")}
+                                content={promptPreview.layers.e_prePromptTemplate}
+                            />
+                        )}
+                        {promptPreview.layers.budgetPolicy && (
+                            <PromptLayerBlock
+                                label={t("workspace.ui.layers.policy")}
+                                badge={t("workspace.ui.layers.policyBadge")}
+                                badgeColor="#8b5cf6"
+                                source={t("workspace.ui.layers.policySource")}
+                                content={promptPreview.layers.budgetPolicy}
+                            />
+                        )}
+                    </>
+                )}
+            </div>
+        </div>
+    );
+
     if (checkingAuth) {
         return <div style={{ padding: "2rem", color: "var(--text-muted)" }}>{t("workspace.ui.checkingSession")}</div>;
     }
@@ -3215,16 +3495,19 @@ export default function WorkspacePage() {
         <div className="workspace-outer">
         <WorkspaceHeader
             projectName={projectName}
-            totalCostEur={promptOpsSummary.totalCost + (projectAiAnalytics?.totals.imageCost ?? 0)}
+            totalCostEur={Math.max(projectDbCostEur, promptOpsSummary.totalCost + (projectAiAnalytics?.totals.imageCost ?? 0))}
             projectId={projectId}
             onConfigOpen={() => setConfigOpen(true)}
             onDashboard={() => router.push("/dashboard")}
+            workMode={workMode}
+            onWorkModeChange={setWorkMode}
         />
         <div
             className="workspace-shell workspace-shell-resizable"
             style={{ gridTemplateColumns: `${leftWidth}% 8px minmax(0, 1fr)` }}
         >
             <aside className="workspace-chat-panel">
+                {workMode === "build" ? (<>
                 <div className="workspace-chat-header">
                     {/* Project name + cog */}
                     <div className="row" style={{ gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem" }}>
@@ -3798,7 +4081,15 @@ export default function WorkspacePage() {
                     </div>
                 </form>
                 </div>{/* /workspace-chat-body */}
-            </aside>
+            </>) : (
+                <DidacticPanel
+                    projectId={projectId}
+                    snapshotId={selectedBackendSnapshotId}
+                    token={token ?? ""}
+                    onAnchorFocus={(kind) => setPreviewTab(kind)}
+                    onCostUpdated={refreshProjectDbCost}
+                />
+            )}</aside>
 
             <div
                 className="workspace-resizer"
@@ -3943,37 +4234,42 @@ export default function WorkspacePage() {
                 </div>
 
                 <div className="workspace-preview-tabs">
-                    {(["preview", "html", "css", "js"] as const).map((tab) => (
-                        <button
-                            key={tab}
-                            className="secondary"
-                            data-active={previewTab === tab ? "true" : "false"}
-                            onClick={() => {
-                                setPreviewTab(tab);
-                                if (tab === "preview") setPreviewPending(false);
-                            }}
-                            type="button"
-                            style={{ position: "relative" }}
-                        >
-                            {tab.toUpperCase()}
-                            {tab === "preview" && previewPending && previewTab !== "preview" && (
-                                <span
-                                    style={{
-                                        position: "absolute",
-                                        top: 3,
-                                        right: 3,
-                                        width: 7,
-                                        height: 7,
-                                        borderRadius: "50%",
-                                        background: "#7dd3fc",
-                                        boxShadow: "0 0 5px #7dd3fc",
-                                        animation: "pf-pulse 1.2s ease-in-out infinite",
-                                        display: "block",
-                                    }}
-                                />
-                            )}
-                        </button>
-                    ))}
+                    {(["preview", "html", "css", "js"] as const)
+                        .filter((tab) => !splitMode || tab !== "preview")
+                        .map((tab) => (
+                            <button
+                                key={tab}
+                                className="secondary"
+                                data-active={previewTab === tab ? "true" : "false"}
+                                onClick={() => {
+                                    setPreviewTab(tab);
+                                    if (tab === "preview") {
+                                        setPreviewPending(false);
+                                        if (splitMode) setSplitMode(false);
+                                    }
+                                }}
+                                type="button"
+                                style={{ position: "relative" }}
+                            >
+                                {tab.toUpperCase()}
+                                {tab === "preview" && previewPending && previewTab !== "preview" && (
+                                    <span
+                                        style={{
+                                            position: "absolute",
+                                            top: 3,
+                                            right: 3,
+                                            width: 7,
+                                            height: 7,
+                                            borderRadius: "50%",
+                                            background: "#7dd3fc",
+                                            boxShadow: "0 0 5px #7dd3fc",
+                                            animation: "pf-pulse 1.2s ease-in-out infinite",
+                                            display: "block",
+                                        }}
+                                    />
+                                )}
+                            </button>
+                        ))}
 
                     {/* Prompt preview tab */}
                     <button
@@ -3986,9 +4282,19 @@ export default function WorkspacePage() {
                         🔍 PROMPT
                     </button>
 
+                    {/* Split view toggle */}
+                    <button
+                        type="button"
+                        className="secondary"
+                        data-active={splitMode ? "true" : "false"}
+                        onClick={() => setSplitMode((v) => !v)}
+                        title="Split view"
+                        style={{ marginLeft: "0.25rem" }}
+                    >
+                        <Columns2 size={14} />
+                    </button>
 
-
-                    {previewTab === "preview" && (
+                    {(previewTab === "preview" || splitMode) && (
                         <>
                             <button
                                 type="button"
@@ -4039,7 +4345,7 @@ export default function WorkspacePage() {
                         </>
                     )}
 
-                    {previewTab !== "preview" && (
+                    {!splitMode && previewTab !== "preview" && (
                         <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: "0.75rem" }}>
                             {editorSelectionLabel || t("workspace.selectionNone")}
                         </span>
@@ -4265,7 +4571,7 @@ export default function WorkspacePage() {
                     </div>
                 )}
 
-                {previewTab === "preview" && hasPreviewArtifacts && (
+                {(previewTab === "preview" || splitMode) && hasPreviewArtifacts && (
                     <PreviewViewportSelector value={previewViewport} onChange={setPreviewViewport} />
                 )}
 
@@ -4280,149 +4586,78 @@ export default function WorkspacePage() {
                         </div>
                     )}
 
-                    {artifacts && previewTab === "preview" && (
-                        <div style={{ display: "flex", flex: 1, minHeight: 0, gap: 0, position: "relative" }}>
-                        {/* Main preview area with optional viewport width+height constraint */}
-                        <div style={{
-                            flex: 1,
-                            minWidth: 0,
-                            minHeight: 0,
-                            position: "relative",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            // for constrained viewports scroll vertically
-                            overflowY: viewportDimensions(previewViewport) ? "auto" : "hidden",
-                            padding: viewportDimensions(previewViewport) ? "16px 0 24px" : 0,
-                        }}>
-                        {/* Viewport-constrained inner frame */}
-                        <div style={{
-                            width: viewportDimensions(previewViewport)?.w ?? "100%",
-                            height: viewportDimensions(previewViewport)?.h,
-                            maxWidth: "100%",
-                            flex: viewportDimensions(previewViewport) ? "none" : 1,
-                            minHeight: viewportDimensions(previewViewport) ? undefined : 0,
-                            position: "relative",
-                            display: "flex",
-                            flexDirection: "column",
-                            transition: "width 0.2s ease, height 0.2s ease",
-                            boxShadow: viewportDimensions(previewViewport) ? "0 8px 40px rgba(0,0,0,0.55), 0 0 0 1px var(--border)" : undefined,
-                            borderRadius: viewportDimensions(previewViewport) ? "var(--radius)" : undefined,
-                            overflow: viewportDimensions(previewViewport) ? "hidden" : undefined,
-                        }}>
-                        {previewRefreshing && (
-                            <div
-                                style={{
-                                    position: "absolute",
-                                    inset: 0,
-                                    zIndex: 50,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    background: "rgba(10,15,26,0.52)",
-                                    borderRadius: "var(--radius)",
-                                    backdropFilter: "blur(2px)",
-                                    pointerEvents: "none",
-                                }}
-                            >
-                                <span
-                                    style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: "0.55rem",
-                                        background: "rgba(15,21,35,0.88)",
-                                        border: "1px solid var(--border)",
-                                        borderRadius: "var(--radius)",
-                                        padding: "0.45rem 1rem",
-                                        color: "#7dd3fc",
-                                        fontSize: "0.82rem",
-                                        fontWeight: 600,
-                                        boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-                                    }}
-                                >
-                                    <span
-                                        style={{
-                                            width: 14,
-                                            height: 14,
-                                            border: "2px solid #7dd3fc",
-                                            borderTopColor: "transparent",
-                                            borderRadius: "50%",
-                                            animation: "pf-spin 0.7s linear infinite",
-                                            display: "inline-block",
-                                            flexShrink: 0,
-                                        }}
+                    {artifacts && splitMode && (
+                        <DualView
+                            leftPane={
+                                <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                                    {PreviewCanvas()}
+                                </div>
+                            }
+                            rightPane={
+                                previewTab === "prompt" ? PromptCanvas() :
+                                previewTab === "html" ? (
+                                    <CodeEditorPanel
+                                        key={`html-${artifactsKey}`}
+                                        language="html"
+                                        value={editorHtml}
+                                        onChange={(value) => setEditorHtml(value)}
+                                        onSelectionChange={setEditorSelectionLabel}
+                                        onCodeSelectionChange={(data) =>
+                                            setCodeEditorSelection(data ? { language: "html", ...data } : null)
+                                        }
+                                        onSave={activeConvId ? () => void handleSaveEditorSnapshot() : undefined}
+                                        isSaving={isSavingEditorSnapshot}
                                     />
-                                    {t("workspace.ui.previewRefreshing")}
-                                </span>
-                            </div>
-                        )}
-                        <iframe
-                            key={`${artifactsKey}-${previewForceKey}`}
-                            ref={iframeRef}
-                            title="preview"
-                            srcDoc={previewDocWithInspect}
-                            className="workspace-preview-iframe"
-                            sandbox="allow-scripts"
-                            onLoad={() => {
-                                // Mark loaded so the watchdog timer knows not to force-remount
-                                iframeLoadedRef.current = true;
-                                // Hide spinner as soon as the iframe has actually loaded the new content
-                                setPreviewRefreshing(false);
-                                if (inspectMode) {
-                                    // Re-arm inspect after iframe reload
-                                    setTimeout(() => {
-                                        iframeRef.current?.contentWindow?.postMessage({ type: "pf-inspect", on: true }, "*");
-                                    }, 50);
-                                }
-                                if (editMode) {
-                                    // Re-arm EDIT Light after iframe reload
-                                    setTimeout(() => {
-                                        iframeRef.current?.contentWindow?.postMessage({ type: "pf-edit", on: true }, "*");
-                                    }, 80);
-                                }
-                            }}
+                                ) :
+                                previewTab === "css" ? (
+                                    <CodeEditorPanel
+                                        key={`css-${artifactsKey}`}
+                                        language="css"
+                                        value={editorCss}
+                                        onChange={(value) => setEditorCss(value)}
+                                        onSelectionChange={setEditorSelectionLabel}
+                                        onCodeSelectionChange={(data) =>
+                                            setCodeEditorSelection(data ? { language: "css", ...data } : null)
+                                        }
+                                        onSave={activeConvId ? () => void handleSaveEditorSnapshot() : undefined}
+                                        isSaving={isSavingEditorSnapshot}
+                                    />
+                                ) :
+                                previewTab === "js" ? (
+                                    <CodeEditorPanel
+                                        key={`js-${artifactsKey}`}
+                                        language="javascript"
+                                        value={editorJs}
+                                        onChange={(value) => setEditorJs(value)}
+                                        onSelectionChange={setEditorSelectionLabel}
+                                        onCodeSelectionChange={(data) =>
+                                            setCodeEditorSelection(data ? { language: "js", ...data } : null)
+                                        }
+                                        onSave={activeConvId ? () => void handleSaveEditorSnapshot() : undefined}
+                                        isSaving={isSavingEditorSnapshot}
+                                    />
+                                ) :
+                                (
+                                    <CodeEditorPanel
+                                        key={`html-${artifactsKey}`}
+                                        language="html"
+                                        value={editorHtml}
+                                        onChange={(value) => setEditorHtml(value)}
+                                        onSelectionChange={setEditorSelectionLabel}
+                                        onCodeSelectionChange={(data) =>
+                                            setCodeEditorSelection(data ? { language: "html", ...data } : null)
+                                        }
+                                        onSave={activeConvId ? () => void handleSaveEditorSnapshot() : undefined}
+                                        isSaving={isSavingEditorSnapshot}
+                                    />
+                                )
+                            }
                         />
-                        </div>{/* /viewport-frame */}
-                        </div>{/* /main-preview-area */}
-                        {/* EDIT media sidebar — reusable MediaGrid */}
-                        {editMode && editMediaList.length > 0 && (
-                            <MediaGrid
-                                items={editMediaList}
-                                selectedId={
-                                    selectedElement?.selector
-                                        ? editMediaList.find((m) => m.meta?.selector === selectedElement.selector)?.id ?? null
-                                        : null
-                                }
-                                onSelect={(item) => {
-                                    const selector = item.meta?.selector as string | undefined;
-                                    const pfId = item.meta?.stableNodeId as string | undefined;
-                                    iframeRef.current?.contentWindow?.postMessage({
-                                        type: "pf-edit-scroll-to",
-                                        selector: selector || "",
-                                        pfId: pfId?.startsWith("pf:") ? pfId.slice(3) : undefined,
-                                    }, "*");
-                                }}
-                                title="🖼 Assets"
-                                columns={1}
-                                filters={[
-                                    { key: "img", label: t("workspace.editMediaFilters.images"), match: (i) => i.mediaType === "image" },
-                                    { key: "bg", label: t("workspace.editMediaFilters.backgrounds"), match: (i) => i.mediaType === "background" },
-                                ]}
-                                headerActions={
-                                    <button
-                                        type="button"
-                                        onClick={() => iframeRef.current?.contentWindow?.postMessage({ type: "pf-edit-scan-media" }, "*")}
-                                        className="bg-transparent border-none cursor-pointer text-muted-foreground text-[0.7rem] px-1 hover:text-foreground transition-colors"
-                                        title={t("workspace.ui.rescanImages")}
-                                    >↻</button>
-                                }
-                                className="w-[160px] min-w-[160px]"
-                            />
-                        )}
-                        </div>
                     )}
 
-                    {artifacts && previewTab === "html" && (
+                    {artifacts && !splitMode && previewTab === "preview" && PreviewCanvas()}
+
+                    {artifacts && !splitMode && previewTab === "html" && (
                         <CodeEditorPanel
                             key={`html-${artifactsKey}`}
                             language="html"
@@ -4436,7 +4671,7 @@ export default function WorkspacePage() {
                             isSaving={isSavingEditorSnapshot}
                         />
                     )}
-                    {artifacts && previewTab === "css" && (
+                    {artifacts && !splitMode && previewTab === "css" && (
                         <CodeEditorPanel
                             key={`css-${artifactsKey}`}
                             language="css"
@@ -4450,7 +4685,7 @@ export default function WorkspacePage() {
                             isSaving={isSavingEditorSnapshot}
                         />
                     )}
-                    {artifacts && previewTab === "js" && (
+                    {artifacts && !splitMode && previewTab === "js" && (
                         <CodeEditorPanel
                             key={`js-${artifactsKey}`}
                             language="javascript"
@@ -4467,135 +4702,7 @@ export default function WorkspacePage() {
 
 
 
-                    {previewTab === "prompt" && (
-                        <div
-                            style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                flex: 1,
-                                minHeight: 0,
-                                background: "#0b1220",
-                            }}
-                        >
-                            {/* Toolbar */}
-                            <div
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "0.6rem",
-                                    padding: "0.35rem 0.75rem",
-                                    borderBottom: "1px solid var(--border)",
-                                    flexShrink: 0,
-                                }}
-                            >
-                                <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
-                                    {t("workspace.ui.promptPanelDesc")}
-                                    {promptPreview && (
-                                        <span style={{ color: "var(--accent, #7dd3fc)", marginLeft: "0.75rem" }}>
-                                            {t("workspace.ui.promptPanelTokensPreset", { tokens: promptPreview.tokenEstimate, preset: promptPreview.presetId ?? t("workspace.ui.promptPanelNone") })}
-                                        </span>
-                                    )}
-                                </span>
-                                <button
-                                    type="button"
-                                    disabled={loadingPromptPreview}
-                                    onClick={() => void loadPromptPreview()}
-                                    style={{
-                                        marginLeft: "auto",
-                                        fontSize: "0.78rem",
-                                        padding: "0.25rem 0.75rem",
-                                        background: "transparent",
-                                        color: "var(--accent, #7dd3fc)",
-                                        border: "1px solid var(--accent, #7dd3fc)",
-                                        borderRadius: "var(--radius)",
-                                        cursor: loadingPromptPreview ? "wait" : "pointer",
-                                        fontWeight: 600,
-                                    }}
-                                >
-                                    {loadingPromptPreview ? t("workspace.ui.promptPanelLoading") : t("workspace.ui.promptPanelReload")}
-                                </button>
-                            </div>
-                            {/* Layer panels */}
-                            <div
-                                style={{
-                                    flex: 1,
-                                    overflowY: "auto",
-                                    padding: "1rem",
-                                }}
-                            >
-                                {!promptPreview && !loadingPromptPreview && (
-                                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
-                                        {t("workspace.ui.promptPanelHint")}
-                                    </p>
-                                )}
-                                {loadingPromptPreview && (
-                                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.ui.promptPanelLoading")}</p>
-                                )}
-                                {promptPreview && (
-                                    <>
-                                        <PromptLayerBlock
-                                            label={t("workspace.ui.layers.layerA")}
-                                            badge={t("workspace.ui.layers.layerABadge")}
-                                            badgeColor="#7dd3fc"
-                                            source={t("workspace.ui.layers.layerASource")}
-                                            content={promptPreview.layers.a_baseConstraints}
-                                        />
-                                        <PromptLayerBlock
-                                            label={t("workspace.ui.layers.layerB")}
-                                            badge={promptPreview.presetId ? t("workspace.ui.layers.layerBBadge", { presetId: promptPreview.presetId }) : t("workspace.ui.layers.layerBBadgeNone")}
-                                            badgeColor={promptPreview.layers.b_presetModule ? "#a3e635" : "#6b7280"}
-                                            source={t("workspace.ui.layers.layerBSource")}
-                                            content={promptPreview.layers.b_presetModule || t("workspace.ui.layers.layerBEmpty")}
-                                            empty={!promptPreview.layers.b_presetModule}
-                                        />
-                                        <PromptLayerBlock
-                                            label={t("workspace.ui.layers.layerC")}
-                                            badge={promptPreview.layers.c_styleContext ? t("workspace.ui.layers.layerCBadge") : t("workspace.ui.layers.layerCBadgeEmpty")}
-                                            badgeColor={promptPreview.layers.c_styleContext ? "#fb923c" : "#6b7280"}
-                                            source={t("workspace.ui.layers.layerCSource")}
-                                            content={promptPreview.layers.c_styleContext || t("workspace.ui.layers.layerCEmpty")}
-                                            empty={!promptPreview.layers.c_styleContext}
-                                        />
-                                        <PromptLayerBlock
-                                            label={t("workspace.ui.layers.layerD")}
-                                            badge={promptPreview.layers.d_documentContext ? t("workspace.ui.layers.layerDBadge") : t("workspace.ui.layers.layerDEmpty")}
-                                            badgeColor={promptPreview.layers.d_documentContext ? "#34d399" : "#6b7280"}
-                                            source={t("workspace.ui.layers.layerDSource")}
-                                            content={promptPreview.layers.d_documentContext || t("workspace.ui.layers.layerDEmpty")}
-                                            empty={!promptPreview.layers.d_documentContext}
-                                        />
-                                        {promptPreview.layers.x_dataContext && (
-                                            <PromptLayerBlock
-                                                label={t("workspace.ui.layers.layerX", "Layer X")}
-                                                badge={t("workspace.ui.layers.layerXBadge", "Grounded data")}
-                                                badgeColor="#38bdf8"
-                                                source={t("workspace.ui.layers.layerXSource", "Dataset runtime envelope")}
-                                                content={promptPreview.layers.x_dataContext}
-                                            />
-                                        )}
-                                        {promptPreview.layers.e_prePromptTemplate && (
-                                            <PromptLayerBlock
-                                                label={t("workspace.ui.layers.layerE")}
-                                                badge={t("workspace.ui.layers.layerEBadge")}
-                                                badgeColor="#f59e0b"
-                                                source={t("workspace.ui.layers.layerESource")}
-                                                content={promptPreview.layers.e_prePromptTemplate}
-                                            />
-                                        )}
-                                        {promptPreview.layers.budgetPolicy && (
-                                            <PromptLayerBlock
-                                                label={t("workspace.ui.layers.policy")}
-                                                badge={t("workspace.ui.layers.policyBadge")}
-                                                badgeColor="#8b5cf6"
-                                                source={t("workspace.ui.layers.policySource")}
-                                                content={promptPreview.layers.budgetPolicy}
-                                            />
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    {artifacts && !splitMode && previewTab === "prompt" && PromptCanvas()}
                 </div>
             </section>
         </div>

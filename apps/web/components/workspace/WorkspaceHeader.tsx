@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Loader2, Settings } from "lucide-react";
+import { Bell, Loader2, Settings, BookOpen, Hammer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNotifications } from "@/lib/notifications";
@@ -14,6 +14,8 @@ interface WorkspaceHeaderProps {
     projectId?: string;
     onConfigOpen: () => void;
     onDashboard: () => void;
+    workMode?: "build" | "didactic";
+    onWorkModeChange?: (mode: "build" | "didactic") => void;
 }
 
 export function WorkspaceHeader({
@@ -22,6 +24,8 @@ export function WorkspaceHeader({
     projectId,
     onConfigOpen,
     onDashboard,
+    workMode = "build",
+    onWorkModeChange,
 }: WorkspaceHeaderProps) {
     const { notifications, panelOpen, setPanelOpen } = useNotifications();
 
@@ -55,6 +59,30 @@ export function WorkspaceHeader({
                 >
                     <Settings size={14} />
                 </Button>
+                {onWorkModeChange && (
+                    <div className="flex items-center bg-muted rounded-md p-0.5 ml-2">
+                        <Button
+                            type="button"
+                            variant={workMode === "build" ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => onWorkModeChange("build")}
+                            className="h-7 text-xs gap-1"
+                        >
+                            <Hammer size={12} />
+                            Build
+                        </Button>
+                        <Button
+                            type="button"
+                            variant={workMode === "didactic" ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => onWorkModeChange("didactic")}
+                            className="h-7 text-xs gap-1"
+                        >
+                            <BookOpen size={12} />
+                            Didact
+                        </Button>
+                    </div>
+                )}
             </div>
 
             {/* CENTER — total project cost */}
