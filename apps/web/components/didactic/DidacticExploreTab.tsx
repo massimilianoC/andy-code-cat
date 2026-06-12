@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Sparkles, Lightbulb, CheckCircle, XCircle } from "lucide-react";
+import { Loader2, Sparkles, Lightbulb, CheckCircle, XCircle, ExternalLink } from "lucide-react";
 import type { DidacticArtifactKnowledge, DidacticTopic, DidacticQuiz, DidacticDifficulty } from "@andy-code-cat/contracts";
 
 interface DidacticExploreTabProps {
@@ -14,6 +14,10 @@ interface DidacticExploreTabProps {
     onGenerate: () => void;
     onRegenerate: () => void;
     generating: boolean;
+    /** When set, renders only the specified section of content. */
+    section?: "analyze" | "quiz";
+    /** Called when the user clicks a topic card that has a code anchor. */
+    onAnchorClick?: (kind: "html" | "css" | "js", lineRange?: [number, number]) => void;
 }
 
 const DIFFICULTY_LABELS: Record<DidacticDifficulty, string> = {
@@ -28,16 +32,6 @@ const DIFFICULTY_VARIANTS: Record<DidacticDifficulty, "default" | "secondary" | 
     advanced: "destructive",
 };
 
-function groupByCategory(topics: DidacticTopic[]) {
-    const map = new Map<string, DidacticTopic[]>();
-    for (const t of topics) {
-        const list = map.get(t.category) ?? [];
-        list.push(t);
-        map.set(t.category, list);
-    }
-    return map;
-}
-
 const CATEGORY_LABELS: Record<string, string> = {
     html_structure: "HTML",
     css_technique: "CSS",
@@ -48,11 +42,84 @@ const CATEGORY_LABELS: Record<string, string> = {
     prompt_layer: "Prompt",
 };
 
-export function DidacticExploreTab({ status, knowledge, onGenerate, onRegenerate, generating }: DidacticExploreTabProps) {
-    const [quizAnswers, setQuizAnswers] = useState<Record<string, number | null>>({});
-    const [quizRevealed, setQuizRevealed] = useState<Record<string, boolean>>({});
+// Maps a topic category to a fallback code tab when the anchor kind is not directly usable.
+const CATEGORY_TAB: Record<string, "html" | "css" | "js"> = {
+    html_structure: "html",
+    css_technique: "css",
+    js_function: "js",
+    responsiveness: "css",
+    accessibility: "html",
+    design_choice: "css",
+    prompt_layer: "html",
+};
+
+function groupByCategory(topics: DidacticTopic[]) {
+    const map = new Map<string, DidacticTopic[]>();
+    for (const t of topics) {
+        const list = map.get(t.category) ?? [];
+        list.push(t);
+        map.set(t.category, list);
+    }
+    return map;
+}
+
+type ShuffledQuiz = Omit<DidacticQuiz, "options" | "correctIndex"> & {
+    options: string[];
+    correctIndex: number;
+};
+
+function shuffleQuizOptions(quiz: DidacticQuiz): ShuffledQuiz {
+    const perm = [0, 1, 2, 3];
+    for (let i = 3; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [perm[i], perm[j]] = [perm[j], perm[i]];
+    }
+    return {
+        ...quiz,
+        options: perm.map((i) => quiz.options[i]),
+        correctIndex: perm.indexOf(quiz.correctIndex),
+    };
+}
+
+export function DidacticExploreTab({
+    status,
+    knowledge,
+    onGenerate,
+    onRegenerate,
+    generating,
+    section,
+    onAnchorClick,
+}: DidacticExploreTabProps) {
+    // State keyed by array index to avoid duplicate-ID bugs from LLM-generated content.
+    const [quizAnswers, setQuizAnswers] = useState<Record<number, number | null>>({});
+    const [quizRevealed, setQuizRevealed] = useState<Record<number, boolean>>({});
+
+    // Reset quiz state and reshuffle when a new knowledge artifact is loaded.
+    useEffect(() => {
+        setQuizAnswers({});
+        setQuizRevealed({});
+    }, [knowledge?.id]);
+
+    // Shuffle answer positions once per knowledge load, stable within the session.
+    const shuffledQuizzes = useMemo<ShuffledQuiz[]>(() => {
+        if (!knowledge) return [];
+        return knowledge.quizzes.map(shuffleQuizOptions);
+    }, [knowledge]);
 
     if (status === "absent" || !knowledge) {
+        if (section === "quiz") {
+            return (
+                <div className="p-6 text-center space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                        Genera prima un&apos;analisi per accedere ai quiz.
+                    </p>
+                    <Button type="button" size="sm" onClick={onGenerate} disabled={generating}>
+                        {generating ? <Loader2 className="animate-spin mr-2" size={14} /> : <Sparkles size={14} className="mr-2" />}
+                        Genera analisi
+                    </Button>
+                </div>
+            );
+        }
         return (
             <div className="p-6 text-center space-y-4">
                 <Lightbulb className="mx-auto text-muted-foreground" size={32} />
@@ -69,83 +136,111 @@ export function DidacticExploreTab({ status, knowledge, onGenerate, onRegenerate
     }
 
     const grouped = groupByCategory(knowledge.topics);
+    const showAnalyze = !section || section === "analyze";
+    const showQuiz = !section || section === "quiz";
 
     return (
-        <div className="p-4 space-y-5 relative">
-            {generating && (
-                <div className="absolute inset-0 z-20 bg-card/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-6 space-y-3">
-                    <Loader2 className="animate-spin text-primary" size={40} />
-                    <div className="space-y-1">
-                        <p className="text-sm font-medium">Analisi didattica in corso...</p>
-                        <p className="text-xs text-muted-foreground max-w-[260px]">
-                            L&apos;AI sta esaminando l&apos;artifact e generando argomenti, quiz e spiegazioni.
-                            Questo può richiedere 10-30 secondi.
-                        </p>
-                    </div>
-                </div>
-            )}
-            {status === "stale" && (
+        <div className="p-4 space-y-5">
+            {status === "stale" && showAnalyze && (
                 <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 flex items-center gap-2">
                     <Sparkles size={12} />
                     L&apos;artifact è cambiato. L&apos;analisi potrebbe non essere aggiornata.
-                    <Button type="button" variant="ghost" size="sm" className="h-auto text-xs py-0 px-2 ml-auto" onClick={onRegenerate} disabled={generating}>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto text-xs py-0 px-2 ml-auto"
+                        onClick={onRegenerate}
+                        disabled={generating}
+                    >
                         {generating ? <Loader2 className="animate-spin" size={12} /> : "Rigenera"}
                     </Button>
                 </div>
             )}
 
-            {/* Overview */}
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Panoramica</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{knowledge.overview}</p>
-                </CardContent>
-            </Card>
+            {showAnalyze && (
+                <>
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium">Panoramica</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-sm text-muted-foreground leading-relaxed">{knowledge.overview}</p>
+                        </CardContent>
+                    </Card>
 
-            {/* Topics */}
-            <div className="space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Argomenti</h3>
-                {Array.from(grouped.entries()).map(([category, topics]) => (
-                    <div key={category} className="space-y-2">
-                        <Badge variant="outline" className="text-[10px]">{CATEGORY_LABELS[category] ?? category}</Badge>
-                        <div className="space-y-2">
-                            {topics.map((t) => (
-                                <Card key={t.id} className="cursor-pointer hover:bg-muted/40 transition-colors">
-                                    <CardContent className="p-3">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-sm font-medium">{t.title}</span>
-                                            <Badge variant={DIFFICULTY_VARIANTS[t.difficulty]} className="text-[10px] px-1 py-0">
-                                                {DIFFICULTY_LABELS[t.difficulty]}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">{t.summary}</p>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Argomenti</h3>
+                        {Array.from(grouped.entries()).map(([category, topics]) => (
+                            <div key={category} className="space-y-2">
+                                <Badge variant="outline" className="text-[10px]">
+                                    {CATEGORY_LABELS[category] ?? category}
+                                </Badge>
+                                <div className="space-y-2">
+                                    {topics.map((t) => {
+                                        const anchor = t.anchors[0];
+                                        const tabKind: "html" | "css" | "js" | undefined =
+                                            anchor && anchor.kind !== "preview" && anchor.kind !== "prompt"
+                                                ? anchor.kind
+                                                : CATEGORY_TAB[t.category];
+                                        const canNavigate = !!onAnchorClick && !!tabKind;
+                                        return (
+                                            <Card
+                                                key={t.id}
+                                                className={`transition-colors ${canNavigate ? "cursor-pointer hover:bg-muted/40 hover:border-primary/30" : ""}`}
+                                                onClick={canNavigate ? () => onAnchorClick!(tabKind!, anchor?.lineRange) : undefined}
+                                            >
+                                                <CardContent className="p-3">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-sm font-medium">{t.title}</span>
+                                                        <Badge
+                                                            variant={DIFFICULTY_VARIANTS[t.difficulty]}
+                                                            className="text-[10px] px-1 py-0"
+                                                        >
+                                                            {DIFFICULTY_LABELS[t.difficulty]}
+                                                        </Badge>
+                                                        {canNavigate && (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="text-[10px] px-1 py-0 ml-auto gap-0.5"
+                                                            >
+                                                                <ExternalLink size={9} />
+                                                                {tabKind!.toUpperCase()}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground">{t.summary}</p>
+                                                </CardContent>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                ))}
-            </div>
+                </>
+            )}
 
-            <Separator />
+            {showAnalyze && showQuiz && <Separator />}
 
-            {/* Quizzes */}
-            <div className="space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Quiz ({knowledge.quizzes.length})</h3>
-                {knowledge.quizzes.map((q, idx) => (
-                    <QuizCard
-                        key={q.id}
-                        index={idx + 1}
-                        quiz={q}
-                        selected={quizAnswers[q.id] ?? null}
-                        revealed={quizRevealed[q.id] ?? false}
-                        onSelect={(i) => setQuizAnswers((prev) => ({ ...prev, [q.id]: i }))}
-                        onReveal={() => setQuizRevealed((prev) => ({ ...prev, [q.id]: true }))}
-                    />
-                ))}
-            </div>
+            {showQuiz && (
+                <div className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Quiz ({shuffledQuizzes.length})
+                    </h3>
+                    {shuffledQuizzes.map((q, idx) => (
+                        <QuizCard
+                            key={idx}
+                            index={idx + 1}
+                            quiz={q}
+                            selected={quizAnswers[idx] ?? null}
+                            revealed={quizRevealed[idx] ?? false}
+                            onSelect={(i) => setQuizAnswers((prev) => ({ ...prev, [idx]: i }))}
+                            onReveal={() => setQuizRevealed((prev) => ({ ...prev, [idx]: true }))}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -159,7 +254,7 @@ function QuizCard({
     onReveal,
 }: {
     index: number;
-    quiz: DidacticQuiz;
+    quiz: ShuffledQuiz;
     selected: number | null;
     revealed: boolean;
     onSelect: (i: number) => void;
@@ -171,7 +266,10 @@ function QuizCard({
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold">{index}.</span>
                     <span className="text-sm">{quiz.question}</span>
-                    <Badge variant={DIFFICULTY_VARIANTS[quiz.difficulty]} className="text-[10px] px-1 py-0 ml-auto">
+                    <Badge
+                        variant={DIFFICULTY_VARIANTS[quiz.difficulty]}
+                        className="text-[10px] px-1 py-0 ml-auto"
+                    >
                         {DIFFICULTY_LABELS[quiz.difficulty]}
                     </Badge>
                 </div>
@@ -179,7 +277,7 @@ function QuizCard({
                     {quiz.options.map((opt, i) => {
                         const isCorrect = i === quiz.correctIndex;
                         const isSelected = selected === i;
-                        let btnVariant: "outline" | "default" | "secondary" | "ghost" | "destructive" = "outline";
+                        let btnVariant: "outline" | "default" | "secondary" | "destructive" = "outline";
                         if (revealed) {
                             btnVariant = isCorrect ? "default" : isSelected ? "destructive" : "outline";
                         } else if (isSelected) {
