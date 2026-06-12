@@ -10,6 +10,7 @@ import type {
 } from "@andy-code-cat/contracts";
 
 export type DidacticStreamEvent =
+    | { type: "token"; content: string }
     | { type: "answer"; content: string }
     | { type: "done" }
     | { type: "error"; message: string; durationMs?: number };

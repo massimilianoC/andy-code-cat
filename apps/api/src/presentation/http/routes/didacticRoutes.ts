@@ -180,7 +180,7 @@ export function createDidacticRoutes(): Router {
             let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
 
             try {
-                const result = await askUseCase.execute({
+                const askInput = {
                     projectId,
                     userId: req.auth!.userId,
                     snapshotId: body.snapshotId,
@@ -189,13 +189,16 @@ export function createDidacticRoutes(): Router {
                     focus: body.focus,
                     uiLanguage: body.uiLanguage,
                     llmContext,
+                };
+
+                const result = await askUseCase.streamTokens(askInput, (delta) => {
+                    sendSse(res, { type: "token", content: delta });
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (res as any).flush?.();
                 });
 
-                answer = result.answer;
+                answer = result.fullAnswer;
                 usage = result.usage;
-
-                // Stream the answer as a single chunk (MVP — real streaming deferred)
-                sendSse(res, { type: "answer", content: answer });
 
                 // Persist Q&A
                 await askUseCase.persist({
