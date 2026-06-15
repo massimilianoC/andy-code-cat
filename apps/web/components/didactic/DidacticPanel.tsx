@@ -19,7 +19,8 @@ const GENERATION_PHASES: { ms: number; text: string }[] = [
 
 interface DidacticPanelProps {
     projectId: string;
-    snapshotId: string;
+    /** Active backend snapshot id. `null` when the project has no saved/active snapshot yet. */
+    snapshotId: string | null;
     token: string;
     focus?: {
         kind: "preview" | "html" | "css" | "js";
@@ -53,6 +54,15 @@ export function DidacticPanel({
     const phaseTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
     const load = async () => {
+        // No active/saved snapshot yet → never call the API with a null id
+        // (it would hit /didactic/knowledge?snapshotId=null → 404). Show the
+        // empty state instead.
+        if (!snapshotId) {
+            setStatusDto(null);
+            setError(null);
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
@@ -70,6 +80,7 @@ export function DidacticPanel({
     }, [projectId, snapshotId]);
 
     const handleGenerate = async () => {
+        if (!snapshotId) return;
         setGenerating(true);
         setError(null);
 
@@ -148,8 +159,22 @@ export function DidacticPanel({
 
             {/* Content */}
             <div className="flex-1 min-h-0 relative">
+                {/* No snapshot yet — guard against null snapshotId so we never fire
+                    requests with ?snapshotId=null. The user must first generate or
+                    select an artifact version in Build mode. */}
+                {!snapshotId && (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-6 space-y-2">
+                        <BookOpen className="text-muted-foreground" size={32} />
+                        <p className="text-sm font-medium">Nessun artifact da analizzare</p>
+                        <p className="text-xs text-muted-foreground max-w-[260px]">
+                            Genera o seleziona una versione dell&apos;artifact in modalità Build per
+                            usare la modalità Didattica.
+                        </p>
+                    </div>
+                )}
+
                 {/* Panel-level generation overlay with phase progress. */}
-                {generating && (
+                {snapshotId && generating && (
                     <div className="absolute inset-0 z-20 bg-card/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-6 space-y-3">
                         <Loader2 className="animate-spin text-primary" size={36} />
                         <div className="space-y-1">
@@ -163,14 +188,14 @@ export function DidacticPanel({
                     </div>
                 )}
 
-                {loading && !statusDto && (
+                {snapshotId && loading && !statusDto && (
                     <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                         <Loader2 className="animate-spin mr-2" size={14} />
                         Caricamento...
                     </div>
                 )}
 
-                {error && (
+                {snapshotId && error && (
                     <div className="p-4 space-y-2">
                         <p className="text-sm text-destructive">{error}</p>
                         <Button type="button" size="sm" variant="outline" onClick={load}>
@@ -179,7 +204,7 @@ export function DidacticPanel({
                     </div>
                 )}
 
-                {activeTab !== "ask" && (
+                {snapshotId && activeTab !== "ask" && (
                     <ScrollArea className="h-full">
                         <DidacticExploreTab
                             status={statusDto?.status ?? "absent"}
@@ -193,7 +218,7 @@ export function DidacticPanel({
                     </ScrollArea>
                 )}
 
-                {activeTab === "ask" && (
+                {snapshotId && activeTab === "ask" && (
                     <DidacticAskTab
                         projectId={projectId}
                         snapshotId={snapshotId}
