@@ -58,10 +58,18 @@ export function createApp() {
     app.use(express.json({ limit: "8mb" }));
     app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
 
+    // Publish routes are created up-front so the PUBLIC check-slug router can be
+    // mounted before any router that applies a global authMiddleware. The auth-protected
+    // apiRouter and the static /p router are mounted later, at their normal positions.
+    const { apiRouter: publishApi, staticRouter: publishStatic, publicRouter: publishPublic } = createPublishRoutes();
+
     app.use("/", createHealthRoutes());
     app.use("/v1/auth", createAuthRoutes());
     // Presets catalog — public, no auth (must be before any router that applies authMiddleware)
     app.use("/v1", createPresetRoutes());
+    // Public slug availability check — no auth. MUST be before the auth-applying routers
+    // below, otherwise their router.use(authMiddleware) intercepts it with a 401.
+    app.use("/v1", publishPublic);
     // User profile + style tags (public /v1/style-tags must come before route groups
     // that apply global authMiddleware, otherwise the public route is blocked)
     app.use("/v1", createUserProfileRoutes());
@@ -85,8 +93,8 @@ export function createApp() {
     // Otherwise /p/media/:assetId is swallowed by /p/:publishId/:file.
     app.use("/p", createPublicMediaRoutes());
 
-    // Publish: API routes (auth-protected) + static serving (public)
-    const { apiRouter: publishApi, staticRouter: publishStatic } = createPublishRoutes();
+    // Publish: API routes (auth-protected) + static serving (public).
+    // publishPublic (check-slug) was already mounted above, before the auth routers.
     app.use("/v1", publishApi);
     app.use("/p", publishStatic);
 

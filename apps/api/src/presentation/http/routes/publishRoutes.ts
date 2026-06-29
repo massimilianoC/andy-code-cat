@@ -97,13 +97,22 @@ function toHistoryDto(e: PublishHistoryEntry) {
 }
 
 /**
- * Creates two sets of routes:
- * 1. publishApiRoutes — mounted at /v1, require auth + sandbox
- * 2. publishStaticRoutes — mounted at /p, public, serve static files
+ * Creates three sets of routes:
+ * 1. publicRouter — mounted at /v1 BEFORE any auth-applying router, no auth.
+ *    Holds /publish/check-slug, which must stay reachable without a token.
+ * 2. apiRouter — mounted at /v1, require auth + sandbox
+ * 3. staticRouter — mounted at /p, public, serve static files
+ *
+ * Why publicRouter is separate: several /v1 routers call `router.use(authMiddleware)`,
+ * and Express runs those for every /v1 request that reaches them in mount order. If the
+ * public check-slug route is mounted after them (as part of apiRouter), the auth middleware
+ * short-circuits the request with 401 before it ever reaches the handler — which is exactly
+ * why slug validation silently failed in production. Mounting publicRouter early fixes it.
  */
 export function createPublishRoutes() {
     const apiRouter = Router();
     const staticRouter = Router();
+    const publicRouter = Router();
 
     const projectRepository = new MongoProjectRepository();
     const snapshotRepository = new MongoPreviewSnapshotRepository();
@@ -216,8 +225,10 @@ export function createPublishRoutes() {
     // exact reason a slug can't be used (not just a generic "already in use").
     // Optional `excludeDeploymentId` lets a caller editing its own slug treat
     // its current value as available instead of "taken".
+    // NOTE: registered on publicRouter (mounted before the auth routers) so it
+    // is reachable without a bearer token. See createPublishRoutes() docblock.
     // -----------------------------------------------------------------
-    apiRouter.get("/publish/check-slug", async (req, res, next) => {
+    publicRouter.get("/publish/check-slug", async (req, res, next) => {
         try {
             const raw = req.query.slug;
             if (typeof raw !== "string") {
@@ -531,5 +542,5 @@ export function createPublishRoutes() {
         fs.createReadStream(filePath).pipe(res);
     });
 
-    return { apiRouter, staticRouter };
+    return { apiRouter, staticRouter, publicRouter };
 }
