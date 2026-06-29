@@ -14,7 +14,8 @@ import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { PublishProject } from "../../../application/use-cases/PublishProject";
 import { UnpublishProject } from "../../../application/use-cases/UnpublishProject";
 import { GetSiteDeployment } from "../../../application/use-cases/GetSiteDeployment";
-import { publishProjectSchema, customSlugSchema } from "@andy-code-cat/contracts";
+import { publishProjectSchema, customSlugSchema, classifySlugFormat } from "@andy-code-cat/contracts";
+import type { SlugCheckResponse } from "@andy-code-cat/contracts";
 import { env } from "../../../config";
 import type { RequestWithContext } from "../types";
 import type { SiteDeployment } from "../../../domain/entities/SiteDeployment";
@@ -210,7 +211,11 @@ export function createPublishRoutes() {
 
     // -----------------------------------------------------------------
     // GET /v1/publish/check-slug?slug=xxx — public availability check
-    // No auth required. Returns { available: boolean, slug: string }.
+    // No auth required. Returns a coherent SlugCheckResponse for every outcome:
+    // reason ∈ "ok" | "taken" | "invalid" | "reserved" so the UI can show the
+    // exact reason a slug can't be used (not just a generic "already in use").
+    // Optional `excludeDeploymentId` lets a caller editing its own slug treat
+    // its current value as available instead of "taken".
     // -----------------------------------------------------------------
     apiRouter.get("/publish/check-slug", async (req, res, next) => {
         try {
@@ -219,13 +224,20 @@ export function createPublishRoutes() {
                 res.status(400).json({ error: "slug query param is required" });
                 return;
             }
-            const parsed = customSlugSchema.safeParse(raw);
-            if (!parsed.success) {
-                res.json({ available: false, slug: raw, reason: "invalid" });
+            const { normalized, reason: formatReason } = classifySlugFormat(raw);
+            if (formatReason !== "ok") {
+                const response: SlugCheckResponse = { available: false, slug: normalized, reason: formatReason };
+                res.json(response);
                 return;
             }
-            const taken = await deploymentRepository.isCustomSlugTaken(parsed.data);
-            res.json({ available: !taken, slug: parsed.data });
+            const exclude = typeof req.query.excludeDeploymentId === "string" ? req.query.excludeDeploymentId : undefined;
+            const taken = await deploymentRepository.isCustomSlugTaken(normalized, exclude);
+            const response: SlugCheckResponse = {
+                available: !taken,
+                slug: normalized,
+                reason: taken ? "taken" : "ok",
+            };
+            res.json(response);
         } catch (error) {
             next(error);
         }
