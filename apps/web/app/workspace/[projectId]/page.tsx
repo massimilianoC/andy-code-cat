@@ -679,7 +679,7 @@ export default function WorkspacePage() {
     // Slug edit state
     const [slugEditMode, setSlugEditMode] = useState(false);
     const [slugInput, setSlugInput] = useState("");
-    const [slugCheckState, setSlugCheckState] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
+    const [slugCheckState, setSlugCheckState] = useState<"idle" | "checking" | "available" | "taken" | "invalid" | "reserved" | "error">("idle");
     const [slugSaving, setSlugSaving] = useState(false);
     const slugDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -795,12 +795,19 @@ export default function WorkspacePage() {
             .catch(() => setPromptOpsSummary({ totalCost: 0, totalTokens: 0, runs: 0 }));
     }, [token, projectId]);
 
-    // Debounced slug availability check
+    // Debounced slug availability check.
+    // Mirrors the backend slug format (2-30 chars, no leading/trailing hyphen) and
+    // maps the server's `reason` 1:1 so the UI message always matches the real verdict.
     useEffect(() => {
         if (!slugEditMode) { setSlugCheckState("idle"); return; }
         const slug = slugInput.trim().toLowerCase();
         if (!slug) { setSlugCheckState("idle"); return; }
-        if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(slug)) {
+        // Re-entering your own current slug is always allowed (it's already yours).
+        if (slug === (publishDeployment?.customSlug ?? "")) {
+            setSlugCheckState("available");
+            return;
+        }
+        if (!/^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$/.test(slug)) {
             setSlugCheckState("invalid");
             return;
         }
@@ -808,14 +815,24 @@ export default function WorkspacePage() {
         if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current);
         slugDebounceRef.current = setTimeout(async () => {
             try {
-                const result = await checkSlugAvailability(slug);
-                setSlugCheckState(result.available ? "available" : "taken");
+                const result = await checkSlugAvailability(slug, publishDeployment?.id);
+                if (result.available) {
+                    setSlugCheckState("available");
+                } else if (result.reason === "reserved") {
+                    setSlugCheckState("reserved");
+                } else if (result.reason === "invalid") {
+                    setSlugCheckState("invalid");
+                } else {
+                    setSlugCheckState("taken");
+                }
             } catch {
-                setSlugCheckState("idle");
+                // Surface the failure instead of silently resetting to idle, otherwise
+                // a network error looks identical to "not yet checked".
+                setSlugCheckState("error");
             }
         }, 450);
         return () => { if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current); };
-    }, [slugInput, slugEditMode]);
+    }, [slugInput, slugEditMode, publishDeployment?.customSlug, publishDeployment?.id]);
 
     const handlePublish = useCallback(async () => {
         if (!token) return;
@@ -898,8 +915,19 @@ export default function WorkspacePage() {
             setSlugEditMode(false);
             setSlugInput("");
             setSlugCheckState("idle");
-        } catch {
-            // error visible via slugCheckState — leave input open
+        } catch (err) {
+            // Surface the failure in the inline status and keep the editor open so the
+            // user understands why the save didn't take (previously swallowed silently,
+            // making the Save button look broken on a 409/400).
+            if (err instanceof ApiError && err.status === 409) {
+                setSlugCheckState("taken");
+            } else if (err instanceof ApiError && err.status === 400) {
+                setSlugCheckState("invalid");
+            } else if (err instanceof ApiError && err.status === 401) {
+                window.dispatchEvent(new CustomEvent("session-expired"));
+            } else {
+                setSlugCheckState("error");
+            }
         } finally {
             setSlugSaving(false);
         }
@@ -4498,7 +4526,9 @@ export default function WorkspacePage() {
                                     fontSize: "0.72rem",
                                     color: slugCheckState === "available" ? "#4ade80"
                                         : slugCheckState === "taken" ? "#ef4444"
+                                        : slugCheckState === "error" ? "#ef4444"
                                         : slugCheckState === "invalid" ? "#f59e0b"
+                                        : slugCheckState === "reserved" ? "#f59e0b"
                                         : slugCheckState === "checking" ? "#6b7280"
                                         : "#6b7280",
                                     minWidth: "4.5rem",
@@ -4507,6 +4537,8 @@ export default function WorkspacePage() {
                                         : slugCheckState === "available" ? t("workspace.ui.slugAvailable")
                                         : slugCheckState === "taken" ? t("workspace.ui.slugTaken")
                                         : slugCheckState === "invalid" ? t("workspace.ui.slugInvalid")
+                                        : slugCheckState === "reserved" ? t("workspace.ui.slugReserved")
+                                        : slugCheckState === "error" ? t("workspace.ui.slugError")
                                         : ""}
                                 </span>
                                 <button

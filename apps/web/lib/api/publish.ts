@@ -54,11 +54,25 @@ export function unpublishProject(token: string, projectId: string, deploymentId:
     );
 }
 
-/** Check if a custom slug is available (no auth required). */
-export function checkSlugAvailability(slug: string) {
-    return call<{ available: boolean; slug: string }>(
+export type SlugCheckReason = "ok" | "taken" | "invalid" | "reserved";
+
+export interface SlugCheckResponse {
+    available: boolean;
+    slug: string;
+    reason: SlugCheckReason;
+}
+
+/**
+ * Check if a custom slug is available (no auth required).
+ * Pass `excludeDeploymentId` when editing an existing deployment so its own
+ * current slug is reported as available instead of "taken".
+ */
+export function checkSlugAvailability(slug: string, excludeDeploymentId?: string) {
+    const qs = new URLSearchParams({ slug });
+    if (excludeDeploymentId) qs.set("excludeDeploymentId", excludeDeploymentId);
+    return call<SlugCheckResponse>(
         "GET",
-        `/v1/publish/check-slug?slug=${encodeURIComponent(slug)}`,
+        `/v1/publish/check-slug?${qs.toString()}`,
         undefined,
         {}
     );

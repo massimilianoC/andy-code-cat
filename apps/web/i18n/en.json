@@ -863,6 +863,8 @@
             "slugAvailable": "✓ Available",
             "slugTaken": "✗ Already in use",
             "slugInvalid": "⚠ Invalid format",
+            "slugReserved": "⚠ Reserved name",
+            "slugError": "✗ Check failed",
             "slugSaving": "⏳",
             "slugSave": "Save",
             "slugRemove": "Remove slug",
