@@ -238,3 +238,39 @@ Wave 1 (model) ──┼─► Wave 2 (use cases) ─► Wave 3 (wiring) ─► 
 
 Progress is tracked in this file (append a `## Progress` section per wave on completion,
 mirroring `DIDACTIC_MODE_PROGRESS.md` convention).
+
+---
+
+## Progress
+
+> Branch: `feat/brand-reusable-context` (from `develop`). All waves below verified with
+> `tsc --noEmit` (api + web + contracts) green and the new unit test passing.
+
+- **Wave 0 — docs ✅** ROADMAP.md + DEVELOPMENT_PLAN.md register Brand (Layer G) and Didactic
+  as delivered; GLOBAL_BRAND_IDENTITY_SPEC status flipped to delivered; INDEX links this plan.
+- **Wave 1 — data model ✅** `BrandAsset` gains `brand_document` role, `document_ref` value type,
+  and `documentFragment` / `enrichmentTrace` / `enrichmentStatus` (all optional). Mongo repo maps
+  them; contracts mirror the enums + DTO (`enrichmentStatus`, `hasDocumentFragment`) and add
+  `brandDocumentUploadMetaSchema`.
+- **Wave 2 — use cases ✅** `EnrichBrandDocument` runs the pipeline once via an in-memory capture
+  repository; `ResolveBrandDocumentContext` collects cached fragments (no LLM/IO);
+  `buildBrandDocumentLayerD` renders the BRAND REFERENCE MATERIALS sub-block;
+  `SetBrandAsset.createDocument` + promote reuse of source `enrichmentTrace` (zero re-extraction).
+- **Wave 3 — wiring ✅** `llmRoutes` generation + prompt-preview prepend brand-doc fragments to
+  Layer D within the shared `ENRICHMENT_LAYER_D_MAX_CHARS` budget; error-isolated; empty context
+  leaves Layer D unchanged.
+- **Wave 4 — routes ✅** `POST .../brand-assets/document` on admin/user/project; DTO + download
+  handlers accept `document_ref`; user router constructs its own `GetLlmCatalog`.
+- **Wave 5 — UI ✅** `BrandAssetsManager` adds an "Upload brand document" action (all scopes) and a
+  per-document analysis status badge; `brand.ts` client gains the three document-upload functions.
+- **Wave 6 — tests/docs ✅** `brandDocument.layerD.test.ts` (5 tests passing) covers builder budget,
+  empty-context retrocompat, and resolver filtering/ordering; TESTABLE_STEPS 11s–11v added.
+
+### Notes / deferrals
+
+- `i18n` keys: `BrandAssetsManager` uses inline English strings (existing component convention),
+  so no `t()` keys were added — revisit if the component is migrated to i18n.
+- Stretch `BrandPromptPreview` component not built: the existing prompt-preview endpoint already
+  exposes the merged `layerD`, so a dedicated panel is optional polish.
+- Admin `/promote` still hardcodes `valueType: "asset_ref"`; promoting a document at platform scope
+  should use `/admin/brand-assets/document` instead. User/project promote handle `brand_document`.
