@@ -191,6 +191,11 @@ Primary reference:
 The following are already delivered enough that they should be treated as established platform
 capabilities unless a specific gap is documented elsewhere:
 
+- **Global Brand Identity System (Layer G)** — hierarchical platform → user → project brand
+  atoms (logo, colour palette, contacts, tagline) auto-injected into every generation
+  (PR #26, release `2026.06.10.1`). Active extension: reusable brand documents into Layer D —
+  see `docs/specs/BRAND_REUSABLE_CONTEXT_IMPLEMENTATION.md`
+- **Didactic Mode** — read-only artifact interrogation (knowledge, Q&A, quizzes), live
 - auth register/login/refresh baseline
 - double sandbox project isolation
 - preset-aware prompting and layered prompt assembly

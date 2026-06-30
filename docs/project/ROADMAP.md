@@ -2,7 +2,20 @@
 
 Andy Code Cat is developed in iterative releases. Each release is a shippable, testable increment.
 
-_Last review: 2026-04-27_
+_Last review: 2026-06-30_
+
+> **Cross-cutting features delivered outside the R-numbered milestones** (recorded here so they
+> are no longer mistaken for unbuilt work):
+>
+> - **Global Brand Identity System (Layer G)** — ✅ delivered, merged via PR #26, release
+>   `2026.06.10.1`. Hierarchical platform → user → project brand atoms (logo, colour palette,
+>   contacts, tagline) auto-injected into every generation. Spec:
+>   [GLOBAL_BRAND_IDENTITY_SPEC.md](../specs/GLOBAL_BRAND_IDENTITY_SPEC.md).
+>   Active extension: reusable brand *documents* injected into Layer D of every project —
+>   [BRAND_REUSABLE_CONTEXT_IMPLEMENTATION.md](../specs/BRAND_REUSABLE_CONTEXT_IMPLEMENTATION.md).
+> - **Didactic Mode** — ✅ live (read-only artifact interrogation: knowledge, Q&A, quizzes).
+>   Spec: [DIDACTIC_MODE_SPEC.md](../specs/DIDACTIC_MODE_SPEC.md); progress:
+>   [DIDACTIC_MODE_PROGRESS.md](../DIDACTIC_MODE_PROGRESS.md).
 
 ---
 

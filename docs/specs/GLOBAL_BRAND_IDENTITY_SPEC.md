@@ -1,8 +1,13 @@
 # Global Brand Identity System — Implementation Spec
 
-**Status:** planned  
+**Status:** ✅ delivered (backend + minimal UI) — merged via PR #26, release `2026.06.10.1`  
 **Branch target:** `develop`  
 **Milestone tag:** `R4-brand-identity`
+
+> **Extension in progress:** reusable brand *documents* (brand books / guidelines analysed
+> once and injected into Layer D of every project) are specced and tracked in
+> [BRAND_REUSABLE_CONTEXT_IMPLEMENTATION.md](BRAND_REUSABLE_CONTEXT_IMPLEMENTATION.md).
+> This document below describes the delivered Layer G atom system (logo, colours, contacts).
 
 ---
 
