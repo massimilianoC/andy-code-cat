@@ -4,6 +4,7 @@ import type { AssetEnrichmentTrace } from "../../domain/entities/AssetEnrichment
 import { FORMAT_HINT_RULES } from "../prompting/formatHintRules";
 import { env } from "../../config";
 import type { ResolvedBrandContext } from "../use-cases/ResolveBrandContext";
+import type { ResolvedBrandDocument } from "../use-cases/ResolveBrandDocumentContext";
 import type { BrandAssetScope, BrandAssetPolicy } from "../../domain/entities/BrandAsset";
 
 /** Default per-asset fragment budget. Tuned so 3 assets fit comfortably under the 50 KB Layer D max. */
@@ -763,4 +764,43 @@ export function buildGlobalBrandLayer(context: ResolvedBrandContext, opts?: { ma
     const result = lines.join("\n");
     if (result.length > budget) return "";
     return result;
+}
+
+/**
+ * Build the brand-document sub-block of Layer D.
+ *
+ * Brand documents are reusable brand books / guidelines analysed ONCE and cached on the
+ * BrandAsset (`documentFragment`). This renders those cached fragments under a dedicated
+ * header so the LLM distinguishes durable brand guidance from one-off project attachments.
+ *
+ * Returns "" when there are no brand documents — Layer D is then byte-identical to before.
+ * Fragments are emitted in scope/priority order; the block is truncated to `maxChars` by
+ * dropping whole fragments (never mid-fragment) so brand docs claim the budget first.
+ */
+export function buildBrandDocumentLayerD(
+    documents: ResolvedBrandDocument[],
+    opts?: { maxChars?: number },
+): string {
+    if (!documents.length) return "";
+
+    const budget = opts?.maxChars ?? env.ENRICHMENT_LAYER_D_MAX_CHARS;
+    const header =
+        "## LAYER D — BRAND REFERENCE MATERIALS\n\n" +
+        "The following are the user's durable brand guidelines and reference documents, " +
+        "analysed once and reused for every project. Treat them as authoritative for brand " +
+        "voice, terminology, tone, and content direction. Items marked [MUST USE] are mandatory.";
+
+    const blocks: string[] = [];
+    let total = header.length + 2;
+
+    for (const doc of documents) {
+        const labelLine = `[${POLICY_LABEL[doc.policy]} / ${SCOPE_LABEL[doc.scope]}] ${doc.title}`;
+        const block = `${labelLine}\n${doc.fragment}`;
+        if (total + block.length + 2 > budget) break;
+        blocks.push(block);
+        total += block.length + 2;
+    }
+
+    if (blocks.length === 0) return "";
+    return `${header}\n\n${blocks.join("\n\n")}`;
 }
