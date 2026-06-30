@@ -22,6 +22,9 @@ import {
     createProjectBrandAssetText,
     updateProjectBrandAsset,
     deleteProjectBrandAsset,
+    uploadAdminBrandDocument,
+    uploadUserBrandDocument,
+    uploadProjectBrandDocument,
     type BrandAssetDto,
     type CreateBrandTextBody,
 } from "@/lib/api/brand";
@@ -35,7 +38,7 @@ const ROLE_LABELS: Record<string, string> = {
     company_name: "Company Name", brand_tagline: "Tagline",
     contact_email: "Email", contact_phone: "Phone", contact_address: "Address",
     social_instagram: "Instagram", social_linkedin: "LinkedIn", social_website: "Website",
-    legal_vat: "VAT / Legal", custom: "Custom",
+    legal_vat: "VAT / Legal", brand_document: "Brand Document", custom: "Custom",
 };
 
 const ROLES = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }));
@@ -66,7 +69,9 @@ export function BrandAssetsManager({ scope, projectId, token, allowFileUpload = 
     });
     const [submitting, setSubmitting] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [uploadingDoc, setUploadingDoc] = useState(false);
     const fileRef = useRef<HTMLInputElement>(null);
+    const docRef = useRef<HTMLInputElement>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -123,6 +128,26 @@ export function BrandAssetsManager({ scope, projectId, token, allowFileUpload = 
         }
     }
 
+    async function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploadingDoc(true);
+        setError(null);
+        try {
+            const meta = { policy: form.policy };
+            let created: BrandAssetDto;
+            if (scope === "platform") created = await uploadAdminBrandDocument(token, file, meta);
+            else if (scope === "user") created = await uploadUserBrandDocument(token, file, meta);
+            else created = await uploadProjectBrandDocument(token, projectId!, file, meta);
+            setAssets((prev) => [...prev, created]);
+        } catch {
+            setError("Failed to upload brand document.");
+        } finally {
+            setUploadingDoc(false);
+            if (docRef.current) docRef.current.value = "";
+        }
+    }
+
     async function handleToggleActive(asset: BrandAssetDto) {
         try {
             let updated: BrandAssetDto;
@@ -174,8 +199,21 @@ export function BrandAssetsManager({ scope, projectId, token, allowFileUpload = 
                                 {asset.policy.replace("_", " ")}
                             </Badge>
                             <span className="flex-1 text-xs text-muted-foreground truncate">
-                                {asset.valueType === "asset_ref" ? (asset.originalName ?? "file") : asset.textValue}
+                                {asset.valueType === "asset_ref" || asset.valueType === "document_ref"
+                                    ? (asset.originalName ?? "file")
+                                    : asset.textValue}
                             </span>
+                            {asset.valueType === "document_ref" ? (
+                                <Badge
+                                    variant={asset.enrichmentStatus === "ready" ? "secondary" : asset.enrichmentStatus === "failed" ? "destructive" : "outline"}
+                                    className="text-[10px] shrink-0"
+                                    title="Brand document analysis status"
+                                >
+                                    {asset.enrichmentStatus === "ready" ? "analyzed"
+                                        : asset.enrichmentStatus === "failed" ? "failed"
+                                        : "analyzing…"}
+                                </Badge>
+                            ) : null}
                             <button
                                 type="button"
                                 onClick={() => handleToggleActive(asset)}
@@ -224,6 +262,29 @@ export function BrandAssetsManager({ scope, projectId, token, allowFileUpload = 
                                 accept="image/*,application/pdf"
                                 className="hidden"
                                 onChange={handleFileUpload}
+                            />
+                        </>
+                    ) : null}
+                    {allowFileUpload ? (
+                        <>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-xs"
+                                disabled={uploadingDoc}
+                                onClick={() => docRef.current?.click()}
+                                title="Upload a brand book / guideline document analysed once and reused in every project"
+                            >
+                                <Upload className="h-3.5 w-3.5" />
+                                {uploadingDoc ? "Analyzing…" : "Upload brand document"}
+                            </Button>
+                            <input
+                                ref={docRef}
+                                type="file"
+                                accept="application/pdf,.doc,.docx,.txt,.md,text/plain,text/markdown"
+                                className="hidden"
+                                onChange={handleDocUpload}
                             />
                         </>
                     ) : null}
