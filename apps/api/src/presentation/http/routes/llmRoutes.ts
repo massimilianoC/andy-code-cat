@@ -21,7 +21,7 @@ import { buildStyleContextBlock } from "../../../application/llm/styleContextBui
 import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
 import { composeSystemPrompt, composeSystemPromptWithLayers } from "../../../application/llm/systemPromptComposer";
-import { buildGroundedDataContextLayer, buildGlobalBrandLayer, buildPresetLayerFromPreset, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
+import { buildGroundedDataContextLayer, buildGlobalBrandLayer, buildBrandDocumentLayerD, buildPresetLayerFromPreset, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
 import { estimateCost } from "../../../application/llm/costPolicy";
 import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
 import { env } from "../../../config";
@@ -54,6 +54,7 @@ import { PRESET_MAP } from "../../../domain/entities/ProjectPreset";
 import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { ResolveBrandContext } from "../../../application/use-cases/ResolveBrandContext";
+import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
 
 type LlmRuntimeContext = {
     providerCatalog: {
@@ -265,6 +266,7 @@ export function createLlmRoutes(): Router {
     const serviceKeyRepo = new MongoServiceApiKeyRepository();
     const brandAssetRepository = new MongoBrandAssetRepository();
     const resolveBrandContext = new ResolveBrandContext(brandAssetRepository);
+    const resolveBrandDocumentContext = new ResolveBrandDocumentContext(brandAssetRepository);
     const resolveArtifactMedia = new ResolveArtifactMedia(
         assetRepository,
         getFileStorage(),
@@ -380,9 +382,20 @@ export function createLlmRoutes(): Router {
             }
         }
 
-        const documentContextLayer = buildProjectKnowledgeLayer(contextAssets, {
-            includeUnenrichedAssets: selectedAssetIds.size > 0,
-        });
+        // Reusable brand documents (analysed once, cached) claim the Layer D budget first;
+        // project attachments fill the remainder. Failure never blocks generation.
+        const brandDocuments = await resolveBrandDocumentContext
+            .execute({ userId: input.userId, projectId: input.projectId })
+            .catch(() => []);
+        const brandDocumentLayer = buildBrandDocumentLayerD(brandDocuments);
+        const remainingLayerDBudget = Math.max(0, env.ENRICHMENT_LAYER_D_MAX_CHARS - brandDocumentLayer.length);
+        const projectKnowledgeLayer = remainingLayerDBudget > 0
+            ? buildProjectKnowledgeLayer(contextAssets, {
+                includeUnenrichedAssets: selectedAssetIds.size > 0,
+                maxChars: remainingLayerDBudget,
+            })
+            : "";
+        const documentContextLayer = [brandDocumentLayer, projectKnowledgeLayer].filter(Boolean).join("\n\n");
         // Alpha guardrail: grounded dataset Layer X is restricted to explicit
         // data-dashboard projects and is not injected into the standard website flow.
         const dataContextLayer = project?.presetId === "data-dashboard"
@@ -691,7 +704,16 @@ export function createLlmRoutes(): Router {
             const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
             const governanceSystemPrompt = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates?.generationSystem || undefined;
             const previewAssets = await assetRepository.listByProject(req.sandbox!.projectId, req.auth!.userId).catch(() => []);
-            const documentContextLayer = buildProjectKnowledgeLayer(previewAssets) || undefined;
+            const previewBrandDocuments = await resolveBrandDocumentContext
+                .execute({ userId: req.auth!.userId, projectId: req.sandbox!.projectId })
+                .catch(() => []);
+            const previewBrandDocumentLayer = buildBrandDocumentLayerD(previewBrandDocuments);
+            const previewRemainingBudget = Math.max(0, env.ENRICHMENT_LAYER_D_MAX_CHARS - previewBrandDocumentLayer.length);
+            const previewProjectKnowledgeLayer = previewRemainingBudget > 0
+                ? buildProjectKnowledgeLayer(previewAssets, { maxChars: previewRemainingBudget })
+                : "";
+            const documentContextLayer = [previewBrandDocumentLayer, previewProjectKnowledgeLayer]
+                .filter(Boolean).join("\n\n") || undefined;
             const dataContextLayer = project?.presetId === "data-dashboard"
                 ? (buildGroundedDataContextLayer(previewAssets) || undefined)
                 : undefined;
