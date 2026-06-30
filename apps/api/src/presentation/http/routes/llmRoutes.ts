@@ -47,6 +47,7 @@ import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptC
 import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
+import { extractInlineDocumentLayerD } from "../../../application/documents/inlineDocumentContext";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
@@ -395,7 +396,17 @@ export function createLlmRoutes(): Router {
                 maxChars: remainingLayerDBudget,
             })
             : "";
-        const documentContextLayer = [brandDocumentLayer, projectKnowledgeLayer].filter(Boolean).join("\n\n");
+        // Live extraction for document assets not yet enriched (async enrichment gap):
+        // ensures the document content is in the prompt ACTUALLY sent, not only in the
+        // later-recomposed preview. Skipped cheaply when nothing is pending.
+        const inlineDocBudget = Math.max(0, remainingLayerDBudget - projectKnowledgeLayer.length);
+        const inlineDoc = inlineDocBudget > 500
+            ? await extractInlineDocumentLayerD(contextAssets, getFileStorage(), {
+                maxAssets: 3,
+                maxCharsPerDoc: Math.min(2500, inlineDocBudget),
+            }).catch(() => ({ block: "", documentNames: [] }))
+            : { block: "", documentNames: [] };
+        const documentContextLayer = [brandDocumentLayer, projectKnowledgeLayer, inlineDoc.block].filter(Boolean).join("\n\n");
         // Alpha guardrail: grounded dataset Layer X is restricted to explicit
         // data-dashboard projects and is not injected into the standard website flow.
         const dataContextLayer = project?.presetId === "data-dashboard"
@@ -712,7 +723,16 @@ export function createLlmRoutes(): Router {
             const previewProjectKnowledgeLayer = previewRemainingBudget > 0
                 ? buildProjectKnowledgeLayer(previewAssets, { maxChars: previewRemainingBudget })
                 : "";
-            const documentContextLayer = [previewBrandDocumentLayer, previewProjectKnowledgeLayer]
+            // Mirror the generation path: include live extraction of not-yet-enriched docs
+            // so the preview reflects what would actually be sent now.
+            const previewInlineBudget = Math.max(0, previewRemainingBudget - previewProjectKnowledgeLayer.length);
+            const previewInlineDoc = previewInlineBudget > 500
+                ? await extractInlineDocumentLayerD(previewAssets, getFileStorage(), {
+                    maxAssets: 3,
+                    maxCharsPerDoc: Math.min(2500, previewInlineBudget),
+                }).catch(() => ({ block: "", documentNames: [] }))
+                : { block: "", documentNames: [] };
+            const documentContextLayer = [previewBrandDocumentLayer, previewProjectKnowledgeLayer, previewInlineDoc.block]
                 .filter(Boolean).join("\n\n") || undefined;
             const dataContextLayer = project?.presetId === "data-dashboard"
                 ? (buildGroundedDataContextLayer(previewAssets) || undefined)

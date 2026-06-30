@@ -17,7 +17,9 @@ import { MongoProjectRepository } from "../../../infra/repositories/MongoProject
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { getParser } from "../../../application/documents/parsers/DocumentParserFactory";
-import { buildGroundedDataContextLayer, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
+import { buildGroundedDataContextLayer, buildProjectKnowledgeLayer, buildBrandDocumentLayerD } from "../../../application/llm/systemPromptLayers";
+import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
+import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
 import { VibePrefill } from "../../../application/use-cases/VibePrefill";
@@ -84,6 +86,7 @@ export function createVibecoreRoutes(): Router {
     const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog);
     const projectRepository = new MongoProjectRepository();
     const assetRepository = new MongoProjectAssetRepository();
+    const resolveBrandDocumentContext = new ResolveBrandDocumentContext(new MongoBrandAssetRepository());
     const storage = getFileStorage();
 
     function validateAttachmentMetaLimits(attachmentMeta: Array<{ sizeBytes: number }>, policy: ProductAttachmentPolicy) {
@@ -340,6 +343,17 @@ export function createVibecoreRoutes(): Router {
                             layerXDataContext = groundedData;
                         }
                     }
+                }
+
+                // Reusable brand documents (user/platform scope) apply to every project — even a
+                // freshly auto-created one — so the brand book guides the prefill from intake.
+                const brandDocuments = await resolveBrandDocumentContext
+                    .execute({ userId, projectId })
+                    .catch(() => []);
+                const brandDocumentLayer = buildBrandDocumentLayerD(brandDocuments, { maxChars: 6000 });
+                if (brandDocumentLayer) {
+                    layerDContext = [brandDocumentLayer, layerDContext].filter(Boolean).join("\n\n");
+                    brandDocuments.forEach((d) => layerDocNames.push(d.title));
                 }
 
                 const result = await vibePrefill.execute({
