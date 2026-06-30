@@ -278,17 +278,8 @@ export function createUserProfileRoutes(): Router {
                 .toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 60);
             const storedFilename = `${randomUUID()}-${safeName}${safeExt}`;
             await brandStorage.saveUpload(req.auth!.userId, "brand", storedFilename, req.file.buffer, req.file.mimetype);
-            const platformConfig = await userConfigRepo.get().catch(() => null);
-            const enrichment = await enrichBrandDocument.execute({
-                fileBuffer: req.file.buffer,
-                originalName: req.file.originalname,
-                mimeType: req.file.mimetype,
-                fileSize: req.file.size,
-                storedFilename,
-                ownerUserId: req.auth!.userId,
-                getLlmCatalog: userGetLlmCatalog,
-                platformConfig,
-            });
+            // Create as pending and respond immediately; analyse in the background so the UI
+            // shows an "analyzing…" spinner that resolves via polling.
             const asset = await setBrandAsset.createDocument({
                 scope: "user",
                 ownerUserId: req.auth!.userId,
@@ -300,11 +291,26 @@ export function createUserProfileRoutes(): Router {
                 originalName: req.file.originalname,
                 mimeType: req.file.mimetype,
                 fileSize: req.file.size,
-                documentFragment: enrichment.documentFragment,
-                enrichmentTrace: enrichment.enrichmentTrace,
-                enrichmentStatus: enrichment.status,
+                enrichmentStatus: "pending",
             });
             res.status(201).json({ asset: toBrandAssetDto(asset) });
+
+            const fileBuffer = req.file.buffer;
+            const originalName = req.file.originalname;
+            const mimeType = req.file.mimetype;
+            const fileSize = req.file.size;
+            const ownerUserId = req.auth!.userId;
+            const platformConfig = await userConfigRepo.get().catch(() => null);
+            void enrichBrandDocument.execute({
+                fileBuffer, originalName, mimeType, fileSize, storedFilename, ownerUserId, getLlmCatalog: userGetLlmCatalog, platformConfig,
+            })
+                .then((enrichment) => brandAssetRepo.update(asset.id, {
+                    documentFragment: enrichment.documentFragment,
+                    enrichmentTrace: enrichment.enrichmentTrace,
+                    enrichmentStatus: enrichment.status,
+                }))
+                .catch(() => brandAssetRepo.update(asset.id, { enrichmentStatus: "failed" }).catch(() => undefined));
+            return;
         } catch (err) {
             next(err);
         }

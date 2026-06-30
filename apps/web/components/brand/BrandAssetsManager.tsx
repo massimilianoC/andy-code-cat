@@ -289,8 +289,10 @@ export function BrandAssetsManager({ scope, projectId, token, allowFileUpload = 
                                 onClick={() => docRef.current?.click()}
                                 title="Upload a brand book / guideline document analysed once and reused in every project"
                             >
-                                <Upload className="h-3.5 w-3.5" />
-                                {uploadingDoc ? "Analyzing…" : "Upload brand document"}
+                                {uploadingDoc
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : <Upload className="h-3.5 w-3.5" />}
+                                {uploadingDoc ? "Uploading…" : "Upload brand document"}
                             </Button>
                             <input
                                 ref={docRef}
