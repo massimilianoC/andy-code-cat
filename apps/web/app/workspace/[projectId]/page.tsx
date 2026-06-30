@@ -2116,17 +2116,21 @@ export default function WorkspacePage() {
         .reverse()
         .find((m) => m.role === "assistant");
 
-    // Ground-truth: the system prompt ACTUALLY sent in the most recent generation, recorded
-    // in the message's promptingTrace. Shown in the Prompt panel so the read-back prompt is
-    // the real one, not only the live recomposed estimate.
-    const lastSentSystemPrompt = (activeConv?.messages ?? [])
+    // Ground-truth: the exact messages ACTUALLY sent to the LLM in the most recent generation,
+    // recorded in the message's promptingTrace. The Prompt panel shows THIS — the real prompt,
+    // structured into system sections + user message(s) — not a live recomposed estimate.
+    const lastSentTrace = (activeConv?.messages ?? [])
         .slice()
         .reverse()
-        .map((m) =>
-            m.metadata?.promptingTrace?.messagesSentToLlm?.find((x) => x.role === "system")?.content
-            ?? m.metadata?.promptingTrace?.effectiveSystemPrompt,
-        )
-        .find((p): p is string => Boolean(p && p.trim()));
+        .map((m) => m.metadata?.promptingTrace)
+        .find((tr) => Boolean(tr && ((tr.messagesSentToLlm?.length ?? 0) > 0 || tr.effectiveSystemPrompt)));
+    const lastSentMessages: Array<{ role: "system" | "user"; content: string }> = lastSentTrace
+        ? ((lastSentTrace.messagesSentToLlm?.length ?? 0) > 0
+            ? lastSentTrace.messagesSentToLlm!
+            : lastSentTrace.effectiveSystemPrompt
+                ? [{ role: "system", content: lastSentTrace.effectiveSystemPrompt }]
+                : [])
+        : [];
 
     // Active baseline: the snapshot marked isActive (used as LLM context on next turn).
     // If the active snapshot has empty HTML (corrupted), fall back to the first
@@ -3453,46 +3457,50 @@ export default function WorkspacePage() {
                     padding: "1rem",
                 }}
             >
-                {!promptPreview && !loadingPromptPreview && (
+                {lastSentMessages.length === 0 && !promptPreview && !loadingPromptPreview && (
                     <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
                         {t("workspace.ui.promptPanelHint")}
                     </p>
                 )}
-                {loadingPromptPreview && (
+                {lastSentMessages.length === 0 && loadingPromptPreview && (
                     <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.ui.promptPanelLoading")}</p>
                 )}
-                {lastSentSystemPrompt && (
-                    <div style={{ marginBottom: "1rem" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                {lastSentMessages.length > 0 ? (
+                    <>
+                        <div style={{ marginBottom: "0.75rem" }}>
                             <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#34d399", letterSpacing: "0.03em" }}>
                                 {t("workspace.ui.promptPanelActualSent", "PROMPT REALMENTE INVIATO — ultima generazione")}
                             </span>
                         </div>
-                        <pre
-                            style={{
-                                margin: 0,
-                                maxHeight: "16rem",
-                                overflow: "auto",
-                                whiteSpace: "pre-wrap",
-                                wordBreak: "break-word",
-                                fontSize: "0.72rem",
-                                lineHeight: 1.5,
-                                color: "var(--text)",
-                                background: "rgba(52,211,153,0.06)",
-                                border: "1px solid rgba(52,211,153,0.3)",
-                                borderRadius: "var(--radius)",
-                                padding: "0.6rem 0.75rem",
-                            }}
-                        >
-                            {lastSentSystemPrompt}
-                        </pre>
-                        <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
-                            {t("workspace.ui.promptPanelEstimateNote", "I layer qui sotto sono una STIMA della prossima request (ricomposta in tempo reale). Il blocco verde è il prompt realmente inviato nell'ultima generazione.")}
-                        </p>
-                    </div>
-                )}
-                {promptPreview && (
+                        {lastSentMessages.map((msg, i) =>
+                            msg.role === "system"
+                                ? splitSentPromptSections(msg.content).map((sec, j) => (
+                                    <PromptLayerBlock
+                                        key={`sent-sys-${i}-${j}`}
+                                        label={sec.label}
+                                        badge="SYSTEM"
+                                        badgeColor="#34d399"
+                                        source={t("workspace.ui.promptPanelSystemSource", "Sezione del system prompt inviato")}
+                                        content={sec.content}
+                                    />
+                                ))
+                                : (
+                                    <PromptLayerBlock
+                                        key={`sent-usr-${i}`}
+                                        label={t("workspace.ui.promptPanelUserMessage", "Messaggio utente")}
+                                        badge="USER"
+                                        badgeColor="#7dd3fc"
+                                        source={t("workspace.ui.promptPanelUserSource", "Messaggio inviato al modello")}
+                                        content={msg.content}
+                                    />
+                                ),
+                        )}
+                    </>
+                ) : promptPreview ? (
                     <>
+                        <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: "0.75rem" }}>
+                            {t("workspace.ui.promptPanelNoGenYet", "Nessuna generazione ancora — anteprima di cosa verrà inviato alla prossima request.")}
+                        </p>
                         <PromptLayerBlock
                             label={t("workspace.ui.layers.layerA")}
                             badge={t("workspace.ui.layers.layerABadge")}
@@ -3552,7 +3560,7 @@ export default function WorkspacePage() {
                             />
                         )}
                     </>
-                )}
+                ) : null}
             </div>
         </div>
     );
@@ -5732,6 +5740,23 @@ function MessageBubble({ message }: { message: MessageDto }) {
 }
 
 // ─── Prompt Layer Block ───────────────────────────────────────────────────────
+
+/**
+ * Split an actually-sent system prompt into its composed sections.
+ * The backend joins layers with "\n\n---\n\n" (LAYER_SEPARATOR), so splitting on it
+ * recovers the exact sections that were sent — labelled by each section's first heading.
+ */
+function splitSentPromptSections(systemPrompt: string): Array<{ label: string; content: string }> {
+    return systemPrompt
+        .split("\n\n---\n\n")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map((section) => {
+            const firstLine = section.split("\n").find((l) => l.trim().length > 0)?.trim() ?? "";
+            const label = (firstLine.startsWith("#") ? firstLine.replace(/^#+\s*/, "") : firstLine).slice(0, 64) || "Sezione";
+            return { label, content: section };
+        });
+}
 
 function PromptLayerBlock({
     label,
