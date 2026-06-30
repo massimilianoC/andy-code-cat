@@ -13,11 +13,16 @@ import { GetUserPreferences } from "../../../application/use-cases/GetUserPrefer
 import { UpdateUserPreferences } from "../../../application/use-cases/UpdateUserPreferences";
 import { ListUserMediaLibrary } from "../../../application/use-cases/ListUserMediaLibrary";
 import { SetBrandAsset } from "../../../application/use-cases/SetBrandAsset";
+import { EnrichBrandDocument } from "../../../application/use-cases/EnrichBrandDocument";
 import { ListBrandAssets } from "../../../application/use-cases/ListBrandAssets";
 import { DeleteBrandAsset } from "../../../application/use-cases/DeleteBrandAsset";
+import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
+import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
+import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
+import { env } from "../../../config";
 import { STYLE_TAG_CATALOG } from "../../../domain/entities/StyleTag";
-import { createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
+import { brandDocumentUploadMetaSchema, createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
 import type { BrandAsset } from "../../../domain/entities/BrandAsset";
 import type { RequestWithContext } from "../types";
 import type { BrandAssetDto, ProjectAssetDto, UserPreferencesDto } from "@andy-code-cat/contracts";
@@ -46,7 +51,8 @@ function mapToDto(profile: import("../../../domain/entities/UserStyleProfile").U
 }
 
 function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
-    const downloadUrl = asset.valueType === "asset_ref"
+    const isFile = asset.valueType === "asset_ref" || asset.valueType === "document_ref";
+    const downloadUrl = isFile
         ? (asset.scope === "platform"
             ? `/v1/admin/brand-assets/${asset.id}/download`
             : asset.scope === "user"
@@ -59,6 +65,8 @@ function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
         valueType: asset.valueType, originalName: asset.originalName, mimeType: asset.mimeType,
         fileSize: asset.fileSize, textValue: asset.textValue, description: asset.description,
         isActive: asset.isActive, priority: asset.priority, downloadUrl,
+        enrichmentStatus: asset.enrichmentStatus,
+        hasDocumentFragment: typeof asset.documentFragment === "string" && asset.documentFragment.length > 0,
         createdAt: asset.createdAt.toISOString(), updatedAt: asset.updatedAt.toISOString(),
     };
 }
@@ -77,6 +85,18 @@ export function createUserProfileRoutes(): Router {
     const updatePreferences = new UpdateUserPreferences(preferencesRepo);
     const listUserLibrary = new ListUserMediaLibrary(assetRepo);
     const setBrandAsset = new SetBrandAsset(brandAssetRepo, assetRepo);
+    const enrichBrandDocument = new EnrichBrandDocument();
+    const userConfigRepo = new MongoPlatformConfigRepository();
+    const userGetLlmCatalog = new GetLlmCatalog(
+        env.LLM_CATALOG_SOURCE,
+        env.SILICONFLOW_BASE_URL,
+        env.LMSTUDIO_BASE_URL,
+        env.OPENROUTER_BASE_URL,
+        new MongoLlmCatalogRepository(),
+        env.hasOpenRouterApiKey,
+        env.providerApiKeys,
+        env.LLM_DEFAULT_PROVIDER,
+    );
     const listBrandAssets = new ListBrandAssets(brandAssetRepo);
     const deleteBrandAsset = new DeleteBrandAsset(brandAssetRepo, brandStorage);
 
@@ -245,6 +265,51 @@ export function createUserProfileRoutes(): Router {
         }
     });
 
+    /** POST /users/me/brand-assets/document — upload a reusable brand document (enriched once) */
+    router.post("/users/me/brand-assets/document", brandUpload.single("file"), async (req: RequestWithContext, res, next) => {
+        try {
+            if (!req.file) {
+                res.status(400).json({ error: "No file uploaded" });
+                return;
+            }
+            const meta = brandDocumentUploadMetaSchema.parse(req.body);
+            const safeExt = path.extname(req.file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, "");
+            const safeName = path.basename(req.file.originalname, path.extname(req.file.originalname))
+                .toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 60);
+            const storedFilename = `${randomUUID()}-${safeName}${safeExt}`;
+            await brandStorage.saveUpload(req.auth!.userId, "brand", storedFilename, req.file.buffer, req.file.mimetype);
+            const platformConfig = await userConfigRepo.get().catch(() => null);
+            const enrichment = await enrichBrandDocument.execute({
+                fileBuffer: req.file.buffer,
+                originalName: req.file.originalname,
+                mimeType: req.file.mimetype,
+                fileSize: req.file.size,
+                storedFilename,
+                ownerUserId: req.auth!.userId,
+                getLlmCatalog: userGetLlmCatalog,
+                platformConfig,
+            });
+            const asset = await setBrandAsset.createDocument({
+                scope: "user",
+                ownerUserId: req.auth!.userId,
+                policy: meta.policy,
+                description: meta.description,
+                isActive: meta.isActive,
+                priority: meta.priority,
+                storedFilename,
+                originalName: req.file.originalname,
+                mimeType: req.file.mimetype,
+                fileSize: req.file.size,
+                documentFragment: enrichment.documentFragment,
+                enrichmentTrace: enrichment.enrichmentTrace,
+                enrichmentStatus: enrichment.status,
+            });
+            res.status(201).json({ asset: toBrandAssetDto(asset) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
     /** POST /users/me/brand-assets/promote — promote own project asset to user brand */
     router.post("/users/me/brand-assets/promote", async (req: RequestWithContext, res, next) => {
         try {
@@ -315,7 +380,7 @@ export function createUserProfileRoutes(): Router {
             if (!id) { res.status(400).json({ error: "Missing id" }); return; }
             const asset = await brandAssetRepo.findById(id);
             if (!asset || asset.scope !== "user" || asset.ownerUserId !== req.auth!.userId
-                || asset.valueType !== "asset_ref" || !asset.storedFilename) {
+                || !(asset.valueType === "asset_ref" || asset.valueType === "document_ref") || !asset.storedFilename) {
                 res.status(404).json({ error: "Asset not found or not downloadable" });
                 return;
             }

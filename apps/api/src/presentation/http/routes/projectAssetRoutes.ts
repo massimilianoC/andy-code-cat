@@ -37,14 +37,16 @@ import { MongoConversationRepository } from "../../../infra/repositories/MongoCo
 import { LogBackgroundTask } from "../../../application/use-cases/LogBackgroundTask";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { SetBrandAsset } from "../../../application/use-cases/SetBrandAsset";
+import { EnrichBrandDocument } from "../../../application/use-cases/EnrichBrandDocument";
 import { ListBrandAssets } from "../../../application/use-cases/ListBrandAssets";
 import { DeleteBrandAsset } from "../../../application/use-cases/DeleteBrandAsset";
-import { createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
+import { brandDocumentUploadMetaSchema, createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
 import type { BrandAsset } from "../../../domain/entities/BrandAsset";
 import type { BrandAssetDto } from "@andy-code-cat/contracts";
 
 function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
-    const downloadUrl = asset.valueType === "asset_ref"
+    const isFile = asset.valueType === "asset_ref" || asset.valueType === "document_ref";
+    const downloadUrl = isFile
         ? (asset.scope === "platform"
             ? `/v1/admin/brand-assets/${asset.id}/download`
             : asset.scope === "user"
@@ -57,6 +59,8 @@ function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
         valueType: asset.valueType, originalName: asset.originalName, mimeType: asset.mimeType,
         fileSize: asset.fileSize, textValue: asset.textValue, description: asset.description,
         isActive: asset.isActive, priority: asset.priority, downloadUrl,
+        enrichmentStatus: asset.enrichmentStatus,
+        hasDocumentFragment: typeof asset.documentFragment === "string" && asset.documentFragment.length > 0,
         createdAt: asset.createdAt.toISOString(), updatedAt: asset.updatedAt.toISOString(),
     };
 }
@@ -249,6 +253,7 @@ export function createProjectAssetRoutes(): Router {
     const regenerateMediaByKey = new RegenerateMediaByKey(mediaResolutionTraceRepository, regenerateStockProjectImage);
     const brandAssetRepo = new MongoBrandAssetRepository();
     const setBrandAsset = new SetBrandAsset(brandAssetRepo, assetRepository);
+    const enrichBrandDocument = new EnrichBrandDocument();
     const listBrandAssets = new ListBrandAssets(brandAssetRepo);
     const deleteBrandAsset = new DeleteBrandAsset(brandAssetRepo, storage);
 
@@ -854,6 +859,61 @@ export function createProjectAssetRoutes(): Router {
         }
     );
 
+    /** POST /projects/:projectId/brand-assets/document — upload a reusable brand document (enriched once) */
+    router.post(
+        "/projects/:projectId/brand-assets/document",
+        sandboxMiddleware,
+        upload.single("file"),
+        async (req: RequestWithContext, res, next) => {
+            try {
+                if (!req.file) {
+                    res.status(400).json({ error: "No file uploaded" });
+                    return;
+                }
+                const meta = brandDocumentUploadMetaSchema.parse(req.body);
+                const { randomUUID } = await import("crypto");
+                const pathMod = await import("path");
+                const safeExt = pathMod.extname(req.file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, "");
+                const safeName = pathMod.basename(req.file.originalname, pathMod.extname(req.file.originalname))
+                    .toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 60);
+                const storedFilename = `${randomUUID()}-${safeName}${safeExt}`;
+                await storage.saveUpload(req.auth!.userId, req.sandbox!.projectId, storedFilename, req.file.buffer, req.file.mimetype);
+                const platformConfig = await platformConfigRepository.get().catch(() => null);
+                const enrichment = await enrichBrandDocument.execute({
+                    fileBuffer: req.file.buffer,
+                    originalName: req.file.originalname,
+                    mimeType: req.file.mimetype,
+                    fileSize: req.file.size,
+                    storedFilename,
+                    ownerUserId: req.auth!.userId,
+                    projectId: req.sandbox!.projectId,
+                    getLlmCatalog,
+                    promptExecutionLogRepository,
+                    platformConfig,
+                });
+                const asset = await setBrandAsset.createDocument({
+                    scope: "project",
+                    ownerUserId: req.auth!.userId,
+                    projectId: req.sandbox!.projectId,
+                    policy: meta.policy,
+                    description: meta.description,
+                    isActive: meta.isActive,
+                    priority: meta.priority,
+                    storedFilename,
+                    originalName: req.file.originalname,
+                    mimeType: req.file.mimetype,
+                    fileSize: req.file.size,
+                    documentFragment: enrichment.documentFragment,
+                    enrichmentTrace: enrichment.enrichmentTrace,
+                    enrichmentStatus: enrichment.status,
+                });
+                res.status(201).json({ asset: toBrandAssetDto(asset) });
+            } catch (err) {
+                next(err);
+            }
+        }
+    );
+
     /** POST /projects/:projectId/brand-assets/promote — promote project asset to project brand */
     router.post("/projects/:projectId/brand-assets/promote", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
@@ -928,7 +988,7 @@ export function createProjectAssetRoutes(): Router {
                 const asset = await brandAssetRepo.findById(id);
                 if (!asset || asset.scope !== "project"
                     || asset.projectId !== req.sandbox!.projectId
-                    || asset.valueType !== "asset_ref" || !asset.storedFilename) {
+                    || !(asset.valueType === "asset_ref" || asset.valueType === "document_ref") || !asset.storedFilename) {
                     res.status(404).json({ error: "Asset not found or not downloadable" });
                     return;
                 }
