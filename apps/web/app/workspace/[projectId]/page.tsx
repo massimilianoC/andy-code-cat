@@ -2116,6 +2116,18 @@ export default function WorkspacePage() {
         .reverse()
         .find((m) => m.role === "assistant");
 
+    // Ground-truth: the system prompt ACTUALLY sent in the most recent generation, recorded
+    // in the message's promptingTrace. Shown in the Prompt panel so the read-back prompt is
+    // the real one, not only the live recomposed estimate.
+    const lastSentSystemPrompt = (activeConv?.messages ?? [])
+        .slice()
+        .reverse()
+        .map((m) =>
+            m.metadata?.promptingTrace?.messagesSentToLlm?.find((x) => x.role === "system")?.content
+            ?? m.metadata?.promptingTrace?.effectiveSystemPrompt,
+        )
+        .find((p): p is string => Boolean(p && p.trim()));
+
     // Active baseline: the snapshot marked isActive (used as LLM context on next turn).
     // If the active snapshot has empty HTML (corrupted), fall back to the first
     // snapshot with actual content to prevent sending blank context to the LLM.
@@ -3448,6 +3460,36 @@ export default function WorkspacePage() {
                 )}
                 {loadingPromptPreview && (
                     <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.ui.promptPanelLoading")}</p>
+                )}
+                {lastSentSystemPrompt && (
+                    <div style={{ marginBottom: "1rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#34d399", letterSpacing: "0.03em" }}>
+                                {t("workspace.ui.promptPanelActualSent", "PROMPT REALMENTE INVIATO — ultima generazione")}
+                            </span>
+                        </div>
+                        <pre
+                            style={{
+                                margin: 0,
+                                maxHeight: "16rem",
+                                overflow: "auto",
+                                whiteSpace: "pre-wrap",
+                                wordBreak: "break-word",
+                                fontSize: "0.72rem",
+                                lineHeight: 1.5,
+                                color: "var(--text)",
+                                background: "rgba(52,211,153,0.06)",
+                                border: "1px solid rgba(52,211,153,0.3)",
+                                borderRadius: "var(--radius)",
+                                padding: "0.6rem 0.75rem",
+                            }}
+                        >
+                            {lastSentSystemPrompt}
+                        </pre>
+                        <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
+                            {t("workspace.ui.promptPanelEstimateNote", "I layer qui sotto sono una STIMA della prossima request (ricomposta in tempo reale). Il blocco verde è il prompt realmente inviato nell'ultima generazione.")}
+                        </p>
+                    </div>
                 )}
                 {promptPreview && (
                     <>

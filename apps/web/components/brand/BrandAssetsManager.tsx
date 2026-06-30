@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Trash2, Plus, Upload } from "lucide-react";
+import { Trash2, Plus, Upload, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -90,6 +90,18 @@ export function BrandAssetsManager({ scope, projectId, token, allowFileUpload = 
     }, [scope, projectId, token]);
 
     useEffect(() => { load(); }, [load]);
+
+    // Poll while any brand document is still being analysed, so the status badge
+    // resolves from "analyzing…" to "analyzed"/"failed" without a manual refresh.
+    const hasPendingDoc = assets.some(
+        (a) => a.valueType === "document_ref"
+            && a.enrichmentStatus !== "ready" && a.enrichmentStatus !== "failed" && a.enrichmentStatus !== "skipped",
+    );
+    useEffect(() => {
+        if (!hasPendingDoc) return;
+        const id = setInterval(() => { void load(); }, 3000);
+        return () => clearInterval(id);
+    }, [hasPendingDoc, load]);
 
     async function handleAdd() {
         if (!form.textValue.trim()) return;
@@ -206,12 +218,13 @@ export function BrandAssetsManager({ scope, projectId, token, allowFileUpload = 
                             {asset.valueType === "document_ref" ? (
                                 <Badge
                                     variant={asset.enrichmentStatus === "ready" ? "secondary" : asset.enrichmentStatus === "failed" ? "destructive" : "outline"}
-                                    className="text-[10px] shrink-0"
+                                    className="text-[10px] shrink-0 gap-1"
                                     title="Brand document analysis status"
                                 >
                                     {asset.enrichmentStatus === "ready" ? "analyzed"
                                         : asset.enrichmentStatus === "failed" ? "failed"
-                                        : "analyzing…"}
+                                        : asset.enrichmentStatus === "skipped" ? "skipped"
+                                        : (<><Loader2 className="h-2.5 w-2.5 animate-spin" />analyzing…</>)}
                                 </Badge>
                             ) : null}
                             <button
