@@ -238,10 +238,10 @@ export function buildBaseConstraintsLayer(): string {
         "Non-negotiable rules for ALL output types:",
         "- Produce exactly 1 HTML file + 1 CSS file + 1 JS file — standalone and executable without a build step.",
         "- All external dependencies (libraries, fonts, icons) via CDN only (<script src>, <link rel=stylesheet>) — never import via npm or require().",
-        "- Mobile-first responsive design: optimize for 375px (mobile), 768px (tablet), 1280px (desktop).",
-        "- Semantic HTML5: use <header>, <nav>, <main>, <section>, <article>, <footer> where semantically appropriate.",
+        "- Responsive by default (soft): adapt to the target viewport(s) implied by the format and the request. This is only a fallback — a VIEWPORT MODE directive from the preset/format layer overrides it. Never force a fixed full-viewport experience into a scrollable landing/marketing document.",
+        "- Layout, page structure, semantic landmarks and viewport framing are owned by the preset/format layer (VIEWPORT MODE), not by these base rules. Do not assume a landing/document structure unless the format calls for it.",
         "- Accessibility baseline: meaningful alt text on images, sufficient color contrast (WCAG AA), keyboard-navigable focus.",
-        "- Performance: no render-blocking resources above the fold, use loading=\"lazy\" on below-the-fold images.",
+        "- Performance: keep the critical render path light; use loading=\"lazy\" for off-screen images when the layout scrolls.",
         "- No JavaScript framework (React, Vue, Angular, Svelte) — vanilla JS only.",
         "- CSS strategy: choose Tailwind CDN OR vanilla CSS — never both in the same output.",
         "- artifacts.css and artifacts.js must be plain strings without <style> or <script> wrappers.",
@@ -281,10 +281,61 @@ export function buildBaseConstraintsLayer(): string {
  * Contains the preset's systemPromptModule (structural format rules) and optional
  * cssConstraints (verbatim CSS required in the generated output).
  */
+type ViewportModel = NonNullable<ProjectPreset["outputSpec"]["viewportModel"]>;
+
+/**
+ * Deterministic VIEWPORT MODE block — single source for layout framing.
+ *
+ * This is the layout characterization that Layer A no longer dictates (it now keeps only the
+ * technical floor). Derived solely from `viewportModel`, so it cannot drift from free text.
+ * Absent viewportModel is treated as `document_scroll` (legacy responsive-document behaviour),
+ * which preserves the responsive/semantic directives that used to live in Layer A.
+ */
+export function buildViewportModeBlock(viewportModel?: ViewportModel): string {
+    const mode: ViewportModel = viewportModel ?? "document_scroll";
+    switch (mode) {
+        case "fullscreen_app":
+            return [
+                "## VIEWPORT MODE — FULLSCREEN APP",
+                "The experience FILLS the viewport. It IS the page — never embed it inside a landing/marketing layout.",
+                "- Root/mount container sized to 100dvw × 100dvh; set html, body { margin:0; height:100%; overflow:hidden } — NO page scroll.",
+                "- No document chrome: no marketing header, hero, feature sections, or footer around the experience.",
+                "- Fit and scale to the viewport on load and on resize; support desktop and touch input.",
+                "- Any UI (HUD, menus, controls) overlays the experience inside the viewport, not as a scrolling document.",
+            ].join("\n");
+        case "slide_deck":
+            return [
+                "## VIEWPORT MODE — SLIDE DECK",
+                "Full-viewport slides: exactly one slide visible per screen (100dvw × 100dvh).",
+                "- No document scroll; html, body { margin:0; overflow:hidden }.",
+                "- Navigate slides via keyboard (arrows / space / page keys) and touch swipe; expose a progress indicator.",
+                "- Each slide is self-contained and legible without scrolling.",
+            ].join("\n");
+        case "print":
+            return [
+                "## VIEWPORT MODE — PRINT CANVAS",
+                "Render a fixed, print-ready canvas per the CSS size constraints — not a scrollable web document.",
+                "- Respect the declared page size/aspect ratio; design for the fixed canvas, not for viewport reflow.",
+            ].join("\n");
+        case "document_scroll":
+        default:
+            return [
+                "## VIEWPORT MODE — RESPONSIVE DOCUMENT",
+                "A responsive, vertically scrollable page.",
+                "- Mobile-first responsive design across common breakpoints (~375px mobile, ~768px tablet, ~1280px desktop).",
+                "- Use semantic landmarks (header, nav, main, section, article, footer) where appropriate to the content.",
+                "- Lazy-load below-the-fold images (loading=\"lazy\").",
+            ].join("\n");
+    }
+}
+
 export function buildPresetLayerFromPreset(preset?: Pick<ProjectPreset, "outputSpec"> | null): string {
     if (!preset) return "";
 
-    const parts: string[] = [preset.outputSpec.systemPromptModule];
+    const parts: string[] = [
+        buildViewportModeBlock(preset.outputSpec.viewportModel),
+        preset.outputSpec.systemPromptModule,
+    ].filter((p) => p && p.trim().length > 0);
 
     if (preset.outputSpec.cssConstraints) {
         parts.push(

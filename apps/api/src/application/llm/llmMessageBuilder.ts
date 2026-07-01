@@ -64,7 +64,7 @@ export function buildOutputBudgetPolicy(): string {
         "- Keep mediaManifest semantic and provider-agnostic: write search intent and optional generationPrompt, never provider API syntax.",
         "- Never emit random/provider image URLs such as loremflickr.com, picsum.photos, pexels.com, pixabay.com, or unsplash.com in new artifacts.",
         "- These media placeholder rules are non-editable platform rules and override any earlier editable project template, model template, governance prompt, or request prompt that suggests direct stock/provider image URLs.",
-        "- VISIBILITY (non-editable): every section, card, image and text block MUST be fully visible with CSS alone even if JS never runs. Never leave content at opacity:0 / display:none / collapsed waiting for a script. Do not use AOS/WOW/ScrollReveal or Alpine x-collapse/x-cloak/x-show to hide content unless you load the required plugin AND keep a CSS-only visible fallback. Prefer native <details>/<summary> for collapsible UI.",
+        "- VISIBILITY: follow the visibility-without-JS rules defined in Layer A (base constraints) — content must render with CSS alone even if JS never runs. Those rules are authoritative; this is a reminder, not a redefinition.",
         "",
         "## MEDIA CONTRACT (how to declare images)",
         "For EVERY image, background, logo, avatar, or decorative visual the page needs:",

@@ -220,6 +220,7 @@ export interface AdminProjectPresetDto {
     outputSpec: {
         pageModel: "single_page" | "multi_page" | "slide_deck" | "print_a4";
         sectionModel: "scroll" | "paginated" | "masonry" | "stepped_form";
+        viewportModel?: "document_scroll" | "fullscreen_app" | "slide_deck" | "print";
         recommendedPageCount?: number;
         aspectRatio?: "16:9" | "4:3" | "A4_portrait" | "A4_landscape" | "free";
         cssConstraints?: string;

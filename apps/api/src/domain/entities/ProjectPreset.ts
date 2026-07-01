@@ -12,6 +12,17 @@ export interface PresetOutputSpec {
     /** Scroll / navigation model */
     sectionModel: 'scroll' | 'paginated' | 'masonry' | 'stepped_form';
 
+    /**
+     * Viewport mode — owns the layout framing that Layer A no longer dictates.
+     * Drives the deterministic VIEWPORT MODE block in Layer B (buildPresetLayerFromPreset).
+     * Absent = 'document_scroll' (legacy behaviour: a responsive scrollable document).
+     * - document_scroll: responsive scrollable page (landing, website, article…)
+     * - fullscreen_app:  fill the viewport, no page scroll, no document chrome (games, VR…)
+     * - slide_deck:      one full-viewport slide per screen, keyboard/touch paging
+     * - print:           fixed print canvas (poster/A4)
+     */
+    viewportModel?: 'document_scroll' | 'fullscreen_app' | 'slide_deck' | 'print';
+
     /** Recommended page/slide count (undefined = variable) */
     recommendedPageCount?: number;
 
@@ -480,6 +491,7 @@ VINCOLI:
 }
 @page { size: 1270px 714px; margin: 0; }
 @media print { body { margin: 0; } .slide { page-break-after: always; } }`,
+            viewportModel: 'slide_deck',
             systemPromptModule: `FORMATO OUTPUT - PRESENTATION / PITCH 16:9:
 Crea un deck argomentativo, navigabile e stampabile. Deve aiutare una riunione, un pitch o una review, non imitare una keynote da palco.
 VINCOLI TECNICI:
@@ -540,6 +552,7 @@ CRITERIO DI RIUSCITA:
   box-sizing: border-box;
 }
 @page { size: 1920px 1080px; margin: 0; }`,
+            viewportModel: 'slide_deck',
             systemPromptModule: `FORMATO OUTPUT - CONFERENCE KEYNOTE:
 Crea una sequenza visuale da palco, launch o all-hands. Deve avere momenti memorabili, non un deck di bullet.
 VINCOLI TECNICI:
@@ -607,6 +620,7 @@ body {
   html, body { width: var(--page-w); height: var(--page-h); }
   .page { page-break-after: always; }
 }`,
+            viewportModel: 'print',
             systemPromptModule: `FORMATO OUTPUT - DOCUMENTO A4 STAMPABILE:
 Genera uno o piu fogli A4 pronti per PDF/stampa. La priorita e controllo del formato, gerarchia e assenza di overflow.
 VINCOLI TECNICI:
@@ -741,6 +755,7 @@ Pensa come un art director: impatto visivo → chiarezza → completezza.`,
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
+            viewportModel: 'fullscreen_app',
             systemPromptModule: `FORMATO OUTPUT - VIDEOGAME EXPERIENCE:
 Crea un prototipo giocabile browser-first con un loop completo. Non generare una landing sul gioco.
 STRUTTURA OBBLIGATORIA:
@@ -780,6 +795,7 @@ REGOLE DI DESIGN:
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
+            viewportModel: 'fullscreen_app',
             systemPromptModule: `FORMATO OUTPUT - FREE RUNNER:
 Preset specialistico per endless runner; resta nascosto nel catalogo standard per ridurre ridondanza con Videogame Experience.
 STRUTTURA OBBLIGATORIA:
@@ -818,6 +834,7 @@ CRITERIO DI RIUSCITA:
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
+            viewportModel: 'fullscreen_app',
             systemPromptModule: `FORMATO OUTPUT - SERIOUS GAME:
 Progetta un'esperienza educativa o formativa giocabile. L'apprendimento guida la meccanica.
 STRUTTURA OBBLIGATORIA:
@@ -856,6 +873,7 @@ CRITERIO DI RIUSCITA:
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
+            viewportModel: 'fullscreen_app',
             systemPromptModule: `FORMATO OUTPUT - 3D GAME / 3D SCENE:
 Crea una scena 3D o pseudo-3D leggera e interattiva. Non promettere un gioco complesso se il brief non lo richiede.
 STRUTTURA OBBLIGATORIA:
@@ -894,6 +912,7 @@ REGOLE:
             pageModel: 'single_page',
             sectionModel: 'scroll',
             printReady: false,
+            viewportModel: 'fullscreen_app',
             systemPromptModule: `FORMATO OUTPUT - VR EXPERIENCE A-FRAME:
 Genera un'esperienza immersiva web VR con una scena precisa, non una generica pagina 3D.
 STRUTTURA OBBLIGATORIA:
@@ -931,6 +950,7 @@ CRITERIO DI RIUSCITA:
             pageModel: 'single_page',
             sectionModel: 'paginated',
             printReady: false,
+            viewportModel: 'fullscreen_app',
             systemPromptModule: `FORMATO OUTPUT - INTERACTIVE STORY:
 Crea una narrativa a scelte giocabile, con stato e conseguenze. Non generare un racconto lineare mascherato da bottoni.
 STRUTTURA OBBLIGATORIA:

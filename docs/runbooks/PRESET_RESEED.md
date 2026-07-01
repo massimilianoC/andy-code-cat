@@ -8,6 +8,7 @@ Use it after changing:
 - preset `briefTemplate`
 - preset `styleTemplate`
 - preset `outputSpec.systemPromptModule`
+- preset `outputSpec.viewportModel` (layout/viewport framing — drives the Layer B VIEWPORT MODE block)
 - preset default tags
 - preset visibility (`isActive`)
 
@@ -115,3 +116,4 @@ Expected outcomes:
 - `landing`, `website`, `form`, `manifesto`, `slideshow`, `keynote`, `a4poster`, `infographic`, `videogame`, `seriousgame`, `game3d`, `vr-aframe`, and `interactive-story` are active standard choices.
 - `freerunner` and `data-dashboard` remain in the registry but are hidden from the standard dashboard picker because `isActive=false`.
 - Feature tags use the valid `feat:*` prefix.
+- `videogame`, `freerunner`, `seriousgame`, `game3d`, `vr-aframe`, `interactive-story` carry `outputSpec.viewportModel = "fullscreen_app"`; `slideshow`, `keynote` carry `"slide_deck"`; `a4poster` carries `"print"`. Document presets omit the field and default to `document_scroll`. Confirm one full-screen preset returns it: `curl -s http://localhost:4000/v1/presets | grep -o '"viewportModel":"fullscreen_app"' | head -1`.

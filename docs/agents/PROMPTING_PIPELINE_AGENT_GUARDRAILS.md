@@ -16,8 +16,8 @@ The Layer 1 (chat-preview) pipeline composes the system prompt in the following 
 
 | Layer | Function / File | Owner | Authorised content |
 |---|---|---|---|
-| **A** | `buildBaseConstraintsLayer()` in `systemPromptLayers.ts` | **Architecture** (human maintainer or architecture agent) | Immutable structural rules: 1+1+1 output format, CDN-only, no framework, JS exclusively in artifacts.js, HTML compactness |
-| **B** | `buildPresetLayerFromPreset()` in `systemPromptLayers.ts` | **Preset agent** | `outputSpec.systemPromptModule` + `cssConstraints` from presets — never free text |
+| **A** | `buildBaseConstraintsLayer()` in `systemPromptLayers.ts` | **Architecture** (human maintainer or architecture agent) | Immutable **technical** floor: 1+1+1 output format, CDN-only, no framework, JS exclusively in artifacts.js, HTML compactness, visibility-without-JS, canvas/engine container safety, accessibility baseline. **No layout/viewport/document-structure directives** (those belong to Layer B). Responsiveness is stated only as a soft, overridable default. |
+| **B** | `buildPresetLayerFromPreset()` in `systemPromptLayers.ts` | **Preset agent** | `outputSpec.systemPromptModule` + `cssConstraints` + the deterministic **VIEWPORT MODE** block derived from `outputSpec.viewportModel` (`buildViewportModeBlock`). Owns all layout/viewport/document-structure framing — never free text |
 | **C** | `buildStyleContextBlock()` in `styleContextBuilder.ts` | **Style / moodboard agent** | Visual tags, palette, typography, layout, tone — no technical rules |
 | **D** | `buildProjectKnowledgeLayer()` *(to be implemented)* in `systemPromptLayers.ts` | **Context / embed agent** | Asset enrichment traces, document briefs, fetched resource snippets — pure content, no technical rules |
 | **E** | `prePromptTemplate` via `GetLlmPromptConfig.ts` | **CDN / images / encoding agent** | RESPONSE FORMAT, JSON ENCODING RULES, HTML ATTRIBUTE QUOTING, APPROVED CDN LIBRARIES, LIBRARY SELECTION GUIDANCE, IMAGES, CONVERSATION CONTEXT |
@@ -72,6 +72,20 @@ The following statement in `buildBaseConstraintsLayer()` is the **single authori
 
 - **`PP-003` MUST NOT:** Any other layer contain a section named `## OUTPUT` or `## REASONING`.
 - **`PP-003` MUST NOT:** `DEFAULT_PRE_PROMPT` contain hardcoded token count values (they diverge from env).
+
+### 3.5 Layout & viewport ownership (PP-018)
+
+Layout, page structure, semantic landmarks, responsive breakpoints and viewport framing are
+owned **exclusively by Layer B** (the preset), emitted deterministically by
+`buildViewportModeBlock()` from `outputSpec.viewportModel`.
+
+- **`PP-018` MUST NOT:** Layer A (`buildBaseConstraintsLayer`) contain layout/viewport/document
+  directives (mobile-first breakpoints, `header/nav/section/footer` mandates, above/below-the-fold).
+  It may state responsiveness only as a soft, explicitly-overridable default.
+- **`PP-018` MUST NOT:** any preset assert a viewport framing in free text that contradicts its
+  `viewportModel` (e.g. a `fullscreen_app` preset asking for a scrollable landing structure).
+- A full-screen format (`fullscreen_app`, `slide_deck`) that renders as a scrollable landing is a
+  `PP-018` regression — check Layer A did not reintroduce document framing.
 
 ### 3.4 Layer E — DEFAULT_PRE_PROMPT boundary (PP-004)
 

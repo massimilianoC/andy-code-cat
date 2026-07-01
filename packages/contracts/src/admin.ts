@@ -136,6 +136,7 @@ export type AdminSeedLlmRegistryInput = z.infer<typeof adminSeedLlmRegistrySchem
 
 const presetPageModelSchema = z.enum(["single_page", "multi_page", "slide_deck", "print_a4"]);
 const presetSectionModelSchema = z.enum(["scroll", "paginated", "masonry", "stepped_form"]);
+const presetViewportModelSchema = z.enum(["document_scroll", "fullscreen_app", "slide_deck", "print"]);
 
 export const adminPresetRecommendedModelSchema = z.object({
     provider: z.string().min(1).max(80),
@@ -162,6 +163,7 @@ export const adminProjectPresetPatchSchema = z.object({
     outputSpec: z.object({
         pageModel: presetPageModelSchema.optional(),
         sectionModel: presetSectionModelSchema.optional(),
+        viewportModel: presetViewportModelSchema.optional(),
         recommendedPageCount: z.number().int().min(1).max(100).optional(),
         aspectRatio: z.enum(["16:9", "4:3", "A4_portrait", "A4_landscape", "free"]).optional(),
         cssConstraints: z.string().max(40000).optional(),
@@ -205,6 +207,7 @@ export const adminDraftProjectTemplateSchema = z.object({
         outputSpec: z.object({
             pageModel: presetPageModelSchema.optional(),
             sectionModel: presetSectionModelSchema.optional(),
+            viewportModel: presetViewportModelSchema.optional(),
             recommendedPageCount: z.number().int().min(1).max(100).optional(),
             aspectRatio: z.enum(["16:9", "4:3", "A4_portrait", "A4_landscape", "free"]).optional(),
             printReady: z.boolean().optional(),
