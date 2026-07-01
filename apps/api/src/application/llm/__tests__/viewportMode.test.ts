@@ -60,4 +60,9 @@ describe("VIEWPORT MODE block (Layer B, single source for layout framing)", () =
         expect(layer.indexOf("VIEWPORT MODE — FULLSCREEN APP")).toBeGreaterThanOrEqual(0);
         expect(layer.indexOf("VIEWPORT MODE — FULLSCREEN APP")).toBeLessThan(layer.indexOf("MODULE BODY"));
     });
+
+    it("preset-less projects still receive the default document framing (PP-018 gap guard)", () => {
+        expect(buildPresetLayerFromPreset(null)).toContain("VIEWPORT MODE — RESPONSIVE DOCUMENT");
+        expect(buildPresetLayerFromPreset(undefined)).toContain("VIEWPORT MODE — RESPONSIVE DOCUMENT");
+    });
 });

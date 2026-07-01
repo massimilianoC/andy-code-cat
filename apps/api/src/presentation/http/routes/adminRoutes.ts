@@ -864,7 +864,10 @@ export function createAdminRoutes(): Router {
                     enrichmentTrace: enrichment.enrichmentTrace,
                     enrichmentStatus: enrichment.status,
                 }))
-                .catch(() => brandAssetRepo.update(asset.id, { enrichmentStatus: "failed" }).catch(() => undefined));
+                .catch((err) => {
+                    console.error("[brand-document] background enrichment failed", { assetId: asset.id, scope: "platform", error: err instanceof Error ? err.message : String(err) });
+                    return brandAssetRepo.update(asset.id, { enrichmentStatus: "failed" }).catch(() => undefined);
+                });
             return;
         } catch (err) {
             next(err);

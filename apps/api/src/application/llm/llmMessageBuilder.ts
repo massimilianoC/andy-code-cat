@@ -64,7 +64,7 @@ export function buildOutputBudgetPolicy(): string {
         "- Keep mediaManifest semantic and provider-agnostic: write search intent and optional generationPrompt, never provider API syntax.",
         "- Never emit random/provider image URLs such as loremflickr.com, picsum.photos, pexels.com, pixabay.com, or unsplash.com in new artifacts.",
         "- These media placeholder rules are non-editable platform rules and override any earlier editable project template, model template, governance prompt, or request prompt that suggests direct stock/provider image URLs.",
-        "- VISIBILITY: follow the visibility-without-JS rules defined in Layer A (base constraints) — content must render with CSS alone even if JS never runs. Those rules are authoritative; this is a reminder, not a redefinition.",
+        "- VISIBILITY (non-editable, final authority): every section, card, image and text block MUST be fully visible with CSS alone even if JS never runs. The complete visibility-without-JS rules are defined in Layer A (base constraints); they are platform rules and override any earlier project/model/governance/request template that hides content behind scripts.",
         "",
         "## MEDIA CONTRACT (how to declare images)",
         "For EVERY image, background, logo, avatar, or decorative visual the page needs:",

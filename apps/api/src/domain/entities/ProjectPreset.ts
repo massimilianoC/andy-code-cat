@@ -43,6 +43,24 @@ export interface PresetOutputSpec {
     systemPromptModule: string;
 }
 
+/**
+ * Pre-reseed safety net (PP-018): Mongo-backed preset documents created before the
+ * `viewportModel` field existed would otherwise fall back to `document_scroll`, which would
+ * prepend a "RESPONSIVE DOCUMENT" framing to full-screen presets (games/slides) until the
+ * catalog is reseeded. When the stored preset lacks `viewportModel`, inherit it from the
+ * static catalog entry with the same id. Reseed remains MANDATORY — this only keeps the
+ * deploy→reseed window safe.
+ */
+export function withStaticViewportFallback<T extends { outputSpec: PresetOutputSpec }>(
+    preset: T,
+    presetId: string,
+): T {
+    if (preset.outputSpec.viewportModel) return preset;
+    const staticViewport = PRESET_MAP.get(presetId)?.outputSpec.viewportModel;
+    if (!staticViewport) return preset;
+    return { ...preset, outputSpec: { ...preset.outputSpec, viewportModel: staticViewport } };
+}
+
 export interface PresetTagDefaults {
     visualTags?: string[];
     paletteTags?: string[];

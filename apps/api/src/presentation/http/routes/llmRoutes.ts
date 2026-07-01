@@ -51,11 +51,11 @@ import { extractInlineDocumentLayerD } from "../../../application/documents/inli
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
-import { PRESET_MAP } from "../../../domain/entities/ProjectPreset";
+import { PRESET_MAP, withStaticViewportFallback } from "../../../domain/entities/ProjectPreset";
 import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { ResolveBrandContext } from "../../../application/use-cases/ResolveBrandContext";
-import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
+import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../../../application/use-cases/ResolveBrandDocumentContext";
 
 type LlmRuntimeContext = {
     providerCatalog: {
@@ -339,9 +339,12 @@ export function createLlmRoutes(): Router {
             platformConfigRepo.get().catch(() => null),
             assetRepository.listByProject(input.projectId, input.userId).catch(() => [] as Awaited<ReturnType<typeof assetRepository.listByProject>>),
         ]);
-        const preset = project?.presetId
+        const presetRaw = project?.presetId
             ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
             : null;
+        // PP-018 pre-reseed safety: Mongo presets stored before viewportModel existed inherit
+        // the static catalog's viewport framing instead of degrading to document_scroll.
+        const preset = presetRaw && project?.presetId ? withStaticViewportFallback(presetRaw, project.presetId) : presetRaw;
 
         const governanceTemplates =
             (project?.presetId ? platformConfig?.governanceByProduct?.[project.presetId]?.promptTemplates : undefined)
@@ -385,8 +388,10 @@ export function createLlmRoutes(): Router {
 
         // Reusable brand documents (analysed once, cached) claim the Layer D budget first;
         // project attachments fill the remainder. Failure never blocks generation.
+        // The enrichment content is functional to this generation, so in-flight (pending)
+        // analyses are AWAITED (bounded) — never treated as fire-and-forget.
         const brandDocuments = await resolveBrandDocumentContext
-            .execute({ userId: input.userId, projectId: input.projectId })
+            .execute({ userId: input.userId, projectId: input.projectId, waitForPendingMs: BRAND_DOC_WAIT_FOR_PENDING_MS })
             .catch(() => []);
         const brandDocumentLayer = buildBrandDocumentLayerD(brandDocuments);
         const remainingLayerDBudget = Math.max(0, env.ENRICHMENT_LAYER_D_MAX_CHARS - brandDocumentLayer.length);
@@ -708,9 +713,11 @@ export function createLlmRoutes(): Router {
                 projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId),
                 platformConfigRepo.get().catch(() => null),
             ]);
-            const preset = project?.presetId
+            const presetRaw = project?.presetId
                 ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
                 : null;
+            // PP-018 pre-reseed safety — mirror of the generation path.
+            const preset = presetRaw && project?.presetId ? withStaticViewportFallback(presetRaw, project.presetId) : presetRaw;
             const styleBlock = buildStyleContextBlock(userProfile, moodboard);
             const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
             const governanceSystemPrompt = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates?.generationSystem || undefined;

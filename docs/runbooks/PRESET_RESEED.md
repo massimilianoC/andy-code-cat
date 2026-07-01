@@ -2,6 +2,13 @@
 
 This runbook updates the Mongo-backed project template registry from the static `PRESET_CATALOG`.
 
+> **MANDATORY:** whenever a deploy includes changes to `ProjectPreset.ts`, the reseed is a
+> binding part of that deploy — run it in the same operation, on every environment
+> (local deploy stack AND droplet). The Mongo catalog wins over the static one: skipping the
+> reseed keeps serving stale prompt modules. For `viewportModel` only, a code fallback
+> (`withStaticViewportFallback`, PP-018) protects the deploy→reseed window — nothing else is
+> protected.
+
 Use it after changing:
 
 - `apps/api/src/domain/entities/ProjectPreset.ts`

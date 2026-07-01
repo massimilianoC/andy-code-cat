@@ -330,7 +330,10 @@ export function buildViewportModeBlock(viewportModel?: ViewportModel): string {
 }
 
 export function buildPresetLayerFromPreset(preset?: Pick<ProjectPreset, "outputSpec"> | null): string {
-    if (!preset) return "";
+    // No preset: still emit the default document_scroll viewport framing. Layer A no longer
+    // carries responsive/document directives (PP-018), so without this a preset-less project
+    // would receive no layout guidance at all.
+    if (!preset) return buildViewportModeBlock(undefined);
 
     const parts: string[] = [
         buildViewportModeBlock(preset.outputSpec.viewportModel),

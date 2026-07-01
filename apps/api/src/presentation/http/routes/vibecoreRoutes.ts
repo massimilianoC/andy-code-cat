@@ -19,7 +19,7 @@ import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { getParser } from "../../../application/documents/parsers/DocumentParserFactory";
 import { buildGroundedDataContextLayer, buildProjectKnowledgeLayer, buildBrandDocumentLayerD } from "../../../application/llm/systemPromptLayers";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
-import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
+import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../../../application/use-cases/ResolveBrandDocumentContext";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
 import { VibePrefill } from "../../../application/use-cases/VibePrefill";
@@ -347,8 +347,9 @@ export function createVibecoreRoutes(): Router {
 
                 // Reusable brand documents (user/platform scope) apply to every project — even a
                 // freshly auto-created one — so the brand book guides the prefill from intake.
+                // In-flight analyses are awaited (bounded): the prefill quality depends on them.
                 const brandDocuments = await resolveBrandDocumentContext
-                    .execute({ userId, projectId })
+                    .execute({ userId, projectId, waitForPendingMs: BRAND_DOC_WAIT_FOR_PENDING_MS })
                     .catch(() => []);
                 const brandDocumentLayer = buildBrandDocumentLayerD(brandDocuments, { maxChars: 6000 });
                 if (brandDocumentLayer) {
