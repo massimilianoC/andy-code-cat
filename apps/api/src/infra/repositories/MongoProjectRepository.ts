@@ -9,6 +9,7 @@ interface ProjectDocument {
     name: string;
     presetId?: string;
     templateResolution?: ProjectTemplateResolution;
+    outputLanguage?: string;
     createdAt: Date;
 }
 
@@ -19,6 +20,7 @@ function mapDocument(doc: ProjectDocument): Project {
         name: doc.name,
         presetId: doc.presetId,
         templateResolution: doc.templateResolution,
+        outputLanguage: doc.outputLanguage,
         createdAt: doc.createdAt
     };
 }
@@ -86,7 +88,7 @@ export class MongoProjectRepository implements ProjectRepository {
         return this.update(projectId, userId, { name });
     }
 
-    async update(projectId: string, userId: string, input: { name?: string; presetId?: string; templateResolution?: ProjectTemplateResolution }): Promise<Project | null> {
+    async update(projectId: string, userId: string, input: { name?: string; presetId?: string; templateResolution?: ProjectTemplateResolution; outputLanguage?: string }): Promise<Project | null> {
         const collection = await this.collection();
         const setFields: Partial<ProjectDocument> = {};
         if (input.name !== undefined) {
@@ -97,6 +99,9 @@ export class MongoProjectRepository implements ProjectRepository {
         }
         if (input.templateResolution !== undefined) {
             setFields.templateResolution = input.templateResolution;
+        }
+        if (input.outputLanguage !== undefined) {
+            setFields.outputLanguage = input.outputLanguage;
         }
         if (Object.keys(setFields).length === 0) {
             return this.findByIdForUser(projectId, userId);

@@ -457,10 +457,14 @@ export function createLlmRoutes(): Router {
             .join("\n\n---\n\n");
 
         // Layer T: re-inject the Layer Φ format signal persisted at classify time.
-        // buildLayerT self-suppresses when presetId is set (Layer B already covers it).
+        // buildLayerT self-suppresses when presetId is set — but ONLY a preset that actually
+        // carries a systemPromptModule "covers" the format in Layer B. A module-less generic
+        // preset (e.g. "neutral", 0 chars) must NOT suppress the formatHint fallback, or the
+        // format directives vanish from the prompt entirely (B thin AND T empty).
+        const presetCoversFormat = Boolean(preset?.outputSpec.systemPromptModule?.trim());
         const templateResolution: TemplateResolution | null = project?.templateResolution
             ? {
-                presetId: project.presetId ?? null,
+                presetId: presetCoversFormat ? (project.presetId ?? null) : null,
                 userTemplateId: null,
                 formatHint: (project.templateResolution.formatHint ?? null) as TemplateResolution["formatHint"],
                 confidence: project.templateResolution.confidence,
@@ -474,7 +478,16 @@ export function createLlmRoutes(): Router {
         ).catch(() => ({ entries: [], hasMustUse: false }));
         const brandContextLayer = buildGlobalBrandLayer(brandContext, { maxChars: 4000 });
 
+        // Layer L (OUTPUT LANGUAGE) resolution chain: explicit persisted project language
+        // (from zero-effort/Vibe intake) → client UI language sent with the request → none
+        // (model default = English). See OUTPUT_LANGUAGE_CONTROL_SPEC.md.
+        const resolvedOutputLanguage = project?.outputLanguage || input.outputLanguage || null;
+        const outputLanguageSource = project?.outputLanguage
+            ? "project-config"
+            : input.outputLanguage ? "request-ui-language" : "empty";
+
         const layerSources: Partial<Record<import("../../../application/llm/systemPromptComposer").PromptLayerId, string>> = {
+            L: outputLanguageSource,
             B: project?.presetId ? "preset-catalog" : "code-default",
             T: templateResolution?.formatHint ? "project-config" : "empty",
             E: promptConfig.enabled && promptConfig.prePromptTemplate && roleModel?.promptTemplate
@@ -496,7 +509,7 @@ export function createLlmRoutes(): Router {
             outputBudgetPolicy: buildOutputBudgetPolicy(),
             requestSystemPrompt: input.systemPrompt,
             governanceSystemPrompt,
-            outputLanguage: input.outputLanguage ?? null,
+            outputLanguage: resolvedOutputLanguage,
             sources: layerSources,
         });
         const systemPrompt = composedLayers.composed;

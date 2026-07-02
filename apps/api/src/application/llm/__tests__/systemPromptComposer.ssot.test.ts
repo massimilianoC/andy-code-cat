@@ -60,4 +60,26 @@ describe("composeSystemPromptWithLayers — SSOT contract", () => {
         expect(nonEmpty[nonEmpty.length - 1]!.id).toBe("R");
         expect(result.composed.trimEnd().endsWith("<!-- /PF_LAYER id=R -->")).toBe(true);
     });
+
+    // Regression guard: Layer L (OUTPUT LANGUAGE) must be injected when a language is
+    // resolved, and omitted otherwise. See OUTPUT_LANGUAGE_CONTROL_SPEC.md — the previous
+    // regression was Layer L never reaching generation, so this locks the composer half.
+    it("injects Layer L with a byte-exact marker when outputLanguage is resolved", async () => {
+        const { composeSystemPromptWithLayers } = await loadComposer();
+        const result = composeSystemPromptWithLayers({ outputLanguage: "it", sources: { L: "project-config" } });
+        expect(result.composed).toContain("PF_LAYER id=L");
+        expect(result.composed).toContain("OUTPUT LANGUAGE");
+        expect(result.composed).toContain("Italian");
+        const layerL = result.layers.find((l) => l.id === "L")!;
+        expect(layerL.chars).toBeGreaterThan(0);
+        expect(layerL.source).toBe("project-config");
+        expect(result.composed.slice(layerL.span[0], layerL.span[1])).toContain("Italian");
+    });
+
+    it("omits Layer L when no output language is resolved (model default English)", async () => {
+        const { composeSystemPromptWithLayers } = await loadComposer();
+        const result = composeSystemPromptWithLayers({ outputLanguage: null });
+        expect(result.composed).not.toContain("PF_LAYER id=L");
+        expect(result.layers.find((l) => l.id === "L")!.chars).toBe(0);
+    });
 });
