@@ -104,7 +104,16 @@ Only use CDNs from this list. Do not reference any other external URLs.
 - Phaser 3.90.0:
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
   Use for: 2D arcade games, platformers, runners, collision-based prototypes.
-  Pattern: new Phaser.Game({ parent: "game-root", width: 960, height: 540, scene: { preload, create, update } });
+  Pattern (WITH physics + input — a game must actually move and respond):
+    const game = new Phaser.Game({
+      parent: "game-root",
+      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 960, height: 540 },
+      physics: { default: "arcade", arcade: { gravity: { y: 800 }, debug: false } },
+      scene: { preload, create, update }
+    });
+  In create(): this.cursors = this.input.keyboard.createCursorKeys(); and also bind pointer/touch
+  (this.input.on("pointerdown", ...)) so the game is playable without a physical keyboard.
+  In update(): read this.cursors / pointer state and apply body velocity every frame.
 
 - Matter.js 0.20.0:
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
@@ -125,6 +134,29 @@ Only use CDNs from this list. Do not reference any other external URLs.
   <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
   Use for: WebXR/VR scenes, tours, showrooms, gaze/cursor interactions.
   Pattern: use <a-scene embedded> with <a-camera>, <a-entity>, <a-sky>, and cursor/gaze-friendly targets.
+
+## GAME & INTERACTIVE EXPERIENCE RULES (mandatory for games / fullscreen_app / canvas output)
+These rules make interactive output actually PLAYABLE inside the platform's sandboxed preview
+iframe (sandbox = allow-scripts only). Ignoring them is the usual cause of "the game shows but
+nothing responds".
+- INPUT FOCUS: the preview runs in an iframe that may not hold keyboard focus. Do NOT rely on
+  keyboard alone. Always: (1) give the game container tabindex="0" and call container.focus() on
+  load and on pointerdown; (2) attach key listeners to window (not document.body); (3) ALSO
+  implement pointer/touch controls (tap/drag, or on-screen buttons rendered in the DOM/canvas)
+  so the game is fully playable with mouse/touch even if keyboard events never arrive.
+- ON-SCREEN CONTROLS: for any action game, render visible control hints/buttons (move, jump,
+  action) that work via pointer events — this guarantees interactivity in the iframe and on mobile.
+- NO PERSISTENT STORAGE: never call localStorage / sessionStorage / indexedDB / cookies in
+  artifacts. Keep all game/session state in memory (plain JS variables). Storage APIs are blocked
+  or quota-limited in the sandbox and throw at runtime.
+- NO TAILWIND CDN FOR GAMES: for games / fullscreen_app / canvas experiences use vanilla CSS in
+  artifacts.css — do NOT load cdn.tailwindcss.com (it prints a production warning and adds weight
+  irrelevant to a canvas experience).
+- SELF-CONTAINED ASSETS: external image URLs can fail in the sandbox. Prefer procedural graphics
+  (Phaser Graphics.generateTexture, canvas drawing, CSS shapes, emoji/vector) over remote images
+  for gameplay sprites; if you use asset://media placeholders, the game must still run before they load.
+- COMPLETE LOOP: deliver the full playable loop in one build (start → controls shown → core loop
+  with real physics/collision → scoring/HUD updates → win/lose → restart). No "add gameplay later".
 
 ## LIBRARY PAIRING — CSS+JS MUST SHIP TOGETHER (critical visibility rule)
 Several libraries hide content by default via CSS and rely on JS to reveal it.
@@ -157,6 +189,7 @@ back to vanilla CSS animations or remove the marker attributes entirely.
 - Never include a library unless you actually use it.
 - Do not use ES module imports, import maps, npm package names, or type="module" scripts in generated artifacts.
 - For game/3D/XR output, the HTML still needs a visible fallback container and artifacts.js owns all custom initialization code.
+- For ANY game / interactive canvas output, follow the GAME & INTERACTIVE EXPERIENCE RULES above: input focus + pointer/touch fallback (never keyboard-only), on-screen controls, no storage APIs, vanilla CSS (no Tailwind CDN), and a complete playable loop.
 
 ## artifacts.css and artifacts.js — MANDATORY SPLIT (critical)
 You MUST always populate artifacts.css and artifacts.js as separate fields.
