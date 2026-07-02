@@ -234,6 +234,21 @@ export function createVibecoreRoutes(): Router {
                     projectId,
                 });
 
+                // Persist the Layer T signal on the project so subsequent generation
+                // turns (chat-preview) re-inject the same format guidance. Layer T
+                // self-suppresses when the project later gains a presetId, so this is
+                // safe to store even when templateId also matched.
+                if (result.formatHint && !result.skipped) {
+                    await projectRepository.update(projectId, userId, {
+                        templateResolution: {
+                            formatHint: result.formatHint,
+                            confidence: result.confidence,
+                            reasoning: result.reasoning,
+                            source: "layer_phi",
+                        },
+                    }).catch(() => null);
+                }
+
                 // Always echo projectId so the client pins follow-up calls
                 // (prefill, generation, conversation) to the same sandbox.
                 res.json({ ...result, projectId, warnings, attachmentPolicy });

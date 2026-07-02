@@ -166,6 +166,22 @@ export interface LlmPromptingTraceMessage {
     content: string;
 }
 
+/**
+ * One entry of the structured system-prompt breakdown — the same shape the
+ * backend composer (composeSystemPromptWithLayers) produces and the frontend
+ * Prompt tab renders. `span` indexes into `effectiveSystemPrompt`, so content
+ * is never duplicated: the breakdown and the raw prompt can never disagree.
+ * See docs/specs/PROMPT_LAYER_SSOT_SPEC.md.
+ */
+export interface LlmPromptingTraceLayer {
+    id: string;
+    key: string;
+    label: string;
+    source: string;
+    chars: number;
+    span: [number, number];
+}
+
 export interface LlmPromptingTrace {
     originalUserMessage: string;
     /** MongoDB _id of the llm_prompt_configs document active at the time of the call */
@@ -174,6 +190,8 @@ export interface LlmPromptingTrace {
     effectiveSystemPrompt: string;
     messagesSentToLlm: LlmPromptingTraceMessage[];
     focusContext?: LlmFocusContext;
+    /** Structured system-prompt layer breakdown, in composition order. Absent for legacy traces. */
+    layers?: LlmPromptingTraceLayer[];
 }
 
 export interface LlmFocusContext {

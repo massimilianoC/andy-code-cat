@@ -332,6 +332,26 @@ export function resolveDocumentContextPolicyFromConfig(
     };
 }
 
+/**
+ * Resolves the Layer F (governance system prompt) text for a product, with the
+ * same default -> product priority chain as resolvePromptTaskSettingFromConfig.
+ * Centralises a lookup that was previously inlined ad-hoc at two call sites in
+ * llmRoutes.ts without the `governanceByProduct.default` fallback.
+ */
+export function resolveGovernanceSystemPromptFromConfig(
+    platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
+    productKey: string,
+    field: keyof ProductPromptTemplates = "generationSystem",
+): { value: string; source: "product-override" | "platform-default" | "code-default" } {
+    const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.promptTemplates?.[field];
+    if (fromProduct?.trim()) return { value: fromProduct, source: "product-override" };
+
+    const fromDefault = platformConfig?.governanceByProduct?.default?.promptTemplates?.[field];
+    if (fromDefault?.trim() && productKey !== "default") return { value: fromDefault, source: "platform-default" };
+
+    return { value: "", source: "code-default" };
+}
+
 export function resolvePromptTaskSettingFromConfig(
     platformConfig: Pick<PlatformConfig, "governanceByProduct"> | null | undefined,
     productKey: string,

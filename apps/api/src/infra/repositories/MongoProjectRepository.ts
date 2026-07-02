@@ -1,5 +1,5 @@
 import { ObjectId, type Collection, type Filter } from "mongodb";
-import type { Project } from "../../domain/entities/Project";
+import type { Project, ProjectTemplateResolution } from "../../domain/entities/Project";
 import type { ProjectRepository, AdminProjectFilters, AdminProjectListResult } from "../../domain/repositories/ProjectRepository";
 import { getDb } from "../db/mongo";
 
@@ -8,6 +8,7 @@ interface ProjectDocument {
     ownerUserId: ObjectId;
     name: string;
     presetId?: string;
+    templateResolution?: ProjectTemplateResolution;
     createdAt: Date;
 }
 
@@ -17,6 +18,7 @@ function mapDocument(doc: ProjectDocument): Project {
         ownerUserId: doc.ownerUserId.toHexString(),
         name: doc.name,
         presetId: doc.presetId,
+        templateResolution: doc.templateResolution,
         createdAt: doc.createdAt
     };
 }
@@ -84,7 +86,7 @@ export class MongoProjectRepository implements ProjectRepository {
         return this.update(projectId, userId, { name });
     }
 
-    async update(projectId: string, userId: string, input: { name?: string; presetId?: string }): Promise<Project | null> {
+    async update(projectId: string, userId: string, input: { name?: string; presetId?: string; templateResolution?: ProjectTemplateResolution }): Promise<Project | null> {
         const collection = await this.collection();
         const setFields: Partial<ProjectDocument> = {};
         if (input.name !== undefined) {
@@ -92,6 +94,9 @@ export class MongoProjectRepository implements ProjectRepository {
         }
         if (input.presetId !== undefined) {
             setFields.presetId = input.presetId;
+        }
+        if (input.templateResolution !== undefined) {
+            setFields.templateResolution = input.templateResolution;
         }
         if (Object.keys(setFields).length === 0) {
             return this.findByIdForUser(projectId, userId);
