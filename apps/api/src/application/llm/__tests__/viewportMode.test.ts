@@ -66,3 +66,15 @@ describe("VIEWPORT MODE block (Layer B, single source for layout framing)", () =
         expect(buildPresetLayerFromPreset(undefined)).toContain("VIEWPORT MODE — RESPONSIVE DOCUMENT");
     });
 });
+
+describe("Layer A completeness & ship-readiness contract", () => {
+    it("mandates a complete, publish-ready result and forbids deferring work to next steps", async () => {
+        const { buildBaseConstraintsLayer } = await import("../systemPromptLayers");
+        const layer = buildBaseConstraintsLayer();
+        expect(layer).toContain("COMPLETENESS & SHIP-READINESS CONTRACT");
+        expect(layer).toContain("publish-ready");
+        expect(layer).toContain("never a skeleton");
+        // Token efficiency must not be an excuse to shrink scope.
+        expect(layer).toContain("Token efficiency serves completeness");
+    });
+});

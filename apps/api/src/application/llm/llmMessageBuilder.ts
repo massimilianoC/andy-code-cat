@@ -55,7 +55,7 @@ export function buildOutputBudgetPolicy(): string {
     const maxTok = env.LLM_DEFAULT_MAX_COMPLETION_TOKENS;
     return [
         "## OUTPUT BUDGET POLICY",
-        "Keep outputs compact and parse-safe.",
+        "Keep outputs compact and parse-safe — but COMPLETENESS COMES FIRST: always ship a fully functional, publish-ready result (see Layer A completeness contract). Compact means efficient markup and no repetition, never partial scope, truncated code, or deferring work to 'next steps'.",
         "- Return ONLY one raw JSON object — no markdown fences, no prose before or after the JSON.",
         "- Required keys: chat (with summary, bullets, nextActions) and artifacts (with html, css, js).",
         "- For every new image/background/logo/avatar/decorative visual, use asset://media/<lowercase-kebab-key> in HTML/CSS and add a matching mediaManifest request.",
