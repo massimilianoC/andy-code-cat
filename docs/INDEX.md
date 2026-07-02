@@ -45,6 +45,7 @@ Read in this order before making changes:
 | [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) | Primary entry point for coding agents |
 | [docs/agents/LLM_PROVIDER_HANDOFF_RECAP.md](agents/LLM_PROVIDER_HANDOFF_RECAP.md) | LLM provider and chat-preview implementation notes |
 | [docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md](agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md) | Layer ownership map and collision-prevention rules for parallel agents |
+| [docs/reports/PROMPT_LAYER_DEDUP_2026-07-02.md](reports/PROMPT_LAYER_DEDUP_2026-07-02.md) | Prompt-layer dedup note: single-source ownership for high-salience rules to reduce reasoning self-loops in Layer 1 generation |
 
 ---
 
@@ -82,6 +83,7 @@ Read in this order before making changes:
 | [docs/DIDACTIC_MODE_PROGRESS.md](DIDACTIC_MODE_PROGRESS.md) | Implementation progress log for Didactic Mode (branch `feat/didactic-mode`)
 | [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
 | [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | Preprompt engine service and composition flow |
+| [docs/specs/PROMPT_LAYER_SSOT_SPEC.md](specs/PROMPT_LAYER_SSOT_SPEC.md) | Prompt Layer SSOT — canonical layer registry, MongoDB override chain, self-describing markers, persisted trace, 1:1 superadmin/sent/stored/displayed correspondence |
 | [docs/specs/WORKFLOWS.md](specs/WORKFLOWS.md) | Automated workflow definitions WF-01 to WF-10 |
 | [docs/specs/UX_SPEC.md](specs/UX_SPEC.md) | End-to-end UX and product screen map |
 | [docs/specs/EXECUTION_LOG_SPEC.md](specs/EXECUTION_LOG_SPEC.md) | Structured operational audit logging |
@@ -147,6 +149,19 @@ Read in this order before making changes:
 | `apps/api/src/application/use-cases/VibePrefill.ts` | Structured Zero Effort brief prefill use-case with optional Layer D document context |
 | `apps/api/src/application/prompting/formatHintRules.ts` | Format hint catalog (7 categories) and template list block builder |
 | `apps/api/src/presentation/http/routes/vibecoreRoutes.ts` | `GET /v1/vibecore/config` + `POST /v1/vibecore/classify` + `POST /v1/vibecore/prefill` — auth-protected, project-aware vibe entry surface |
+
+---
+
+## Reusable Agent Skills
+
+Self-contained, portable knowledge packages (`SKILL.md` + `AGENTS.md` + reference docs/code
+templates) meant to be copied into *other* projects to teach a coding agent an implementation
+pattern proven in this codebase.
+
+| Document | Description |
+| --- | --- |
+| [docs/skills/screenshot-pdf-export/](skills/screenshot-pdf-export/README.md) | Server-side headless-Chromium (Puppeteer) pattern for capturing an HTML/CSS/JS artifact, a live URL, or iframe content as a JPEG screenshot and/or paginated PDF — on-demand, background-thumbnail, and export-embedded flows, with framework-agnostic code templates |
+| [docs/skills/zip-export-module/](skills/zip-export-module/README.md) | Post-processing + packaging pattern for turning LLM/coding-agent HTML(+CSS/JS) output into a downloadable, deploy-ready ZIP (inline-style/script extraction, dedup, placeholder detection, README generation, signed download tokens) behind a single one-click export button, with framework-agnostic code templates |
 
 ---
 

@@ -69,7 +69,7 @@ export const llmChatPreviewSchema = z.object({
     provider: z.string().min(1).max(80).optional(),
     model: z.string().min(1).max(200).optional(),
     capability: z.enum(["chat", "vision", "image_generation", "video_generation", "tools", "embeddings"]).optional(),
-    max_tokens: z.number().int().positive().max(32000).optional(),
+    max_tokens: z.number().int().positive().max(64000).optional(),
     pipelineRole: z.enum([
         "coding",
         "coding_fast",

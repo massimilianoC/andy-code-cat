@@ -103,6 +103,25 @@ Layer E (`prePromptTemplate` default) contains **exclusively**:
 - **`PP-004` MUST NOT** belong in Layer E: architectural rules about output files → Layer A; token/reasoning budget → `buildOutputBudgetPolicy()`; JS placement directives → Layer A; preset-specific sections → Layer B; project content (brief, links, assets) → Layer D.
 - **`PP-004` MUST NOT:** `DEFAULT_PRE_PROMPT` include dynamic values read from `env` — use `buildOutputBudgetPolicy()` for those.
 
+### 3.6 Anti-loop salience control (PP-019)
+
+Prompt quality is not only about correctness. Repeating the same high-salience rule block across
+multiple late layers causes some providers to spend reasoning budget re-auditing the prompt rather
+than emitting the JSON artifact.
+
+- **`PP-019` MUST:** keep each high-salience behavioural rule family in one authoritative layer.
+  Examples: visibility-without-JS, script placement, game/input reliability, and reasoning-budget
+  policy.
+- **`PP-019` MUST NOT:** restate the same checklist with only cosmetic wording changes across
+  Layer A, Layer E, model guidance, governance prompt, and budget policy.
+- **`PP-019` SHOULD:** let later layers reference the owning layer briefly when needed, instead of
+  reprinting the full rule block.
+- **`PP-019` MUST NOT:** use the budget layer to repeat detailed architectural constraints already
+  defined in Layer A. The budget layer may only set output-shape and reasoning-discipline rules.
+- **`PP-019` SHOULD:** prefer compact imperative wording over anxious phrasing such as repeated
+  "final authority", "non-editable", or multi-step self-audit instructions unless the rule must
+  genuinely override an editable template.
+
 ---
 
 ## 4. Agent-Specific Guardrails
@@ -173,6 +192,7 @@ Before modifying any layer file:
 4. Verify the change does not add token budget or reasoning rules outside buildOutputBudgetPolicy().
 5. If the target is a frozen zone → stop. Open an issue or discuss with the maintainer.
 6. Commit on a separate feat/* branch per agent — do not mix changes from different layers in one commit.
+7. If a rule is already present in Layer A or the budget policy, shorten the later layer instead of adding a paraphrased duplicate.
 ```
 
 ### 5.1 Pre-commit anti-conflict checklist
@@ -182,6 +202,7 @@ Answer each question before committing. A single "yes" is a blocker.
 - [ ] Does my change introduce a section named `## OUTPUT` or `## REASONING`? → **PP-003 violation** — move it to `buildOutputBudgetPolicy()`
 - [ ] Does my change specify where to place JS (inline, `<script>`, `artifacts.js`)? → **PP-002 violation** — belongs in Layer A
 - [ ] Does my change replicate the JSON schema `{ chat, artifacts }`? → **PP-004 violation** — already in `## RESPONSE FORMAT` of Layer E
+- [ ] Does my change restate a high-salience rule family already owned by another layer (visibility, script placement, game reliability, reasoning budget)? → **PP-019 violation** — keep one authoritative copy
 - [ ] Does my change touch `composeSystemPrompt()` or the layer order? → **frozen zone** — consensus required
 - [ ] Does my layer builder return a string that starts or ends with `---`? → **PP-001 violation** — remove the separator
 

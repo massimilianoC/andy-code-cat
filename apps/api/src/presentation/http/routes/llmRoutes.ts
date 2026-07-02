@@ -48,11 +48,12 @@ import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserP
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { extractInlineDocumentLayerD } from "../../../application/documents/inlineDocumentContext";
+import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../../../application/documents/projectLayerDContext";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
 import { PRESET_MAP, withStaticViewportFallback } from "../../../domain/entities/ProjectPreset";
-import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
+import { resolveAttachmentPolicyFromConfig, resolveDocumentContextPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { ResolveBrandContext } from "../../../application/use-cases/ResolveBrandContext";
 import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../../../application/use-cases/ResolveBrandDocumentContext";
@@ -115,6 +116,12 @@ function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]
     }
 
     return [...byId.values()];
+}
+
+function resolveChatPreviewMaxTokens(requestedMaxTokens?: number): number {
+    const previewCeiling = 64_000;
+    const defaultPreviewBudget = Math.min(env.LLM_DEFAULT_MAX_COMPLETION_TOKENS, previewCeiling);
+    return Math.min(requestedMaxTokens ?? defaultPreviewBudget, env.LLM_MAX_COMPLETION_TOKENS, previewCeiling);
 }
 
 function sendSse(res: RequestWithContext["res"], payload: unknown) {
@@ -302,6 +309,7 @@ export function createLlmRoutes(): Router {
         userRepo,
         promptExecutionLogRepository,
         getLlmCatalog,
+        getFileStorage(),
     );
 
     function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none") {
@@ -353,6 +361,7 @@ export function createLlmRoutes(): Router {
         const governanceFocusedBasePrompt = governanceTemplates?.focusedEditSystem || undefined;
         const productKey = project?.presetId ?? "default";
         const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, productKey);
+        const documentContextPolicy = resolveDocumentContextPolicyFromConfig(platformConfig, productKey);
 
         const styleBlock = buildStyleContextBlock(userProfile, moodboard);
         const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
@@ -395,27 +404,25 @@ export function createLlmRoutes(): Router {
             .catch(() => []);
         const brandDocumentLayer = buildBrandDocumentLayerD(brandDocuments);
         const remainingLayerDBudget = Math.max(0, env.ENRICHMENT_LAYER_D_MAX_CHARS - brandDocumentLayer.length);
-        const projectKnowledgeLayer = remainingLayerDBudget > 0
-            ? buildProjectKnowledgeLayer(contextAssets, {
+        const projectLayerD = remainingLayerDBudget > 0 && env.enrichmentInjectLayerD
+            ? await buildProjectLayerDContext({
+                assetRepository,
+                storage: getFileStorage(),
+                projectId: input.projectId,
+                userId: input.userId,
+                assets: contextAssets,
                 includeUnenrichedAssets: selectedAssetIds.size > 0,
                 maxChars: remainingLayerDBudget,
+                maxAssets: documentContextPolicy.maxAssetsPerPrompt,
+                fallbackInlineExtractionMaxAssets: documentContextPolicy.fallbackInlineExtractionMaxAssets,
+                waitForPendingMs: env.enrichmentEnabled ? PROJECT_LAYER_D_WAIT_FOR_PENDING_MS : 0,
             })
-            : "";
-        // Live extraction for document assets not yet enriched (async enrichment gap):
-        // ensures the document content is in the prompt ACTUALLY sent, not only in the
-        // later-recomposed preview. Skipped cheaply when nothing is pending.
-        const inlineDocBudget = Math.max(0, remainingLayerDBudget - projectKnowledgeLayer.length);
-        const inlineDoc = inlineDocBudget > 500
-            ? await extractInlineDocumentLayerD(contextAssets, getFileStorage(), {
-                maxAssets: 3,
-                maxCharsPerDoc: Math.min(2500, inlineDocBudget),
-            }).catch(() => ({ block: "", documentNames: [] }))
-            : { block: "", documentNames: [] };
-        const documentContextLayer = [brandDocumentLayer, projectKnowledgeLayer, inlineDoc.block].filter(Boolean).join("\n\n");
+            : { layer: "", assets: contextAssets, documentNames: [] };
+        const documentContextLayer = [brandDocumentLayer, projectLayerD.layer].filter(Boolean).join("\n\n");
         // Alpha guardrail: grounded dataset Layer X is restricted to explicit
         // data-dashboard projects and is not injected into the standard website flow.
         const dataContextLayer = project?.presetId === "data-dashboard"
-            ? buildGroundedDataContextLayer(contextAssets)
+            ? buildGroundedDataContextLayer(projectLayerD.assets)
             : "";
 
         const providerCatalog =
@@ -856,10 +863,7 @@ export function createLlmRoutes(): Router {
                 body: JSON.stringify(buildChatCompletionRequestBody({
                     provider: context.providerCatalog.provider,
                     model: context.modelId,
-                    maxTokens: Math.min(
-                        body.max_tokens ?? env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,
-                        env.LLM_MAX_COMPLETION_TOKENS
-                    ),
+                    maxTokens: resolveChatPreviewMaxTokens(body.max_tokens),
                     temperature: body.temperature ?? 0.4,
                     messages,
                     thinkingBudget: body.thinking_budget,
@@ -1272,10 +1276,7 @@ export function createLlmRoutes(): Router {
                         provider: context.providerCatalog.provider,
                         model: context.modelId,
                         stream: true,
-                        maxTokens: Math.min(
-                            body.max_tokens ?? env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,
-                            env.LLM_MAX_COMPLETION_TOKENS
-                        ),
+                        maxTokens: resolveChatPreviewMaxTokens(body.max_tokens),
                         temperature: body.temperature ?? 0.4,
                         messages,
                         thinkingBudget: body.thinking_budget,

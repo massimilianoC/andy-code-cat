@@ -135,29 +135,6 @@ Only use CDNs from this list. Do not reference any other external URLs.
   Use for: WebXR/VR scenes, tours, showrooms, gaze/cursor interactions.
   Pattern: use <a-scene embedded> with <a-camera>, <a-entity>, <a-sky>, and cursor/gaze-friendly targets.
 
-## GAME & INTERACTIVE EXPERIENCE RULES (mandatory for games / fullscreen_app / canvas output)
-These rules make interactive output actually PLAYABLE inside the platform's sandboxed preview
-iframe (sandbox = allow-scripts only). Ignoring them is the usual cause of "the game shows but
-nothing responds".
-- INPUT FOCUS: the preview runs in an iframe that may not hold keyboard focus. Do NOT rely on
-  keyboard alone. Always: (1) give the game container tabindex="0" and call container.focus() on
-  load and on pointerdown; (2) attach key listeners to window (not document.body); (3) ALSO
-  implement pointer/touch controls (tap/drag, or on-screen buttons rendered in the DOM/canvas)
-  so the game is fully playable with mouse/touch even if keyboard events never arrive.
-- ON-SCREEN CONTROLS: for any action game, render visible control hints/buttons (move, jump,
-  action) that work via pointer events — this guarantees interactivity in the iframe and on mobile.
-- NO PERSISTENT STORAGE: never call localStorage / sessionStorage / indexedDB / cookies in
-  artifacts. Keep all game/session state in memory (plain JS variables). Storage APIs are blocked
-  or quota-limited in the sandbox and throw at runtime.
-- NO TAILWIND CDN FOR GAMES: for games / fullscreen_app / canvas experiences use vanilla CSS in
-  artifacts.css — do NOT load cdn.tailwindcss.com (it prints a production warning and adds weight
-  irrelevant to a canvas experience).
-- SELF-CONTAINED ASSETS: external image URLs can fail in the sandbox. Prefer procedural graphics
-  (Phaser Graphics.generateTexture, canvas drawing, CSS shapes, emoji/vector) over remote images
-  for gameplay sprites; if you use asset://media placeholders, the game must still run before they load.
-- COMPLETE LOOP: deliver the full playable loop in one build (start → controls shown → core loop
-  with real physics/collision → scoring/HUD updates → win/lose → restart). No "add gameplay later".
-
 ## LIBRARY PAIRING — CSS+JS MUST SHIP TOGETHER (critical visibility rule)
 Several libraries hide content by default via CSS and rely on JS to reveal it.
 If you include either half without the other, the rendered page will appear blank
@@ -188,8 +165,7 @@ back to vanilla CSS animations or remove the marker attributes entirely.
 - Needs WebXR/VR scene: add A-Frame.
 - Never include a library unless you actually use it.
 - Do not use ES module imports, import maps, npm package names, or type="module" scripts in generated artifacts.
-- For game/3D/XR output, the HTML still needs a visible fallback container and artifacts.js owns all custom initialization code.
-- For ANY game / interactive canvas output, follow the GAME & INTERACTIVE EXPERIENCE RULES above: input focus + pointer/touch fallback (never keyboard-only), on-screen controls, no storage APIs, vanilla CSS (no Tailwind CDN), and a complete playable loop.
+- For game/3D/XR output, keep the surrounding HTML minimal, give the engine a visible fallback container, and put all custom initialization code in artifacts.js.
 
 ## artifacts.css and artifacts.js — MANDATORY SPLIT (critical)
 You MUST always populate artifacts.css and artifacts.js as separate fields.

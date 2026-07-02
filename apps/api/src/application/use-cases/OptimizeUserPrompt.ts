@@ -7,12 +7,14 @@ import type { PlatformConfigRepository } from "../../domain/repositories/Platfor
 import type { UserRepository } from "../../domain/repositories/UserRepository";
 import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
+import type { IFileStorage } from "../../infra/storage/IFileStorage";
 import { estimateCost, type CostEstimate } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 import { buildOptimizeUserPromptRequest } from "../prompting/optimizeUserPromptInstruction";
 import { buildProjectKnowledgeLayer } from "../llm/systemPromptLayers";
+import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../documents/projectLayerDContext";
 import {
     resolveAttachmentPolicyFromConfig,
     resolveDocumentContextPolicyFromConfig,
@@ -128,6 +130,7 @@ export class OptimizeUserPrompt {
         private readonly userRepository: UserRepository,
         private readonly promptExecutionLogRepository: PromptExecutionLogRepository,
         private readonly getLlmCatalog: GetLlmCatalog,
+        private readonly storage?: IFileStorage,
     ) { }
 
     private buildPromptingTrace(input: { rawPrompt: string }, context: PreparedExecutionContext): OptimizerTrace {
@@ -369,12 +372,24 @@ export class OptimizeUserPrompt {
             });
         }
 
-        const layerDContext = env.enrichmentInjectLayerD
-            ? buildProjectKnowledgeLayer(selectedAssets, {
+        const layerDContext = env.enrichmentInjectLayerD && this.storage
+            ? (await buildProjectLayerDContext({
+                assetRepository: this.assetRepository,
+                storage: this.storage,
+                projectId: input.projectId,
+                userId: input.userId,
+                assets: selectedAssets,
                 maxChars: 6000,
                 maxAssets: documentContextPolicy.maxAssetsPerPrompt,
-            })
-            : "";
+                fallbackInlineExtractionMaxAssets: documentContextPolicy.fallbackInlineExtractionMaxAssets,
+                waitForPendingMs: env.enrichmentEnabled ? PROJECT_LAYER_D_WAIT_FOR_PENDING_MS : 0,
+            })).layer
+            : env.enrichmentInjectLayerD
+                ? buildProjectKnowledgeLayer(selectedAssets, {
+                    maxChars: 6000,
+                    maxAssets: documentContextPolicy.maxAssetsPerPrompt,
+                })
+                : "";
 
         const { systemPrompt, userPrompt } = buildOptimizeUserPromptRequest({
             rawPrompt: input.rawPrompt,

@@ -37,18 +37,19 @@ describe("LLM media placeholder prompt policy", () => {
         expect(layer).not.toContain('href="app.css"');
     });
 
-    it("keeps the visibility-without-JS rule authoritative in Layer A with a final-authority imperative in the budget policy", async () => {
+    it("keeps the visibility-without-JS rule authoritative in Layer A without duplicating it in the budget policy", async () => {
         const { buildBaseConstraintsLayer } = await import("../systemPromptLayers");
         const { buildOutputBudgetPolicy } = await loadPromptModules();
         const layer = buildBaseConstraintsLayer();
 
-        // Single source of truth: the detailed rules live in Layer A…
-        expect(layer).toContain("Visibility-without-JS rules (NON-EDITABLE");
-        // …and the budget policy (which composes LAST, after editable templates) keeps a strong
-        // non-editable imperative pointing back to Layer A — recency authority without duplication.
+        // Single source of truth: the detailed rules live in Layer A.
+        expect(layer).toContain("Visibility-without-JS rules (platform rules)");
+
+        // The budget policy should not restate the same visibility block — otherwise the model
+        // sees the same high-salience checklist twice and tends to self-audit instead of emitting.
         const policy = buildOutputBudgetPolicy();
-        expect(policy).toContain("VISIBILITY (non-editable, final authority)");
-        expect(policy).toContain("defined in Layer A");
+        expect(policy).not.toContain("VISIBILITY (non-editable, final authority)");
+        expect(policy).not.toContain("defined in Layer A");
     });
 
     it("composes hardcoded media rules after editable project templates", async () => {
