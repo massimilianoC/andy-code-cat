@@ -1,7 +1,13 @@
 # Prompt Layer Restructure — Format-Agnostic Core & Template-Driven Layout
 
-> Status: proposed (awaiting maintainer approval — touches FROZEN ZONES)
-> Branch target: `develop` (feature branch `feat/prompt-layer-restructure`)
+> Status: **implemented** (waves 0–6 + regression fixes A–D) on branch `feat/brand-reusable-context`
+> Maintainer decisions (2026-07-01): full Layer A slimming approved; new `viewportModel` field
+> (not enum extension); soft-responsive wording so assertive templates win. Regression gaps
+> closed post-review: static viewport fallback pre-reseed (PP-018), default document framing
+> for preset-less projects, awaited (never fire-and-forget) brand-doc enrichment with stale
+> guard, final-authority visibility imperative restored in budget policy.
+> Reseed is MANDATORY per deploy — see `docs/runbooks/PRESET_RESEED.md` and
+> `docs/guides/AGENT_RELEASE_CHECKLIST.md` §10.
 > Date: 2026-06-30
 > Related: [PROMPTING_PIPELINE_AGENT_GUARDRAILS.md](../agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md) ·
 > [ProjectPreset.ts](../../apps/api/src/domain/entities/ProjectPreset.ts) ·
