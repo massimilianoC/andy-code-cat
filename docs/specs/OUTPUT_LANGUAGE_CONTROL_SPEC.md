@@ -1,8 +1,24 @@
 # Output Language Control — Implementation Spec
 
-**Status:** Draft  
-**Version:** 1.0  
-**Feature branch:** `feat/output-language-control` (da creare da `develop`)
+**Status:** Implemented (2026-07-02) — regression fix restoring Layer L end-to-end  
+**Version:** 1.1  
+**Feature branch:** implemented on `feat/brand-reusable-context`
+
+> **Implementation note (v1.1).** The intake half (Vibe classify/prefill language inference,
+> zero-effort launch form language selector, normalized-brief `Output language:` line) was already
+> in place, but the resolved language never reached the generation system prompt — Layer L was never
+> injected at `chat-preview` time. Two gaps were closed:
+> 1. **Persistence.** `Project.outputLanguage` is now stored at zero-effort launch (see §5.5/§6.3),
+>    so the explicit language survives to every later generation turn — not just the intake brief text.
+> 2. **Resolution + fallback.** `resolveContext` (the single composition path) resolves Layer L as
+>    **`project.outputLanguage` → request `uiLanguage` (client i18n) → none (EN default)`**, and the
+>    workspace now sends its current UI language with every `chat-preview` call.
+>
+> This means the God-Mode workspace now DOES receive Layer L via the UI-language fallback (an
+> intentional evolution of the original §3.3 "no Layer L in God Mode" design, per maintainer request
+> 2026-07-02): the operator wanted the UI language to drive output language when no explicit choice
+> was made. A user who wants a different language still sets it explicitly (zero-effort form, which
+> persists, or by writing it in the prompt).
 
 ---
 

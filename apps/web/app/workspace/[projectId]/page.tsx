@@ -452,7 +452,7 @@ function isFocusContextValidationError(error: unknown): boolean {
 }
 
 export default function WorkspacePage() {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const router = useRouter();
     const params = useParams();
     const searchParams = useSearchParams();
@@ -966,6 +966,7 @@ export default function WorkspacePage() {
                 model: selectedModel || undefined,
                 pipelineRole: chatDefaults.pipelineRole,
                 capability: chatDefaults.capability,
+                uiLanguage: i18n.language?.split("-")[0] || undefined,
             });
             setPromptPreview(data);
         } catch (err) {
@@ -975,7 +976,7 @@ export default function WorkspacePage() {
         } finally {
             setLoadingPromptPreview(false);
         }
-    }, [token, projectId, selectedProvider, selectedModel, chatDefaults.pipelineRole, chatDefaults.capability]);
+    }, [token, projectId, selectedProvider, selectedModel, chatDefaults.pipelineRole, chatDefaults.capability, i18n.language]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const thinkingFlowRef = useRef<HTMLDivElement>(null);
@@ -2519,6 +2520,9 @@ export default function WorkspacePage() {
                         capability: chatDefaults.capability,
                         pipelineRole: chatDefaults.pipelineRole,
                         temperature: chatDefaults.temperature,
+                        // Fallback source for Layer L when the project has no persisted output
+                        // language; the backend still prioritises project.outputLanguage over this.
+                        uiLanguage: i18n.language?.split("-")[0] || undefined,
                         history,
                         currentArtifacts,
                         focusContext,
@@ -2650,6 +2654,7 @@ export default function WorkspacePage() {
                     capability: chatDefaults.capability,
                     pipelineRole: chatDefaults.pipelineRole,
                     temperature: chatDefaults.temperature,
+                    uiLanguage: i18n.language?.split("-")[0] || undefined,
                     history,
                     currentArtifacts,
                     focusContext: retryWithoutFocusContext ? undefined : focusContext,

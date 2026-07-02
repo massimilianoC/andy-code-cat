@@ -61,6 +61,8 @@ export interface LlmChatInput {
     history?: LlmHistoryMessage[];
     currentArtifacts?: LlmCurrentArtifacts;
     focusContext?: LlmFocusContext;
+    /** BCP-47 UI language from the client (e.g. "it", "en"). Fallback source for Layer L. */
+    uiLanguage?: string;
 }
 
 /**
