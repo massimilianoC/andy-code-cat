@@ -375,7 +375,7 @@ export function buildPresetLayer(presetId?: string | null): string {
 /**
  * Layer D — Document context from enriched project assets.
  * Owned by: Agente context/embed (see PROMPTING_PIPELINE_AGENT_GUARDRAILS.md §4.1).
- * Returns "" when no enriched assets are available — the layer is then omitted by composeSystemPrompt.
+ * Returns "" when no enriched assets are available — the layer is then omitted by composeSystemPromptWithLayers.
  * Contains only content (briefs, summaries, tags) — zero technical instructions.
  */
 export function buildProjectKnowledgeLayer(

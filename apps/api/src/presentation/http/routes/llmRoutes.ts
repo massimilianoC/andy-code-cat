@@ -743,13 +743,20 @@ export function createLlmRoutes(): Router {
             const uiLanguage = typeof req.query.uiLanguage === "string" ? req.query.uiLanguage : undefined;
             const provider = typeof req.query.provider === "string" ? req.query.provider : undefined;
             const model = typeof req.query.model === "string" ? req.query.model : undefined;
+            const capability = typeof req.query.capability === "string" ? req.query.capability : undefined;
+            // pipelineRole mirrors the value the workspace sends to chat-preview (the backend-driven
+            // chatDefaults default is "dialogue"). Keeping it in sync means the dry-run resolves the
+            // SAME roleModel — hence the same model id and the same Layer E model template — that the
+            // next real generation will use. Never hardcode a role here (PROMPT_LAYER_SSOT_SPEC §7).
+            const pipelineRole = typeof req.query.pipelineRole === "string" ? req.query.pipelineRole : "dialogue";
             // Dry-run of the EXACT generation path: same resolver, same composer, no provider call.
             const context = await resolveContext({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
-                pipelineRole: "coding",
+                pipelineRole,
                 provider,
                 model,
+                capability,
                 outputLanguage: uiLanguage,
             });
             res.json({

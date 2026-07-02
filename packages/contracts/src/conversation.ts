@@ -1,5 +1,18 @@
 import { z } from "zod";
+import { llmFocusContextSchema } from "./llm";
 import { mediaResolutionMetadataSchema } from "./mediaResolution";
+
+const promptingTraceLayerSchema = z.object({
+    id: z.string().min(1),
+    key: z.string().min(1),
+    label: z.string().min(1),
+    source: z.string().min(1),
+    chars: z.number().int().nonnegative(),
+    span: z.tuple([
+        z.number().int().nonnegative(),
+        z.number().int().nonnegative(),
+    ]),
+});
 
 // ── Request schemas ──────────────────────────────────────────────────────────
 
@@ -55,6 +68,8 @@ export const addMessageSchema = z.object({
                     content: z.string(),
                 })
             ),
+            focusContext: llmFocusContextSchema.optional(),
+            layers: z.array(promptingTraceLayerSchema).optional(),
         }).optional(),
         generatedArtifacts: z.object({
             html: z.string(),

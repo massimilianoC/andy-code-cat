@@ -398,12 +398,14 @@ export function getLlmPromptConfig(token: string, projectId: string) {
 export function getLlmPromptPreview(
     token: string,
     projectId: string,
-    params?: { uiLanguage?: string; provider?: string; model?: string }
+    params?: { uiLanguage?: string; provider?: string; model?: string; pipelineRole?: string; capability?: string }
 ) {
     const query = new URLSearchParams();
     if (params?.uiLanguage) query.set("uiLanguage", params.uiLanguage);
     if (params?.provider) query.set("provider", params.provider);
     if (params?.model) query.set("model", params.model);
+    if (params?.pipelineRole) query.set("pipelineRole", params.pipelineRole);
+    if (params?.capability) query.set("capability", params.capability);
     const qs = query.toString();
     return call<PromptPreviewResponse>("GET", `/v1/projects/${projectId}/llm/prompt-preview${qs ? `?${qs}` : ""}`, undefined, {
         Authorization: `Bearer ${token}`,

@@ -959,7 +959,14 @@ export default function WorkspacePage() {
         if (!token) return;
         setLoadingPromptPreview(true);
         try {
-            const data = await getLlmPromptPreview(token, projectId);
+            // Mirror exactly what the next chat-preview generation will send (provider, model,
+            // pipelineRole, capability) so the dry-run resolves the same model + Layer E template.
+            const data = await getLlmPromptPreview(token, projectId, {
+                provider: selectedProvider || undefined,
+                model: selectedModel || undefined,
+                pipelineRole: chatDefaults.pipelineRole,
+                capability: chatDefaults.capability,
+            });
             setPromptPreview(data);
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
@@ -968,7 +975,7 @@ export default function WorkspacePage() {
         } finally {
             setLoadingPromptPreview(false);
         }
-    }, [token, projectId]);
+    }, [token, projectId, selectedProvider, selectedModel, chatDefaults.pipelineRole, chatDefaults.capability]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const thinkingFlowRef = useRef<HTMLDivElement>(null);

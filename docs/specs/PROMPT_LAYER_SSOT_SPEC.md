@@ -155,7 +155,7 @@ export interface LlmPromptingTrace {
 
 - `resolveContext` (llmRoutes) becomes the **only** composer entry point. It internally uses `composeSystemPromptWithLayers` (registry-driven) and returns both the composed string and the breakdown.
 - `GET /projects/:id/llm/prompt-preview` is reimplemented as a **dry-run of `resolveContext`** (same inputs, no provider call, flagged `dryRun: true` in the response). The duplicated composition block (llmRoutes:714-789) is deleted.
-- The dry-run accepts optional query params for the inputs that only exist at request time (`uiLanguage`, `pipelineRole`, `model`) so the preview can show exactly what the next request would send, including Layer L and the model template.
+- The dry-run accepts optional query params for the inputs that only exist at request time (`uiLanguage`, `pipelineRole`, `model`, `provider`, `capability`) so the preview can show exactly what the next request would send, including Layer L and the model template. **Implemented** (commit after `f31b111`): the endpoint reads all five params; `pipelineRole` defaults to `"dialogue"` to match the backend-driven `chatDefaults` default, and the workspace passes its current `provider`/`model`/`pipelineRole`/`capability` so the dry-run resolves the same `roleModel` (hence same model id + Layer E model template) as the next generation. Earlier the role was hardcoded to `"coding"`, which could diverge from the `"dialogue"` used by generation — that gap is now closed.
 - `composeSystemPrompt` (string-only variant) is removed; all callers get the layered result.
 
 ## 8. Layer T decision
@@ -179,12 +179,25 @@ The heuristic `splitSentPromptSections` is deleted.
 
 ## 10. Superadmin UI contract
 
+> **Status: DEFERRED (not implemented as of commit `f31b111` + pipelineRole fix).** The phases 1–2
+> work delivered the read surface at the per-project level (the Prompt tab renders every registry
+> layer, including non-editable ones, via `promptingTrace.layers` / the dry-run). The dedicated
+> superadmin "Prompt Layers" panel below — a single admin surface listing ALL layers with the
+> non-editable ones read-only — was NOT built. Today only **Layer F** remains editable, through the
+> pre-existing governance UI (`apps/web/app/admin/governance/page.tsx` → `promptTemplates.generationSystem`),
+> resolved by `resolveGovernanceSystemPromptFromConfig`. Consequence: an operator can *read* layers
+> A/P/etc. only from the per-project Prompt tab, not from a consolidated admin screen. This satisfies
+> the "read what is sent" requirement per project but not the "one admin surface lists the whole
+> registry" goal of R1/§2. Tracked as a follow-up; no code change planned for now (maintainer decision
+> 2026-07-02).
+
+Target design when picked up (unchanged):
 New "Prompt Layers" section in the superadmin governance panel (per product, with `default` as the base):
 
 - Lists the registry in composition order: id, label, description, editability, current source, effective text preview.
 - Editable layers: template editor with "reset to default" (deletes the MongoDB override record — absence of record = default, per R2).
 - Non-editable layers: read-only display of the code default (so the operator can *read* the platform rules that will be sent, satisfying "voglio sapere cosa sto scrivendo e cosa viene inviato").
-- The panel consumes the same `resolvePromptLayersFromConfig` resolver — no separate rendering of "what would be applied".
+- The panel consumes the same resolver family — no separate rendering of "what would be applied".
 
 ## 11. Implementation phases
 
