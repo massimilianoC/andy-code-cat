@@ -1,6 +1,6 @@
 # Prompt Layer SSOT — Single Source of Truth for Layer Definition, Composition, Persistence, and Display
 
-Status: **draft — approved direction, pending implementation**
+Status: **implemented (phases 1-2) — see PROMPT_LAYER_SSOT_EXECUTION_PLAN.md for the executed step list**
 Owner: platform maintainer
 Supersedes the presentation/duplication aspects of: `PROMPT_LAYER_RESTRUCTURE_PLAN.md` (implemented), `PREPROMPT_ENGINE_SPEC.md` (composition flow section)
 Related: `PROMPTING_SERVICE_PLATFORM_SPEC.md`, `SUPER_ADMIN_SPEC.md`, `OUTPUT_LANGUAGE_CONTROL_SPEC.md`, `DOCUMENT_CONTEXT_LAYER_SPEC.md`
@@ -36,6 +36,14 @@ Operative rules:
 - R6. A layer defined in the spec that is not wired into the composition path must be either wired or removed. No aspirational layers (current Layer T situation).
 
 ## 3. Canonical layer registry
+
+> **Implementation note (PROMPT_LAYER_SSOT_EXECUTION_PLAN.md, Step 1-5):** the registry described
+> below was realized as `PROMPT_LAYER_DESCRIPTORS` inside the existing
+> `apps/api/src/application/llm/systemPromptComposer.ts` — reusing the already-established
+> composer module — instead of the new `promptLayerRegistry.ts` file sketched here. Layer S
+> (`template-skills`) was additionally added to the registry as a reserved, always-empty slot
+> pending `TEMPLATE_SKILLS_INJECTION_PLAN.md` Wave 3. The `PromptLayerId` union, order, and field
+> names below are otherwise accurate to the shipped implementation.
 
 New module: `apps/api/src/application/llm/promptLayerRegistry.ts`.
 

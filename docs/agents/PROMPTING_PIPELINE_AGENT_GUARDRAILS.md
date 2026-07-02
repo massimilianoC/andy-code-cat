@@ -258,3 +258,27 @@ containing the list of triggered tags. Use those events as the canary metric for
 prompt regressions: a sustained rise in any tag means the corresponding prompt
 directive is losing effectiveness and should be revisited at the prompt layer
 first, then strengthened in the repair if necessary.
+
+---
+
+## 8. Prompt Layer SSOT — Single Composition Path (PP-020)
+
+Implemented per `docs/specs/PROMPT_LAYER_SSOT_SPEC.md` /
+`docs/specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md`.
+
+- **`PP-020` MUST:** composition happens ONLY inside `resolveContext()` in
+  `llmRoutes.ts`, via `composeSystemPromptWithLayers()` (the deprecated
+  `composeSystemPrompt()` wrapper has been removed — it has zero call sites).
+  The `/llm/prompt-preview` dry-run endpoint reuses `resolveContext()`; it does
+  not call the composer directly.
+- **`PP-020` MUST:** every new layer be registered in `PROMPT_LAYER_DESCRIPTORS`
+  (`systemPromptComposer.ts`) — this is the only place layer order/identity is
+  declared. Do not introduce a parallel registry.
+- **`PP-020` MUST:** the frontend Prompt tab render ONLY from persisted
+  `promptingTrace.layers` (real generations) or the `/llm/prompt-preview`
+  dry-run response `layers[]` (next-request estimate) — via the single
+  `apps/web/components/PromptLayersView.tsx` renderer. No client-side
+  recomposition, heuristic text-splitting, or mock/fallback text.
+- **`PP-020` MUST NOT:** Layer S (`template-skills`, reserved) be populated —
+  it stays empty until `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md` Wave 3
+  ships a resolver.

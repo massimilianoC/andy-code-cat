@@ -20,8 +20,8 @@ import {
 import { buildStyleContextBlock } from "../../../application/llm/styleContextBuilder";
 import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
-import { composeSystemPrompt, composeSystemPromptWithLayers } from "../../../application/llm/systemPromptComposer";
-import { buildGroundedDataContextLayer, buildGlobalBrandLayer, buildBrandDocumentLayerD, buildPresetLayerFromPreset, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
+import { composeSystemPromptWithLayers, type PromptLayerTraceEntry, type TemplateResolution } from "../../../application/llm/systemPromptComposer";
+import { buildGroundedDataContextLayer, buildGlobalBrandLayer, buildBrandDocumentLayerD, buildPresetLayerFromPreset } from "../../../application/llm/systemPromptLayers";
 import { estimateCost } from "../../../application/llm/costPolicy";
 import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
 import { env } from "../../../config";
@@ -47,13 +47,12 @@ import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptC
 import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
-import { extractInlineDocumentLayerD } from "../../../application/documents/inlineDocumentContext";
 import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../../../application/documents/projectLayerDContext";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
 import { PRESET_MAP, withStaticViewportFallback } from "../../../domain/entities/ProjectPreset";
-import { resolveAttachmentPolicyFromConfig, resolveDocumentContextPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
+import { resolveAttachmentPolicyFromConfig, resolveDocumentContextPolicyFromConfig, resolveGovernanceSystemPromptFromConfig } from "../../../domain/entities/PlatformConfig";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { ResolveBrandContext } from "../../../application/use-cases/ResolveBrandContext";
 import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../../../application/use-cases/ResolveBrandDocumentContext";
@@ -86,6 +85,8 @@ type LlmRuntimeContext = {
     prePromptTemplate?: string;
     systemPrompt: string;
     governanceFocusedSystemPrompt?: string;
+    /** Structured breakdown of systemPrompt — same spans, persisted in promptingTrace.layers. */
+    promptLayers: PromptLayerTraceEntry[];
 };
 
 type LlmProviderStatus = {
@@ -354,12 +355,10 @@ export function createLlmRoutes(): Router {
         // the static catalog's viewport framing instead of degrading to document_scroll.
         const preset = presetRaw && project?.presetId ? withStaticViewportFallback(presetRaw, project.presetId) : presetRaw;
 
-        const governanceTemplates =
-            (project?.presetId ? platformConfig?.governanceByProduct?.[project.presetId]?.promptTemplates : undefined)
-            ?? platformConfig?.governanceByProduct?.["default"]?.promptTemplates;
-        const governanceSystemPrompt = governanceTemplates?.generationSystem || undefined;
-        const governanceFocusedBasePrompt = governanceTemplates?.focusedEditSystem || undefined;
         const productKey = project?.presetId ?? "default";
+        const governanceResolved = resolveGovernanceSystemPromptFromConfig(platformConfig, productKey, "generationSystem");
+        const governanceSystemPrompt = governanceResolved.value || undefined;
+        const governanceFocusedBasePrompt = resolveGovernanceSystemPromptFromConfig(platformConfig, productKey, "focusedEditSystem").value || undefined;
         const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, productKey);
         const documentContextPolicy = resolveDocumentContextPolicyFromConfig(platformConfig, productKey);
 
@@ -457,14 +456,38 @@ export function createLlmRoutes(): Router {
             .filter((value): value is string => Boolean(value && value.trim()))
             .join("\n\n---\n\n");
 
+        // Layer T: re-inject the Layer Φ format signal persisted at classify time.
+        // buildLayerT self-suppresses when presetId is set (Layer B already covers it).
+        const templateResolution: TemplateResolution | null = project?.templateResolution
+            ? {
+                presetId: project.presetId ?? null,
+                userTemplateId: null,
+                formatHint: (project.templateResolution.formatHint ?? null) as TemplateResolution["formatHint"],
+                confidence: project.templateResolution.confidence,
+                reasoning: project.templateResolution.reasoning,
+                source: project.templateResolution.source,
+            }
+            : null;
+
         const brandContext = await resolveBrandContext.execute(
             { userId: input.userId, projectId: input.projectId },
         ).catch(() => ({ entries: [], hasMustUse: false }));
         const brandContextLayer = buildGlobalBrandLayer(brandContext, { maxChars: 4000 });
 
-        const systemPrompt = composeSystemPrompt({
+        const layerSources: Partial<Record<import("../../../application/llm/systemPromptComposer").PromptLayerId, string>> = {
+            B: project?.presetId ? "preset-catalog" : "code-default",
+            T: templateResolution?.formatHint ? "project-config" : "empty",
+            E: promptConfig.enabled && promptConfig.prePromptTemplate && roleModel?.promptTemplate
+                ? "project-config+model-template"
+                : roleModel?.promptTemplate ? "model-template"
+                    : promptConfig.enabled && promptConfig.prePromptTemplate ? "project-config" : "empty",
+            F: governanceResolved.source,
+            R: input.systemPrompt ? "request" : "empty",
+        };
+        const composedLayers = composeSystemPromptWithLayers({
             presetId: project?.presetId,
             presetLayer,
+            templateResolution,
             styleBlock,
             brandContextLayer: brandContextLayer || undefined,
             documentContextLayer: documentContextLayer || undefined,
@@ -474,7 +497,9 @@ export function createLlmRoutes(): Router {
             requestSystemPrompt: input.systemPrompt,
             governanceSystemPrompt,
             outputLanguage: input.outputLanguage ?? null,
+            sources: layerSources,
         });
+        const systemPrompt = composedLayers.composed;
 
         const governanceFocusedSystemPrompt = [
             roleModel?.focusPromptTemplate,
@@ -495,6 +520,7 @@ export function createLlmRoutes(): Router {
                 prePromptTemplate: effectivePrePromptTemplate || undefined,
                 systemPrompt,
                 governanceFocusedSystemPrompt: governanceFocusedSystemPrompt || undefined,
+                promptLayers: composedLayers.layers,
             };
         }
 
@@ -509,6 +535,7 @@ export function createLlmRoutes(): Router {
             prePromptTemplate: effectivePrePromptTemplate || undefined,
             systemPrompt,
             governanceFocusedSystemPrompt: governanceFocusedSystemPrompt || undefined,
+            promptLayers: composedLayers.layers,
         };
     }
 
@@ -713,75 +740,26 @@ export function createLlmRoutes(): Router {
 
     router.get("/projects/:projectId/llm/prompt-preview", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
-            const promptConfig = await getLlmPromptConfig.execute(req.sandbox!.projectId);
-            const [moodboard, userProfile, project, platformConfig] = await Promise.all([
-                moodboardRepository.findByProjectId(req.sandbox!.projectId),
-                userStyleProfileRepository.findByUserId(req.auth!.userId),
-                projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId),
-                platformConfigRepo.get().catch(() => null),
-            ]);
-            const presetRaw = project?.presetId
-                ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
-                : null;
-            // PP-018 pre-reseed safety — mirror of the generation path.
-            const preset = presetRaw && project?.presetId ? withStaticViewportFallback(presetRaw, project.presetId) : presetRaw;
-            const styleBlock = buildStyleContextBlock(userProfile, moodboard);
-            const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
-            const governanceSystemPrompt = platformConfig?.governanceByProduct?.[project?.presetId ?? "default"]?.promptTemplates?.generationSystem || undefined;
-            const previewAssets = await assetRepository.listByProject(req.sandbox!.projectId, req.auth!.userId).catch(() => []);
-            const previewBrandDocuments = await resolveBrandDocumentContext
-                .execute({ userId: req.auth!.userId, projectId: req.sandbox!.projectId })
-                .catch(() => []);
-            const previewBrandDocumentLayer = buildBrandDocumentLayerD(previewBrandDocuments);
-            const previewRemainingBudget = Math.max(0, env.ENRICHMENT_LAYER_D_MAX_CHARS - previewBrandDocumentLayer.length);
-            const previewProjectKnowledgeLayer = previewRemainingBudget > 0
-                ? buildProjectKnowledgeLayer(previewAssets, { maxChars: previewRemainingBudget })
-                : "";
-            // Mirror the generation path: include live extraction of not-yet-enriched docs
-            // so the preview reflects what would actually be sent now.
-            const previewInlineBudget = Math.max(0, previewRemainingBudget - previewProjectKnowledgeLayer.length);
-            const previewInlineDoc = previewInlineBudget > 500
-                ? await extractInlineDocumentLayerD(previewAssets, getFileStorage(), {
-                    maxAssets: 3,
-                    maxCharsPerDoc: Math.min(2500, previewInlineBudget),
-                }).catch(() => ({ block: "", documentNames: [] }))
-                : { block: "", documentNames: [] };
-            const documentContextLayer = [previewBrandDocumentLayer, previewProjectKnowledgeLayer, previewInlineDoc.block]
-                .filter(Boolean).join("\n\n") || undefined;
-            const dataContextLayer = project?.presetId === "data-dashboard"
-                ? (buildGroundedDataContextLayer(previewAssets) || undefined)
-                : undefined;
-            const brandContext = await resolveBrandContext.execute(
-                { userId: req.auth!.userId, projectId: req.sandbox!.projectId },
-            ).catch(() => ({ entries: [], hasMustUse: false }));
-            const brandContextLayer = buildGlobalBrandLayer(brandContext, { maxChars: 4000 }) || undefined;
-            const layers = composeSystemPromptWithLayers({
-                presetId: project?.presetId,
-                presetLayer,
-                styleBlock,
-                brandContextLayer,
-                documentContextLayer,
-                dataContextLayer,
-                prePromptTemplate: promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-                outputBudgetPolicy: buildOutputBudgetPolicy(),
-                governanceSystemPrompt,
+            const uiLanguage = typeof req.query.uiLanguage === "string" ? req.query.uiLanguage : undefined;
+            const provider = typeof req.query.provider === "string" ? req.query.provider : undefined;
+            const model = typeof req.query.model === "string" ? req.query.model : undefined;
+            // Dry-run of the EXACT generation path: same resolver, same composer, no provider call.
+            const context = await resolveContext({
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                pipelineRole: "coding",
+                provider,
+                model,
+                outputLanguage: uiLanguage,
             });
             res.json({
-                presetId: project?.presetId ?? null,
-                layers: {
-                    a_baseConstraints: layers.layerA,
-                    l_outputLanguage: layers.layerL,
-                    b_presetModule: layers.layerB,
-                    c_styleContext: layers.layerC,
-                    g_brandContext: layers.layerG,
-                    d_documentContext: layers.layerD,
-                    x_dataContext: layers.layerX,
-                    e_prePromptTemplate: layers.layerE,
-                    f_governance: layers.layerF,
-                    budgetPolicy: layers.budgetPolicy,
-                },
-                composed: layers.composed,
-                tokenEstimate: Math.ceil(layers.composed.length / 4),
+                dryRun: true,
+                presetId: null, // kept for backward-compat; presetId is visible in layers[].source
+                provider: context.providerCatalog.provider,
+                model: context.modelId,
+                effectiveSystemPrompt: context.systemPrompt,
+                layers: context.promptLayers,
+                tokenEstimate: Math.ceil(context.systemPrompt.length / 4),
             });
         } catch (error) {
             next(error);
@@ -1078,6 +1056,7 @@ export function createLlmRoutes(): Router {
                     promptConfigId: context.promptConfigId,
                     prePromptTemplate: context.prePromptTemplate,
                     effectiveSystemPrompt: effectiveSystemPrompt,
+                    layers: effectiveSystemPrompt === context.systemPrompt ? context.promptLayers : undefined,
                     messagesSentToLlm: messages,
                     focusContext: body.focusContext,
                 },
@@ -1601,6 +1580,7 @@ export function createLlmRoutes(): Router {
                     promptConfigId: context.promptConfigId,
                     prePromptTemplate: context.prePromptTemplate,
                     effectiveSystemPrompt: effectiveSystemPrompt,
+                    layers: effectiveSystemPrompt === context.systemPrompt ? context.promptLayers : undefined,
                     messagesSentToLlm: messages,
                     focusContext: body.focusContext,
                 },

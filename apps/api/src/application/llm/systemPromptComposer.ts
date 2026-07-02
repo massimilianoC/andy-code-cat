@@ -179,8 +179,3 @@ export function composeSystemPromptWithLayers(opts: ComposeOpts): ResolvedPrompt
 
     return { layerA, layerL, layerB, layerS, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, layerR, composed, layers };
 }
-
-/** @deprecated use composeSystemPromptWithLayers(...).composed — kept only until every call site migrates. */
-export function composeSystemPrompt(opts: ComposeOpts): string {
-    return composeSystemPromptWithLayers(opts).composed;
-}
