@@ -112,10 +112,12 @@ function parseXml(raw: string): ParsedDocument {
 
     // Bounded to avoid polynomial backtracking on unclosed tags repeated many times
     // (e.g. "<script<script<script..." with no closing tag) — CodeQL js/polynomial-redos.
-    // Closing tag allows whitespace before ">" (e.g. "</script >") — CodeQL js/bad-tag-filter.
+    // Closing tag allows any content before ">" (e.g. "</script foo="bar">") — browsers treat
+    // that as a valid close tag, so a strict whitespace-only match is bypassable
+    // (CodeQL js/bad-tag-filter).
     const textOnly = raw
-        .replace(/<script[\s\S]{0,50000}?<\/script\s*>/gi, " ")
-        .replace(/<style[\s\S]{0,50000}?<\/style\s*>/gi, " ")
+        .replace(/<script[\s\S]{0,50000}?<\/script[^>]*>/gi, " ")
+        .replace(/<style[\s\S]{0,50000}?<\/style[^>]*>/gi, " ")
         .replace(/<[^>]+>/g, " ")
         .replace(/\s+/g, " ")
         .trim();
