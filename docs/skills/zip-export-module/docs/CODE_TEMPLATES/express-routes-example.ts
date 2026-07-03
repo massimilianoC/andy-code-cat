@@ -9,6 +9,7 @@
  * `yourFileStorage` stand-ins with whatever your project already has.
  */
 import { Router, type Request, type Response, type NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import fs from "fs";
 import jwt from "jsonwebtoken";
 import { exportProjectAsZip } from "./export-zip-use-case";
@@ -36,6 +37,15 @@ interface DownloadTokenPayload {
 
 export function createExportRoutes(): Router {
     const router = Router();
+
+    // Downloads read from disk / stream the ZIP — rate-limit to blunt abuse
+    // (scripted download loops, token brute-forcing on the public route below).
+    const downloadLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        limit: 30,
+        standardHeaders: true,
+        legacyHeaders: false,
+    });
 
     // -----------------------------------------------------------------
     // POST /projects/:projectId/export — create the ZIP (synchronous for MVP)
@@ -90,6 +100,7 @@ export function createExportRoutes(): Router {
     // -----------------------------------------------------------------
     router.get(
         "/exports/:exportId/download",
+        downloadLimiter,
         yourAuthMiddleware,
         async (req: Request & { auth?: { userId: string } }, res, next) => {
             try {
@@ -128,7 +139,7 @@ export function createExportRoutes(): Router {
     // you need bare-link downloads (emails, curl, plain <a href>) — otherwise
     // the Bearer-authenticated route above is simpler and just as secure.
     // -----------------------------------------------------------------
-    router.get("/download/:token", async (req, res, next) => {
+    router.get("/download/:token", downloadLimiter, async (req, res, next) => {
         try {
             let payload: DownloadTokenPayload;
             try {
