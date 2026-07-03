@@ -31,6 +31,7 @@ function normalizePreset(input: ProjectPresetUpsertInput, existing?: ProjectPres
         outputSpec: {
             pageModel: input.outputSpec?.pageModel ?? existing?.outputSpec?.pageModel ?? "single_page",
             sectionModel: input.outputSpec?.sectionModel ?? existing?.outputSpec?.sectionModel ?? "scroll",
+            viewportModel: input.outputSpec?.viewportModel ?? existing?.outputSpec?.viewportModel,
             recommendedPageCount: input.outputSpec?.recommendedPageCount ?? existing?.outputSpec?.recommendedPageCount,
             aspectRatio: input.outputSpec?.aspectRatio ?? existing?.outputSpec?.aspectRatio,
             cssConstraints: input.outputSpec?.cssConstraints ?? existing?.outputSpec?.cssConstraints,

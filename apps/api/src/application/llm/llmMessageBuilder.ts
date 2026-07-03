@@ -55,7 +55,7 @@ export function buildOutputBudgetPolicy(): string {
     const maxTok = env.LLM_DEFAULT_MAX_COMPLETION_TOKENS;
     return [
         "## OUTPUT BUDGET POLICY",
-        "Keep outputs compact and parse-safe.",
+        "Keep outputs compact and parse-safe — but COMPLETENESS COMES FIRST: always ship a fully functional, publish-ready result (see Layer A completeness contract). Compact means efficient markup and no repetition, never partial scope, truncated code, or deferring work to 'next steps'.",
         "- Return ONLY one raw JSON object — no markdown fences, no prose before or after the JSON.",
         "- Required keys: chat (with summary, bullets, nextActions) and artifacts (with html, css, js).",
         "- For every new image/background/logo/avatar/decorative visual, use asset://media/<lowercase-kebab-key> in HTML/CSS and add a matching mediaManifest request.",
@@ -64,7 +64,6 @@ export function buildOutputBudgetPolicy(): string {
         "- Keep mediaManifest semantic and provider-agnostic: write search intent and optional generationPrompt, never provider API syntax.",
         "- Never emit random/provider image URLs such as loremflickr.com, picsum.photos, pexels.com, pixabay.com, or unsplash.com in new artifacts.",
         "- These media placeholder rules are non-editable platform rules and override any earlier editable project template, model template, governance prompt, or request prompt that suggests direct stock/provider image URLs.",
-        "- VISIBILITY (non-editable): every section, card, image and text block MUST be fully visible with CSS alone even if JS never runs. Never leave content at opacity:0 / display:none / collapsed waiting for a script. Do not use AOS/WOW/ScrollReveal or Alpine x-collapse/x-cloak/x-show to hide content unless you load the required plugin AND keep a CSS-only visible fallback. Prefer native <details>/<summary> for collapsible UI.",
         "",
         "## MEDIA CONTRACT (how to declare images)",
         "For EVERY image, background, logo, avatar, or decorative visual the page needs:",
@@ -86,15 +85,16 @@ export function buildOutputBudgetPolicy(): string {
         "Place mediaManifest at the TOP LEVEL of the JSON, as a sibling of chat and artifacts — NOT inside artifacts.",
         "",
         `- TOTAL OUTPUT MUST stay under ${maxTok.toLocaleString()} tokens. Target 8000–32000 tokens for typical requests, up to budget for large/complex outputs. Never repeat the entire artifact if only a small change is needed.`,
+        "- For chat-preview artifact generation, target roughly 24000–32000 completion tokens total (thinking + final JSON/artifacts) for most requests. Use larger budgets only when artifact complexity genuinely requires it.",
         "- HTML target: under 30 KB. Factor repeated visual blocks into CSS classes rather than duplicating markup.",
         "- Keep artifacts concise and functional; avoid unnecessary boilerplate.",
         "- artifacts.css and artifacts.js must be plain code strings without <style> or <script> wrappers.",
         "- Use standard single-backslash JSON escaping: \\\" for quotes inside HTML, \\n for newlines. Never double-escape.",
         "",
         "## REASONING / THINKING BUDGET (critical)",
-        "- Do NOT over-analyze the task. Keep internal reasoning/thinking under 2000 tokens.",
-        "- Skip exploratory analysis and enumeration of rejected alternatives.",
-        "- For code generation: plan briefly (under 300 words), then produce the JSON output immediately.",
+        "- Keep internal reasoning brief (target under 2000 tokens).",
+        "- Plan once, then produce the JSON output immediately. Do not enumerate rejected alternatives or re-check the same constraint list repeatedly.",
+        "- Favor pragmatic execution over exhaustive deliberation: once you have enough information to build the artifact safely, stop analyzing and emit the result.",
         "- Never restate the entire user request in your reasoning. Summarize intent in one sentence, then code.",
     ].join("\n");
 }

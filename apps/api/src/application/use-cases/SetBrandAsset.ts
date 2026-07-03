@@ -1,5 +1,6 @@
 import type { BrandAssetRepository } from "../../domain/repositories/BrandAssetRepository";
-import type { BrandAsset, BrandAssetScope, BrandAssetRole, BrandAssetPolicy, BrandAssetValueType } from "../../domain/entities/BrandAsset";
+import type { BrandAsset, BrandAssetScope, BrandAssetRole, BrandAssetPolicy, BrandAssetValueType, BrandAssetEnrichmentStatus } from "../../domain/entities/BrandAsset";
+import type { AssetEnrichmentTrace } from "../../domain/entities/AssetEnrichmentTrace";
 import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAssetRepository";
 
 export interface SetBrandAssetTextInput {
@@ -31,6 +32,25 @@ export interface SetBrandAssetFileInput {
     originalName: string;
     mimeType: string;
     fileSize: number;
+}
+
+export interface SetBrandAssetDocumentInput {
+    scope: BrandAssetScope;
+    ownerUserId?: string;
+    projectId?: string;
+    customRoleLabel?: string;
+    policy: BrandAssetPolicy;
+    description?: string;
+    isActive?: boolean;
+    priority?: number;
+    storedFilename: string;
+    originalName: string;
+    mimeType: string;
+    fileSize: number;
+    // One-time enrichment result (computed by EnrichBrandDocument before this call)
+    documentFragment?: string;
+    enrichmentTrace?: AssetEnrichmentTrace | null;
+    enrichmentStatus: BrandAssetEnrichmentStatus;
 }
 
 export interface SetBrandAssetPromoteInput {
@@ -89,6 +109,29 @@ export class SetBrandAsset {
         });
     }
 
+    /** Persist a brand document whose Layer D fragment was already computed once by EnrichBrandDocument. */
+    async createDocument(input: SetBrandAssetDocumentInput): Promise<BrandAsset> {
+        return this.brandAssetRepository.create({
+            scope: input.scope,
+            ownerUserId: input.ownerUserId,
+            projectId: input.projectId,
+            role: "brand_document",
+            customRoleLabel: input.customRoleLabel,
+            policy: input.policy,
+            valueType: "document_ref",
+            storedFilename: input.storedFilename,
+            originalName: input.originalName,
+            mimeType: input.mimeType,
+            fileSize: input.fileSize,
+            documentFragment: input.documentFragment,
+            enrichmentTrace: input.enrichmentTrace ?? null,
+            enrichmentStatus: input.enrichmentStatus,
+            description: input.description,
+            isActive: input.isActive ?? true,
+            priority: input.priority ?? 0,
+        });
+    }
+
     async promote(input: SetBrandAssetPromoteInput): Promise<BrandAsset> {
         const source = await this.projectAssetRepository.findById(
             input.sourceAssetId,
@@ -97,6 +140,32 @@ export class SetBrandAsset {
         );
         if (!source) throw new Error(`Source asset ${input.sourceAssetId} not found`);
         if (!source.storedFilename) throw new Error("Source asset has no stored file");
+
+        // Brand document promote: reuse the source asset's already-computed enrichment trace
+        // (zero new LLM cost — the extraction happened when the file was attached to its project).
+        if (input.role === "brand_document") {
+            const trace = source.enrichmentTrace ?? null;
+            return this.brandAssetRepository.create({
+                scope: input.scope,
+                ownerUserId: input.ownerUserId,
+                projectId: input.projectId,
+                role: "brand_document",
+                customRoleLabel: input.customRoleLabel,
+                policy: input.policy,
+                valueType: "document_ref",
+                storedFilename: source.storedFilename,
+                originalName: source.originalName,
+                mimeType: source.mimeType,
+                fileSize: source.fileSize,
+                promotedFromAssetId: source.id,
+                documentFragment: trace?.renderedFragment ?? undefined,
+                enrichmentTrace: trace,
+                enrichmentStatus: trace?.provenance.enrichmentStatus === "ready" ? "ready" : "pending",
+                description: input.description,
+                isActive: input.isActive ?? true,
+                priority: input.priority ?? 0,
+            });
+        }
 
         return this.brandAssetRepository.create({
             scope: input.scope,

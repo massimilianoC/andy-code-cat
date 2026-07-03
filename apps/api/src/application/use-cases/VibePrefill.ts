@@ -52,11 +52,11 @@ function normalizeLang(raw?: string | null): string {
 
 // ── Default draft ─────────────────────────────────────────────────────────────
 
-function defaultDraft(prompt: string, outputLanguage = "en"): ZeroEffortDraft {
+function defaultDraft(prompt: string, outputLanguage = "en", presetId = "landing"): ZeroEffortDraft {
     const projectName = prompt.trim().slice(0, 64) || "Project";
     return {
         businessName: projectName,
-        presetId: "landing",
+        presetId,
         primaryGoal: prompt.trim().slice(0, 500) || "Modern, professional website.",
         audience: "General audience interested in this project.",
         outputLanguage,
@@ -205,7 +205,13 @@ function defaultDataDashboardDraft(prompt: string, attachmentMeta?: AttachmentMe
 
 // ── Response parser ───────────────────────────────────────────────────────────
 
-function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string): { draft: ZeroEffortDraft; confidence: number } {
+function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, detectedTemplateId?: string | null): { draft: ZeroEffortDraft; confidence: number } {
+    // The template detected by Layer Φ (VibeClassify) is authoritative: when it names a
+    // real preset, it becomes the prefilled presetId and takes priority over whatever the
+    // prefill LLM emits (which often collapses a specific template like "infographic" into a
+    // generic siteType → "neutral"). The user can still change it in the zero-effort form
+    // before launch. Without this anchor the identified template was silently lost.
+    const detectedPreset = detectedTemplateId && VALID_PRESET_IDS.has(detectedTemplateId) ? detectedTemplateId : "";
     let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
     const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
 
@@ -219,9 +225,10 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string):
         // Accept new presetId field or old siteType for backward compat with cached drafts
         const rawPreset = typeof parsed.presetId === "string" ? parsed.presetId.trim()
             : typeof parsed.siteType === "string" ? parsed.siteType.trim() : "";
-        const presetId: string = VALID_PRESET_IDS.has(rawPreset)
-            ? rawPreset
-            : (SITE_TYPE_COMPAT[rawPreset] ?? "landing");
+        const presetId: string = detectedPreset
+            || (VALID_PRESET_IDS.has(rawPreset)
+                ? rawPreset
+                : (SITE_TYPE_COMPAT[rawPreset] ?? "landing"));
 
         const primaryGoal = typeof parsed.primaryGoal === "string" && parsed.primaryGoal.trim().length >= 8
             ? parsed.primaryGoal.trim().slice(0, 3000)
@@ -284,9 +291,10 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string):
 
         const hasPartial = !!(partialPresetRaw || partialName || partialGoal);
         if (hasPartial) {
-            const partialPresetId = VALID_PRESET_IDS.has(partialPresetRaw)
-                ? partialPresetRaw
-                : (SITE_TYPE_COMPAT[partialPresetRaw] ?? "landing");
+            const partialPresetId = detectedPreset
+                || (VALID_PRESET_IDS.has(partialPresetRaw)
+                    ? partialPresetRaw
+                    : (SITE_TYPE_COMPAT[partialPresetRaw] ?? "landing"));
             const recoveredDraft: ZeroEffortDraft = {
                 businessName: partialName?.slice(0, 120) || prompt.trim().slice(0, 64) || "Project",
                 presetId: partialPresetId,
@@ -296,7 +304,7 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string):
             };
             return { draft: recoveredDraft, confidence: 0.4 };
         }
-        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage)), confidence: 0 };
+        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage), detectedPreset || "landing"), confidence: 0 };
     }
 }
 
@@ -552,7 +560,7 @@ export class VibePrefill {
                 });
             }
 
-            const websitePrefill = parsePrefillResponse(raw, input.prompt, resolvedUiLanguage);
+            const websitePrefill = parsePrefillResponse(raw, input.prompt, resolvedUiLanguage, input.templateId);
             const dataPrefill = resolvedMode === "data_dashboard"
                 ? parseDataDashboardPrefillResponse(raw, input.prompt, input.attachmentMeta)
                 : undefined;

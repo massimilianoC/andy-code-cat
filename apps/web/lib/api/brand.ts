@@ -55,6 +55,37 @@ async function uploadFile(
     return (json as BrandAssetResponse).asset;
 }
 
+export interface BrandDocumentMeta {
+    policy: string;
+    description?: string;
+    isActive?: boolean;
+    priority?: number;
+}
+
+async function uploadDocument(
+    url: string,
+    token: string,
+    file: File,
+    meta: BrandDocumentMeta,
+    extraHeaders?: Record<string, string>,
+): Promise<BrandAssetDto> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("policy", meta.policy);
+    if (meta.description) formData.append("description", meta.description);
+    if (meta.isActive !== undefined) formData.append("isActive", String(meta.isActive));
+    if (meta.priority !== undefined) formData.append("priority", String(meta.priority));
+    const res = await fetch(`${baseUrl()}${url}`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}`, ...extraHeaders },
+        body: formData,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(res.status, json);
+    return (json as BrandAssetResponse).asset;
+}
+
 // ── Platform (Super Admin) ───────────────────────────────────────────────────
 
 export async function listAdminBrandAssets(token: string): Promise<BrandAssetDto[]> {
@@ -78,6 +109,10 @@ export async function uploadAdminBrandAssetFile(
 export async function updateAdminBrandAsset(token: string, id: string, patch: UpdateBrandBody): Promise<BrandAssetDto> {
     const data = await call<BrandAssetResponse>("PATCH", `/v1/admin/brand-assets/${id}`, patch, { Authorization: `Bearer ${token}` });
     return data.asset;
+}
+
+export async function uploadAdminBrandDocument(token: string, file: File, meta: BrandDocumentMeta): Promise<BrandAssetDto> {
+    return uploadDocument("/v1/admin/brand-assets/document", token, file, meta);
 }
 
 export async function deleteAdminBrandAsset(token: string, id: string): Promise<void> {
@@ -109,6 +144,10 @@ export async function updateUserBrandAsset(token: string, id: string, patch: Upd
     return data.asset;
 }
 
+export async function uploadUserBrandDocument(token: string, file: File, meta: BrandDocumentMeta): Promise<BrandAssetDto> {
+    return uploadDocument("/v1/users/me/brand-assets/document", token, file, meta);
+}
+
 export async function deleteUserBrandAsset(token: string, id: string): Promise<void> {
     await call("DELETE", `/v1/users/me/brand-assets/${id}`, undefined, { Authorization: `Bearer ${token}` });
 }
@@ -137,6 +176,10 @@ export async function updateProjectBrandAsset(token: string, projectId: string, 
         { Authorization: `Bearer ${token}`, "x-project-id": projectId },
     );
     return data.asset;
+}
+
+export async function uploadProjectBrandDocument(token: string, projectId: string, file: File, meta: BrandDocumentMeta): Promise<BrandAssetDto> {
+    return uploadDocument(`/v1/projects/${projectId}/brand-assets/document`, token, file, meta, { "x-project-id": projectId });
 }
 
 export async function deleteProjectBrandAsset(token: string, projectId: string, id: string): Promise<void> {

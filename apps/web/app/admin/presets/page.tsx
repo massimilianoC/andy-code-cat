@@ -462,6 +462,19 @@ export default function AdminPresetsPage() {
                                     {draft.outputSpec.printReady ? "Enabled" : "Disabled"}
                                 </Button>
                             </div>
+                            <div className="space-y-1">
+                                <Label>Viewport model</Label>
+                                <select
+                                    value={draft.outputSpec.viewportModel ?? "document_scroll"}
+                                    onChange={(e) => setDraft((prev) => ({ ...prev, outputSpec: { ...prev.outputSpec, viewportModel: e.target.value as NonNullable<AdminProjectPresetDto["outputSpec"]["viewportModel"]> } }))}
+                                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                                >
+                                    <option value="document_scroll">document_scroll</option>
+                                    <option value="fullscreen_app">fullscreen_app</option>
+                                    <option value="slide_deck">slide_deck</option>
+                                    <option value="print">print</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div className="flex flex-wrap gap-2">

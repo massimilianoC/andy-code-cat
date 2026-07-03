@@ -94,9 +94,8 @@ export function createDidacticRoutes(): Router {
     const router = Router();
     const sandbox = createSandboxMiddleware(new MongoProjectRepository());
 
-    // All didactic routes are auth + sandbox protected
-    router.use(authMiddleware);
-    router.use(sandbox);
+    // Scope auth + sandbox to the didactic project namespace so unrelated /v1 routes can fall through.
+    router.use("/projects/:projectId/didactic", authMiddleware, sandbox);
 
     const knowledgeRepo = new MongoDidacticArtifactKnowledgeRepository();
     const qnaRepo = new MongoDidacticQnaRepository();

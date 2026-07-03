@@ -4,6 +4,7 @@ import type { AssetEnrichmentTrace } from "../../domain/entities/AssetEnrichment
 import { FORMAT_HINT_RULES } from "../prompting/formatHintRules";
 import { env } from "../../config";
 import type { ResolvedBrandContext } from "../use-cases/ResolveBrandContext";
+import type { ResolvedBrandDocument } from "../use-cases/ResolveBrandDocumentContext";
 import type { BrandAssetScope, BrandAssetPolicy } from "../../domain/entities/BrandAsset";
 
 /** Default per-asset fragment budget. Tuned so 3 assets fit comfortably under the 50 KB Layer D max. */
@@ -234,17 +235,26 @@ export function buildBaseConstraintsLayer(): string {
         "You are a static web page generator for the Andy Code Cat platform.",
         "Your output must always be a complete, self-contained page that can be served by nginx without modifications.",
         "",
+        "COMPLETENESS & SHIP-READINESS CONTRACT (non-negotiable, applies to EVERY output type):",
+        "- Always deliver a COMPLETE, end-to-end, publish-ready result in this single response — a working POC/MVP, never a skeleton, outline, or scaffold.",
+        "- NEVER return only a structure and defer the rest to 'next steps', 'future improvements', or 'you can now add…'. If you would propose a follow-up step to make it functional, do that work now instead.",
+        "- Real, final content — not lorem ipsum, not 'TODO', not placeholder headings. Write the actual copy, labels, and data the artifact needs (invent credible, clearly-replaceable content when facts are unknown).",
+        "- Every feature, control, link and interaction you introduce MUST be fully implemented and working in artifacts.js: forms validate and handle submit, navigation links resolve to real in-page sections/anchors, buttons perform their action, dynamic UI actually updates.",
+        "- Prefer leveraging approved CDN libraries to reach a functional result rather than leaving behaviour unimplemented.",
+        "- Match completeness to the format: a landing/website is publish-ready with full copy and working CTAs/forms; a slideshow has all its slides; a videogame is fully PLAYABLE (start → core loop → win/lose → restart) with real input handling and HUD, not just a title screen.",
+        "- Token efficiency serves completeness, never the opposite: optimise by compact markup and reuse, NEVER by shrinking scope, truncating, or omitting parts. If the budget is tight, ship a smaller scope that is 100% functional rather than a larger one that is incomplete.",
+        "",
         "Non-negotiable rules for ALL output types:",
         "- Produce exactly 1 HTML file + 1 CSS file + 1 JS file — standalone and executable without a build step.",
         "- All external dependencies (libraries, fonts, icons) via CDN only (<script src>, <link rel=stylesheet>) — never import via npm or require().",
-        "- Mobile-first responsive design: optimize for 375px (mobile), 768px (tablet), 1280px (desktop).",
-        "- Semantic HTML5: use <header>, <nav>, <main>, <section>, <article>, <footer> where semantically appropriate.",
+        "- Responsive by default (soft): adapt to the target viewport(s) implied by the format and the request. This is only a fallback — a VIEWPORT MODE directive from the preset/format layer overrides it. Never force a fixed full-viewport experience into a scrollable landing/marketing document.",
+        "- Layout, page structure, semantic landmarks and viewport framing are owned by the preset/format layer (VIEWPORT MODE), not by these base rules. Do not assume a landing/document structure unless the format calls for it.",
         "- Accessibility baseline: meaningful alt text on images, sufficient color contrast (WCAG AA), keyboard-navigable focus.",
-        "- Performance: no render-blocking resources above the fold, use loading=\"lazy\" on below-the-fold images.",
+        "- Performance: keep the critical render path light; use loading=\"lazy\" for off-screen images when the layout scrolls.",
         "- No JavaScript framework (React, Vue, Angular, Svelte) — vanilla JS only.",
         "- CSS strategy: choose Tailwind CDN OR vanilla CSS — never both in the same output.",
         "- artifacts.css and artifacts.js must be plain strings without <style> or <script> wrappers.",
-        "- All JavaScript MUST go exclusively in artifacts.js. Never embed script logic inline in the HTML artifact — not in <script> tags, not as event attributes. In the HTML, reference JS only with: <script src=\"script.js\"></script>.",
+        "- All JavaScript MUST go exclusively in artifacts.js. Never embed script logic inline in the HTML artifact — not in <script> tags, not as event attributes. In the HTML, reference exactly one external script — <script src=\"script.js\"></script> — placed immediately before </body>, with no defer, async, or type='module'.",
         "- For vanilla (non-Tailwind) CSS, reference the stylesheet exactly once in <head> with: <link rel=\"stylesheet\" href=\"style.css\">. The platform serves artifacts.css as style.css and artifacts.js as script.js — NEVER use other filenames (e.g. app.css, app.js, main.js) or they will 404 in publication.",
         "",
         "HTML compactness rules (mandatory):",
@@ -255,15 +265,21 @@ export function buildBaseConstraintsLayer(): string {
         "- Avoid inline style= attributes; put all styling in artifacts.css.",
         "- Do not repeat identical class lists across sibling elements — factor them into a shared parent or CSS rule.",
         "",
-        "Visibility-without-JS rules (NON-EDITABLE platform rules — they override any project/model/governance template; preview iframe runs allow-scripts only and external assets may fail):",
+        "Visibility-without-JS rules (platform rules):",
         "- All primary content (text, images, sections) MUST be visible on initial render with CSS alone, before any JS executes.",
         "- Never set `opacity:0`, `visibility:hidden`, `height:0`, `display:none`, or off-screen `transform` as the DEFAULT state of content unless a pure-CSS rule restores it without JS (e.g. a `@keyframes` animation that ENDS in the visible state and is applied directly in CSS).",
         "- JavaScript may ENHANCE (animate, reveal, interact) but must never GATE the appearance of static content. If the script never runs, every section, card, image and text block must still be fully visible.",
         "- FORBIDDEN unless you ALSO ship a CSS-only visible fallback AND load every required plugin: scroll-reveal libraries (AOS, WOW.js, ScrollReveal), and Alpine directives that hide content (`x-show`, `x-collapse`, `x-cloak`, `x-transition`).",
         "- Specifically: do NOT use Alpine `x-collapse` or `x-cloak` unless you load the matching plugin via CDN (e.g. `@alpinejs/collapse`) AND the content is visible by default without it. Prefer the native HTML `<details>`/`<summary>` element for collapsible sections — it needs no JS and is always visible.",
         "- Reveal-on-scroll pattern that is SAFE: start elements visible, then add an OPTIONAL entrance animation via `@keyframes` in CSS only. Do not couple visibility to a JS-added class without a CSS fallback.",
-        "- The HTML must reference exactly one external script: `<script src='script.js'></script>` placed immediately before `</body>`. Do not add `defer`, `async`, `type='module'`, or inline `<script>` blocks.",
         "- The iframe sandbox is `allow-scripts` only: no `window.parent`/`top` access, no top-level navigation, no `localStorage` writes from the page logic that affect the parent. Persist game state to memory only.",
+        "",
+        "Interactive reliability rules (games / fullscreen_app / canvas output):",
+        "- Do not rely on keyboard focus alone. Make the experience playable with pointer/touch, focus the main container on load and pointerdown when applicable, and listen for keyboard input on window rather than document.body.",
+        "- Render visible on-screen controls or interaction hints whenever the experience depends on movement, action, or scene navigation.",
+        "- Keep runtime state in memory only. Do not rely on localStorage, sessionStorage, indexedDB, or cookies.",
+        "- For game/canvas/fullscreen experiences, prefer vanilla CSS in artifacts.css over Tailwind CDN unless the format explicitly needs document-style UI.",
+        "- Ship the full playable loop in one pass: entry/start state, active controls, core loop, feedback/HUD, completion or fail state, and restart/replay.",
         "",
         "Canvas / game-engine container rules (mandatory when using Phaser, Three.js, A-Frame, p5.js, etc.):",
         "- The mounting parent MUST be a `<div>` (or `<a-scene>` for A-Frame) with a non-empty id, explicit width/height in CSS, and visible by default.",
@@ -280,10 +296,64 @@ export function buildBaseConstraintsLayer(): string {
  * Contains the preset's systemPromptModule (structural format rules) and optional
  * cssConstraints (verbatim CSS required in the generated output).
  */
-export function buildPresetLayerFromPreset(preset?: Pick<ProjectPreset, "outputSpec"> | null): string {
-    if (!preset) return "";
+type ViewportModel = NonNullable<ProjectPreset["outputSpec"]["viewportModel"]>;
 
-    const parts: string[] = [preset.outputSpec.systemPromptModule];
+/**
+ * Deterministic VIEWPORT MODE block — single source for layout framing.
+ *
+ * This is the layout characterization that Layer A no longer dictates (it now keeps only the
+ * technical floor). Derived solely from `viewportModel`, so it cannot drift from free text.
+ * Absent viewportModel is treated as `document_scroll` (legacy responsive-document behaviour),
+ * which preserves the responsive/semantic directives that used to live in Layer A.
+ */
+export function buildViewportModeBlock(viewportModel?: ViewportModel): string {
+    const mode: ViewportModel = viewportModel ?? "document_scroll";
+    switch (mode) {
+        case "fullscreen_app":
+            return [
+                "## VIEWPORT MODE — FULLSCREEN APP",
+                "The experience FILLS the viewport. It IS the page — never embed it inside a landing/marketing layout.",
+                "- Root/mount container sized to 100dvw × 100dvh; set html, body { margin:0; height:100%; overflow:hidden } — NO page scroll.",
+                "- No document chrome: no marketing header, hero, feature sections, or footer around the experience.",
+                "- Fit and scale to the viewport on load and on resize; support desktop and touch input.",
+                "- Any UI (HUD, menus, controls) overlays the experience inside the viewport, not as a scrolling document.",
+            ].join("\n");
+        case "slide_deck":
+            return [
+                "## VIEWPORT MODE — SLIDE DECK",
+                "Full-viewport slides: exactly one slide visible per screen (100dvw × 100dvh).",
+                "- No document scroll; html, body { margin:0; overflow:hidden }.",
+                "- Navigate slides via keyboard (arrows / space / page keys) and touch swipe; expose a progress indicator.",
+                "- Each slide is self-contained and legible without scrolling.",
+            ].join("\n");
+        case "print":
+            return [
+                "## VIEWPORT MODE — PRINT CANVAS",
+                "Render a fixed, print-ready canvas per the CSS size constraints — not a scrollable web document.",
+                "- Respect the declared page size/aspect ratio; design for the fixed canvas, not for viewport reflow.",
+            ].join("\n");
+        case "document_scroll":
+        default:
+            return [
+                "## VIEWPORT MODE — RESPONSIVE DOCUMENT",
+                "A responsive, vertically scrollable page.",
+                "- Mobile-first responsive design across common breakpoints (~375px mobile, ~768px tablet, ~1280px desktop).",
+                "- Use semantic landmarks (header, nav, main, section, article, footer) where appropriate to the content.",
+                "- Lazy-load below-the-fold images (loading=\"lazy\").",
+            ].join("\n");
+    }
+}
+
+export function buildPresetLayerFromPreset(preset?: Pick<ProjectPreset, "outputSpec"> | null): string {
+    // No preset: still emit the default document_scroll viewport framing. Layer A no longer
+    // carries responsive/document directives (PP-018), so without this a preset-less project
+    // would receive no layout guidance at all.
+    if (!preset) return buildViewportModeBlock(undefined);
+
+    const parts: string[] = [
+        buildViewportModeBlock(preset.outputSpec.viewportModel),
+        preset.outputSpec.systemPromptModule,
+    ].filter((p) => p && p.trim().length > 0);
 
     if (preset.outputSpec.cssConstraints) {
         parts.push(
@@ -305,7 +375,7 @@ export function buildPresetLayer(presetId?: string | null): string {
 /**
  * Layer D — Document context from enriched project assets.
  * Owned by: Agente context/embed (see PROMPTING_PIPELINE_AGENT_GUARDRAILS.md §4.1).
- * Returns "" when no enriched assets are available — the layer is then omitted by composeSystemPrompt.
+ * Returns "" when no enriched assets are available — the layer is then omitted by composeSystemPromptWithLayers.
  * Contains only content (briefs, summaries, tags) — zero technical instructions.
  */
 export function buildProjectKnowledgeLayer(
@@ -763,4 +833,43 @@ export function buildGlobalBrandLayer(context: ResolvedBrandContext, opts?: { ma
     const result = lines.join("\n");
     if (result.length > budget) return "";
     return result;
+}
+
+/**
+ * Build the brand-document sub-block of Layer D.
+ *
+ * Brand documents are reusable brand books / guidelines analysed ONCE and cached on the
+ * BrandAsset (`documentFragment`). This renders those cached fragments under a dedicated
+ * header so the LLM distinguishes durable brand guidance from one-off project attachments.
+ *
+ * Returns "" when there are no brand documents — Layer D is then byte-identical to before.
+ * Fragments are emitted in scope/priority order; the block is truncated to `maxChars` by
+ * dropping whole fragments (never mid-fragment) so brand docs claim the budget first.
+ */
+export function buildBrandDocumentLayerD(
+    documents: ResolvedBrandDocument[],
+    opts?: { maxChars?: number },
+): string {
+    if (!documents.length) return "";
+
+    const budget = opts?.maxChars ?? env.ENRICHMENT_LAYER_D_MAX_CHARS;
+    const header =
+        "## LAYER D — BRAND REFERENCE MATERIALS\n\n" +
+        "The following are the user's durable brand guidelines and reference documents, " +
+        "analysed once and reused for every project. Treat them as authoritative for brand " +
+        "voice, terminology, tone, and content direction. Items marked [MUST USE] are mandatory.";
+
+    const blocks: string[] = [];
+    let total = header.length + 2;
+
+    for (const doc of documents) {
+        const labelLine = `[${POLICY_LABEL[doc.policy]} / ${SCOPE_LABEL[doc.scope]}] ${doc.title}`;
+        const block = `${labelLine}\n${doc.fragment}`;
+        if (total + block.length + 2 > budget) break;
+        blocks.push(block);
+        total += block.length + 2;
+    }
+
+    if (blocks.length === 0) return "";
+    return `${header}\n\n${blocks.join("\n\n")}`;
 }

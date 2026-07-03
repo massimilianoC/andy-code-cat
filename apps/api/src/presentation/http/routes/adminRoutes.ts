@@ -41,6 +41,8 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { SetBrandAsset } from "../../../application/use-cases/SetBrandAsset";
+import { EnrichBrandDocument } from "../../../application/use-cases/EnrichBrandDocument";
+import { brandDocumentUploadMetaSchema } from "@andy-code-cat/contracts";
 import { ListBrandAssets } from "../../../application/use-cases/ListBrandAssets";
 import { DeleteBrandAsset } from "../../../application/use-cases/DeleteBrandAsset";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
@@ -79,7 +81,8 @@ function getRequiredRouteParam(value: string | undefined, name: string): string 
 }
 
 function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
-    const downloadUrl = asset.valueType === "asset_ref"
+    const isFile = asset.valueType === "asset_ref" || asset.valueType === "document_ref";
+    const downloadUrl = isFile
         ? (asset.scope === "platform"
             ? `/v1/admin/brand-assets/${asset.id}/download`
             : asset.scope === "user"
@@ -103,6 +106,8 @@ function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
         isActive: asset.isActive,
         priority: asset.priority,
         downloadUrl,
+        enrichmentStatus: asset.enrichmentStatus,
+        hasDocumentFragment: typeof asset.documentFragment === "string" && asset.documentFragment.length > 0,
         createdAt: asset.createdAt.toISOString(),
         updatedAt: asset.updatedAt.toISOString(),
     };
@@ -126,6 +131,7 @@ export function createAdminRoutes(): Router {
     const brandStorage = getFileStorage();
     const brandUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
     const setBrandAsset = new SetBrandAsset(brandAssetRepo, assetRepo);
+    const enrichBrandDocument = new EnrichBrandDocument();
     const listBrandAssets = new ListBrandAssets(brandAssetRepo);
     const deleteBrandAsset = new DeleteBrandAsset(brandAssetRepo, brandStorage);
 
@@ -815,6 +821,59 @@ export function createAdminRoutes(): Router {
         }
     });
 
+    /** POST /admin/brand-assets/document — upload a reusable brand document (enriched once) */
+    router.post("/admin/brand-assets/document", brandUpload.single("file"), async (req: RequestWithContext, res, next) => {
+        try {
+            if (!req.file) {
+                res.status(400).json({ error: "No file uploaded" });
+                return;
+            }
+            const meta = brandDocumentUploadMetaSchema.parse(req.body);
+            const safeExt = path.extname(req.file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, "");
+            const safeName = path.basename(req.file.originalname, path.extname(req.file.originalname))
+                .toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 60);
+            const storedFilename = `${randomUUID()}-${safeName}${safeExt}`;
+            await brandStorage.saveUpload("platform", "brand", storedFilename, req.file.buffer, req.file.mimetype);
+            // Create immediately as pending and respond — analysis runs in the background so the
+            // UI shows an "analyzing…" spinner and resolves via polling.
+            const asset = await setBrandAsset.createDocument({
+                scope: "platform",
+                policy: meta.policy,
+                description: meta.description,
+                isActive: meta.isActive,
+                priority: meta.priority,
+                storedFilename,
+                originalName: req.file.originalname,
+                mimeType: req.file.mimetype,
+                fileSize: req.file.size,
+                enrichmentStatus: "pending",
+            });
+            res.status(201).json({ asset: toBrandAssetDto(asset) });
+
+            const fileBuffer = req.file.buffer;
+            const originalName = req.file.originalname;
+            const mimeType = req.file.mimetype;
+            const fileSize = req.file.size;
+            const ownerUserId = req.auth?.userId ?? "platform";
+            const platformConfig = await configRepo.get().catch(() => null);
+            void enrichBrandDocument.execute({
+                fileBuffer, originalName, mimeType, fileSize, storedFilename, ownerUserId, getLlmCatalog, platformConfig,
+            })
+                .then((enrichment) => brandAssetRepo.update(asset.id, {
+                    documentFragment: enrichment.documentFragment,
+                    enrichmentTrace: enrichment.enrichmentTrace,
+                    enrichmentStatus: enrichment.status,
+                }))
+                .catch((err) => {
+                    console.error("[brand-document] background enrichment failed", { assetId: asset.id, scope: "platform", error: err instanceof Error ? err.message : String(err) });
+                    return brandAssetRepo.update(asset.id, { enrichmentStatus: "failed" }).catch(() => undefined);
+                });
+            return;
+        } catch (err) {
+            next(err);
+        }
+    });
+
     /** POST /admin/brand-assets/promote — promote any project asset to platform brand */
     router.post("/admin/brand-assets/promote", async (req: RequestWithContext, res, next) => {
         try {
@@ -877,7 +936,7 @@ export function createAdminRoutes(): Router {
         try {
             const id = getRequiredRouteParam(req.params.id, "id");
             const asset = await brandAssetRepo.findById(id);
-            if (!asset || asset.scope !== "platform" || asset.valueType !== "asset_ref" || !asset.storedFilename) {
+            if (!asset || asset.scope !== "platform" || !(asset.valueType === "asset_ref" || asset.valueType === "document_ref") || !asset.storedFilename) {
                 res.status(404).json({ error: "Asset not found or not downloadable" });
                 return;
             }

@@ -18,7 +18,7 @@ import {
     setLlmPromptConfig,
     streamOptimizePrompt,
     getPromptUsageSummary,
-    type LlmPromptPreviewDto,
+    type PromptPreviewResponse,
     listPreviewSnapshots,
     createPreviewSnapshot,
     activatePreviewSnapshot,
@@ -78,6 +78,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
+import PromptLayersView from "@/components/PromptLayersView";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
 import { DidacticPanel } from "../../../components/didactic/DidacticPanel";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
@@ -451,7 +452,7 @@ function isFocusContextValidationError(error: unknown): boolean {
 }
 
 export default function WorkspacePage() {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const router = useRouter();
     const params = useParams();
     const searchParams = useSearchParams();
@@ -563,7 +564,7 @@ export default function WorkspacePage() {
     const [promptTemplate, setPromptTemplate] = useState("");
     const [promptEnabled, setPromptEnabled] = useState(true);
     const [isSavingPrompt, setIsSavingPrompt] = useState(false);
-    const [promptPreview, setPromptPreview] = useState<LlmPromptPreviewDto | null>(null);
+    const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
     const [loadingPromptPreview, setLoadingPromptPreview] = useState(false);
     const [previewSnapshots, setPreviewSnapshots] = useState<PreviewSnapshot[]>([]);
     const [selectedBackendSnapshotId, setSelectedBackendSnapshotId] = useState<string | null>(null);
@@ -958,7 +959,15 @@ export default function WorkspacePage() {
         if (!token) return;
         setLoadingPromptPreview(true);
         try {
-            const data = await getLlmPromptPreview(token, projectId);
+            // Mirror exactly what the next chat-preview generation will send (provider, model,
+            // pipelineRole, capability) so the dry-run resolves the same model + Layer E template.
+            const data = await getLlmPromptPreview(token, projectId, {
+                provider: selectedProvider || undefined,
+                model: selectedModel || undefined,
+                pipelineRole: chatDefaults.pipelineRole,
+                capability: chatDefaults.capability,
+                uiLanguage: i18n.language?.split("-")[0] || undefined,
+            });
             setPromptPreview(data);
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
@@ -967,7 +976,7 @@ export default function WorkspacePage() {
         } finally {
             setLoadingPromptPreview(false);
         }
-    }, [token, projectId]);
+    }, [token, projectId, selectedProvider, selectedModel, chatDefaults.pipelineRole, chatDefaults.capability, i18n.language]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const thinkingFlowRef = useRef<HTMLDivElement>(null);
@@ -2116,6 +2125,22 @@ export default function WorkspacePage() {
         .reverse()
         .find((m) => m.role === "assistant");
 
+    // Ground-truth: the exact messages ACTUALLY sent to the LLM in the most recent generation,
+    // recorded in the message's promptingTrace. The Prompt panel shows THIS — the real prompt,
+    // structured into system sections + user message(s) — not a live recomposed estimate.
+    const lastSentTrace = (activeConv?.messages ?? [])
+        .slice()
+        .reverse()
+        .map((m) => m.metadata?.promptingTrace)
+        .find((tr) => Boolean(tr && ((tr.messagesSentToLlm?.length ?? 0) > 0 || tr.effectiveSystemPrompt)));
+    const lastSentMessages: Array<{ role: "system" | "user"; content: string }> = lastSentTrace
+        ? ((lastSentTrace.messagesSentToLlm?.length ?? 0) > 0
+            ? lastSentTrace.messagesSentToLlm!
+            : lastSentTrace.effectiveSystemPrompt
+                ? [{ role: "system", content: lastSentTrace.effectiveSystemPrompt }]
+                : [])
+        : [];
+
     // Active baseline: the snapshot marked isActive (used as LLM context on next turn).
     // If the active snapshot has empty HTML (corrupted), fall back to the first
     // snapshot with actual content to prevent sending blank context to the LLM.
@@ -2495,6 +2520,9 @@ export default function WorkspacePage() {
                         capability: chatDefaults.capability,
                         pipelineRole: chatDefaults.pipelineRole,
                         temperature: chatDefaults.temperature,
+                        // Fallback source for Layer L when the project has no persisted output
+                        // language; the backend still prioritises project.outputLanguage over this.
+                        uiLanguage: i18n.language?.split("-")[0] || undefined,
                         history,
                         currentArtifacts,
                         focusContext,
@@ -2626,6 +2654,7 @@ export default function WorkspacePage() {
                     capability: chatDefaults.capability,
                     pipelineRole: chatDefaults.pipelineRole,
                     temperature: chatDefaults.temperature,
+                    uiLanguage: i18n.language?.split("-")[0] || undefined,
                     history,
                     currentArtifacts,
                     focusContext: retryWithoutFocusContext ? undefined : focusContext,
@@ -3411,7 +3440,7 @@ export default function WorkspacePage() {
                     {t("workspace.ui.promptPanelDesc")}
                     {promptPreview && (
                         <span style={{ color: "var(--accent, #7dd3fc)", marginLeft: "0.75rem" }}>
-                            {t("workspace.ui.promptPanelTokensPreset", { tokens: promptPreview.tokenEstimate, preset: promptPreview.presetId ?? t("workspace.ui.promptPanelNone") })}
+                            {`~${promptPreview.tokenEstimate} token · ${promptPreview.provider}/${promptPreview.model}`}
                         </span>
                     )}
                 </span>
@@ -3441,76 +3470,61 @@ export default function WorkspacePage() {
                     padding: "1rem",
                 }}
             >
-                {!promptPreview && !loadingPromptPreview && (
+                {!lastSentTrace?.effectiveSystemPrompt && !promptPreview && !loadingPromptPreview && (
                     <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
                         {t("workspace.ui.promptPanelHint")}
                     </p>
                 )}
-                {loadingPromptPreview && (
+                {!lastSentTrace?.effectiveSystemPrompt && loadingPromptPreview && (
                     <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.ui.promptPanelLoading")}</p>
                 )}
-                {promptPreview && (
+                {lastSentTrace?.effectiveSystemPrompt ? (
                     <>
-                        <PromptLayerBlock
-                            label={t("workspace.ui.layers.layerA")}
-                            badge={t("workspace.ui.layers.layerABadge")}
-                            badgeColor="#7dd3fc"
-                            source={t("workspace.ui.layers.layerASource")}
-                            content={promptPreview.layers.a_baseConstraints}
+                        <PromptLayersView
+                            mode="sent"
+                            fullText={lastSentTrace.effectiveSystemPrompt}
+                            layers={lastSentTrace.layers ?? []}
+                            defaultRaw={!lastSentTrace.layers?.length}
                         />
-                        <PromptLayerBlock
-                            label={t("workspace.ui.layers.layerB")}
-                            badge={promptPreview.presetId ? t("workspace.ui.layers.layerBBadge", { presetId: promptPreview.presetId }) : t("workspace.ui.layers.layerBBadgeNone")}
-                            badgeColor={promptPreview.layers.b_presetModule ? "#a3e635" : "#6b7280"}
-                            source={t("workspace.ui.layers.layerBSource")}
-                            content={promptPreview.layers.b_presetModule || t("workspace.ui.layers.layerBEmpty")}
-                            empty={!promptPreview.layers.b_presetModule}
-                        />
-                        <PromptLayerBlock
-                            label={t("workspace.ui.layers.layerC")}
-                            badge={promptPreview.layers.c_styleContext ? t("workspace.ui.layers.layerCBadge") : t("workspace.ui.layers.layerCBadgeEmpty")}
-                            badgeColor={promptPreview.layers.c_styleContext ? "#fb923c" : "#6b7280"}
-                            source={t("workspace.ui.layers.layerCSource")}
-                            content={promptPreview.layers.c_styleContext || t("workspace.ui.layers.layerCEmpty")}
-                            empty={!promptPreview.layers.c_styleContext}
-                        />
-                        <PromptLayerBlock
-                            label={t("workspace.ui.layers.layerD")}
-                            badge={promptPreview.layers.d_documentContext ? t("workspace.ui.layers.layerDBadge") : t("workspace.ui.layers.layerDEmpty")}
-                            badgeColor={promptPreview.layers.d_documentContext ? "#34d399" : "#6b7280"}
-                            source={t("workspace.ui.layers.layerDSource")}
-                            content={promptPreview.layers.d_documentContext || t("workspace.ui.layers.layerDEmpty")}
-                            empty={!promptPreview.layers.d_documentContext}
-                        />
-                        {promptPreview.layers.x_dataContext && (
-                            <PromptLayerBlock
-                                label={t("workspace.ui.layers.layerX", "Layer X")}
-                                badge={t("workspace.ui.layers.layerXBadge", "Grounded data")}
-                                badgeColor="#38bdf8"
-                                source={t("workspace.ui.layers.layerXSource", "Dataset runtime envelope")}
-                                content={promptPreview.layers.x_dataContext}
-                            />
-                        )}
-                        {promptPreview.layers.e_prePromptTemplate && (
-                            <PromptLayerBlock
-                                label={t("workspace.ui.layers.layerE")}
-                                badge={t("workspace.ui.layers.layerEBadge")}
-                                badgeColor="#f59e0b"
-                                source={t("workspace.ui.layers.layerESource")}
-                                content={promptPreview.layers.e_prePromptTemplate}
-                            />
-                        )}
-                        {promptPreview.layers.budgetPolicy && (
-                            <PromptLayerBlock
-                                label={t("workspace.ui.layers.policy")}
-                                badge={t("workspace.ui.layers.policyBadge")}
-                                badgeColor="#8b5cf6"
-                                source={t("workspace.ui.layers.policySource")}
-                                content={promptPreview.layers.budgetPolicy}
-                            />
-                        )}
+                        {lastSentMessages
+                            .filter((msg) => msg.role === "user")
+                            .map((msg, i) => (
+                                <div key={`sent-usr-${i}`} style={{ marginTop: "1rem" }}>
+                                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#7dd3fc", marginBottom: "0.35rem" }}>
+                                        {t("workspace.ui.promptPanelUserMessage", "Messaggio utente")}
+                                    </div>
+                                    <pre
+                                        style={{
+                                            margin: 0,
+                                            padding: "0.75rem 1rem",
+                                            background: "#080e1a",
+                                            color: "#94a3b8",
+                                            fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                                            fontSize: "0.78rem",
+                                            lineHeight: 1.65,
+                                            whiteSpace: "pre-wrap",
+                                            wordBreak: "break-word",
+                                            overflowX: "auto",
+                                        }}
+                                    >
+                                        {msg.content}
+                                    </pre>
+                                </div>
+                            ))}
                     </>
-                )}
+                ) : promptPreview ? (
+                    <>
+                        <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: "0.75rem" }}>
+                            {t("workspace.ui.promptPanelNoGenYet", "Nessuna generazione ancora — anteprima di cosa verrà inviato alla prossima request.")}
+                        </p>
+                        <PromptLayersView
+                            mode="dry-run"
+                            fullText={promptPreview.effectiveSystemPrompt}
+                            layers={promptPreview.layers}
+                            subtitle={`${promptPreview.provider}/${promptPreview.model}`}
+                        />
+                    </>
+                ) : null}
             </div>
         </div>
     );
@@ -5685,93 +5699,6 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 {operation?.label ? `${message.role} · ${operation.label}` : message.role}
             </span>
             {!isUser && !isError && <RequestMetaInfo message={message} />}
-        </div>
-    );
-}
-
-// ─── Prompt Layer Block ───────────────────────────────────────────────────────
-
-function PromptLayerBlock({
-    label,
-    badge,
-    badgeColor,
-    source,
-    content,
-    empty = false,
-}: {
-    label: string;
-    badge: string;
-    badgeColor: string;
-    source: string;
-    content: string;
-    empty?: boolean;
-}) {
-    const [collapsed, setCollapsed] = React.useState(false);
-    return (
-        <div
-            style={{
-                marginBottom: "1rem",
-                border: `1px solid ${empty ? "#2a3040" : "#2a3a50"}`,
-                borderRadius: "6px",
-                overflow: "hidden",
-            }}
-        >
-            {/* Header */}
-            <div
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    padding: "0.45rem 0.75rem",
-                    background: empty ? "#111827" : "#0f1e35",
-                    cursor: "pointer",
-                    userSelect: "none",
-                }}
-                onClick={() => setCollapsed((c) => !c)}
-            >
-                <span style={{ fontSize: "0.72rem", color: "#6b7280", flexShrink: 0 }}>
-                    {collapsed ? "▶" : "▼"}
-                </span>
-                <span style={{ fontSize: "0.8rem", fontWeight: 700, color: empty ? "#4b5563" : "#e2e8f0", fontFamily: "monospace" }}>
-                    {label}
-                </span>
-                <span
-                    style={{
-                        fontSize: "0.68rem",
-                        padding: "0.1rem 0.45rem",
-                        borderRadius: "9999px",
-                        background: `${badgeColor}22`,
-                        color: badgeColor,
-                        border: `1px solid ${badgeColor}55`,
-                        fontWeight: 600,
-                        flexShrink: 0,
-                    }}
-                >
-                    {badge}
-                </span>
-                <span style={{ fontSize: "0.68rem", color: "#4b5563", marginLeft: "auto", textAlign: "right" }}>
-                    {source}
-                </span>
-            </div>
-            {/* Body */}
-            {!collapsed && (
-                <pre
-                    style={{
-                        margin: 0,
-                        padding: "0.75rem 1rem",
-                        background: "#080e1a",
-                        color: empty ? "#374151" : "#94a3b8",
-                        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                        fontSize: "0.78rem",
-                        lineHeight: 1.65,
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-word",
-                        overflowX: "hidden",
-                    }}
-                >
-                    {content}
-                </pre>
-            )}
         </div>
     );
 }

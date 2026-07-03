@@ -1,3 +1,5 @@
+import type { AssetEnrichmentTrace } from "./AssetEnrichmentTrace";
+
 export type BrandAssetScope = "platform" | "user" | "project";
 
 export type BrandAssetRole =
@@ -18,10 +20,20 @@ export type BrandAssetRole =
     | "social_linkedin"
     | "social_website"
     | "legal_vat"
+    // Reusable brand book / guidelines document (PDF, DOCX, TXT/MD) — analysed once,
+    // injected as Layer D development context into every project.
+    | "brand_document"
     | "custom";
 
 export type BrandAssetPolicy = "must_use" | "prefer" | "optional";
-export type BrandAssetValueType = "asset_ref" | "text" | "color_list" | "url";
+/**
+ * `document_ref` behaves like `asset_ref` for file storage but additionally carries a
+ * pre-rendered Layer D enrichment fragment (`documentFragment`) computed once at upload/promote.
+ */
+export type BrandAssetValueType = "asset_ref" | "text" | "color_list" | "url" | "document_ref";
+
+/** Lifecycle of the one-time enrichment for a `document_ref` brand asset. */
+export type BrandAssetEnrichmentStatus = "pending" | "ready" | "failed" | "skipped";
 
 export interface BrandAsset {
     id: string;
@@ -40,6 +52,16 @@ export interface BrandAsset {
     promotedFromAssetId?: string;
     textValue?: string;
     description?: string;
+    /**
+     * Pre-rendered Layer D fragment for a `document_ref` asset. Computed ONCE at
+     * upload (via AssetEnrichmentPipeline) or copied from the source ProjectAsset at
+     * promote time. Injected verbatim into Layer D of every project — never recomputed.
+     */
+    documentFragment?: string;
+    /** Full enrichment trace for a `document_ref` asset (optional; for re-render/debug). */
+    enrichmentTrace?: AssetEnrichmentTrace | null;
+    /** One-time enrichment lifecycle for `document_ref` assets. */
+    enrichmentStatus?: BrandAssetEnrichmentStatus;
     isActive: boolean;
     priority: number;
     createdAt: Date;
@@ -48,5 +70,6 @@ export interface BrandAsset {
 
 export type CreateBrandAssetInput = Omit<BrandAsset, "id" | "createdAt" | "updatedAt">;
 export type UpdateBrandAssetInput = Partial<
-    Pick<BrandAsset, "role" | "customRoleLabel" | "policy" | "textValue" | "description" | "isActive" | "priority">
+    Pick<BrandAsset, "role" | "customRoleLabel" | "policy" | "textValue" | "description" | "isActive" | "priority"
+        | "documentFragment" | "enrichmentTrace" | "enrichmentStatus">
 >;
