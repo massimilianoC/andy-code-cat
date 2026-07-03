@@ -534,19 +534,89 @@ function splitSqlTuples(valuesBlock: string): string[] {
     return tuples;
 }
 
+const SQL_WHITESPACE_RE = /\s/;
+const SQL_IDENTIFIER_CHAR_RE = /[\w.-]/;
+
+function skipSqlWhitespace(raw: string, from: number): number {
+    let index = from;
+    while (index < raw.length && SQL_WHITESPACE_RE.test(raw[index]!)) index += 1;
+    return index;
+}
+
+/**
+ * Hand-rolled linear scanner for "insert into T (cols) values (...);" statements.
+ * A backtracking regex here is attacker-reachable (parses uploaded SQL dump files) and was
+ * flagged by CodeQL js/polynomial-redos even with bounded quantifiers; every failure path below
+ * breaks out of the loop instead of retrying, so total work stays O(buffer length).
+ */
 function readSqlTables(buffer: Buffer): NormalizedDataset {
     const raw = buffer.toString("utf8");
-    const insertRegex = /insert\s+into\s+[`"]?([\w.-]+)[`"]?\s*\(([^)]+)\)\s*values\s*([\s\S]*?);/gi;
+    const lower = raw.toLowerCase();
     const tableRows = new Map<string, DatasetRow[]>();
     const limitations = new Set<string>();
-    let match: RegExpExecArray | null;
 
-    while ((match = insertRegex.exec(raw)) !== null) {
-        const tableName = match[1]!;
-        const columnBlock = match[2]!;
-        const valuesBlock = match[3]!;
+    let searchFrom = 0;
+    while (searchFrom < raw.length) {
+        const insertIdx = lower.indexOf("insert", searchFrom);
+        if (insertIdx === -1) break;
+
+        let cursor = skipSqlWhitespace(raw, insertIdx + "insert".length);
+        if (!lower.startsWith("into", cursor)) {
+            searchFrom = insertIdx + 1;
+            continue;
+        }
+        cursor = skipSqlWhitespace(raw, cursor + "into".length);
+
+        if (raw[cursor] === "`" || raw[cursor] === '"') cursor += 1;
+        const tableNameStart = cursor;
+        while (cursor < raw.length && SQL_IDENTIFIER_CHAR_RE.test(raw[cursor]!)) cursor += 1;
+        const tableName = raw.slice(tableNameStart, cursor);
+        if (!tableName) {
+            searchFrom = insertIdx + 1;
+            continue;
+        }
+        if (raw[cursor] === "`" || raw[cursor] === '"') cursor += 1;
+        cursor = skipSqlWhitespace(raw, cursor);
+
+        if (raw[cursor] !== "(") {
+            searchFrom = insertIdx + 1;
+            continue;
+        }
+        cursor += 1;
+        const columnsStart = cursor;
+        while (cursor < raw.length && raw[cursor] !== ")") cursor += 1;
+        if (cursor >= raw.length) break; // no closing paren anywhere in the rest of the buffer
+        const columnBlock = raw.slice(columnsStart, cursor);
+        cursor = skipSqlWhitespace(raw, cursor + 1);
+
+        if (!lower.startsWith("values", cursor)) {
+            searchFrom = insertIdx + 1;
+            continue;
+        }
+        cursor = skipSqlWhitespace(raw, cursor + "values".length);
+
+        const statementStart = cursor;
+        let depth = 0;
+        let inString = false;
+        let statementEnd = -1;
+        for (let index = cursor; index < raw.length; index += 1) {
+            const char = raw[index]!;
+            if (char === "'") {
+                inString = !inString;
+                continue;
+            }
+            if (inString) continue;
+            if (char === "(") depth += 1;
+            else if (char === ")") depth -= 1;
+            else if (char === ";" && depth <= 0) {
+                statementEnd = index;
+                break;
+            }
+        }
+        if (statementEnd === -1) break; // no terminating ';' anywhere in the rest of the buffer
+
         const columns = columnBlock.split(",").map((column) => column.trim().replace(/[`"]/g, ""));
-        const tuples = splitSqlTuples(valuesBlock);
+        const tuples = splitSqlTuples(raw.slice(statementStart, statementEnd));
         const rows = tableRows.get(tableName) ?? [];
 
         for (const tuple of tuples) {
@@ -563,6 +633,7 @@ function readSqlTables(buffer: Buffer): NormalizedDataset {
         }
 
         tableRows.set(tableName, rows);
+        searchFrom = statementEnd + 1;
     }
 
     if (tableRows.size === 0) {

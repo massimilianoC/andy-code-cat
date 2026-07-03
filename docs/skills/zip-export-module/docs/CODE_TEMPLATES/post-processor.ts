@@ -31,8 +31,36 @@ export interface ProcessedArtifacts {
 // Adapt this to whatever your platform injects purely for sandboxed preview
 // rendering (CSP meta tags, preview-only data attributes, etc.).
 // ---------------------------------------------------------------------------
+// NOTE: these three helpers scan with indexOf instead of a single backtracking
+// regex like /<meta[^>]+.../ or /<style>([\s\S]*?)<\/style>/. HTML here comes
+// from an LLM agent (untrusted, attacker-shaped in the worst case) — a lazy
+// "[\s\S]*?" or unbounded "[^>]+" over that input backtracks catastrophically
+// on crafted strings (e.g. many "<meta" with no closing ">", or repeated
+// "<style</style" with no ">"). Every failure path below stops the whole scan
+// instead of retrying — if a closing sequence isn't found from a position
+// onward, it can't be found later either, so bailing is both safe and O(n).
+
 function stripMetaCsp(html: string): string {
-    return html.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, "");
+    const lower = html.toLowerCase();
+    let result = "";
+    let cursor = 0;
+
+    while (cursor < html.length) {
+        const idx = lower.indexOf("<meta", cursor);
+        if (idx === -1) { result += html.slice(cursor); return result; }
+
+        const gtIdx = html.indexOf(">", idx);
+        if (gtIdx === -1) { result += html.slice(cursor); return result; }
+
+        const tag = html.slice(idx, gtIdx + 1);
+        const isCsp = /http-equiv\s*=\s*["']content-security-policy["']/i.test(tag);
+
+        result += html.slice(cursor, idx);
+        if (!isCsp) result += tag;
+        cursor = gtIdx + 1;
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,25 +68,70 @@ function stripMetaCsp(html: string): string {
 // ---------------------------------------------------------------------------
 function extractInlineCss(html: string): { html: string; extracted: string } {
     const blocks: string[] = [];
-    const cleaned = html.replace(/<style(?:[^>]*)>([\s\S]*?)<\/style>/gi, (_m, content: string) => {
-        const trimmed = content.trim();
-        if (trimmed) blocks.push(trimmed);
-        return "";
-    });
-    return { html: cleaned, extracted: blocks.join("\n\n") };
+    const lower = html.toLowerCase();
+    let result = "";
+    let cursor = 0;
+
+    while (cursor < html.length) {
+        const openIdx = lower.indexOf("<style", cursor);
+        if (openIdx === -1) { result += html.slice(cursor); return { html: result, extracted: blocks.join("\n\n") }; }
+
+        const openGtIdx = html.indexOf(">", openIdx);
+        if (openGtIdx === -1) { result += html.slice(cursor); return { html: result, extracted: blocks.join("\n\n") }; }
+
+        const closeIdx = lower.indexOf("</style", openGtIdx);
+        if (closeIdx === -1) { result += html.slice(cursor); return { html: result, extracted: blocks.join("\n\n") }; }
+
+        const closeGtIdx = html.indexOf(">", closeIdx);
+        if (closeGtIdx === -1) { result += html.slice(cursor); return { html: result, extracted: blocks.join("\n\n") }; }
+
+        const content = html.slice(openGtIdx + 1, closeIdx).trim();
+        if (content) blocks.push(content);
+
+        result += html.slice(cursor, openIdx);
+        cursor = closeGtIdx + 1;
+    }
+
+    return { html: result, extracted: blocks.join("\n\n") };
 }
 
 function extractInlineJs(html: string): { html: string; extracted: string } {
     const blocks: string[] = [];
-    // Only match <script> tags WITHOUT a src attribute. The negative lookahead on
-    // the tag's attributes prevents eating <script src="..."> — CDN libraries, or
-    // the very script.js reference this function is about to add.
-    const cleaned = html.replace(/<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi, (_m, content: string) => {
-        const trimmed = content.trim();
-        if (trimmed) blocks.push(trimmed);
-        return "";
-    });
-    return { html: cleaned, extracted: blocks.join("\n\n") };
+    const lower = html.toLowerCase();
+    let result = "";
+    let cursor = 0;
+
+    while (cursor < html.length) {
+        const openIdx = lower.indexOf("<script", cursor);
+        if (openIdx === -1) { result += html.slice(cursor); return { html: result, extracted: blocks.join("\n\n") }; }
+
+        const openGtIdx = html.indexOf(">", openIdx);
+        if (openGtIdx === -1) { result += html.slice(cursor); return { html: result, extracted: blocks.join("\n\n") }; }
+
+        const closeIdx = lower.indexOf("</script", openGtIdx);
+        if (closeIdx === -1) { result += html.slice(cursor); return { html: result, extracted: blocks.join("\n\n") }; }
+
+        const closeGtIdx = html.indexOf(">", closeIdx);
+        if (closeGtIdx === -1) { result += html.slice(cursor); return { html: result, extracted: blocks.join("\n\n") }; }
+
+        // Only extract <script> tags WITHOUT a src attribute — don't eat
+        // <script src="..."> (CDN libraries, or the script.js this module adds).
+        const attrs = html.slice(openIdx + "<script".length, openGtIdx);
+        const hasSrc = /\bsrc\s*=/i.test(attrs);
+        if (hasSrc) {
+            result += html.slice(cursor, closeGtIdx + 1);
+            cursor = closeGtIdx + 1;
+            continue;
+        }
+
+        const content = html.slice(openGtIdx + 1, closeIdx).trim();
+        if (content) blocks.push(content);
+
+        result += html.slice(cursor, openIdx);
+        cursor = closeGtIdx + 1;
+    }
+
+    return { html: result, extracted: blocks.join("\n\n") };
 }
 
 // ---------------------------------------------------------------------------
@@ -113,11 +186,20 @@ function ensureScriptTag(html: string): string {
 function detectPlaceholders(html: string, css: string): AssetPlaceholder[] {
     const placeholders: AssetPlaceholder[] = [];
 
-    // Empty or literally-named-"placeholder" <img src>
-    const imgRe = /<img[^>]+src=["']([^"']*)["'][^>]*>/gi;
-    let m: RegExpExecArray | null;
-    while ((m = imgRe.exec(html)) !== null) {
-        const src = m[1];
+    // Empty or literally-named-"placeholder" <img src>. Scan tag-by-tag with
+    // indexOf and only regex-test the small per-tag substring — see the note
+    // above extractInlineCss on why a document-wide "<img[^>]+...[^>]*>" isn't safe.
+    const lowerHtml = html.toLowerCase();
+    let imgCursor = 0;
+    while (imgCursor < html.length) {
+        const openIdx = lowerHtml.indexOf("<img", imgCursor);
+        if (openIdx === -1) break;
+        const gtIdx = html.indexOf(">", openIdx);
+        if (gtIdx === -1) break;
+
+        const tag = html.slice(openIdx, gtIdx + 1);
+        const srcMatch = /src\s*=\s*["']([^"']*)["']/i.exec(tag);
+        const src = srcMatch?.[1];
         if (!src || /placeholder/i.test(src)) {
             placeholders.push({
                 path: `assets/placeholder-${placeholders.length + 1}.jpg`,
@@ -125,19 +207,32 @@ function detectPlaceholders(html: string, css: string): AssetPlaceholder[] {
                 recommendedSize: "1200x800px",
             });
         }
+        imgCursor = gtIdx + 1;
     }
 
-    // Explicit author intent: "/* replace: ... */" comments in CSS
-    const replaceCommentRe = /\/\*\s*replace:\s*([^*]+)\*\//gi;
-    while ((m = replaceCommentRe.exec(css)) !== null) {
-        placeholders.push({
-            path: `assets/replace-${placeholders.length + 1}`,
-            usedIn: `CSS comment: ${m[1]!.trim()}`,
-        });
+    // Explicit author intent: "/* replace: ... */" comments in CSS. Scan
+    // comment-by-comment with indexOf for the same reason as above.
+    let cssCursor = 0;
+    while (cssCursor < css.length) {
+        const openIdx = css.indexOf("/*", cssCursor);
+        if (openIdx === -1) break;
+        const closeIdx = css.indexOf("*/", openIdx + 2);
+        if (closeIdx === -1) break;
+
+        const comment = css.slice(openIdx + 2, closeIdx);
+        const replaceMatch = /^\s*replace:\s*([\s\S]+)$/i.exec(comment);
+        if (replaceMatch) {
+            placeholders.push({
+                path: `assets/replace-${placeholders.length + 1}`,
+                usedIn: `CSS comment: ${replaceMatch[1]!.trim()}`,
+            });
+        }
+        cssCursor = closeIdx + 2;
     }
 
     // Empty CSS url()
     const emptyUrlRe = /url\(["']?\s*["']?\)/gi;
+    let m: RegExpExecArray | null;
     while ((m = emptyUrlRe.exec(css)) !== null) {
         placeholders.push({
             path: `assets/placeholder-${placeholders.length + 1}.jpg`,

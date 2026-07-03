@@ -95,6 +95,70 @@ function parseJson(raw: string): ParsedDocument {
     };
 }
 
+/**
+ * Strips <tagName>...</tagName> blocks (e.g. script/style) via linear indexOf scanning instead
+ * of a backtracking regex. Input is attacker-reachable (uploaded XML/HTML documents); a lazy
+ * "<script[\s\S]*?</script...>" pattern is flagged by CodeQL js/polynomial-redos regardless of
+ * any numeric bound added to the quantifier. Every failure path below stops the whole scan
+ * instead of retrying — if a closing sequence isn't found from position P onward, it cannot be
+ * found from any later position either, so bailing is both safe and O(n) worst case.
+ */
+function stripTagBlocks(input: string, tagName: string): string {
+    const lower = input.toLowerCase();
+    const openNeedle = `<${tagName}`;
+    const closeNeedle = `</${tagName}`;
+    let result = "";
+    let cursor = 0;
+
+    while (cursor < input.length) {
+        const openIdx = lower.indexOf(openNeedle, cursor);
+        if (openIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+
+        const closeIdx = lower.indexOf(closeNeedle, openIdx);
+        if (closeIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+
+        const gtIdx = input.indexOf(">", closeIdx);
+        if (gtIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+
+        result += input.slice(cursor, openIdx) + " ";
+        cursor = gtIdx + 1;
+    }
+
+    return result;
+}
+
+/** Same linear-scan rationale as stripTagBlocks: "<[^>]+>" backtracks on a "<" with no ">". */
+function stripAllTags(input: string): string {
+    let result = "";
+    let cursor = 0;
+
+    while (cursor < input.length) {
+        const ltIdx = input.indexOf("<", cursor);
+        if (ltIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+        const gtIdx = input.indexOf(">", ltIdx);
+        if (gtIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+        result += input.slice(cursor, ltIdx) + " ";
+        cursor = gtIdx + 1;
+    }
+
+    return result;
+}
+
 function parseXml(raw: string): ParsedDocument {
     const tagMatches = raw.match(/<([A-Za-z_][\w:.-]*)\b/g) ?? [];
     const tagFrequency = new Map<string, number>();
@@ -110,10 +174,7 @@ function parseXml(raw: string): ParsedDocument {
         .slice(0, 20)
         .map(([tag, count]) => `${tag}(${count})`);
 
-    const textOnly = raw
-        .replace(/<script[\s\S]*?<\/script>/gi, " ")
-        .replace(/<style[\s\S]*?<\/style>/gi, " ")
-        .replace(/<[^>]+>/g, " ")
+    const textOnly = stripAllTags(stripTagBlocks(stripTagBlocks(raw, "script"), "style"))
         .replace(/\s+/g, " ")
         .trim();
 
