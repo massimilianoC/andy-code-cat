@@ -95,6 +95,47 @@ function parseJson(raw: string): ParsedDocument {
     };
 }
 
+/**
+ * Strips <tagName>...</tagName> blocks (e.g. script/style) via linear indexOf scanning instead
+ * of a backtracking regex. Input is attacker-reachable (uploaded XML/HTML documents); a lazy
+ * "<script[\s\S]*?</script...>" pattern is flagged by CodeQL js/polynomial-redos regardless of
+ * any numeric bound added to the quantifier. Every failure path below stops the whole scan
+ * instead of retrying — if a closing sequence isn't found from position P onward, it cannot be
+ * found from any later position either, so bailing is both safe and O(n) worst case.
+ */
+function stripTagBlocks(input: string, tagName: string): string {
+    const lower = input.toLowerCase();
+    const openNeedle = `<${tagName}`;
+    const closeNeedle = `</${tagName}`;
+    let result = "";
+    let cursor = 0;
+
+    while (cursor < input.length) {
+        const openIdx = lower.indexOf(openNeedle, cursor);
+        if (openIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+
+        const closeIdx = lower.indexOf(closeNeedle, openIdx);
+        if (closeIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+
+        const gtIdx = input.indexOf(">", closeIdx);
+        if (gtIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+
+        result += input.slice(cursor, openIdx) + " ";
+        cursor = gtIdx + 1;
+    }
+
+    return result;
+}
+
 function parseXml(raw: string): ParsedDocument {
     const tagMatches = raw.match(/<([A-Za-z_][\w:.-]*)\b/g) ?? [];
     const tagFrequency = new Map<string, number>();
@@ -110,14 +151,7 @@ function parseXml(raw: string): ParsedDocument {
         .slice(0, 20)
         .map(([tag, count]) => `${tag}(${count})`);
 
-    // Bounded to avoid polynomial backtracking on unclosed tags repeated many times
-    // (e.g. "<script<script<script..." with no closing tag) — CodeQL js/polynomial-redos.
-    // Closing tag allows any content before ">" (e.g. "</script foo="bar">") — browsers treat
-    // that as a valid close tag, so a strict whitespace-only match is bypassable
-    // (CodeQL js/bad-tag-filter).
-    const textOnly = raw
-        .replace(/<script[\s\S]{0,50000}?<\/script[^>]*>/gi, " ")
-        .replace(/<style[\s\S]{0,50000}?<\/style[^>]*>/gi, " ")
+    const textOnly = stripTagBlocks(stripTagBlocks(raw, "script"), "style")
         .replace(/<[^>]+>/g, " ")
         .replace(/\s+/g, " ")
         .trim();
