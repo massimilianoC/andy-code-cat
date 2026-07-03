@@ -93,6 +93,17 @@ For a hotfix:
 4. Tag a new release if published.
 5. Back-merge into `develop`.
 
+> **Operational note**: if the repository has GitHub's "Automatically delete head branches"
+> setting enabled, the `release/<RELEASE_VERSION>` (or `hotfix/<name>`) branch is deleted from
+> the remote as soon as its PR into `main` merges — even if the merge was done with
+> `gh pr merge --delete-branch=false` (that flag only controls whether the CLI *also* deletes it;
+> it does not override the repo-level auto-delete setting). This breaks step 5: opening a PR from
+> that branch into `develop` fails with a "head ref invalid" / "no commits between" error because
+> the remote branch no longer exists. Before opening the back-merge PR, check with
+> `git ls-remote --heads origin release/<RELEASE_VERSION>`; if it's gone, the local branch still
+> has the commits — just re-push it with `git push -u origin release/<RELEASE_VERSION>` and then
+> open the PR.
+
 ## 10. Post-Deploy Data Steps (MANDATORY when applicable)
 
 ### Preset catalog reseed — binding when `ProjectPreset.ts` changed
