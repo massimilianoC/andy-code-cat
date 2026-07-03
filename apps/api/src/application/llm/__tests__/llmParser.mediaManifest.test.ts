@@ -124,6 +124,32 @@ describe("llmParser mediaManifest", () => {
         expect(parsed.structured?.mediaManifest?.requests[0]?.key).toBe("hero-main");
     });
 
+    it("recovers when the model uses ';' instead of ',' between artifacts fields", () => {
+        // Real-world pattern: after a long artifacts.js string full of `;`-terminated
+        // statements, the model separates "html"/"css"/"js" with `;` instead of `,`.
+        const valid = JSON.stringify({
+            chat: { summary: "Generated page", bullets: [], nextActions: [] },
+            artifacts: {
+                html: '<img src="asset://media/hero-main">',
+                css: "body { color: red; }",
+                js: "const x = 1;",
+            },
+            mediaManifest: { version: "media-manifest-v1", requests: [BASE_REQUEST] },
+        });
+        // Swap the two commas that separate the artifacts fields for semicolons —
+        // mirrors the exact malformation observed (html";  css";  js: ...).
+        const raw = valid.replace('","css"', '";"css"').replace('","js"', '";"js"');
+        expect(raw).not.toBe(valid); // sanity: the replace actually corrupted the JSON
+        expect(() => JSON.parse(raw)).toThrow();
+
+        const parsed = tryParseStructuredJson(raw);
+
+        expect(parsed.parseValid).toBe(true);
+        expect(parsed.structured?.artifacts.css).toBe("body { color: red; }");
+        expect(parsed.structured?.artifacts.js).toBe("const x = 1;");
+        expect(parsed.structured?.mediaManifest?.requests[0]?.key).toBe("hero-main");
+    });
+
     it("drops malformed mediaManifest silently (warn, do not throw)", () => {
         const raw = JSON.stringify({
             chat: { summary: "Generated page", bullets: [], nextActions: [] },
