@@ -110,9 +110,11 @@ function parseXml(raw: string): ParsedDocument {
         .slice(0, 20)
         .map(([tag, count]) => `${tag}(${count})`);
 
+    // Bounded to avoid polynomial backtracking on unclosed tags repeated many times
+    // (e.g. "<script<script<script..." with no closing tag) — CodeQL js/polynomial-redos.
     const textOnly = raw
-        .replace(/<script[\s\S]*?<\/script>/gi, " ")
-        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script[\s\S]{0,50000}?<\/script>/gi, " ")
+        .replace(/<style[\s\S]{0,50000}?<\/style>/gi, " ")
         .replace(/<[^>]+>/g, " ")
         .replace(/\s+/g, " ")
         .trim();

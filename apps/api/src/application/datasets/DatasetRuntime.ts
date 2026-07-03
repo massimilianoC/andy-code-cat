@@ -536,7 +536,9 @@ function splitSqlTuples(valuesBlock: string): string[] {
 
 function readSqlTables(buffer: Buffer): NormalizedDataset {
     const raw = buffer.toString("utf8");
-    const insertRegex = /insert\s+into\s+[`"]?([\w.-]+)[`"]?\s*\(([^)]+)\)\s*values\s*([\s\S]*?);/gi;
+    // Column-list capture is bounded to avoid polynomial backtracking on crafted input
+    // (e.g. "insert into x ((((..." with no closing paren) — CodeQL js/polynomial-redos.
+    const insertRegex = /insert\s+into\s+[`"]?([\w.-]+)[`"]?\s*\(([^)]{1,4096})\)\s*values\s*([\s\S]*?);/gi;
     const tableRows = new Map<string, DatasetRow[]>();
     const limitations = new Set<string>();
     let match: RegExpExecArray | null;
