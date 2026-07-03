@@ -41,4 +41,11 @@ describe("parseStructuredData XML script/style stripping", () => {
         expect(Date.now() - start).toBeLessThan(1000);
         expect(result.rawText.length).toBeGreaterThan(0);
     });
+
+    it("strips ordinary tags and terminates quickly on many unclosed '<'", () => {
+        const start = Date.now();
+        const result = parseXml(`<root><name>ok</name>${"<".repeat(200_000)}</root>`);
+        expect(Date.now() - start).toBeLessThan(1000);
+        expect(textExcerpt(result.rawText)).toContain("ok");
+    });
 });

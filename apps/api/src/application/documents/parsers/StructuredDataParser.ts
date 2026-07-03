@@ -136,6 +136,29 @@ function stripTagBlocks(input: string, tagName: string): string {
     return result;
 }
 
+/** Same linear-scan rationale as stripTagBlocks: "<[^>]+>" backtracks on a "<" with no ">". */
+function stripAllTags(input: string): string {
+    let result = "";
+    let cursor = 0;
+
+    while (cursor < input.length) {
+        const ltIdx = input.indexOf("<", cursor);
+        if (ltIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+        const gtIdx = input.indexOf(">", ltIdx);
+        if (gtIdx === -1) {
+            result += input.slice(cursor);
+            return result;
+        }
+        result += input.slice(cursor, ltIdx) + " ";
+        cursor = gtIdx + 1;
+    }
+
+    return result;
+}
+
 function parseXml(raw: string): ParsedDocument {
     const tagMatches = raw.match(/<([A-Za-z_][\w:.-]*)\b/g) ?? [];
     const tagFrequency = new Map<string, number>();
@@ -151,8 +174,7 @@ function parseXml(raw: string): ParsedDocument {
         .slice(0, 20)
         .map(([tag, count]) => `${tag}(${count})`);
 
-    const textOnly = stripTagBlocks(stripTagBlocks(raw, "script"), "style")
-        .replace(/<[^>]+>/g, " ")
+    const textOnly = stripAllTags(stripTagBlocks(stripTagBlocks(raw, "script"), "style"))
         .replace(/\s+/g, " ")
         .trim();
 
