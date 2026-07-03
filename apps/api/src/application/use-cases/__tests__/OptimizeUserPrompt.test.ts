@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Readable } from "stream";
 
 vi.mock("../../../config", () => ({
     env: {
-        enrichmentInjectLayerD: false,
+        enrichmentEnabled: true,
+        enrichmentInjectLayerD: true,
         providerApiKeys: {},
         LLM_DEFAULT_PROVIDER: "siliconflow",
         LLM_MAX_COMPLETION_TOKENS: 32000,
@@ -29,7 +31,52 @@ function streamResponse(lines: string[]) {
     );
 }
 
-function createUseCase(platformConfig: unknown = null) {
+function makeReadyTrace() {
+    return {
+        assetId: "asset-1",
+        projectId: "project-1",
+        userId: "user-1",
+        assetKind: "txt",
+        provenance: {
+            traceVersion: 1,
+            enrichmentStatus: "ready",
+            enrichedAt: new Date(),
+            processingMs: 25,
+            parserName: "text",
+            parserVersion: "1.0.0",
+            llmProvider: null,
+            llmModel: null,
+            llmTokensUsed: null,
+            llmCostEur: null,
+            errorMessage: null,
+        },
+        textLayer: {
+            wordCount: 12,
+            charCount: 72,
+            languageHint: "it",
+            pageCount: 1,
+            sectionCount: 1,
+            extractedTextSnippet: "Contesto allegato: usare il catalogo Jazz Milano e il tono premium.",
+            fullTextStored: false,
+        },
+        documentBrief: null,
+        structuredData: null,
+        colorPalette: null,
+        visualAnalysis: null,
+        designSignals: null,
+        distilledTitle: "Brand Brief",
+        distilledSummary: "Documento guida per il brand.",
+        distilledTags: ["brand"],
+        distilledColors: [],
+        renderedFragment: null,
+    };
+}
+
+function createUseCase(platformConfig: unknown = null, overrides?: {
+    assets?: any[];
+    assetRepository?: { listByProject: ReturnType<typeof vi.fn> };
+    storageText?: string;
+}) {
     const projectRepository = {
         findByIdForUser: vi.fn(async () => ({
             id: "project-1",
@@ -42,7 +89,7 @@ function createUseCase(platformConfig: unknown = null) {
     };
     const moodboardRepository = { findByProjectId: vi.fn(async () => null) };
     const userStyleProfileRepository = { findByUserId: vi.fn(async () => null) };
-    const assetRepository = { listByProject: vi.fn(async () => []) };
+    const assetRepository = overrides?.assetRepository ?? { listByProject: vi.fn(async () => overrides?.assets ?? []) };
     const platformConfigRepository = { get: vi.fn(async () => platformConfig) };
     const userRepository = { incrementTokensConsumed: vi.fn(async () => undefined) };
     const promptExecutionLogRepository = { create: vi.fn(async () => undefined) };
@@ -69,6 +116,10 @@ function createUseCase(platformConfig: unknown = null) {
             }],
         })),
     };
+    const storage = {
+        uploadFilePath: vi.fn((_userId: string, _projectId: string, storedFilename: string) => storedFilename),
+        createReadStream: vi.fn(async () => Readable.from([overrides?.storageText ?? ""])),
+    };
 
     return {
         useCase: new OptimizeUserPrompt(
@@ -80,6 +131,7 @@ function createUseCase(platformConfig: unknown = null) {
             userRepository as any,
             promptExecutionLogRepository as any,
             getLlmCatalog as any,
+            storage as any,
         ),
         promptExecutionLogRepository,
     };
@@ -88,6 +140,7 @@ function createUseCase(platformConfig: unknown = null) {
 describe("OptimizeUserPrompt", () => {
     afterEach(() => {
         vi.unstubAllGlobals();
+        vi.useRealTimers();
     });
 
     it("uses streamed reasoning text as the optimized prompt when content chunks are empty", async () => {
@@ -155,5 +208,67 @@ describe("OptimizeUserPrompt", () => {
 
         const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
         expect(requestBody.max_tokens).toBe(32000);
+    });
+
+    it("waits for pending Layer D document enrichment before zero-effort optimization", async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{
+                message: { content: "Prompt ottimizzato con il contesto allegato." },
+                finish_reason: "stop",
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+        }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const pendingAsset = {
+            id: "asset-1",
+            projectId: "project-1",
+            userId: "user-1",
+            originalName: "brand-brief.txt",
+            mimeType: "text/plain",
+            fileSize: 120,
+            source: "upload",
+            scope: "project",
+            storedFilename: "brand-brief.txt",
+            label: null,
+            useInProject: true,
+            styleRole: undefined,
+            descriptionText: null,
+            externalUrl: null,
+            generationStatus: null,
+            generationPrompt: null,
+            generationMetadata: null,
+            semanticMetadata: null,
+            enrichmentTrace: null,
+            createdAt: new Date(),
+        };
+        const readyAsset = { ...pendingAsset, enrichmentTrace: makeReadyTrace() };
+        const assetRepository = {
+            listByProject: vi.fn()
+                .mockResolvedValueOnce([pendingAsset])
+                .mockResolvedValue([readyAsset]),
+        };
+        const { useCase } = createUseCase(null, {
+            assetRepository,
+        });
+
+        const pending = useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Crea una landing per eventi musicali",
+            taskKey: "zero_effort_optimize",
+        });
+        await vi.advanceTimersByTimeAsync(1_500);
+        await pending;
+
+        expect(assetRepository.listByProject).toHaveBeenCalledTimes(2);
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        const messages = requestBody.messages as Array<{ role: string; content: string }>;
+        expect(messages.map((message) => message.content).join("\n")).toContain("LAYER D");
+        expect(messages.map((message) => message.content).join("\n")).toContain("catalogo Jazz Milano");
     });
 });

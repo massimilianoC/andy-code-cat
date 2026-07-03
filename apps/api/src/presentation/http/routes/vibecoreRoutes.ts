@@ -16,8 +16,10 @@ import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmC
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
-import { getParser } from "../../../application/documents/parsers/DocumentParserFactory";
-import { buildGroundedDataContextLayer, buildProjectKnowledgeLayer } from "../../../application/llm/systemPromptLayers";
+import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../../../application/documents/projectLayerDContext";
+import { buildGroundedDataContextLayer, buildProjectKnowledgeLayer, buildBrandDocumentLayerD } from "../../../application/llm/systemPromptLayers";
+import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
+import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../../../application/use-cases/ResolveBrandDocumentContext";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
 import { VibePrefill } from "../../../application/use-cases/VibePrefill";
@@ -84,6 +86,7 @@ export function createVibecoreRoutes(): Router {
     const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog);
     const projectRepository = new MongoProjectRepository();
     const assetRepository = new MongoProjectAssetRepository();
+    const resolveBrandDocumentContext = new ResolveBrandDocumentContext(new MongoBrandAssetRepository());
     const storage = getFileStorage();
 
     function validateAttachmentMetaLimits(attachmentMeta: Array<{ sizeBytes: number }>, policy: ProductAttachmentPolicy) {
@@ -231,6 +234,21 @@ export function createVibecoreRoutes(): Router {
                     projectId,
                 });
 
+                // Persist the Layer T signal on the project so subsequent generation
+                // turns (chat-preview) re-inject the same format guidance. Layer T
+                // self-suppresses when the project later gains a presetId, so this is
+                // safe to store even when templateId also matched.
+                if (result.formatHint && !result.skipped) {
+                    await projectRepository.update(projectId, userId, {
+                        templateResolution: {
+                            formatHint: result.formatHint,
+                            confidence: result.confidence,
+                            reasoning: result.reasoning,
+                            source: "layer_phi",
+                        },
+                    }).catch(() => null);
+                }
+
                 // Always echo projectId so the client pins follow-up calls
                 // (prefill, generation, conversation) to the same sandbox.
                 res.json({ ...result, projectId, warnings, attachmentPolicy });
@@ -277,58 +295,27 @@ export function createVibecoreRoutes(): Router {
                 }
                 const warnings = buildAttachmentWarnings(attachmentMeta, attachmentPolicy);
 
-                // Layer D injection: load assets only when caller pinned an existing project.
-                if (parsed.data.projectId) {
+                // Layer D injection: use the resolved sandbox project. This covers both
+                // client-pinned projects and backend-created Vibe drafts.
+                if (projectId) {
                     // Load project assets (ownership already verified above)
-                    const assets = await assetRepository.listByProject(projectId, userId).catch(() => []);
+                    let assets = await assetRepository.listByProject(projectId, userId).catch(() => []);
 
-                    // First pass: use fully-enriched traces (status === "ready")
-                    const enrichedLayerD = env.enrichmentInjectLayerD
-                        ? buildProjectKnowledgeLayer(assets, {
+                    if (env.enrichmentInjectLayerD) {
+                        const projectLayerD = await buildProjectLayerDContext({
+                            assetRepository,
+                            storage,
+                            projectId,
+                            userId,
+                            assets,
                             maxChars: 8000,
                             maxAssets: documentContextPolicy.maxAssetsPerPrompt,
-                        })
-                        : "";
-
-                    if (enrichedLayerD) {
-                        layerDContext = enrichedLayerD;
-                        assets
-                            .filter((a) => a.enrichmentTrace?.provenance.enrichmentStatus === "ready" && a.originalName)
-                            .slice(0, documentContextPolicy.maxAssetsPerPrompt)
-                            .forEach((a) => layerDocNames.push(a.originalName));
-                    } else if (assets.length > 0) {
-                        // Second pass: inline text extraction for document assets not yet enriched
-                        const docAssets = assets
-                            .filter((a) => a.storedFilename && getParser(a.mimeType) !== null)
-                            .slice(0, documentContextPolicy.fallbackInlineExtractionMaxAssets);
-
-                        const snippets = await Promise.allSettled(
-                            docAssets.map(async (asset) => {
-                                const parser = getParser(asset.mimeType)!;
-                                const filePath = storage.uploadFilePath(asset.userId, asset.projectId, asset.storedFilename);
-                                const stream = await storage.createReadStream(filePath);
-                                const chunks: Buffer[] = [];
-                                await new Promise<void>((resolve, reject) => {
-                                    stream.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string)));
-                                    stream.on("end", resolve);
-                                    stream.on("error", reject);
-                                });
-                                const buffer = Buffer.concat(chunks);
-                                const parsedDoc = await parser.parse(buffer, asset.mimeType);
-                                const snippet = parsedDoc.rawText.slice(0, 2500).trim();
-                                return snippet ? `--- ${asset.originalName} ---\n${snippet}` : null;
-                            }),
-                        );
-
-                        const blocks = snippets
-                            .filter((r): r is PromiseFulfilledResult<string | null> => r.status === "fulfilled")
-                            .map((r) => r.value)
-                            .filter((s): s is string => s !== null && s.length > 0);
-
-                        if (blocks.length > 0) {
-                            layerDContext = `[DOCUMENT CONTEXT — use to enrich the brief fields]\n${blocks.join("\n\n")}`;
-                            docAssets.forEach((a) => layerDocNames.push(a.originalName));
-                        }
+                            fallbackInlineExtractionMaxAssets: documentContextPolicy.fallbackInlineExtractionMaxAssets,
+                            waitForPendingMs: env.enrichmentEnabled ? PROJECT_LAYER_D_WAIT_FOR_PENDING_MS : 0,
+                        });
+                        assets = projectLayerD.assets;
+                        layerDContext = projectLayerD.layer || undefined;
+                        projectLayerD.documentNames.forEach((name) => layerDocNames.push(name));
                     }
 
                     if (parsed.data.generationMode === "data_dashboard" || parsed.data.templateId === "data-dashboard" || parsed.data.formatHint === "analytics_dashboard") {
@@ -340,6 +327,18 @@ export function createVibecoreRoutes(): Router {
                             layerXDataContext = groundedData;
                         }
                     }
+                }
+
+                // Reusable brand documents (user/platform scope) apply to every project — even a
+                // freshly auto-created one — so the brand book guides the prefill from intake.
+                // In-flight analyses are awaited (bounded): the prefill quality depends on them.
+                const brandDocuments = await resolveBrandDocumentContext
+                    .execute({ userId, projectId, waitForPendingMs: BRAND_DOC_WAIT_FOR_PENDING_MS })
+                    .catch(() => []);
+                const brandDocumentLayer = buildBrandDocumentLayerD(brandDocuments, { maxChars: 6000 });
+                if (brandDocumentLayer) {
+                    layerDContext = [brandDocumentLayer, layerDContext].filter(Boolean).join("\n\n");
+                    brandDocuments.forEach((d) => layerDocNames.push(d.title));
                 }
 
                 const result = await vibePrefill.execute({

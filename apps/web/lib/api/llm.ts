@@ -61,6 +61,22 @@ export interface LlmChatInput {
     history?: LlmHistoryMessage[];
     currentArtifacts?: LlmCurrentArtifacts;
     focusContext?: LlmFocusContext;
+    /** BCP-47 UI language from the client (e.g. "it", "en"). Fallback source for Layer L. */
+    uiLanguage?: string;
+}
+
+/**
+ * One entry of the structured system-prompt breakdown — mirrors the backend
+ * composer (composeSystemPromptWithLayers) and the persisted promptingTrace.layers.
+ * `span` indexes into the corresponding `effectiveSystemPrompt` string.
+ */
+export interface PromptLayerEntryDto {
+    id: string;
+    key: string;
+    label: string;
+    source: string;
+    chars: number;
+    span: [number, number];
 }
 
 export interface LlmChatPreviewResult {
@@ -77,6 +93,8 @@ export interface LlmChatPreviewResult {
             role: "system" | "user";
             content: string;
         }>;
+        /** Structured system-prompt layer breakdown, in composition order. Absent for legacy traces or focused-mode edits. */
+        layers?: PromptLayerEntryDto[];
     };
     structured?: {
         chat: {
@@ -271,19 +289,12 @@ export interface LlmProvidersResponse {
     hasProviderApiKeyConfigured: boolean;
 }
 
-export interface LlmPromptPreviewDto {
-    presetId: string | null;
-    layers: {
-        a_baseConstraints: string;
-        b_presetModule: string;
-        c_styleContext: string;
-        d_documentContext: string;
-        x_dataContext?: string;
-        e_prePromptTemplate: string;
-        f_governance?: string;
-        budgetPolicy: string;
-    };
-    composed: string;
+export interface PromptPreviewResponse {
+    dryRun: true;
+    provider: string;
+    model: string;
+    effectiveSystemPrompt: string;
+    layers: PromptLayerEntryDto[];
     tokenEstimate: number;
 }
 
@@ -386,8 +397,19 @@ export function getLlmPromptConfig(token: string, projectId: string) {
     });
 }
 
-export function getLlmPromptPreview(token: string, projectId: string) {
-    return call<LlmPromptPreviewDto>("GET", `/v1/projects/${projectId}/llm/prompt-preview`, undefined, {
+export function getLlmPromptPreview(
+    token: string,
+    projectId: string,
+    params?: { uiLanguage?: string; provider?: string; model?: string; pipelineRole?: string; capability?: string }
+) {
+    const query = new URLSearchParams();
+    if (params?.uiLanguage) query.set("uiLanguage", params.uiLanguage);
+    if (params?.provider) query.set("provider", params.provider);
+    if (params?.model) query.set("model", params.model);
+    if (params?.pipelineRole) query.set("pipelineRole", params.pipelineRole);
+    if (params?.capability) query.set("capability", params.capability);
+    const qs = query.toString();
+    return call<PromptPreviewResponse>("GET", `/v1/projects/${projectId}/llm/prompt-preview${qs ? `?${qs}` : ""}`, undefined, {
         Authorization: `Bearer ${token}`,
         "x-project-id": projectId,
     });

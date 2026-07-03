@@ -104,7 +104,16 @@ Only use CDNs from this list. Do not reference any other external URLs.
 - Phaser 3.90.0:
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
   Use for: 2D arcade games, platformers, runners, collision-based prototypes.
-  Pattern: new Phaser.Game({ parent: "game-root", width: 960, height: 540, scene: { preload, create, update } });
+  Pattern (WITH physics + input — a game must actually move and respond):
+    const game = new Phaser.Game({
+      parent: "game-root",
+      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 960, height: 540 },
+      physics: { default: "arcade", arcade: { gravity: { y: 800 }, debug: false } },
+      scene: { preload, create, update }
+    });
+  In create(): this.cursors = this.input.keyboard.createCursorKeys(); and also bind pointer/touch
+  (this.input.on("pointerdown", ...)) so the game is playable without a physical keyboard.
+  In update(): read this.cursors / pointer state and apply body velocity every frame.
 
 - Matter.js 0.20.0:
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
@@ -156,7 +165,7 @@ back to vanilla CSS animations or remove the marker attributes entirely.
 - Needs WebXR/VR scene: add A-Frame.
 - Never include a library unless you actually use it.
 - Do not use ES module imports, import maps, npm package names, or type="module" scripts in generated artifacts.
-- For game/3D/XR output, the HTML still needs a visible fallback container and artifacts.js owns all custom initialization code.
+- For game/3D/XR output, keep the surrounding HTML minimal, give the engine a visible fallback container, and put all custom initialization code in artifacts.js.
 
 ## artifacts.css and artifacts.js — MANDATORY SPLIT (critical)
 You MUST always populate artifacts.css and artifacts.js as separate fields.

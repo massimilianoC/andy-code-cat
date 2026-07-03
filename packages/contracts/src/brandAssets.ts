@@ -7,12 +7,13 @@ export const BRAND_ASSET_ROLES = [
     "company_name", "brand_tagline",
     "contact_email", "contact_phone", "contact_address",
     "social_instagram", "social_linkedin", "social_website",
-    "legal_vat", "custom",
+    "legal_vat", "brand_document", "custom",
 ] as const;
 
 export const BRAND_ASSET_POLICIES = ["must_use", "prefer", "optional"] as const;
-export const BRAND_ASSET_VALUE_TYPES = ["asset_ref", "text", "color_list", "url"] as const;
+export const BRAND_ASSET_VALUE_TYPES = ["asset_ref", "text", "color_list", "url", "document_ref"] as const;
 export const BRAND_ASSET_SCOPES = ["platform", "user", "project"] as const;
+export const BRAND_ASSET_ENRICHMENT_STATUSES = ["pending", "ready", "failed", "skipped"] as const;
 
 export const createBrandAssetTextSchema = z.object({
     role: z.enum(BRAND_ASSET_ROLES),
@@ -34,6 +35,18 @@ export const promoteBrandAssetSchema = z.object({
     priority: z.number().int().min(0).max(999).default(0),
     sourceAssetId: z.string().uuid(),
 });
+
+/**
+ * Multipart metadata for a brand-document upload (role is forced to `brand_document`
+ * server-side). The file itself travels as `multipart/form-data`; these are the text fields.
+ */
+export const brandDocumentUploadMetaSchema = z.object({
+    policy: z.enum(BRAND_ASSET_POLICIES).default("prefer"),
+    description: z.string().max(200).optional(),
+    isActive: z.coerce.boolean().default(true),
+    priority: z.coerce.number().int().min(0).max(999).default(0),
+});
+export type BrandDocumentUploadMetaInput = z.infer<typeof brandDocumentUploadMetaSchema>;
 
 export const updateBrandAssetSchema = z.object({
     role: z.enum(BRAND_ASSET_ROLES).optional(),
@@ -66,6 +79,10 @@ export interface BrandAssetDto {
     isActive: boolean;
     priority: number;
     downloadUrl?: string;
+    /** Present for `document_ref` assets: lifecycle of the one-time enrichment. */
+    enrichmentStatus?: typeof BRAND_ASSET_ENRICHMENT_STATUSES[number];
+    /** Whether a Layer D fragment has been computed and cached for this document. */
+    hasDocumentFragment?: boolean;
     createdAt: string;
     updatedAt: string;
 }

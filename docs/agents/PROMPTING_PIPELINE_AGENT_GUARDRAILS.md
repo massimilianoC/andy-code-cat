@@ -16,8 +16,8 @@ The Layer 1 (chat-preview) pipeline composes the system prompt in the following 
 
 | Layer | Function / File | Owner | Authorised content |
 |---|---|---|---|
-| **A** | `buildBaseConstraintsLayer()` in `systemPromptLayers.ts` | **Architecture** (human maintainer or architecture agent) | Immutable structural rules: 1+1+1 output format, CDN-only, no framework, JS exclusively in artifacts.js, HTML compactness |
-| **B** | `buildPresetLayerFromPreset()` in `systemPromptLayers.ts` | **Preset agent** | `outputSpec.systemPromptModule` + `cssConstraints` from presets — never free text |
+| **A** | `buildBaseConstraintsLayer()` in `systemPromptLayers.ts` | **Architecture** (human maintainer or architecture agent) | Immutable **technical** floor: 1+1+1 output format, CDN-only, no framework, JS exclusively in artifacts.js, HTML compactness, visibility-without-JS, canvas/engine container safety, accessibility baseline, **completeness & ship-readiness contract** (every output a complete, publish-ready, fully-functional POC/MVP — never a skeleton or deferred-to-next-steps stub; token efficiency never reduces scope). **No layout/viewport/document-structure directives** (those belong to Layer B). Responsiveness is stated only as a soft, overridable default. |
+| **B** | `buildPresetLayerFromPreset()` in `systemPromptLayers.ts` | **Preset agent** | `outputSpec.systemPromptModule` + `cssConstraints` + the deterministic **VIEWPORT MODE** block derived from `outputSpec.viewportModel` (`buildViewportModeBlock`). Owns all layout/viewport/document-structure framing — never free text |
 | **C** | `buildStyleContextBlock()` in `styleContextBuilder.ts` | **Style / moodboard agent** | Visual tags, palette, typography, layout, tone — no technical rules |
 | **D** | `buildProjectKnowledgeLayer()` *(to be implemented)* in `systemPromptLayers.ts` | **Context / embed agent** | Asset enrichment traces, document briefs, fetched resource snippets — pure content, no technical rules |
 | **E** | `prePromptTemplate` via `GetLlmPromptConfig.ts` | **CDN / images / encoding agent** | RESPONSE FORMAT, JSON ENCODING RULES, HTML ATTRIBUTE QUOTING, APPROVED CDN LIBRARIES, LIBRARY SELECTION GUIDANCE, IMAGES, CONVERSATION CONTEXT |
@@ -73,6 +73,20 @@ The following statement in `buildBaseConstraintsLayer()` is the **single authori
 - **`PP-003` MUST NOT:** Any other layer contain a section named `## OUTPUT` or `## REASONING`.
 - **`PP-003` MUST NOT:** `DEFAULT_PRE_PROMPT` contain hardcoded token count values (they diverge from env).
 
+### 3.5 Layout & viewport ownership (PP-018)
+
+Layout, page structure, semantic landmarks, responsive breakpoints and viewport framing are
+owned **exclusively by Layer B** (the preset), emitted deterministically by
+`buildViewportModeBlock()` from `outputSpec.viewportModel`.
+
+- **`PP-018` MUST NOT:** Layer A (`buildBaseConstraintsLayer`) contain layout/viewport/document
+  directives (mobile-first breakpoints, `header/nav/section/footer` mandates, above/below-the-fold).
+  It may state responsiveness only as a soft, explicitly-overridable default.
+- **`PP-018` MUST NOT:** any preset assert a viewport framing in free text that contradicts its
+  `viewportModel` (e.g. a `fullscreen_app` preset asking for a scrollable landing structure).
+- A full-screen format (`fullscreen_app`, `slide_deck`) that renders as a scrollable landing is a
+  `PP-018` regression — check Layer A did not reintroduce document framing.
+
 ### 3.4 Layer E — DEFAULT_PRE_PROMPT boundary (PP-004)
 
 Layer E (`prePromptTemplate` default) contains **exclusively**:
@@ -88,6 +102,25 @@ Layer E (`prePromptTemplate` default) contains **exclusively**:
 
 - **`PP-004` MUST NOT** belong in Layer E: architectural rules about output files → Layer A; token/reasoning budget → `buildOutputBudgetPolicy()`; JS placement directives → Layer A; preset-specific sections → Layer B; project content (brief, links, assets) → Layer D.
 - **`PP-004` MUST NOT:** `DEFAULT_PRE_PROMPT` include dynamic values read from `env` — use `buildOutputBudgetPolicy()` for those.
+
+### 3.6 Anti-loop salience control (PP-019)
+
+Prompt quality is not only about correctness. Repeating the same high-salience rule block across
+multiple late layers causes some providers to spend reasoning budget re-auditing the prompt rather
+than emitting the JSON artifact.
+
+- **`PP-019` MUST:** keep each high-salience behavioural rule family in one authoritative layer.
+  Examples: visibility-without-JS, script placement, game/input reliability, and reasoning-budget
+  policy.
+- **`PP-019` MUST NOT:** restate the same checklist with only cosmetic wording changes across
+  Layer A, Layer E, model guidance, governance prompt, and budget policy.
+- **`PP-019` SHOULD:** let later layers reference the owning layer briefly when needed, instead of
+  reprinting the full rule block.
+- **`PP-019` MUST NOT:** use the budget layer to repeat detailed architectural constraints already
+  defined in Layer A. The budget layer may only set output-shape and reasoning-discipline rules.
+- **`PP-019` SHOULD:** prefer compact imperative wording over anxious phrasing such as repeated
+  "final authority", "non-editable", or multi-step self-audit instructions unless the rule must
+  genuinely override an editable template.
 
 ---
 
@@ -159,6 +192,7 @@ Before modifying any layer file:
 4. Verify the change does not add token budget or reasoning rules outside buildOutputBudgetPolicy().
 5. If the target is a frozen zone → stop. Open an issue or discuss with the maintainer.
 6. Commit on a separate feat/* branch per agent — do not mix changes from different layers in one commit.
+7. If a rule is already present in Layer A or the budget policy, shorten the later layer instead of adding a paraphrased duplicate.
 ```
 
 ### 5.1 Pre-commit anti-conflict checklist
@@ -168,6 +202,7 @@ Answer each question before committing. A single "yes" is a blocker.
 - [ ] Does my change introduce a section named `## OUTPUT` or `## REASONING`? → **PP-003 violation** — move it to `buildOutputBudgetPolicy()`
 - [ ] Does my change specify where to place JS (inline, `<script>`, `artifacts.js`)? → **PP-002 violation** — belongs in Layer A
 - [ ] Does my change replicate the JSON schema `{ chat, artifacts }`? → **PP-004 violation** — already in `## RESPONSE FORMAT` of Layer E
+- [ ] Does my change restate a high-salience rule family already owned by another layer (visibility, script placement, game reliability, reasoning budget)? → **PP-019 violation** — keep one authoritative copy
 - [ ] Does my change touch `composeSystemPrompt()` or the layer order? → **frozen zone** — consensus required
 - [ ] Does my layer builder return a string that starts or ends with `---`? → **PP-001 violation** — remove the separator
 
@@ -223,3 +258,27 @@ containing the list of triggered tags. Use those events as the canary metric for
 prompt regressions: a sustained rise in any tag means the corresponding prompt
 directive is losing effectiveness and should be revisited at the prompt layer
 first, then strengthened in the repair if necessary.
+
+---
+
+## 8. Prompt Layer SSOT — Single Composition Path (PP-020)
+
+Implemented per `docs/specs/PROMPT_LAYER_SSOT_SPEC.md` /
+`docs/specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md`.
+
+- **`PP-020` MUST:** composition happens ONLY inside `resolveContext()` in
+  `llmRoutes.ts`, via `composeSystemPromptWithLayers()` (the deprecated
+  `composeSystemPrompt()` wrapper has been removed — it has zero call sites).
+  The `/llm/prompt-preview` dry-run endpoint reuses `resolveContext()`; it does
+  not call the composer directly.
+- **`PP-020` MUST:** every new layer be registered in `PROMPT_LAYER_DESCRIPTORS`
+  (`systemPromptComposer.ts`) — this is the only place layer order/identity is
+  declared. Do not introduce a parallel registry.
+- **`PP-020` MUST:** the frontend Prompt tab render ONLY from persisted
+  `promptingTrace.layers` (real generations) or the `/llm/prompt-preview`
+  dry-run response `layers[]` (next-request estimate) — via the single
+  `apps/web/components/PromptLayersView.tsx` renderer. No client-side
+  recomposition, heuristic text-splitting, or mock/fallback text.
+- **`PP-020` MUST NOT:** Layer S (`template-skills`, reserved) be populated —
+  it stays empty until `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md` Wave 3
+  ships a resolver.

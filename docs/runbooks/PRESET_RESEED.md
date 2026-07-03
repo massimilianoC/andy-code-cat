@@ -2,12 +2,20 @@
 
 This runbook updates the Mongo-backed project template registry from the static `PRESET_CATALOG`.
 
+> **MANDATORY:** whenever a deploy includes changes to `ProjectPreset.ts`, the reseed is a
+> binding part of that deploy — run it in the same operation, on every environment
+> (local deploy stack AND droplet). The Mongo catalog wins over the static one: skipping the
+> reseed keeps serving stale prompt modules. For `viewportModel` only, a code fallback
+> (`withStaticViewportFallback`, PP-018) protects the deploy→reseed window — nothing else is
+> protected.
+
 Use it after changing:
 
 - `apps/api/src/domain/entities/ProjectPreset.ts`
 - preset `briefTemplate`
 - preset `styleTemplate`
 - preset `outputSpec.systemPromptModule`
+- preset `outputSpec.viewportModel` (layout/viewport framing — drives the Layer B VIEWPORT MODE block)
 - preset default tags
 - preset visibility (`isActive`)
 
@@ -115,3 +123,4 @@ Expected outcomes:
 - `landing`, `website`, `form`, `manifesto`, `slideshow`, `keynote`, `a4poster`, `infographic`, `videogame`, `seriousgame`, `game3d`, `vr-aframe`, and `interactive-story` are active standard choices.
 - `freerunner` and `data-dashboard` remain in the registry but are hidden from the standard dashboard picker because `isActive=false`.
 - Feature tags use the valid `feat:*` prefix.
+- `videogame`, `freerunner`, `seriousgame`, `game3d`, `vr-aframe`, `interactive-story` carry `outputSpec.viewportModel = "fullscreen_app"`; `slideshow`, `keynote` carry `"slide_deck"`; `a4poster` carries `"print"`. Document presets omit the field and default to `document_scroll`. Confirm one full-screen preset returns it: `curl -s http://localhost:4000/v1/presets | grep -o '"viewportModel":"fullscreen_app"' | head -1`.

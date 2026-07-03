@@ -68,10 +68,13 @@ export function createPipelineRoutes(): Router {
         try {
             const intake = zeroEffortLaunchSchema.parse(req.body);
 
-            // Propagate inferred presetId to the project so Layer T picks the right template
-            if (intake.presetId) {
+            // Propagate inferred presetId to the project so Layer T picks the right template,
+            // and persist the resolved output language so Layer L (OUTPUT LANGUAGE) is injected
+            // into every subsequent generation for this project (not just the intake brief text).
+            if (intake.presetId || intake.outputLanguage) {
                 await projectRepository.update(req.sandbox!.projectId, req.auth!.userId, {
-                    presetId: intake.presetId,
+                    ...(intake.presetId ? { presetId: intake.presetId } : {}),
+                    ...(intake.outputLanguage ? { outputLanguage: intake.outputLanguage } : {}),
                 }).catch(() => {});
             }
 

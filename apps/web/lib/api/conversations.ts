@@ -1,4 +1,5 @@
 import { call } from "./call";
+import type { PromptLayerEntryDto } from "./llm";
 
 export interface BackgroundTaskDto {
     id: string;
@@ -63,6 +64,8 @@ export interface MessageDto {
                 role: "system" | "user";
                 content: string;
             }>;
+            /** Structured system-prompt layer breakdown, in composition order. Absent for legacy traces or focused-mode edits. */
+            layers?: PromptLayerEntryDto[];
         };
         generatedArtifacts?: {
             html: string;

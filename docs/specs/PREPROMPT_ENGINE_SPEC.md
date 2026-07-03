@@ -1,5 +1,15 @@
 # Andy Code Cat — PrepromptEngine: Detailed Specification
 
+> **Superseded composition flow:** the live system-prompt composition pipeline (Layer 1 chat-preview
+> path) described elsewhere in this document has been superseded by the registry-driven composer in
+> `apps/api/src/application/llm/systemPromptComposer.ts` (`composeSystemPromptWithLayers`), wired
+> exclusively through `resolveContext()` in `llmRoutes.ts`. See
+> [PROMPT_LAYER_SSOT_SPEC.md](PROMPT_LAYER_SSOT_SPEC.md) for the canonical layer registry, trace
+> persistence, and frontend rendering contract. This document is retained for the PrepromptEngine's
+> other responsibilities (PDF/image ingestion, `resolvedClaudeMd`/`resolvedOpenCodeJson` output).
+
+---
+
 > **Scope:** Full technical specification for the PrepromptEngine service  
 > **Dependencies:** MongoDB (`PrepromptProfile`), Nunjucks templates, `pdf-parse`, `sharp`  
 > **Project location:** `apps/api/src/services/preprompt/`

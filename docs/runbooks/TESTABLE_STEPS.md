@@ -294,6 +294,28 @@ These two items are additive roadmap improvements and can be delivered after the
 - Verify: `DELETE /v1/admin/brand-assets/:id` removes the asset and it no longer appears in Layer G
 - Retrocompatibility: `GET /v1/projects/:projectId/llm/prompt-preview` on a project with NO brand assets configured returns `g_brandContext: ""` and the composed prompt is identical to what it was before the feature was deployed
 
+### Step 11s - Reusable Brand Document: one-time extraction (User Scope)
+
+- `POST /v1/users/me/brand-assets/document` (multipart) with a PDF/DOCX brand book — Expected: 201 with `enrichmentStatus` and `valueType: "document_ref"`
+- Re-fetch `GET /v1/users/me/brand-assets` — Expected: the document shows `hasDocumentFragment: true` once enrichment completes (`enrichmentStatus: "ready"`)
+- Verify: the LLM document analysis ran exactly once (one enrichment cost entry in the ledger for that document)
+
+### Step 11t - Reusable Brand Document: cross-project injection
+
+- With the user-scope brand document from 11s present, open `GET /v1/projects/:projectId/llm/prompt-preview` on ANY project (even one with no attachments)
+- Expected: `layerD` contains a `## LAYER D — BRAND REFERENCE MATERIALS` block with the document's cached fragment
+- Open a SECOND, different project — Expected: the same brand-document block appears with NO new enrichment call (fragment reused verbatim)
+
+### Step 11u - Reusable Brand Document: promote reuses extraction
+
+- Upload a document as a project attachment and let it enrich; then `POST /v1/users/me/brand-assets/promote` with `{ "role": "brand_document", "sourceAssetId": "<assetId>" }`
+- Expected: 201 with the promoted document carrying the source's cached fragment and ZERO new LLM cost
+
+### Step 11v - Reusable Brand Document: budget + retrocompat
+
+- Verify: combined Layer D (brand documents + project attachments) never exceeds `ENRICHMENT_LAYER_D_MAX_CHARS`; brand documents claim the budget first
+- Retrocompatibility: with NO brand documents, `layerD` is byte-identical to before this feature (only project attachments, or empty)
+
 ---
 
 ## M0.5 - Focused Asset Control

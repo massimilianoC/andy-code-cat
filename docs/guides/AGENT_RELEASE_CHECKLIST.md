@@ -93,7 +93,31 @@ For a hotfix:
 4. Tag a new release if published.
 5. Back-merge into `develop`.
 
-## 10. Final Agent Sanity Check
+## 10. Post-Deploy Data Steps (MANDATORY when applicable)
+
+### Preset catalog reseed — binding when `ProjectPreset.ts` changed
+
+If the release touches `apps/api/src/domain/entities/ProjectPreset.ts` (preset modules,
+`outputSpec`, **`viewportModel`**), the Mongo preset registry MUST be reseeded **in the same
+deploy operation** — it is not optional and must not be deferred:
+
+- The live catalog is Mongo-backed and wins over the static catalog.
+- Until reseed, stored presets lack the new fields; a code-level fallback
+  (`withStaticViewportFallback`, PP-018) keeps the window safe for `viewportModel`, but any
+  other preset content change (prompt modules, templates) is NOT covered and will keep serving
+  stale prompts until reseed.
+
+Production (droplet):
+
+```bash
+npm run droplet:deploy
+npm run droplet:seed -- --only-presets
+```
+
+Local deploy stack: see `docs/runbooks/PRESET_RESEED.md` for the per-stack commands and
+verification steps (including the `viewportModel` check).
+
+## 11. Final Agent Sanity Check
 
 - The branch name matches the Gitflow policy.
 - The release identifier is consistent everywhere.

@@ -56,8 +56,8 @@ export async function prepareImageBuffer(buffer: Buffer, mimeType: string): Prom
         return { buffer: output, resized: needsResize, mimeType: targetMime };
     } catch (err) {
         console.warn(
-            `[ImageResizeGuard] sharp pipeline failed for ${lower} (needsTranscode=${needsTranscode}, needsResize=${needsResize}); using original buffer`,
-            err instanceof Error ? err.message : err,
+            "[ImageResizeGuard] sharp pipeline failed; using original buffer",
+            { mimeType: lower, needsTranscode, needsResize, error: err instanceof Error ? err.message : err },
         );
         return { buffer, resized: false, mimeType: lower };
     }

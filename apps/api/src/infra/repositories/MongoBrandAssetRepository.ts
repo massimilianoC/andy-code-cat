@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import type { Collection, Filter } from "mongodb";
 import { getDb } from "../db/mongo";
-import type { BrandAsset, BrandAssetScope, CreateBrandAssetInput, UpdateBrandAssetInput } from "../../domain/entities/BrandAsset";
+import type { AssetEnrichmentTrace } from "../../domain/entities/AssetEnrichmentTrace";
+import type { BrandAsset, BrandAssetEnrichmentStatus, BrandAssetScope, CreateBrandAssetInput, UpdateBrandAssetInput } from "../../domain/entities/BrandAsset";
 import type { BrandAssetRepository } from "../../domain/repositories/BrandAssetRepository";
 
 interface BrandAssetDocument {
@@ -20,6 +21,9 @@ interface BrandAssetDocument {
     promotedFromAssetId?: string;
     textValue?: string;
     description?: string;
+    documentFragment?: string;
+    enrichmentTrace?: AssetEnrichmentTrace | null;
+    enrichmentStatus?: BrandAssetEnrichmentStatus;
     isActive: boolean;
     priority: number;
     createdAt: Date;
@@ -43,6 +47,9 @@ function toEntity(doc: BrandAssetDocument): BrandAsset {
         promotedFromAssetId: doc.promotedFromAssetId,
         textValue: doc.textValue,
         description: doc.description,
+        documentFragment: doc.documentFragment,
+        enrichmentTrace: doc.enrichmentTrace ?? undefined,
+        enrichmentStatus: doc.enrichmentStatus,
         isActive: doc.isActive,
         priority: doc.priority,
         createdAt: doc.createdAt,
