@@ -37,8 +37,16 @@ const attachmentMetaSchema = z.object({
     sizeBytes: z.number().int().nonnegative(),
 });
 
+/**
+ * Generous upper bound for the Vibe prompt. This is a defensive ceiling against
+ * abuse / runaway LLM cost, NOT a product limit — verbosity in the prompt is
+ * welcome. ~12k chars ≈ 3k tokens, effectively unreachable in normal use. The
+ * frontend counter mirrors this value (VibeCoreEntry.tsx).
+ */
+const VIBE_PROMPT_MAX_CHARS = 12000;
+
 const classifyBodySchema = z.object({
-    prompt: z.string().min(1).max(2000),
+    prompt: z.string().min(1).max(VIBE_PROMPT_MAX_CHARS),
     attachmentMeta: z.array(attachmentMetaSchema).max(100).optional(),
     generationMode: z.enum(["auto", "website", "data_dashboard"]).optional(),
     provider: z.string().min(1).max(80).optional(),
@@ -54,7 +62,7 @@ const classifyBodySchema = z.object({
 });
 
 const prefillBodySchema = z.object({
-    prompt: z.string().min(1).max(2000),
+    prompt: z.string().min(1).max(VIBE_PROMPT_MAX_CHARS),
     /** If provided, backend loads project assets and builds Layer D document context for the LLM. */
     projectId: z.string().max(128).optional(),
     generationMode: z.enum(["auto", "website", "data_dashboard"]).optional(),
