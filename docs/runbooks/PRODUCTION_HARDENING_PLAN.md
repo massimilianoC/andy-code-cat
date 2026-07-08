@@ -119,6 +119,8 @@ Use conservative but realistic upstream timeouts for chat/stream endpoints:
 - deploy frontend and API together when route contracts changed
 - validate the correct public origin is present in `CORS_ORIGIN`
 - after env changes, restart only the target service with `--no-deps`
+- when droplet SSH is flaky or load is high, use the one-service-at-a-time
+  [Droplet manual deploy runbook](DROPLET_MANUAL_DEPLOY.md) instead of the full deploy script
 
 ### Verification checklist
 
