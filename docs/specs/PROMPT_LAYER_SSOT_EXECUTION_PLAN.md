@@ -404,7 +404,7 @@ describe("composeSystemPromptWithLayers — SSOT contract", () => {
         }
     });
 
-    it("keeps Layer S reserved and empty (TEMPLATE_SKILLS_INJECTION_PLAN not implemented)", async () => {
+    it("keeps Layer S empty unless the resolver passes filesystem skills", async () => {
         const { composeSystemPromptWithLayers } = await loadComposer();
         const result = composeSystemPromptWithLayers({ prePromptTemplate: "x" });
         const layerS = result.layers.find((l) => l.id === "S")!;
@@ -456,13 +456,13 @@ All must pass. The mediaPolicy test asserts `layers.composed.indexOf(layers.laye
 1. `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md` — append a rule block:
    composition happens ONLY in `resolveContext` via `composeSystemPromptWithLayers`;
    every new layer MUST be added to `PROMPT_LAYER_DESCRIPTORS`; the UI renders ONLY
-   `promptingTrace.layers` / the dry-run endpoint; Layer S is reserved for template skills
-   (TEMPLATE_SKILLS_INJECTION_PLAN) and must stay empty until that plan's Wave 3.
+   `promptingTrace.layers` / the dry-run endpoint; Layer S is the template-skills slot and is
+   populated by `resolveFilesystemTemplateSkills` when a preset-specific folder exists.
 2. `docs/specs/PROMPT_LAYER_SSOT_SPEC.md` — change Status line to
    `implemented (phases 1-2) — see PROMPT_LAYER_SSOT_EXECUTION_PLAN.md for the executed step list`,
    and in §3 add a note that the registry was realized as `PROMPT_LAYER_DESCRIPTORS` inside
    `systemPromptComposer.ts` (reuse-existing decision) instead of a new `promptLayerRegistry.ts` file,
-   and that Layer S was added to the registry as a reserved slot.
+   and that Layer S was added to the registry as the template-skills slot.
 3. `docs/INDEX.md` — this file is already linked; verify the row exists (added at plan creation).
 4. `docs/specs/PREPROMPT_ENGINE_SPEC.md` — add a short "Superseded composition flow" note at the top
    pointing to PROMPT_LAYER_SSOT_SPEC.md. Do not rewrite the document.

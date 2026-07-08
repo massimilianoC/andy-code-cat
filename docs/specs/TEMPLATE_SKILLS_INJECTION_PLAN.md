@@ -1,8 +1,13 @@
 # Template Skills Injection — MD Skill Manuals per Template
 
-> Status: **proposed** (plan only — do NOT implement yet, per maintainer)
+> Status: **filesystem-first strategy approved for next implementation wave** — runtime wiring still pending
 > Branch target: `develop` (future `feat/template-skills`)
 > Date: 2026-07-02
+> Research update: 2026-07-08 — first seed manuals added under
+> `docs/skills/template-skills/seed-catalog/`; trend report at
+> `docs/research/template-skills/AGENT_SKILLS_TREND_REPORT_2026-07-08.md`
+> Filesystem strategy update: 2026-07-08 — first implementation should read
+> Markdown skills from `docs/skills/template-skills/` without Mongo/admin policy.
 > Related: [PROMPT_LAYER_RESTRUCTURE_PLAN.md](PROMPT_LAYER_RESTRUCTURE_PLAN.md) ·
 > [PROMPTING_PIPELINE_AGENT_GUARDRAILS.md](../agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md) ·
 > [ProjectPreset.ts](../../apps/api/src/domain/entities/ProjectPreset.ts) ·
@@ -23,6 +28,11 @@ This complements the two universal contracts already live:
 Skills are the specialized *how* (library patterns, gameplay loops, physics setup, input handling,
 data-viz idioms) — too detailed and type-specific to live in Layer A, too reusable to be re-written
 inside each preset's `systemPromptModule`.
+
+The July 2026 research pass confirms this direction: current agent platforms increasingly use
+small, discoverable skill packages made of Markdown instructions and optional resources. For Andy,
+the direct translation is a budgeted, selected, operator-governed Layer S rather than a global
+prompt expansion.
 
 ---
 
@@ -83,8 +93,13 @@ export interface TemplateSkill {
 }
 ```
 
-Storage: Mongo collection `template_skills` (reuse the `MongoProjectPresetRepository` pattern),
-plus a static seed catalog `TEMPLATE_SKILL_CATALOG` (same static→Mongo→reseed model as presets).
+Long-term storage: Mongo collection `template_skills` (reuse the `MongoProjectPresetRepository`
+pattern), plus a static seed catalog `TEMPLATE_SKILL_CATALOG` (same static→Mongo→reseed model as
+presets).
+
+Short-term storage: filesystem only, documented in §3.4. This is the approved first step because it
+gives immediate feedback, prompt-preview visibility, git review, and simple operator control before
+introducing database policy, admin CRUD, or tenant-specific overrides.
 
 ### 3.2 Resolution + injection — new Layer S (skills)
 
@@ -102,9 +117,86 @@ plus a static seed catalog `TEMPLATE_SKILL_CATALOG` (same static→Mongo→resee
 - Admin-editable (superadmin), reuse existing admin CRUD + auth patterns.
 - Budget: a global cap (e.g. `LLM_SKILLS_MAX_CHARS`) so skills never crowd out Layer D/context.
 
+### 3.4 Filesystem-first Layer S strategy
+
+First implementation should avoid database policy entirely. The runtime resolver reads from the
+repository filesystem:
+
+```text
+docs/skills/template-skills/
+  ingestion/                  # raw source files, not injected
+  seed-catalog/               # canonical local skill manuals, injectable
+  by-template/<preset-id>/    # runtime source: all Markdown skill files for this preset
+  template-skill-map.json     # validation/documentation map, kept in sync with folders
+  external-skill-routing.json # external references only, not injected directly
+```
+
+Runtime rules:
+
+1. Resolve the active `presetId` from the project exactly as Layer B does.
+2. Validate that `presetId` is a safe folder identifier (`[a-z0-9-]+`).
+3. Read every Markdown file from `by-template/<presetId>/`, sorted by filename.
+4. Exclude folder documentation such as `README.md`.
+5. Build one compact `## LAYER S — TEMPLATE SKILLS` block.
+6. Pass it to `composeSystemPromptWithLayers({ skillsLayer })`.
+7. Mark Layer S source as `filesystem-template-skills`.
+
+Do not read from `ingestion/` or raw `external-sources/`. External inputs must first be distilled
+into local skill manuals and copied into the template folder.
+
+Recommended env controls:
+
+```text
+LLM_TEMPLATE_SKILLS_ENABLED=false
+LLM_TEMPLATE_SKILLS_ROOT=docs/skills/template-skills
+LLM_TEMPLATE_SKILLS_MAX_CHARS=12000
+LLM_TEMPLATE_SKILLS_MAX_COUNT=4
+```
+
+Default should be disabled until tests and prompt-preview verification pass.
+
+Budgeting discipline:
+
+- Drop whole skills when the budget is full; never cut a manual mid-sentence.
+- Inject at most 3-5 skill bodies per template.
+- Prefer local distilled manuals over imported external source files.
+- Keep Layer S after Layer B and before Layer T/C, matching the existing composer slot.
+- Never put API keys, secrets, tenant data, project documents, or user-provided attachments in Layer S.
+
+### 3.5 Easy customization model
+
+Operators customize skills with plain files:
+
+1. Edit or add a canonical manual in `seed-catalog/<skill-id>.md`.
+2. Copy that manual into one or more `by-template/<preset-id>/` folders.
+3. Add that skill id to `template-skill-map.json` for validation/documentation.
+4. Open `/llm/prompt-preview` for a project using that preset and verify Layer S appears with the
+   expected source, char count, and content.
+
+Duplication is acceptable in `by-template/` because it makes each template folder self-contained.
+The canonical source remains `seed-catalog/`. If two templates need different instructions, create
+two derivative manuals instead of overloading one broad skill.
+
+Recommended naming:
+
+```text
+seed-catalog/game-feel-juice.md
+seed-catalog/landing-premium-hero.md
+seed-catalog/dashboard-state-hierarchy.md
+seed-catalog/story-branching-consequences.md
+```
+
+This keeps feedback loops fast: edit file, restart only the API if runtime reads at boot, or no
+restart if the resolver reads per request in development. Production can later switch to cached
+boot-time loading.
+
 ---
 
 ## 4. First skill packs (seed catalog)
+
+The first manuals now exist as original documentation assets under
+`docs/skills/template-skills/seed-catalog/`. Runtime injection reads the per-template copies under
+`docs/skills/template-skills/by-template/<presetId>/`.
 
 | Skill id | appliesTo | Content focus |
 |---|---|---|
@@ -121,9 +213,53 @@ plus a static seed catalog `TEMPLATE_SKILL_CATALOG` (same static→Mongo→resee
 Each is a well-documented MD manual referencing ONLY the approved pinned CDNs, with copy-ready
 patterns — the durable version of what §2 inlined.
 
+Current seed files:
+
+- `docs/skills/template-skills/seed-catalog/game-input-and-loop.md`
+- `docs/skills/template-skills/seed-catalog/arcade-physics-phaser.md`
+- `docs/skills/template-skills/seed-catalog/landing-conversion-copy.md`
+- `docs/skills/template-skills/seed-catalog/website-information-architecture.md`
+- `docs/skills/template-skills/seed-catalog/form-ux-validation.md`
+- `docs/skills/template-skills/seed-catalog/manifesto-editorial-rhetoric.md`
+- `docs/skills/template-skills/seed-catalog/print-layout-a4.md`
+- `docs/skills/template-skills/seed-catalog/serious-game-learning-loop.md`
+- `docs/skills/template-skills/seed-catalog/interactive-story-branching.md`
+- `docs/skills/template-skills/seed-catalog/data-dashboard-grounded.md`
+- `docs/skills/template-skills/seed-catalog/slide-deck-craft.md`
+- `docs/skills/template-skills/seed-catalog/svg-illustration-craft.md`
+- `docs/skills/template-skills/seed-catalog/dataviz-chartjs.md`
+- `docs/skills/template-skills/seed-catalog/creative-canvas-p5.md`
+- `docs/skills/template-skills/seed-catalog/webgl-scene-three.md`
+- `docs/skills/template-skills/seed-catalog/webxr-aframe.md`
+- `docs/skills/template-skills/seed-catalog/modern-impact-visual-direction.md`
+- `docs/skills/template-skills/seed-catalog/premium-landing-art-direction.md`
+- `docs/skills/template-skills/seed-catalog/product-interface-craft.md`
+- `docs/skills/template-skills/seed-catalog/anti-ai-slop-ui-review.md`
+- `docs/skills/template-skills/seed-catalog/brand-led-identity-system.md`
+
+Open seed gap before runtime implementation:
+
+- optional `matter-physics-sim.md`
+- optional `responsive-print-poster.md`
+
 ---
 
-## 5. Wave plan (when approved)
+## 5. Wave plan
+
+### 5.1 Filesystem-first wave
+
+| Wave | Scope | Risk |
+|---|---|---|
+| FS-1 | `TemplateSkill` filesystem DTO + JSON map validation, no DB | low |
+| FS-2 | `resolveFilesystemTemplateSkills({ presetId })` reads `template-skill-map.json` + `seed-catalog/*.md` | low |
+| FS-3 | `buildTemplateSkillsLayer()` budget-caps whole manuals and emits Layer S | low |
+| FS-4 | Wire `skillsLayer` into `resolveContext()` and prompt-preview behind `LLM_TEMPLATE_SKILLS_ENABLED` | medium |
+| FS-5 | Unit tests for map validity, budget drop, disabled flag, missing file handling | low |
+| FS-6 | Manual prompt-preview runbook for at least `landing`, `videogame`, `slideshow`, `data-dashboard` | low |
+
+No Mongo collection, no admin CRUD, no tenant policy in this wave.
+
+### 5.2 Later database wave
 
 | Wave | Scope | Risk |
 |---|---|---|

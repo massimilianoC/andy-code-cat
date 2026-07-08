@@ -106,6 +106,9 @@ Prompting and generation support:
 - `SetLlmPromptConfig`
 - `OptimizeUserPrompt`
 - `DraftProjectTemplate`
+- `resolveFilesystemTemplateSkills` (Layer S) — reads `docs/skills/template-skills/by-template/<presetId>/*.md`
+  inside the canonical `resolveContext()` prompt path. The compose files bind-mount this directory
+  into the API container and the production Dockerfile copies it into the image.
 
 Project/profile/content operations:
 

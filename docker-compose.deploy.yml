@@ -66,6 +66,7 @@ services:
       - "4000:4000"
     volumes:
       - ./data/www:/workspace/data/www
+      - ./docs/skills/template-skills:/workspace/docs/skills/template-skills:ro
     networks:
       - andy-code-cat-net
 

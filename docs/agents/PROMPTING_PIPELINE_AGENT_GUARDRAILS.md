@@ -18,6 +18,7 @@ The Layer 1 (chat-preview) pipeline composes the system prompt in the following 
 |---|---|---|---|
 | **A** | `buildBaseConstraintsLayer()` in `systemPromptLayers.ts` | **Architecture** (human maintainer or architecture agent) | Immutable **technical** floor: 1+1+1 output format, CDN-only, no framework, JS exclusively in artifacts.js, HTML compactness, visibility-without-JS, canvas/engine container safety, accessibility baseline, **completeness & ship-readiness contract** (every output a complete, publish-ready, fully-functional POC/MVP — never a skeleton or deferred-to-next-steps stub; token efficiency never reduces scope). **No layout/viewport/document-structure directives** (those belong to Layer B). Responsiveness is stated only as a soft, overridable default. |
 | **B** | `buildPresetLayerFromPreset()` in `systemPromptLayers.ts` | **Preset agent** | `outputSpec.systemPromptModule` + `cssConstraints` + the deterministic **VIEWPORT MODE** block derived from `outputSpec.viewportModel` (`buildViewportModeBlock`). Owns all layout/viewport/document-structure framing — never free text |
+| **S** | `resolveFilesystemTemplateSkills()` in `templateSkillsLayer.ts`, passed as `skillsLayer` to `composeSystemPromptWithLayers()` | **Template skills agent** | Curated Markdown manuals selected by current `ProjectPreset.id` from `docs/skills/template-skills/by-template/<presetId>/*.md`. Owns template-specific craft, UX, style, interaction, and review guidance. Must stay budget-capped and file-backed. |
 | **C** | `buildStyleContextBlock()` in `styleContextBuilder.ts` | **Style / moodboard agent** | Visual tags, palette, typography, layout, tone — no technical rules |
 | **D** | `buildProjectKnowledgeLayer()` *(to be implemented)* in `systemPromptLayers.ts` | **Context / embed agent** | Asset enrichment traces, document briefs, fetched resource snippets — pure content, no technical rules |
 | **E** | `prePromptTemplate` via `GetLlmPromptConfig.ts` | **CDN / images / encoding agent** | RESPONSE FORMAT, JSON ENCODING RULES, HTML ATTRIBUTE QUOTING, APPROVED CDN LIBRARIES, LIBRARY SELECTION GUIDANCE, IMAGES, CONVERSATION CONTEXT |
@@ -279,6 +280,11 @@ Implemented per `docs/specs/PROMPT_LAYER_SSOT_SPEC.md` /
   dry-run response `layers[]` (next-request estimate) — via the single
   `apps/web/components/PromptLayersView.tsx` renderer. No client-side
   recomposition, heuristic text-splitting, or mock/fallback text.
-- **`PP-020` MUST NOT:** Layer S (`template-skills`, reserved) be populated —
-  it stays empty until `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md` Wave 3
-  ships a resolver.
+- **`PP-020` MUST NOT:** Layer S (`template-skills`) be populated by ad-hoc
+  route logic, database reads, raw ingestion files, or external source files.
+  It is populated only by `resolveFilesystemTemplateSkills()` as described in
+  `docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md` and governed by
+  `docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md`.
+- **`PP-020` MUST:** real generation, prompt preview, and persisted traces all
+  use the same `resolveContext()` composition path. Do not add a second Layer S
+  preview/composition path.

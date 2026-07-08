@@ -23,17 +23,16 @@ export interface PromptLayerDescriptor {
 }
 
 /**
- * Composition order. Layer S (template skills) is reserved per
- * docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md — it is always empty today
- * (no TemplateSkill entity/resolver exists yet, Wave 1-3 not implemented)
- * but is declared here so the slot is visible end-to-end (registry, trace,
- * UI) instead of being introduced silently later.
+ * Composition order. Layer S (template skills) is populated by the
+ * filesystem-first resolver in templateSkillsLayer.ts when a preset-specific
+ * skill folder exists. The slot remains visible end-to-end (registry, trace,
+ * UI) even when no skills are selected.
  */
 export const PROMPT_LAYER_DESCRIPTORS: readonly PromptLayerDescriptor[] = [
     { id: "A", field: "layerA", key: "base-constraints", label: "Layer A — Base constraints", editableBy: "none" },
     { id: "L", field: "layerL", key: "output-language", label: "Layer L — Output language", editableBy: "none" },
     { id: "B", field: "layerB", key: "preset-format", label: "Layer B — Preset output format", editableBy: "superadmin" },
-    { id: "S", field: "layerS", key: "template-skills", label: "Layer S — Template skills (reserved)", editableBy: "superadmin" },
+    { id: "S", field: "layerS", key: "template-skills", label: "Layer S — Template skills", editableBy: "superadmin" },
     { id: "T", field: "layerT", key: "template-resolution", label: "Layer T — Template resolution", editableBy: "user-template" },
     { id: "C", field: "layerC", key: "style-context", label: "Layer C — Style context", editableBy: "none" },
     { id: "G", field: "layerG", key: "brand-identity", label: "Layer G — Global brand identity", editableBy: "project-owner" },
@@ -49,7 +48,7 @@ export interface ResolvedPromptLayers {
     layerA: string;
     layerL: string;
     layerB: string;
-    /** Always "" today — reserved slot, see PROMPT_LAYER_DESCRIPTORS doc-comment. */
+    /** Filesystem-selected template skills, empty when no preset skill folder is resolved. */
     layerS: string;
     layerT: string;
     layerC: string;
@@ -89,7 +88,7 @@ interface ComposeOpts {
     presetLayer?: string;
     templateResolution?: TemplateResolution | null;
     userTemplatePreprompt?: string;
-    /** Reserved for Wave 3 of TEMPLATE_SKILLS_INJECTION_PLAN.md — not wired yet, always "" until then. */
+    /** Layer S content resolved from docs/skills/template-skills/by-template/<presetId>/*.md. */
     skillsLayer?: string;
     styleBlock?: string;
     brandContextLayer?: string;

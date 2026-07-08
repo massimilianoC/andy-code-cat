@@ -59,6 +59,14 @@ export interface MessageMetadata {
         promptConfigId?: string;
         prePromptTemplate?: string;
         effectiveSystemPrompt: string;
+        layers?: Array<{
+            id: string;
+            key: string;
+            label: string;
+            source: string;
+            chars: number;
+            span: [number, number];
+        }>;
         messagesSentToLlm: Array<{
             role: "system" | "user" | "assistant";
             content: string;

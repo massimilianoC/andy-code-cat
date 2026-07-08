@@ -21,6 +21,7 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [README.md](../README.md) | Public project overview, quick start, and positioning |
+| [docs/project/PRODUCT_VISION.md](project/PRODUCT_VISION.md) | Current product vision: interactive artifact platform, VibeCore/GodMode/Didactic modes, Layer S direction, deferred BaaS boundary |
 | [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Current development-state summary: `R1` delivered, `R2`/`R3` active, live cross-cutting tracks |
 | [docs/project/ROADMAP.md](project/ROADMAP.md) | Project roadmap and release direction |
 | [docs/project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md](project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md) | Reuse-first implementation plan for zero-effort flows, backend orchestration, and future node-based pipelines |
@@ -111,6 +112,9 @@ Read in this order before making changes:
 | [docs/specs/SECTION_CONTEXT_OPT_SPEC.md](specs/SECTION_CONTEXT_OPT_SPEC.md) | Section-aware context optimization |
 | [docs/specs/PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX and guardrails |
 | [docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md](specs/PROMPTING_SERVICE_PLATFORM_SPEC.md) | Internal prompting platform and audit model |
+| [docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md](specs/TEMPLATE_SKILLS_INJECTION_PLAN.md) | Layer S template-skills architecture — filesystem-first runtime injection from by-template Markdown folders |
+| [docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md](specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md) | Project policy for filesystem-first Layer S: ownership, source-of-truth files, selection rules, validation workflow, impact evaluation, and rollback |
+| [docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md](specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md) | Implemented filesystem resolver for Layer S: by-template folder loading, env controls, prompt trace, DB logging, Docker packaging, and validation |
 | [docs/specs/LLM_PROVIDER_CATALOG_ALIGNMENT_SPEC.md](specs/LLM_PROVIDER_CATALOG_ALIGNMENT_SPEC.md) | Summary spec for provider compatibility fixes, single-source catalog alignment, shared picker UI, validation status, and review perimeter |
 | [docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md](specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md) | Ultra-operational MVP spec for Zero Effort + GodMode, shared orchestration, and parallel implementation waves |
 | [docs/specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md](specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md) | Evoluzione Zero Effort: media upload step, Layer F media context nel prompt, async job tracking, notifiche email/Telegram |
@@ -134,6 +138,12 @@ Read in this order before making changes:
 | [docs/specs/GLOBAL_BRAND_IDENTITY_SPEC.md](specs/GLOBAL_BRAND_IDENTITY_SPEC.md) | Global Brand Identity System (Layer G) — ✅ delivered (PR #26, release 2026.06.10.1); hierarchical (platform → user → project) additive brand-asset injection; reuses existing storage, auth, and route infrastructure; retrocompatible new layer |
 | [docs/specs/BRAND_REUSABLE_CONTEXT_IMPLEMENTATION.md](specs/BRAND_REUSABLE_CONTEXT_IMPLEMENTATION.md) | Reusable brand context — wave-based plan extending Layer G/D so brand books & guidelines are LLM-analysed once and injected as Layer D development context into every project |
 | [docs/specs/DIDACTIC_MODE_SPEC.md](specs/DIDACTIC_MODE_SPEC.md) | Didactic Mode — parallel, additive, read-only artifact-interrogation layer over the workstation: per-snapshot LLM-generated knowledge (overview, topics, quizzes) cached by `groundingHash`, click-to-ask via the existing inspect engine and Monaco, standalone reusable dual-view; reuses snapshots, prompting trace, and the LLM engine without touching the generation pipeline |
+
+## Research
+
+| Document | Description |
+| --- | --- |
+| [docs/research/template-skills/AGENT_SKILLS_TREND_REPORT_2026-07-08.md](research/template-skills/AGENT_SKILLS_TREND_REPORT_2026-07-08.md) | Online research summary for agent skills and declarative manuals; maps current trends to Andy Code Cat Layer S |
 
 ## VibeCore Components (feat/dashboard-lovable-chat)
 
@@ -163,6 +173,8 @@ pattern proven in this codebase.
 | --- | --- |
 | [docs/skills/screenshot-pdf-export/](skills/screenshot-pdf-export/README.md) | Server-side headless-Chromium (Puppeteer) pattern for capturing an HTML/CSS/JS artifact, a live URL, or iframe content as a JPEG screenshot and/or paginated PDF — on-demand, background-thumbnail, and export-embedded flows, with framework-agnostic code templates |
 | [docs/skills/zip-export-module/](skills/zip-export-module/README.md) | Post-processing + packaging pattern for turning LLM/coding-agent HTML(+CSS/JS) output into a downloadable, deploy-ready ZIP (inline-style/script extraction, dedup, placeholder detection, README generation, signed download tokens) behind a single one-click export button, with framework-agnostic code templates |
+| [docs/skills/template-skills/](skills/template-skills/README.md) | Template skill workspace for future Layer S: ingestion inbox, canonical seed manuals, by-template distribution, and JSON association map |
+| [docs/skills/template-skills/EXTERNAL_SKILL_SELECTION_2026-07-08.md](skills/template-skills/EXTERNAL_SKILL_SELECTION_2026-07-08.md) | Curated external skill import from GitHub sources, with selected files, skipped sources, and candidate template injection relationships |
 
 ---
 
@@ -196,3 +208,4 @@ pattern proven in this codebase.
 | --- | --- |
 | [docs/archive/specs/IMAGE_PICKER_SPEC.deprecated.md](archive/specs/IMAGE_PICKER_SPEC.deprecated.md) | Superseded by [docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md) |
 | [docs/archive/specs/EXTERNAL_API_KEYS_PLATFORM_SPEC.deprecated.md](archive/specs/EXTERNAL_API_KEYS_PLATFORM_SPEC.deprecated.md) | Image-provider governance superseded by [docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md); general API-key/BYOK ideas are historical only |
+| [docs/archive/vision/TARGET-VISION_2026-05-14.md](archive/vision/TARGET-VISION_2026-05-14.md) | Historical product/vertical vision; superseded by [docs/project/PRODUCT_VISION.md](project/PRODUCT_VISION.md) and current roadmap |

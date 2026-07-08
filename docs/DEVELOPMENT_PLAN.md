@@ -12,7 +12,7 @@ and the relevant specs under `docs/specs/`.
 
 ## Current Status
 
-Last aligned review: 2026-06-03
+Last aligned review: 2026-07-08
 
 Andy Code Cat is beyond the original bootstrap phase.
 
@@ -27,6 +27,8 @@ The platform already has a working foundation for:
 - media resolution with persisted project assets and snapshot linkage
 - execution logging, notifications, and cost-tracking foundations
 - Zero Effort / guided-entry work that feeds into the same project model
+- Didactic Mode as a read-only artifact interrogation layer
+- Document Context Layer / `enrichmentTrace` for uploaded assets and reusable brand documents
 
 At this point, the project should be understood as:
 
@@ -34,8 +36,10 @@ At this point, the project should be understood as:
 - `R1`: functionally delivered
 - `R2`: active
 - `R3`: started
+- `R3-QA`: active verification gate
 - `R3.5`: planned
 - `R4+`: intentionally deferred until R2/R3 are hardened
+- `Layer S / Template Skills`: planned next quality track after the R2/R3 verification gate
 
 This supersedes older references that still describe `R1` as the sole current focus.
 
@@ -59,6 +63,17 @@ that converge on the same project, asset, snapshot, and publish model.
 - frontend modes are additive shells, not separate products
 - prompt composition, media resolution, and publish/export rules stay centralized in the API
 - observability and governance are now as important as generation quality
+- template-specific craft should be improved through selected Markdown skill manuals, not by
+  expanding universal prompt layers into a single large prompt
+- dynamic backend behavior should be added later through a declarative BaaS layer, not through
+  arbitrary generated backend code per artifact
+
+### July 2026 operating order
+
+1. Verify and harden R2/R3 end to end.
+2. Implement Template Skills / Layer S as the next artifact-quality track.
+3. Complete domain/publish automation.
+4. Re-open BaaS only after observability and publish are solid.
 
 ---
 
@@ -110,6 +125,28 @@ Primary references:
 - `docs/project/ROADMAP.md`
 - `docs/specs/EXPORT_AND_PUBLISH_SPEC.md`
 - `docs/specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md`
+
+### R2/R3 Verification Gate
+
+Status: active
+
+Purpose:
+
+- prove that the already implemented platform works across the real user path before expanding
+  runtime scope
+- confirm that VibeCore, Zero Effort, GodMode, media resolution, snapshots, export, publish,
+  cost logs, execution logs, and notifications form one observable path
+
+Current priorities:
+
+- browser/manual smoke for VibeCore -> upload -> enrichment -> launch -> workspace
+- export/publish guardrail validation for unresolved media
+- log/cost/notification traceability for generation and publish failures
+- owner/admin visibility for project usage and operational outcomes
+
+Primary reference:
+
+- `docs/runbooks/TESTABLE_STEPS.md`
 
 ### Media Orchestrator Continuation
 
@@ -168,6 +205,28 @@ Primary references:
 - `docs/specs/ZERO_EFFORT_PREFILL_SPEC.md`
 - `docs/project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md`
 
+### Template Skills / Layer S
+
+Status: planned next quality track, documentation seed complete
+
+This track improves output quality for games, slides, SVG/vector artifacts, dataviz, 3D/WebXR,
+and other template families through selected Markdown manuals injected beside Layer B.
+
+Already in place:
+
+- filesystem-backed `Layer S` in the prompt composer
+- `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md`
+- `docs/research/template-skills/AGENT_SKILLS_TREND_REPORT_2026-07-08.md`
+- `docs/skills/template-skills/seed-catalog/`
+
+Current priorities:
+
+- keep Layer S empty until the runtime implementation is approved
+- implement entity/contract/repository/static catalog first
+- select skills by preset, viewport model, and tags
+- add budget caps and prompt-preview trace visibility
+- validate on artifact families where failures are visible: games, slide decks, dataviz, 3D/WebXR
+
 ### R3.5 - Settings and API Keys
 
 Status: planned, not current implementation focus
@@ -221,6 +280,7 @@ of execution as of 2026-06-03:
 - fully new async generation platform as the primary milestone
 - BaaS services expansion before publish/observability hardening
 - RAG chatbot expansion before runtime governance is more mature
+- arbitrary generated backend runtimes for individual artifacts
 
 Those remain backlog or deferred tracks unless a newer spec explicitly reactivates them.
 

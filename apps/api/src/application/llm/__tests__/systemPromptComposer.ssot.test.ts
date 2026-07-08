@@ -35,7 +35,7 @@ describe("composeSystemPromptWithLayers — SSOT contract", () => {
         }
     });
 
-    it("keeps Layer S reserved and empty (TEMPLATE_SKILLS_INJECTION_PLAN not implemented)", async () => {
+    it("keeps Layer S empty unless the resolver passes filesystem skills", async () => {
         const { composeSystemPromptWithLayers } = await loadComposer();
         const result = composeSystemPromptWithLayers({ prePromptTemplate: "x" });
         const layerS = result.layers.find((l) => l.id === "S")!;
