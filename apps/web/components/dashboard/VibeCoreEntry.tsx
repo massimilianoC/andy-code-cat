@@ -72,6 +72,15 @@ const PHASE_LABEL_KEYS: Record<EntryPhase, string> = {
 };
 
 const MIN_PROMPT_CHARS = 3;
+/**
+ * Mirrors backend VIBE_PROMPT_MAX_CHARS in apps/api/.../vibecoreRoutes.ts.
+ * Generous defensive ceiling — verbosity in the prompt is welcome; this only
+ * guards against runaway input. The counter surfaces it before the backend 400s,
+ * so a too-long prompt never fails silently.
+ */
+const MAX_PROMPT_CHARS = 12000;
+/** Only reveal the character counter once the prompt approaches the ceiling. */
+const PROMPT_COUNTER_THRESHOLD = Math.floor(MAX_PROMPT_CHARS * 0.9);
 const STRUCTURED_ENRICHMENT_POLL_INTERVAL_MS = 800;
 const STRUCTURED_ENRICHMENT_MAX_WAIT_MS = 12_000;
 
@@ -379,7 +388,12 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
     async function handleSubmit(e?: React.FormEvent) {
         e?.preventDefault();
-        if (prompt.trim().length < MIN_PROMPT_CHARS || phase !== "idle") return;
+        if (
+            prompt.trim().length < MIN_PROMPT_CHARS ||
+            prompt.length > MAX_PROMPT_CHARS ||
+            phase !== "idle"
+        )
+            return;
         setError(null);
         setServerWarnings([]);
 
@@ -552,6 +566,8 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
     const glowColor = MODE_GLOW[mode];
     const isLoading = phase !== "idle";
+    const promptOverflow = prompt.length > MAX_PROMPT_CHARS;
+    const showPromptCounter = prompt.length >= PROMPT_COUNTER_THRESHOLD;
     const phaseKey = PHASE_LABEL_KEYS[phase];
     const phaseLabel = phaseKey ? t(phaseKey, phase) : "";
 
@@ -659,6 +675,31 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             overflowY: "auto",
                         }}
                     />
+
+                    {/* Character counter: informational, only near the ceiling. */}
+                    {showPromptCounter && (
+                        <div
+                            aria-live="polite"
+                            className="flex items-center justify-end gap-2 px-2 pt-0.5 text-[11px]"
+                        >
+                            {promptOverflow && (
+                                <span className="text-destructive">
+                                    {t(
+                                        "vibecore.promptTooLong",
+                                        "Prompt troppo lungo - accorcialo per continuare",
+                                    )}
+                                </span>
+                            )}
+                            <span
+                                className={cn(
+                                    "tabular-nums",
+                                    promptOverflow ? "text-destructive" : "text-muted-foreground",
+                                )}
+                            >
+                                {prompt.length.toLocaleString()} / {MAX_PROMPT_CHARS.toLocaleString()}
+                            </span>
+                        </div>
+                    )}
 
                     {/* File pills */}
                     {files.length > 0 && (
@@ -820,7 +861,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         {/* Submit */}
                         <button
                             type="submit"
-                            disabled={isLoading || prompt.trim().length < MIN_PROMPT_CHARS}
+                            disabled={isLoading || prompt.trim().length < MIN_PROMPT_CHARS || promptOverflow}
                             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{
                                 background: isLoading

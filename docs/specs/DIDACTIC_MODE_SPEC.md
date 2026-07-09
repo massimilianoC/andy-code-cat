@@ -18,7 +18,7 @@ It is a read-only **interrogation layer toward the current artifact**, not a gen
 
 ### 0.1 Roadmap positioning
 
-Not on the committed release roadmap (R0–R5). Self-standing, **segment-defining MVP** for the "Scuole & Università" vertical (`TARGET-VISION.md` §3 — a read-only subset of *Modalità laboratorio*). Consumes (does not re-implement) **R1** layered prompting (`promptingTrace`) and **R2** logging/cost (`PromptExecutionLog`, `CostTransactionService`). Distinct from **R5 RAG chatbot** (that targets site *visitors*; this targets the *creator*). Expanded only if it finds commercial traction.
+Not on the committed release roadmap (R0–R5). Self-standing, **segment-defining MVP** for the "Scuole & Università" vertical from the archived historical vision (`docs/archive/vision/TARGET-VISION_2026-05-14.md` §3 — a read-only subset of *Modalità laboratorio*). Consumes (does not re-implement) **R1** layered prompting (`promptingTrace`) and **R2** logging/cost (`PromptExecutionLog`, `CostTransactionService`). Distinct from **R5 RAG chatbot** (that targets site *visitors*; this targets the *creator*). Expanded only if it finds commercial traction.
 
 ### 0.2 Locked decisions (interview)
 

@@ -7,7 +7,9 @@ loadEnv({ path: path.resolve(__dirname, "../../../.env") });
 
 // Default DATA_DIR: monorepo root's /data — works both locally and in Docker
 // (__dirname = apps/api/src → ../../../ = monorepo root)
-const DEFAULT_DATA_DIR = path.resolve(__dirname, "../../../data");
+const MONOREPO_ROOT = path.resolve(__dirname, "../../..");
+const DEFAULT_DATA_DIR = path.resolve(MONOREPO_ROOT, "data");
+const DEFAULT_TEMPLATE_SKILLS_ROOT = path.resolve(MONOREPO_ROOT, "docs/skills/template-skills");
 const DEFAULT_SILICONFLOW_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell";
 const DEFAULT_SILICONFLOW_IMAGE_SIZE = "1024x1024";
 
@@ -31,6 +33,10 @@ const envSchema = z.object({
     LLM_HISTORY_MESSAGE_MAX_CHARS: z.coerce.number().int().positive().default(2000),
     LLM_HISTORY_MAX_CHARS: z.coerce.number().int().positive().default(7000),
     LLM_DEFAULT_MAX_COMPLETION_TOKENS: z.coerce.number().int().positive().default(24000),
+    // --- Template Skills Layer S (filesystem-first) ---
+    LLM_TEMPLATE_SKILLS_ENABLED: z.string().default("true"),
+    LLM_TEMPLATE_SKILLS_ROOT: z.string().default(DEFAULT_TEMPLATE_SKILLS_ROOT),
+    LLM_TEMPLATE_SKILLS_MAX_CHARS: z.coerce.number().int().positive().default(12000),
     // --- Section-aware focus context (experimental, backward-compatible) ---
     /** Enable section-level context extraction for focused-edit requests. */
     LLM_FOCUS_SECTION_CONTEXT: z.string().default("false"),
@@ -160,6 +166,10 @@ export const env = {
         return map;
     })(),
     focusSectionContext: parsed.data.LLM_FOCUS_SECTION_CONTEXT === "true",
+    templateSkillsEnabled: parsed.data.LLM_TEMPLATE_SKILLS_ENABLED === "true",
+    templateSkillsRoot: path.isAbsolute(parsed.data.LLM_TEMPLATE_SKILLS_ROOT)
+        ? parsed.data.LLM_TEMPLATE_SKILLS_ROOT
+        : path.resolve(MONOREPO_ROOT, parsed.data.LLM_TEMPLATE_SKILLS_ROOT),
     enrichmentEnabled: parsed.data.ENRICHMENT_ENABLED === "true",
     enrichmentDocumentParsing: parsed.data.ENRICHMENT_DOCUMENT_PARSING === "true",
     enrichmentDocumentLlmPass: parsed.data.ENRICHMENT_DOCUMENT_LLM_PASS === "true",

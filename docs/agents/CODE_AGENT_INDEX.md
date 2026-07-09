@@ -14,6 +14,10 @@
 10. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 16 presets (14 active, 2 hidden: `freerunner`, `data-dashboard`) with `outputSpec` and `systemPromptModule`
 11. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
 12. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
+13. `docs/project/PRODUCT_VISION.md` — current product vision and July 2026 direction lock
+14. `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md` — filesystem-first Layer S template-skills architecture and runtime strategy
+15. `docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md` — Layer S ownership, filesystem source of truth, validation workflow, and impact rubric
+16. `docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md` — implemented Layer S resolver, env flags, prompt trace, DB logging, and Docker packaging
 
 ---
 
@@ -26,8 +30,12 @@ Current active platform tracks:
 
 - **R2 - Observability and cost visibility**: execution logs, usage summaries, dashboard surfaces, operational auditability
 - **R3 - Publish hardening and domain management**: path publish stabilization, slug/domain controls, nginx/SSL completion
+- **R2/R3 verification gate**: VibeCore -> enrichment -> workspace -> export/publish traceability before widening runtime scope
+- **Template Skills / Layer S**: filesystem resolver is implemented; runtime reads Markdown files from `docs/skills/template-skills/by-template/<presetId>/`, seed manuals live under `seed-catalog/`, and `template-skill-map.json` remains a validation/documentation map
 - **Artifact Media Orchestrator continuation**: media resolution reliability, trace completeness, resolver expansion, browser E2E
 - **Guided entry / Zero Effort / VibeCore evolution**: additive intake flows that reuse the same backend orchestration and project model
+
+BaaS remains a deferred R4 direction. Do not start backend-as-a-service implementation unless a newer roadmap update explicitly reactivates it.
 
 When touching prompting code, treat the prompt architecture as an implemented foundation to extend carefully, not as an unbuilt milestone.
 

@@ -2,7 +2,7 @@
 
 Andy Code Cat is developed in iterative releases. Each release is a shippable, testable increment.
 
-_Last review: 2026-06-30_
+_Last review: 2026-07-08_
 
 > **Cross-cutting features delivered outside the R-numbered milestones** (recorded here so they
 > are no longer mistaken for unbuilt work):
@@ -16,6 +16,10 @@ _Last review: 2026-06-30_
 > - **Didactic Mode** — ✅ live (read-only artifact interrogation: knowledge, Q&A, quizzes).
 >   Spec: [DIDACTIC_MODE_SPEC.md](../specs/DIDACTIC_MODE_SPEC.md); progress:
 >   [DIDACTIC_MODE_PROGRESS.md](../DIDACTIC_MODE_PROGRESS.md).
+> - **Template Skills research seed** — documentation-only seed catalog created for the
+>   future Layer S (`template-skills`) implementation. Runtime injection is not wired yet.
+>   Research: [AGENT_SKILLS_TREND_REPORT_2026-07-08.md](../research/template-skills/AGENT_SKILLS_TREND_REPORT_2026-07-08.md);
+>   seed catalog: [docs/skills/template-skills/](../skills/template-skills/README.md).
 
 ---
 
@@ -30,8 +34,10 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 | R0 | ✅ Complete | Core AI loop, auth, WYSIWYG, export, publish, onboarding, i18n, preset catalog |
 | R0.5 | 🔲 Planned | First-install wizard (`/install`), guided server config, superadmin seed, emergency DB promotion docs |
 | R1 | ✅ Functionally delivered | Layered prompting, preset-aware generation, style propagation, provider/model selector, prompt optimization |
-| R2 | 🟡 In progress | Execution log infrastructure and prompt usage summaries exist; dashboarding is still incomplete |
-| R3 | 🟡 Started | Path publish is live and slug/subdomain foundations exist; custom domains and SSL are still pending |
+| R2 | 🟡 In progress | Execution log infrastructure and prompt usage summaries exist; needs verification gate and dashboard completion |
+| R3 | 🟡 Started | Path publish and slug foundations exist; needs verification gate, wildcard/custom domains, nginx/SSL completion |
+| R3-QA | 🔎 Active verification gate | Proves VibeCore -> enrichment -> workspace -> export/publish plus observability before widening runtime scope |
+| Layer S | ✅ Filesystem resolver implemented | Template Skills manuals are loaded from `docs/skills/template-skills/by-template/<presetId>/*.md` into the canonical prompt pipeline |
 | R4 | ⏸ Postponed | Deferred until R2/R3 stabilization is complete |
 | R5 | ⏸ Postponed | Deferred until the BaaS layer is ready |
 
@@ -115,7 +121,7 @@ See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.m
 
 ## R2 — Execution Logging & Observability
 
-**Status: 🟡 Cost data foundation complete; dashboard UI still pending.**
+**Status: 🟡 Cost data foundation complete; verification gate and dashboard UI still pending.**
 
 - [x] execution_logs collection (MongoDB TTL 90d)
 - [x] Admin/owner log query endpoint
@@ -123,6 +129,8 @@ See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.m
 - [x] Per-project cost aggregation API — LLM prompt costs + image generation costs summed and exposed in `GET /v1/projects` (foundation for cost dashboard)
 - [ ] Full per-operation log coverage for every export/publish/UI workflow
 - [ ] Dedicated cost dashboard UI per project (data is now fully available from the API)
+- [ ] Verification gate: generate -> media resolution -> snapshot -> export -> publish emits enough execution/cost/notification data to debug failures without reading raw container logs
+- [ ] Verification gate: VibeCore and Zero Effort flows expose prompt/model/cost lineage consistently with GodMode generation
 
 **Notes**
 
@@ -133,7 +141,7 @@ See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.m
 
 ## R3 — Subdomain Publishing & Domain Management
 
-**Status: 🟡 Foundation in place, rollout not complete.**
+**Status: 🟡 Foundation in place, verification and rollout not complete.**
 
 - [x] Path-based publish is live and stable
 - [x] Custom slug availability check and slug update flow
@@ -141,11 +149,45 @@ See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.m
 - [ ] Custom domain mapping (BYOD — bring your own domain)
 - [ ] nginx dynamic vhost generation
 - [ ] SSL automation (Let's Encrypt)
+- [ ] Verification gate: path publish remains stable from a freshly generated VibeCore/Zero Effort project
+- [ ] Verification gate: unresolved media placeholders block publish/export and emit user/admin notifications
 
 **Notes**
 
 - The publish layer already exposes the right primitives for deployment IDs, slugs, and public URLs.
 - The remaining work is mainly **infrastructure automation and ops hardening**, not the base publish capability itself.
+
+---
+
+## Layer S — Template Skills Quality Layer
+
+**Status: 🔲 Planned next implementation track after R2/R3 verification gate.**
+
+Template Skills are Markdown manuals selected by preset, viewport model, and tags, then injected
+beside Layer B to improve artifact-specific craft. This is the preferred next quality lever before
+expanding into full backend services.
+
+Already in place:
+
+- [x] `Layer S` implemented through a filesystem resolver and injected via the canonical prompt composer
+- [x] implementation plan: [TEMPLATE_SKILLS_INJECTION_PLAN.md](../specs/TEMPLATE_SKILLS_INJECTION_PLAN.md)
+- [x] online research report: [AGENT_SKILLS_TREND_REPORT_2026-07-08.md](../research/template-skills/AGENT_SKILLS_TREND_REPORT_2026-07-08.md)
+- [x] first seed manuals under [docs/skills/template-skills/](../skills/template-skills/README.md)
+
+Planned implementation:
+
+- [ ] `TemplateSkill` entity, contract, Mongo repository, and static seed catalog
+- [ ] resolver by `presetId`, `viewportModel`, and tags
+- [ ] `buildTemplateSkillsLayer()` with whole-skill budget dropping
+- [ ] composer wiring and prompt-preview trace visibility
+- [ ] admin CRUD/reseed flow
+- [ ] browser E2E comparing game/slideshow/dataviz outputs before and after skills
+
+Non-goal for this track:
+
+- arbitrary tool execution from skill files
+- user-uploaded unreviewed skill manuals
+- backend service generation
 
 ---
 
@@ -249,10 +291,11 @@ The latest delivery wave is **already implemented**. The three immediate follow-
 
 ### Broader roadmap focus
 
-1. Complete R2 with a real project-level cost and log dashboard (data layer is now ready)
-2. Finish R3 domain automation (wildcard subdomain, SSL, custom domains)
-3. Re-open R4 only after the publishing pipeline is considered operationally solid
-4. Keep async project-generation orchestration in the documented backlog until R2/R3 are hardened
+1. Complete the R2/R3 verification gate: observability, VibeCore -> workspace -> export/publish, unresolved-media guardrails, and publish smoke coverage.
+2. Implement Layer S Template Skills as the next quality track.
+3. Finish R3 domain automation (wildcard subdomain, SSL, custom domains).
+4. Re-open R4 BaaS only after publishing and observability are operationally solid.
+5. Keep async project-generation orchestration in the documented backlog until R2/R3 are hardened.
 
 ### Consolidation fixes — 2026-04-27
 
