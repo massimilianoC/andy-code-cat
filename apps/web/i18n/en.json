@@ -576,6 +576,9 @@
         "dataDashboardWarning": "Data dashboard mode is alpha-only and disabled in the main Vibe flow. Continuing with the standard website pipeline.",
         "uploadAllFailed": "Unable to upload attached files: {{files}}. Check the session and try again.",
         "uploadPartialFailed": "Some files were not uploaded: {{files}}",
+        "prefillFailedNotification": {
+            "label": "Couldn't auto-fill the brief — you can still continue and fill it in manually."
+        },
         "phase": {
             "classifying": "Analysing request…",
             "prefilling": "Pre-filling fields with AI…",

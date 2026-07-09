@@ -16,6 +16,7 @@ import { classifyVibeIntent, getVibeConfig, prefillZeroEffort } from "@/lib/api/
 import { getZeroEffortConfig } from "@/lib/api/pipelines";
 import { createProject, getProjectAsset, uploadProjectAsset, updateProject } from "@/lib/api";
 import { getLlmProviders, type LlmProviderCatalogDto } from "@/lib/api/llm";
+import { useNotifications } from "@/lib/notifications";
 
 const DEFAULT_ATTACHMENT_POLICY = {
     maxAttachmentsPerPrompt: 10,
@@ -177,6 +178,7 @@ interface VibeCoreEntryProps {
 export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps) {
     const router = useRouter();
     const { t, i18n } = useTranslation();
+    const { add: addNotification } = useNotifications();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const [prompt, setPrompt] = useState("");
@@ -509,7 +511,14 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 provider: pipelineOverride?.provider,
                 model: pipelineOverride?.model,
                 uiLanguage,
-            }).catch(() => null);
+            }).catch((err: unknown) => {
+                addNotification({
+                    label: t("vibecore.prefillFailedNotification.label"),
+                    status: "error",
+                    message: err instanceof Error ? err.message : undefined,
+                });
+                return null;
+            });
             if (prefillResult?.warnings?.length) {
                 setServerWarnings((prev) => [...new Set([...prev, ...prefillResult.warnings!])]);
             }
