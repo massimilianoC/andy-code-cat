@@ -5,6 +5,7 @@
  */
 import { call } from "./call";
 import type { AiUsageAnalyticsDto } from "./assets";
+import type { PreviewSnapshot } from "./snapshots";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -590,6 +591,26 @@ export function adminListProjects(token: string, params?: AdminListProjectsParam
 
 export function adminDeleteProject(token: string, projectId: string): Promise<{ deleted: boolean }> {
     return call("DELETE", `/v1/admin/projects/${projectId}`, undefined, auth(token));
+}
+
+export interface AdminSnapshotSummaryDto {
+    id: string;
+    conversationId: string;
+    sourceMessageId?: string;
+    parentSnapshotId?: string;
+    isActive: boolean;
+    createdAt: string;
+    activatedAt?: string;
+}
+
+/** Version history metadata only — no artifacts, not audit-logged. */
+export function adminListProjectSnapshots(token: string, projectId: string): Promise<{ snapshots: AdminSnapshotSummaryDto[] }> {
+    return call("GET", `/v1/admin/projects/${projectId}/preview-snapshots`, undefined, auth(token));
+}
+
+/** Full artifacts for one version — server writes an AdminAuditLog entry on every call. */
+export function adminGetProjectSnapshot(token: string, projectId: string, snapshotId: string): Promise<{ snapshot: PreviewSnapshot }> {
+    return call("GET", `/v1/admin/projects/${projectId}/preview-snapshots/${snapshotId}`, undefined, auth(token));
 }
 
 // ── Service API keys ──────────────────────────────────────────────────────────
