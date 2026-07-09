@@ -320,7 +320,7 @@ export function createVibecoreRoutes(): Router {
                             maxAssets: documentContextPolicy.maxAssetsPerPrompt,
                             fallbackInlineExtractionMaxAssets: documentContextPolicy.fallbackInlineExtractionMaxAssets,
                             waitForPendingMs: env.enrichmentEnabled ? PROJECT_LAYER_D_WAIT_FOR_PENDING_MS : 0,
-                        });
+                        }).catch(() => ({ layer: "", assets, documentNames: [] as string[] }));
                         assets = projectLayerD.assets;
                         layerDContext = projectLayerD.layer || undefined;
                         projectLayerD.documentNames.forEach((name) => layerDocNames.push(name));

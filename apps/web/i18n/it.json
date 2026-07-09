@@ -576,6 +576,9 @@
         "dataDashboardWarning": "La modalità data dashboard è solo alpha ed è disattivata nel flusso Vibe principale. Continuo con la pipeline website standard.",
         "uploadAllFailed": "Impossibile caricare i file allegati: {{files}}. Verifica la sessione e riprova.",
         "uploadPartialFailed": "Alcuni file non sono stati caricati: {{files}}",
+        "prefillFailedNotification": {
+            "label": "Non siamo riusciti a precompilare automaticamente i campi — puoi comunque continuare e compilarli manualmente."
+        },
         "phase": {
             "classifying": "Analisi della richiesta…",
             "prefilling": "Pre-compilazione campi AI…",

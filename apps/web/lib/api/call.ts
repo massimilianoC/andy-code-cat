@@ -146,7 +146,8 @@ export async function call<T>(
     path: string,
     body?: unknown,
     headers?: Record<string, string>,
-    isRetry = false
+    isRetry = false,
+    timeoutMs?: number
 ): Promise<T> {
     const baseUrl = getApiBaseUrl();
 
@@ -172,6 +173,11 @@ export async function call<T>(
         }
     }
 
+    const timeoutController = timeoutMs ? new AbortController() : undefined;
+    const timeoutTimer = timeoutController
+        ? setTimeout(() => timeoutController.abort(), timeoutMs)
+        : undefined;
+
     const requestInit: RequestInit = {
         method,
         cache: "no-store",
@@ -180,22 +186,30 @@ export async function call<T>(
             ...resolvedHeaders,
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: timeoutController?.signal,
     };
 
     let res: Response;
     try {
-        res = await fetch(`${baseUrl}${path}`, requestInit);
-    } catch {
-        await new Promise((resolve) => setTimeout(resolve, 500));
         try {
             res = await fetch(`${baseUrl}${path}`, requestInit);
         } catch {
-            throw new ApiError(0, {
-                error: "API non raggiungibile. Verifica che il servizio backend sia attivo su http://localhost:4000",
-                path,
-                method,
-            });
+            if (timeoutController?.signal.aborted) {
+                throw new ApiError(0, { error: "Richiesta scaduta (timeout).", path, method });
+            }
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            try {
+                res = await fetch(`${baseUrl}${path}`, requestInit);
+            } catch {
+                throw new ApiError(0, {
+                    error: "API non raggiungibile. Verifica che il servizio backend sia attivo su http://localhost:4000",
+                    path,
+                    method,
+                });
+            }
         }
+    } finally {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
     }
 
     const json = await res.json().catch(() => ({}));
@@ -212,7 +226,7 @@ export async function call<T>(
                 return call<T>(method, path, body, {
                     ...resolvedHeaders,
                     Authorization: `Bearer ${newAccessToken}`,
-                }, true);
+                }, true, timeoutMs);
             } catch {
                 _refreshPromise = null;
                 throw new ApiError(res.status, json);

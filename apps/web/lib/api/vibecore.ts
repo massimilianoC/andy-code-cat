@@ -33,7 +33,7 @@ export function prefillZeroEffort(
 ): Promise<VibePrefillResponse> {
     return call<VibePrefillResponse>("POST", "/v1/vibecore/prefill", input, {
         Authorization: `Bearer ${token}`,
-    });
+    }, false, 300_000);
 }
 
 export function getVibeConfig(token: string, projectId?: string): Promise<VibeConfigResponse> {

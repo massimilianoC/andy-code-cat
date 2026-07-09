@@ -483,6 +483,10 @@ export class VibePrefill {
             ? `${basePrompt}\n\n${contextLayers.join("\n\n")}`
             : basePrompt;
 
+        // Bound the provider fetch — without this a stalled provider hangs the request
+        // indefinitely (the catch block below only runs once something actually rejects).
+        const providerAbort = new AbortController();
+        const providerTimeout = setTimeout(() => providerAbort.abort(), 4.5 * 60 * 1000);
         try {
             const response = await fetch(`${providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
                 method: "POST",
@@ -500,6 +504,7 @@ export class VibePrefill {
                         { role: "user" as const, content: userMessage },
                     ],
                 })),
+                signal: providerAbort.signal,
             });
 
             if (!response.ok) {
@@ -581,6 +586,8 @@ export class VibePrefill {
                 skipped: true,
                 ...echoProject,
             };
+        } finally {
+            clearTimeout(providerTimeout);
         }
     }
 }
