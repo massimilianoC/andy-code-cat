@@ -59,6 +59,7 @@ Read in this order before making changes:
 | [docs/runbooks/CDN_COMPATIBILITY.md](runbooks/CDN_COMPATIBILITY.md) | Verified CDN whitelist and compatibility notes for generated interactive, game, 3D, and VR artifacts |
 | [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Production hardening and deployment safety guidance |
 | [docs/runbooks/DROPLET_MANUAL_DEPLOY.md](runbooks/DROPLET_MANUAL_DEPLOY.md) | Manual one-service-at-a-time droplet deploy procedure for flaky SSH/high-load incidents: sync safely, deploy API, deploy web, restart nginx, and verify public health |
+| [docs/runbooks/SSL_CERT_RENEWAL.md](runbooks/SSL_CERT_RENEWAL.md) | How TLS certs auto-renew on the droplet (webroot + DNS-01, systemd certbot.timer, global deploy-hook), health checks, and the 2026-07-09 CRLF-cron incident |
 | [docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md](runbooks/BETA_LAUNCH_HARDENING_PLAN.md) | Beta-readiness checklist |
 | [install.sh](../install.sh) | Self-configuring one-file installer — local and domain modes, auto SSL via certbot |
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker workflow for dev and deploy-like stacks |
