@@ -8,7 +8,9 @@ import {
     adminDeleteProject,
     adminBlockDeployment,
     getAdminProjectAiAnalytics,
+    adminListProjectSnapshots,
     type AdminProjectDto,
+    type AdminSnapshotSummaryDto,
 } from "@/lib/api/admin";
 import type { AiUsageAnalyticsDto } from "@/lib/api/assets";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import AiUsageSummaryPanel from "@/components/AiUsageSummaryPanel";
+import ProjectVersionsPanel from "@/components/admin/ProjectVersionsPanel";
 
 type ConfirmAction = "delete-project" | "block-deployment" | "unblock-deployment";
 
@@ -36,7 +39,7 @@ interface ConfirmState {
     publishId?: string;
 }
 
-type SidebarTab = "overview" | "ai" | "deployment" | "danger";
+type SidebarTab = "overview" | "ai" | "deployment" | "versions" | "danger";
 
 /** Segment-control tab bar for the project sidebar. */
 function SidebarTabs({ active, onChange }: { active: SidebarTab; onChange: (t: SidebarTab) => void }) {
@@ -44,6 +47,7 @@ function SidebarTabs({ active, onChange }: { active: SidebarTab; onChange: (t: S
         { id: "overview", label: "Overview" },
         { id: "ai", label: "AI Usage" },
         { id: "deployment", label: "Deployment" },
+        { id: "versions", label: "Versions" },
         { id: "danger", label: "Danger", danger: true },
     ];
     return (
@@ -81,6 +85,8 @@ export default function AdminProjectsPage() {
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [projectAiAnalytics, setProjectAiAnalytics] = useState<AiUsageAnalyticsDto | null>(null);
     const [loadingProjectAiAnalytics, setLoadingProjectAiAnalytics] = useState(false);
+    const [projectSnapshots, setProjectSnapshots] = useState<AdminSnapshotSummaryDto[]>([]);
+    const [loadingProjectSnapshots, setLoadingProjectSnapshots] = useState(false);
     const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
     const [actionInFlight, setActionInFlight] = useState(false);
 
@@ -169,6 +175,19 @@ export default function AdminProjectsPage() {
             .then((result) => setProjectAiAnalytics(result))
             .catch(() => setProjectAiAnalytics(null))
             .finally(() => setLoadingProjectAiAnalytics(false));
+    }, [selectedProject?.id]);
+
+    useEffect(() => {
+        const token = getToken();
+        if (!token || !selectedProject) {
+            setProjectSnapshots([]);
+            return;
+        }
+        setLoadingProjectSnapshots(true);
+        adminListProjectSnapshots(token, selectedProject.id)
+            .then((result) => setProjectSnapshots(result.snapshots))
+            .catch(() => setProjectSnapshots([]))
+            .finally(() => setLoadingProjectSnapshots(false));
     }, [selectedProject?.id]);
 
     function getConfirmCopy(state: ConfirmState): { title: string; description: string } {
@@ -486,6 +505,15 @@ export default function AdminProjectsPage() {
                                             </div>
                                         )}
                                     </div>
+                                )}
+
+                                {/* ── Tab: Versions ── */}
+                                {sidebarTab === "versions" && (
+                                    <ProjectVersionsPanel
+                                        projectId={selectedProject.id}
+                                        snapshots={projectSnapshots}
+                                        loading={loadingProjectSnapshots}
+                                    />
                                 )}
 
                                 {/* ── Tab: Danger ── */}
