@@ -127,12 +127,21 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
         assert.equal(res.status, 400);
     });
 
-    it("400 when prompt exceeds 2000 chars", async () => {
+    it("200 when prompt exceeds the old 2000-char cap (verbosity is welcome)", async () => {
         const token = signToken(userId);
         const res = await request(app)
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
             .send({ prompt: "x".repeat(2001) });
+        assert.equal(res.status, 200);
+    });
+
+    it("400 when prompt exceeds the 12000-char ceiling", async () => {
+        const token = signToken(userId);
+        const res = await request(app)
+            .post("/v1/vibecore/classify")
+            .set("Authorization", `Bearer ${token}`)
+            .send({ prompt: "x".repeat(12001) });
         assert.equal(res.status, 400);
     });
 
@@ -168,20 +177,14 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
         assert.equal(typeof res.body.reasoning, "string");
     });
 
-    it("200 with prompt at max length (2000 chars)", async () => {
+    it("200 with prompt at the 12000-char ceiling", async () => {
         const token = signToken(userId);
         const res = await request(app)
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
-            .send({ prompt: "una landing page ".repeat(118).trim() }); // ~2006 chars, will be trimmed to 2000 server-side
-        // Actually Zod max(2000) is enforced on incoming request
-        // Let's use exactly 2000 chars
-        const res2 = await request(app)
-            .post("/v1/vibecore/classify")
-            .set("Authorization", `Bearer ${token}`)
-            .send({ prompt: "a".repeat(2000) });
-        assert.equal(res2.status, 200);
-        assert.ok(typeof res2.body.skipped === "boolean");
+            .send({ prompt: "a".repeat(12000) });
+        assert.equal(res.status, 200);
+        assert.ok(typeof res.body.skipped === "boolean");
     });
 
     it("200 with prompt + valid attachmentMeta (1 item)", async () => {

@@ -1,0 +1,129 @@
+{
+  "version": "template-skill-map-v1",
+  "status": "documentation-only",
+  "runtimeInjection": false,
+  "sourcePresetCatalog": "apps/api/src/domain/entities/ProjectPreset.ts",
+  "skillsRoot": "docs/skills/template-skills/by-template",
+  "templates": [
+    {
+      "presetId": "neutral",
+      "isActive": true,
+      "skills": []
+    },
+    {
+      "presetId": "landing",
+      "isActive": true,
+      "skills": [
+        "landing-conversion-copy",
+        "premium-landing-art-direction",
+        "modern-impact-visual-direction",
+        "brand-led-identity-system",
+        "anti-ai-slop-ui-review"
+      ]
+    },
+    {
+      "presetId": "website",
+      "isActive": true,
+      "skills": [
+        "website-information-architecture",
+        "product-interface-craft",
+        "modern-impact-visual-direction",
+        "brand-led-identity-system",
+        "anti-ai-slop-ui-review"
+      ]
+    },
+    {
+      "presetId": "form",
+      "isActive": true,
+      "skills": ["form-ux-validation", "product-interface-craft", "anti-ai-slop-ui-review"]
+    },
+    {
+      "presetId": "manifesto",
+      "isActive": true,
+      "skills": [
+        "manifesto-editorial-rhetoric",
+        "svg-illustration-craft",
+        "modern-impact-visual-direction",
+        "brand-led-identity-system",
+        "anti-ai-slop-ui-review"
+      ]
+    },
+    {
+      "presetId": "a4poster",
+      "isActive": true,
+      "skills": [
+        "print-layout-a4",
+        "svg-illustration-craft",
+        "modern-impact-visual-direction",
+        "brand-led-identity-system"
+      ]
+    },
+    {
+      "presetId": "infographic",
+      "isActive": true,
+      "skills": [
+        "dataviz-chartjs",
+        "svg-illustration-craft",
+        "creative-canvas-p5",
+        "product-interface-craft",
+        "brand-led-identity-system"
+      ]
+    },
+    {
+      "presetId": "data-dashboard",
+      "isActive": false,
+      "skills": [
+        "data-dashboard-grounded",
+        "dataviz-chartjs",
+        "product-interface-craft",
+        "anti-ai-slop-ui-review"
+      ]
+    },
+    {
+      "presetId": "slideshow",
+      "isActive": true,
+      "skills": ["slide-deck-craft", "modern-impact-visual-direction", "anti-ai-slop-ui-review"]
+    },
+    {
+      "presetId": "keynote",
+      "isActive": true,
+      "skills": [
+        "slide-deck-craft",
+        "svg-illustration-craft",
+        "modern-impact-visual-direction",
+        "brand-led-identity-system",
+        "anti-ai-slop-ui-review"
+      ]
+    },
+    {
+      "presetId": "videogame",
+      "isActive": true,
+      "skills": ["game-input-and-loop", "arcade-physics-phaser", "creative-canvas-p5"]
+    },
+    {
+      "presetId": "freerunner",
+      "isActive": false,
+      "skills": ["game-input-and-loop", "arcade-physics-phaser"]
+    },
+    {
+      "presetId": "seriousgame",
+      "isActive": true,
+      "skills": ["game-input-and-loop", "serious-game-learning-loop"]
+    },
+    {
+      "presetId": "game3d",
+      "isActive": true,
+      "skills": ["game-input-and-loop", "webgl-scene-three"]
+    },
+    {
+      "presetId": "vr-aframe",
+      "isActive": true,
+      "skills": ["webxr-aframe", "webgl-scene-three"]
+    },
+    {
+      "presetId": "interactive-story",
+      "isActive": true,
+      "skills": ["interactive-story-branching", "brand-led-identity-system", "product-interface-craft"]
+    }
+  ]
+}

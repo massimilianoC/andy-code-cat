@@ -18,6 +18,9 @@ import { SetUserLimits } from "../../../application/use-cases/admin/SetUserLimit
 import { DeleteUser } from "../../../application/use-cases/admin/DeleteUser";
 import { AdminListProjects } from "../../../application/use-cases/admin/AdminListProjects";
 import { AdminDeleteProject } from "../../../application/use-cases/admin/AdminDeleteProject";
+import { AdminListProjectSnapshots } from "../../../application/use-cases/admin/AdminListProjectSnapshots";
+import { AdminGetProjectSnapshot } from "../../../application/use-cases/admin/AdminGetProjectSnapshot";
+import { AdminAuditLogger } from "../../../application/services/AdminAuditLogger";
 import { UpdateUserProfile } from "../../../application/use-cases/admin/UpdateUserProfile";
 import { AdminResetUserPassword } from "../../../application/use-cases/admin/AdminResetUserPassword";
 import { SetUserPasswordResetRequired } from "../../../application/use-cases/admin/SetUserPasswordResetRequired";
@@ -35,6 +38,7 @@ import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/M
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { GetAdminAiAnalytics, GetProjectAiAnalytics } from "../../../application/use-cases/GetProjectAiAnalytics";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
+import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { CryptoService } from "../../../infra/security/CryptoService";
 import multer from "multer";
 import { randomUUID } from "crypto";
@@ -127,6 +131,7 @@ export function createAdminRoutes(): Router {
     const promptExecutionLogRepo = new MongoPromptExecutionLogRepository();
     const assetRepo = new MongoProjectAssetRepository();
     const serviceKeyRepo = new MongoServiceApiKeyRepository();
+    const previewSnapshotRepo = new MongoPreviewSnapshotRepository();
     const brandAssetRepo = new MongoBrandAssetRepository();
     const brandStorage = getFileStorage();
     const brandUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -152,6 +157,8 @@ export function createAdminRoutes(): Router {
     const adminTogglePublication = new AdminTogglePublication(deploymentRepo);
     const adminListProjects = new AdminListProjects(projectRepo, userRepo, deploymentRepo);
     const adminDeleteProject = new AdminDeleteProject(projectRepo, deploymentRepo);
+    const adminListProjectSnapshots = new AdminListProjectSnapshots(previewSnapshotRepo);
+    const adminGetProjectSnapshot = new AdminGetProjectSnapshot(previewSnapshotRepo);
     const seedLlmCatalog = new SeedLlmCatalog(
         llmCatalogRepo,
         env.SILICONFLOW_BASE_URL,
@@ -550,6 +557,62 @@ export function createAdminRoutes(): Router {
             const projectId = getRequiredRouteParam(req.params.projectId, "projectId");
             const result = await adminDeleteProject.execute(projectId, req.auth!.userId);
             res.json(result);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /**
+     * GET /admin/projects/:projectId/preview-snapshots — version history, metadata only.
+     * No audit log — listing dates/ids is not sensitive the way viewing rendered content is.
+     */
+    router.get("/admin/projects/:projectId/preview-snapshots", async (req, res, next) => {
+        try {
+            const projectId = getRequiredRouteParam(req.params.projectId, "projectId");
+            const project = await projectRepo.findById(projectId);
+            if (!project) {
+                res.status(404).json({ error: "Project not found" });
+                return;
+            }
+            const snapshots = await adminListProjectSnapshots.execute(projectId);
+            res.json({ snapshots });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    /**
+     * GET /admin/projects/:projectId/preview-snapshots/:snapshotId — full artifacts.
+     * Bypasses the normal ownership sandbox for superadmins; every successful fetch here
+     * writes an AdminAuditLog entry since it exposes another user's unpublished content.
+     */
+    router.get("/admin/projects/:projectId/preview-snapshots/:snapshotId", async (req: RequestWithContext, res, next) => {
+        try {
+            const projectId = getRequiredRouteParam(req.params.projectId, "projectId");
+            const snapshotId = getRequiredRouteParam(req.params.snapshotId, "snapshotId");
+            const project = await projectRepo.findById(projectId);
+            if (!project) {
+                res.status(404).json({ error: "Project not found" });
+                return;
+            }
+            const snapshot = await adminGetProjectSnapshot.execute(projectId, snapshotId);
+            if (!snapshot) {
+                res.status(404).json({ error: "Snapshot not found" });
+                return;
+            }
+
+            const actor = await userRepo.findById(req.auth!.userId);
+            AdminAuditLogger.instance.emit({
+                actorUserId: req.auth!.userId,
+                actorEmail: actor?.email,
+                action: "admin_viewed_project_snapshot",
+                targetProjectId: projectId,
+                targetUserId: project.ownerUserId,
+                targetSnapshotId: snapshotId,
+                metadata: { conversationId: snapshot.conversationId, isActive: snapshot.isActive },
+            });
+
+            res.json({ snapshot });
         } catch (err) {
             next(err);
         }

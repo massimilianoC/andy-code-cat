@@ -22,6 +22,7 @@ import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifact
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
 import { composeSystemPromptWithLayers, type PromptLayerTraceEntry, type TemplateResolution } from "../../../application/llm/systemPromptComposer";
 import { buildGroundedDataContextLayer, buildGlobalBrandLayer, buildBrandDocumentLayerD, buildPresetLayerFromPreset } from "../../../application/llm/systemPromptLayers";
+import { resolveFilesystemTemplateSkills } from "../../../application/llm/templateSkillsLayer";
 import { estimateCost } from "../../../application/llm/costPolicy";
 import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
 import { env } from "../../../config";
@@ -81,6 +82,7 @@ type LlmRuntimeContext = {
         }>;
     };
     modelId: string;
+    projectPresetId?: string;
     promptConfigId?: string;
     prePromptTemplate?: string;
     systemPrompt: string;
@@ -485,10 +487,16 @@ export function createLlmRoutes(): Router {
         const outputLanguageSource = project?.outputLanguage
             ? "project-config"
             : input.outputLanguage ? "request-ui-language" : "empty";
+        const templateSkills = resolveFilesystemTemplateSkills({
+            presetId: project?.presetId,
+        });
 
         const layerSources: Partial<Record<import("../../../application/llm/systemPromptComposer").PromptLayerId, string>> = {
             L: outputLanguageSource,
             B: project?.presetId ? "preset-catalog" : "code-default",
+            S: templateSkills
+                ? `filesystem-template-skills:${templateSkills.presetId}:${templateSkills.documents.map((doc) => doc.id).join(",")}`
+                : "empty",
             T: templateResolution?.formatHint ? "project-config" : "empty",
             E: promptConfig.enabled && promptConfig.prePromptTemplate && roleModel?.promptTemplate
                 ? "project-config+model-template"
@@ -500,6 +508,7 @@ export function createLlmRoutes(): Router {
         const composedLayers = composeSystemPromptWithLayers({
             presetId: project?.presetId,
             presetLayer,
+            skillsLayer: templateSkills?.layer,
             templateResolution,
             styleBlock,
             brandContextLayer: brandContextLayer || undefined,
@@ -529,6 +538,7 @@ export function createLlmRoutes(): Router {
             return {
                 providerCatalog: { ...providerCatalog, models: providerModels },
                 modelId: input.model,
+                projectPresetId: project?.presetId,
                 promptConfigId: promptConfig.id,
                 prePromptTemplate: effectivePrePromptTemplate || undefined,
                 systemPrompt,
@@ -544,6 +554,7 @@ export function createLlmRoutes(): Router {
         return {
             providerCatalog: { ...providerCatalog, models: providerModels },
             modelId: roleModel.id,
+            projectPresetId: project?.presetId,
             promptConfigId: promptConfig.id,
             prePromptTemplate: effectivePrePromptTemplate || undefined,
             systemPrompt,
@@ -1155,7 +1166,13 @@ export function createLlmRoutes(): Router {
                 provider: result.provider,
                 model: result.model,
                 inputPrompt: body.message.slice(0, 2000),
-                contextMeta: { usedMoodboard: false, usedUserProfile: false },
+                renderedSystemPrompt: effectiveSystemPrompt,
+                renderedUserPrompt: messages[messages.length - 1]?.content,
+                contextMeta: {
+                    projectPresetId: context.projectPresetId,
+                    usedMoodboard: false,
+                    usedUserProfile: false,
+                },
                 usage: result.usage,
                 mediaResolutionSummary,
                 costEstimate: result.costEstimate,
@@ -1679,7 +1696,13 @@ export function createLlmRoutes(): Router {
                 provider: result.provider,
                 model: result.model,
                 inputPrompt: body.message.slice(0, 2000),
-                contextMeta: { usedMoodboard: false, usedUserProfile: false },
+                renderedSystemPrompt: effectiveSystemPrompt,
+                renderedUserPrompt: messages[messages.length - 1]?.content,
+                contextMeta: {
+                    projectPresetId: context.projectPresetId,
+                    usedMoodboard: false,
+                    usedUserProfile: false,
+                },
                 usage: result.usage,
                 mediaResolutionSummary,
                 costEstimate: result.costEstimate,

@@ -179,6 +179,69 @@ These two items are additive roadmap improvements and can be delivered after the
 
 ## CURRENT ACTIVE VALIDATION TRACKS
 
+### Step 11qa - R2/R3 Verification Gate
+
+This gate validates the current platform before widening runtime scope with BaaS or other
+large-surface features.
+
+- Open `/dashboard`
+- Expected: VibeCore entry renders and existing project cards still render
+- Create a project from VibeCore with a prompt that implies a concrete artifact family, for example:
+  - `crea un mini gioco interattivo per presentare un portfolio`
+  - `crea una landing con immagine hero e sezione servizi`
+  - `crea una presentazione interattiva per un evento`
+- Attach at least one eligible asset where possible
+- Expected: upload succeeds and the asset shows `enrichmentTrace` status (`pending`, `ready`, or `failed`) in project asset UI/API
+- Expected: VibeCore classification/prefill stays in the authenticated project sandbox
+- Complete handoff into `/launch/:projectId` or `/workspace/:projectId`
+- Expected: the same `projectId` remains editable in GodMode
+- Generate or auto-send the first artifact
+- Expected: a snapshot is created and can be selected from snapshot history
+- Expected: if media placeholders are emitted, they are resolved or explicitly marked degraded
+- `GET /v1/projects/:projectId/llm/prompt-preview`
+- Expected: active layers include preset context, Layer S template skills when the current preset has a `by-template/<presetId>/` folder, and style/brand/document context when applicable
+- Export the active snapshot
+- Expected: ZIP export succeeds when no unresolved `asset://media/*` placeholders remain
+- Publish the active snapshot
+- Expected: path-based publish succeeds and returns a public URL
+- Create or simulate a snapshot with unresolved `asset://media/test-key`
+- Expected: export and publish are blocked, no public files are overwritten, and user/admin notifications are emitted
+- Review execution/cost surfaces
+- Expected: generation, media, export, and publish outcomes are traceable through execution logs, cost summaries, or notifications without reading raw container logs
+
+Passing this gate means R2/R3 are sufficiently stable to begin the Layer S implementation track.
+
+### Step 11qb - Template Skills Filesystem Seed
+
+This gate verifies the filesystem-backed Layer S resolver.
+
+- Open `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md`
+- Expected: filesystem-first strategy is documented
+- Open `docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md`
+- Expected: ownership, forbidden content, validation workflow, impact rubric, and rollback are documented
+- Open `docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md`
+- Expected: resolver, env contract, trace persistence, Docker packaging, and validation are documented
+- Open `docs/research/template-skills/AGENT_SKILLS_TREND_REPORT_2026-07-08.md`
+- Expected: the report cites external agent-skill and domain-craft sources
+- Open `docs/skills/template-skills/README.md`
+- Expected: README describes `by-template/<presetId>/*.md` as the runtime source for Layer S
+- Parse `docs/skills/template-skills/template-skill-map.json`
+- Expected: valid JSON; every skill id resolves to `docs/skills/template-skills/seed-catalog/<skill-id>.md`
+- Open `docs/skills/template-skills/by-template/landing/`
+- Expected: landing has strong style-forward skills including `premium-landing-art-direction`, `modern-impact-visual-direction`, `brand-led-identity-system`, and `anti-ai-slop-ui-review`
+- Open `docs/skills/template-skills/by-template/website/`
+- Expected: website has product/interface craft plus strong style-forward skills including `product-interface-craft`, `modern-impact-visual-direction`, `brand-led-identity-system`, and `anti-ai-slop-ui-review`
+- Open every file under `docs/skills/template-skills/seed-catalog/`
+- Expected: each manual contains a focused directive, practical rules, and output checks
+- `GET /v1/projects/:projectId/llm/prompt-preview`
+- Expected with `LLM_TEMPLATE_SKILLS_ENABLED=true`: prompt trace contains Layer S with source `filesystem-template-skills:<presetId>:<skillIds>`, `chars > 0`, and `effectiveSystemPrompt` contains `## LAYER S — TEMPLATE SKILLS`
+- Expected with `LLM_TEMPLATE_SKILLS_ENABLED=false`: Layer S is present in `layers[]` but empty
+- Send a real chat generation for the same project
+- Expected: assistant message `metadata.promptingTrace.effectiveSystemPrompt` contains the same Layer S block sent to the provider
+- Expected: latest `prompt_execution_logs` row for the project has `renderedSystemPrompt` containing `## LAYER S — TEMPLATE SKILLS`
+- Generate before/after artifacts for one `landing` and one `website` prompt
+- Expected: stronger first-screen distinctiveness, clearer CTA/interface hierarchy, no JSON parse regression, no obvious duplication with Layer A/B/E
+
 ### Step 11h - VibeCore Config Surface
 
 - `GET /v1/vibecore/config` with authenticated user

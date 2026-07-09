@@ -76,6 +76,7 @@ services:
     volumes:
       - ./apps/api:/workspace/apps/api
       - ./packages:/workspace/packages
+      - ./docs/skills/template-skills:/workspace/docs/skills/template-skills:ro
       - /workspace/apps/api/node_modules
       - /workspace/packages/contracts/node_modules
       - ./data:/workspace/data
