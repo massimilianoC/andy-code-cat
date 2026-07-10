@@ -8,6 +8,10 @@ type RuntimeModel = LlmProviderCatalog["models"][number];
 
 const liveModelCache = new Map<string, { expiresAt: number; models: RuntimeModel[] }>();
 
+export function clearLiveModelCatalogCache(): void {
+    liveModelCache.clear();
+}
+
 function dedupeModelsById(models: RuntimeModel[]): RuntimeModel[] {
     const byId = new Map<string, RuntimeModel>();
 
@@ -129,6 +133,7 @@ function inferRole(input: { existingRole?: RuntimeModel["role"]; capabilities: s
 export async function hydrateProviderCatalog(
     providerCatalog: LlmProviderCatalog,
     apiKey?: string,
+    options?: { forceRefresh?: boolean },
 ): Promise<LlmProviderCatalog> {
     const fallbackModels = dedupeModelsById(providerCatalog.models);
 
@@ -144,7 +149,7 @@ export async function hydrateProviderCatalog(
 
     const cacheKey = `${providerCatalog.provider}|${providerCatalog.baseUrl}|${Boolean(authHeader)}`;
     const cached = liveModelCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (!options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
         return { ...providerCatalog, models: cached.models };
     }
 

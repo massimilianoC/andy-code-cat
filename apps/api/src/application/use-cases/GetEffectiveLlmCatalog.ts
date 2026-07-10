@@ -5,7 +5,7 @@ export class GetEffectiveLlmCatalog {
         private readonly getLlmCatalog: GetLlmCatalog,
     ) { }
 
-    async execute() {
-        return this.getLlmCatalog.execute();
+    async execute(options?: { forceRefresh?: boolean }) {
+        return this.getLlmCatalog.execute(options);
     }
 }

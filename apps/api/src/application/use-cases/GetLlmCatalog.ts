@@ -17,7 +17,7 @@ export class GetLlmCatalog {
         private readonly defaultProvider: string = "siliconflow",
     ) { }
 
-    async execute(): Promise<{ source: "env" | "mongo"; providers: LlmProviderCatalog[]; activeProvider: string }> {
+    async execute(options?: { forceRefresh?: boolean }): Promise<{ source: "env" | "mongo"; providers: LlmProviderCatalog[]; activeProvider: string }> {
         const fallbackProviders = [
             buildDefaultSiliconFlowCatalog(this.siliconFlowBaseUrl),
             buildDefaultLmStudioCatalog(this.lmStudioBaseUrl),
@@ -50,6 +50,7 @@ export class GetLlmCatalog {
             baseCatalog.providers.map((provider) => hydrateProviderCatalog(
                 provider,
                 this.providerApiKeys[provider.provider],
+                { forceRefresh: options?.forceRefresh },
             )),
         );
 

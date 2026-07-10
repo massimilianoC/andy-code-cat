@@ -80,6 +80,11 @@ function isAnonymousAuthPath(path: string): boolean {
         || path === "/v1/auth/refresh";
 }
 
+function notifySessionNeedsRelogin(): void {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("session-needs-relogin"));
+}
+
 export function getSharedRefreshPromise(): Promise<string> | null {
     return _refreshPromise;
 }
@@ -103,7 +108,7 @@ function getApiBaseUrl(): string {
 export async function refreshAccessToken(): Promise<string> {
     if (isRefreshTokenExpired()) {
         clearSession();
-        window.dispatchEvent(new CustomEvent("session-needs-relogin"));
+        notifySessionNeedsRelogin();
         throw new ApiError(401, { error: "Sessione scaduta — effettua nuovamente il login" });
     }
 
@@ -125,7 +130,7 @@ export async function refreshAccessToken(): Promise<string> {
 
     if (!response.ok) {
         clearSession();
-        window.dispatchEvent(new CustomEvent("session-needs-relogin"));
+        notifySessionNeedsRelogin();
         throw new ApiError(response.status, json);
     }
 
@@ -137,6 +142,22 @@ export async function refreshAccessToken(): Promise<string> {
     }
     setPasswordChangeRequired(payload.requiresPasswordChange === true);
     return newAccessToken;
+}
+
+export async function getValidAccessToken(fallbackToken?: string): Promise<string> {
+    const current = getAccessToken() ?? fallbackToken;
+    if (current && !isAccessTokenExpired()) {
+        return current;
+    }
+
+    try {
+        if (!_refreshPromise) {
+            _refreshPromise = refreshAccessToken();
+        }
+        return await _refreshPromise;
+    } finally {
+        _refreshPromise = null;
+    }
 }
 
 // ── Core call ────────────────────────────────────────────────────────────────
@@ -161,8 +182,11 @@ export async function call<T>(
                 const freshToken = await _refreshPromise;
                 _refreshPromise = null;
                 resolvedHeaders = { ...resolvedHeaders, Authorization: `Bearer ${freshToken}` };
-            } catch {
+            } catch (err) {
                 _refreshPromise = null;
+                if (err instanceof ApiError) {
+                    throw err;
+                }
                 throw new ApiError(401, { error: "Sessione scaduta" });
             }
         } else {
@@ -227,8 +251,11 @@ export async function call<T>(
                     ...resolvedHeaders,
                     Authorization: `Bearer ${newAccessToken}`,
                 }, true, timeoutMs);
-            } catch {
+            } catch (err) {
                 _refreshPromise = null;
+                if (err instanceof ApiError) {
+                    throw err;
+                }
                 throw new ApiError(res.status, json);
             }
         }

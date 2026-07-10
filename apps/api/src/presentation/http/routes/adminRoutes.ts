@@ -31,6 +31,7 @@ import { AdminTogglePublication } from "../../../application/use-cases/admin/Adm
 import { SeedLlmCatalog } from "../../../application/use-cases/SeedLlmCatalog";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
+import { clearLiveModelCatalogCache } from "../../../application/llm/liveProviderCatalog";
 import { DraftProjectTemplate } from "../../../application/use-cases/DraftProjectTemplate";
 import { env } from "../../../config";
 import { PRESET_CATALOG } from "../../../domain/entities/ProjectPreset";
@@ -265,6 +266,16 @@ export function createAdminRoutes(): Router {
             const seedResult = await seedLlmCatalog.execute();
             const result = await getEffectiveLlmCatalog.execute();
             res.json({ ok: true, ...seedResult, ...result, byokEnabled: true });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.post("/admin/llm-registry/refresh-live", async (_req, res, next) => {
+        try {
+            clearLiveModelCatalogCache();
+            const result = await getEffectiveLlmCatalog.execute({ forceRefresh: true });
+            res.json({ ok: true, refreshedAt: new Date().toISOString(), ...result, byokEnabled: true });
         } catch (err) {
             next(err);
         }

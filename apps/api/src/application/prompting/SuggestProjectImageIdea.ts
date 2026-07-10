@@ -12,7 +12,7 @@ import { buildSuggestImageIdeaRequest } from "./buildSuggestImageIdeaInstruction
 
 const TASK_KEY = "suggest_image_direction";
 const FALLBACK_PROVIDER = "siliconflow";
-const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
+const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
 
 type SuggestionUsage = {
     promptTokens: number;

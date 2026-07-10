@@ -26,7 +26,7 @@ import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "optimize_user_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
-const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
+const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
 
 // Reasoning/thinking models (e.g. Kimi, DeepSeek-R1) may stream the actual answer
 // through the reasoning channel and leave `content` empty. Strip any <think> wrapper

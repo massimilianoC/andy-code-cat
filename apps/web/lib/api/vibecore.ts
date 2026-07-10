@@ -8,6 +8,8 @@ import type {
     VibeGenerationMode,
 } from "@andy-code-cat/contracts";
 
+const PREFILL_WITH_CONTEXT_TIMEOUT_MS = 10 * 60 * 1000;
+
 export interface VibeClassifyInput {
     prompt: string;
     attachmentMeta?: AttachmentMeta[];
@@ -33,7 +35,7 @@ export function prefillZeroEffort(
 ): Promise<VibePrefillResponse> {
     return call<VibePrefillResponse>("POST", "/v1/vibecore/prefill", input, {
         Authorization: `Bearer ${token}`,
-    }, false, 300_000);
+    }, false, PREFILL_WITH_CONTEXT_TIMEOUT_MS);
 }
 
 export function getVibeConfig(token: string, projectId?: string): Promise<VibeConfigResponse> {

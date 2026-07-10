@@ -14,7 +14,7 @@ import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "optimize_image_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
-const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
+const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
 
 type OptimizerUsage = {
     promptTokens: number;

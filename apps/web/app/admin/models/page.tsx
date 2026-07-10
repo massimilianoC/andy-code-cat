@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import {
     getAdminLlmRegistry,
+    refreshAdminLlmRegistry,
     seedAdminLlmRegistry,
     updateAdminLlmModel,
     deleteAdminLlmModel,
@@ -17,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MonacoCodeEditor } from "@/components/admin/MonacoCodeEditor";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
+
+const LIVE_MODEL_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 const ROLE_OPTIONS = [
     "dialogue",
@@ -53,6 +56,8 @@ export default function AdminModelsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [syncing, setSyncing] = useState(false);
+    const [refreshingLive, setRefreshingLive] = useState(false);
+    const [lastLiveRefreshAt, setLastLiveRefreshAt] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [saved, setSaved] = useState(false);
     const [source, setSource] = useState("env");
@@ -69,6 +74,24 @@ export default function AdminModelsPage() {
 
         void loadRegistry(token);
     }, [router]);
+
+    useEffect(() => {
+        const token = getToken();
+        if (!token) return;
+        const interval = window.setInterval(() => {
+            void (async () => {
+                try {
+                    const result = await refreshAdminLlmRegistry(token);
+                    setProviders(result.providers ?? []);
+                    setSource(result.source ?? "env");
+                    setLastLiveRefreshAt(result.refreshedAt);
+                } catch {
+                    // Quiet periodic refresh; manual refresh surfaces errors.
+                }
+            })();
+        }, LIVE_MODEL_REFRESH_INTERVAL_MS);
+        return () => window.clearInterval(interval);
+    }, []);
 
     const activeProvider = useMemo(
         () => providers.find((provider) => provider.provider === selectedProvider) ?? null,
@@ -137,6 +160,37 @@ export default function AdminModelsPage() {
             setError(e instanceof Error ? e.message : "Failed to sync the seed into MongoDB");
         } finally {
             setSyncing(false);
+        }
+    }
+
+    async function refreshLiveModels(tokenOverride?: string, options?: { quiet?: boolean }) {
+        const token = tokenOverride ?? getToken();
+        if (!token) return;
+
+        if (!options?.quiet) {
+            setRefreshingLive(true);
+            setError(null);
+        }
+        try {
+            const result = await refreshAdminLlmRegistry(token);
+            const nextProviders = result.providers ?? [];
+            setProviders(nextProviders);
+            setSource(result.source ?? source);
+            setLastLiveRefreshAt(result.refreshedAt);
+
+            const provider = nextProviders.find((entry) => entry.provider === selectedProvider) ?? nextProviders[0] ?? null;
+            if (!provider) return;
+            setSelectedProvider(provider.provider);
+            const currentModel = provider.models.find((model) => model.id === draft.id) ?? provider.models[0] ?? null;
+            setDraft(currentModel ? { ...currentModel } : { ...EMPTY_MODEL, provider: provider.provider });
+        } catch (e: unknown) {
+            if (!options?.quiet) {
+                setError(e instanceof Error ? e.message : "Failed to refresh live provider models");
+            }
+        } finally {
+            if (!options?.quiet) {
+                setRefreshingLive(false);
+            }
         }
     }
 
@@ -225,9 +279,17 @@ export default function AdminModelsPage() {
                     <Button onClick={syncSeed} disabled={syncing}>
                         {syncing ? "Syncing…" : "Sync seed → Mongo"}
                     </Button>
+                    <Button type="button" variant="outline" onClick={() => void refreshLiveModels()} disabled={refreshingLive}>
+                        {refreshingLive ? "Refreshing…" : "Refresh live models"}
+                    </Button>
                     <Button type="button" variant="outline" onClick={createNewModel}>
                         New model
                     </Button>
+                    {lastLiveRefreshAt ? (
+                        <span className="text-xs text-muted-foreground">
+                            Live refreshed {new Date(lastLiveRefreshAt).toLocaleTimeString()}
+                        </span>
+                    ) : null}
                     {saved ? <span className="text-sm text-green-400">✓ Saved</span> : null}
                 </CardContent>
             </Card>

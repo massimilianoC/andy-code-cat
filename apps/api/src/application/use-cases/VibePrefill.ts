@@ -15,7 +15,7 @@ import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset"
 
 const TASK_KEY = "vibe_intent_prefill";
 const FALLBACK_PROVIDER = "siliconflow";
-const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
+const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
 const MAX_PROMPT_CHARS = 2000;
 // MIN_TOKENS: enforce floor regardless of DB task settings — prevents JSON truncation.
 // The system prompt asks for a ~900-2200 char primaryGoal; 768 tokens cannot fit that.

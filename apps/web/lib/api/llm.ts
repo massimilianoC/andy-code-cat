@@ -1,5 +1,4 @@
-import { call, ApiError, getSharedRefreshPromise, setSharedRefreshPromise, refreshAccessToken } from "./call";
-import { getAccessToken, isAccessTokenExpired } from "../token-store";
+import { call, ApiError, getValidAccessToken } from "./call";
 
 export interface ApiErrorPayload {
     error?: string;
@@ -324,21 +323,7 @@ export async function streamLlmChatPreview(
 ) {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-    // Proactive token refresh — mirrors the logic in call() so streaming
-    // requests don't bypass the auth-refresh mechanism.
-    let effectiveToken = getAccessToken() ?? token;
-    if (isAccessTokenExpired()) {
-        try {
-            if (!getSharedRefreshPromise()) {
-                setSharedRefreshPromise(refreshAccessToken());
-            }
-            effectiveToken = await getSharedRefreshPromise()!;
-            setSharedRefreshPromise(null);
-        } catch {
-            setSharedRefreshPromise(null);
-            throw new ApiError(401, { error: "Sessione scaduta" });
-        }
-    }
+    const effectiveToken = await getValidAccessToken(token);
 
     const res = await fetch(`${baseUrl}/v1/projects/${projectId}/llm/chat-preview/stream`, {
         method: "POST",
@@ -442,19 +427,7 @@ export async function streamOptimizePrompt(
 ) {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-    let effectiveToken = getAccessToken() ?? token;
-    if (isAccessTokenExpired()) {
-        try {
-            if (!getSharedRefreshPromise()) {
-                setSharedRefreshPromise(refreshAccessToken());
-            }
-            effectiveToken = await getSharedRefreshPromise()!;
-            setSharedRefreshPromise(null);
-        } catch {
-            setSharedRefreshPromise(null);
-            throw new ApiError(401, { error: "Sessione scaduta" });
-        }
-    }
+    const effectiveToken = await getValidAccessToken(token);
 
     const res = await fetch(`${baseUrl}/v1/projects/${projectId}/llm/optimize-prompt/stream`, {
         method: "POST",

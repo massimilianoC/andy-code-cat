@@ -368,6 +368,10 @@ export function seedAdminLlmRegistry(token: string): Promise<AdminLlmRegistryDto
     return call("POST", "/v1/admin/llm-registry/seed", {}, auth(token));
 }
 
+export function refreshAdminLlmRegistry(token: string): Promise<AdminLlmRegistryDto & { ok: boolean; refreshedAt: string }> {
+    return call("POST", "/v1/admin/llm-registry/refresh-live", {}, auth(token));
+}
+
 export function updateAdminLlmModel(
     token: string,
     provider: string,

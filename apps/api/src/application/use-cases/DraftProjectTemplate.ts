@@ -14,7 +14,7 @@ import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "draft_template_model";
 const FALLBACK_PROVIDER = "siliconflow";
-const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
+const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
 const INTERNAL_PROJECT_ID = "admin-template-registry";
 
 interface DraftTemplateUsage {
