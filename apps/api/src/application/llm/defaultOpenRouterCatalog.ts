@@ -29,8 +29,8 @@ const FREE_DEFAULTS: Array<{ id: string; role: PipelineModelRole; capabilities: 
  * by the runtime; missing roles fall back via the selection chain.
  */
 const PAID_DEFAULTS: Array<{ id: string; role: PipelineModelRole; capabilities: string[] }> = [
-    // Google Gemma 4 (flagship)
-    { id: "google/gemma-4-31b-it", role: "dialogue", capabilities: ["chat"] },
+    // MiniMax M3
+    { id: "minimax/minimax-m3", role: "dialogue", capabilities: ["vision", "chat"] },
     // Google Gemini 2.5
     { id: "google/gemini-2.5-pro", role: "quality_check", capabilities: ["vision", "chat"] },
     { id: "google/gemini-2.5-flash", role: "dialogue_fast", capabilities: ["vision", "chat"] },

@@ -1200,7 +1200,7 @@ export default function ZeroEffortLaunchPage() {
                                     </CardDescription>
                                 </div>
                                 <Badge variant={phase === "optimized" ? "success" : "secondary"} className="ml-auto text-xs">
-                                    {phase === "optimized" ? t("launch.step4.promptReady") : `${pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model ?? "MiniMax-M2.5"}`}
+                                    {phase === "optimized" ? t("launch.step4.promptReady") : `${pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model ?? "MiniMax-M3"}`}
                                 </Badge>
                             </div>
                         </CardHeader>

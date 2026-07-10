@@ -23,7 +23,7 @@ export type SetUserLimitsInput = z.infer<typeof setUserLimitsSchema>;
 const promptTaskSettingSchema = z.object({
     enabled: z.boolean().default(true),
     provider: z.string().min(1).max(80).default("siliconflow"),
-    model: z.string().min(1).max(200).default("MiniMaxAI/MiniMax-M2.5"),
+    model: z.string().min(1).max(200).default("MiniMaxAI/MiniMax-M3"),
     temperature: z.number().min(0).max(2).default(0.7),
     maxCompletionTokens: z.number().int().min(64).max(32000).default(1200),
     systemTemplate: z.string().max(20000).default(""),

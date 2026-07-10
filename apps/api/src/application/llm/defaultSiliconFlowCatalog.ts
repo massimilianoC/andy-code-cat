@@ -5,9 +5,8 @@ import { computePriceTier, SILICONFLOW_MODEL_PRICES } from "./siliconflowPricing
 const DEFAULT_MODELS: Record<PipelineModelRole, string> = {
     coding: "deepseek-ai/DeepSeek-V3.2",
     coding_fast: "Qwen/Qwen3-Coder-30B-A3B-Instruct",
-    dialogue: "MiniMaxAI/MiniMax-M2.5",
-    // Qwen3-8B replaced: intermittent timeouts observed in production testing (June 2026)
-    dialogue_fast: "google/gemma-4-12B-it",
+    dialogue: "MiniMaxAI/MiniMax-M3",
+    dialogue_fast: "MiniMaxAI/MiniMax-M2.5",
     vision: "Qwen/Qwen3-VL-32B-Instruct",
     vision_fast: "Qwen/Qwen3-VL-8B-Instruct",
     quality_check: "deepseek-ai/DeepSeek-V3",
@@ -19,7 +18,7 @@ const DEFAULT_MODELS: Record<PipelineModelRole, string> = {
 const FALLBACK_MODELS: Partial<Record<PipelineModelRole, string>> = {
     coding: "Qwen/Qwen3-Coder-30B-A3B-Instruct",
     coding_fast: "Qwen/Qwen3-14B",
-    dialogue: "moonshotai/Kimi-K2.5",
+    dialogue: "MiniMaxAI/MiniMax-M2.5",
     dialogue_fast: "Qwen/Qwen3-14B",
     vision: "Qwen/Qwen3-VL-30B-A3B-Instruct",
     vision_fast: "zai-org/GLM-5V-Turbo",

@@ -1,4 +1,5 @@
 import { env } from "../config";
+import { closeDb } from "../infra/db/mongo";
 import { MongoLlmCatalogRepository } from "../infra/repositories/MongoLlmCatalogRepository";
 import { SeedLlmCatalog } from "../application/use-cases/SeedLlmCatalog";
 
@@ -12,7 +13,12 @@ async function run() {
     );
 }
 
-run().catch((error) => {
-    console.error("LLM seed failed", error);
-    process.exit(1);
-});
+run()
+    .then(async () => {
+        await closeDb();
+    })
+    .catch(async (error) => {
+        console.error("LLM seed failed", error);
+        await closeDb().catch(() => undefined);
+        process.exit(1);
+    });

@@ -42,7 +42,7 @@ const PROMPT_TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
     [DEFAULT_PROMPT_TASK_KEY]: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.7,
         maxCompletionTokens: 1200,
         systemTemplate: "",
@@ -50,7 +50,7 @@ const PROMPT_TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
     [TEMPLATE_DRAFT_TASK_KEY]: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.5,
         maxCompletionTokens: 1800,
         systemTemplate: "",
@@ -1076,7 +1076,7 @@ export default function AdminGovernancePage() {
                                 <PromptTaskSettingsCard
                                     title="Optimized preprompting"
                                     description="Controls the rewriting layer that strengthens the user brief before generation, aligned with the active project-type template model."
-                                    helperText="Default fallback: SiliconFlow + MiniMax M2.5"
+                                    helperText="Default fallback: SiliconFlow + MiniMax M3"
                                     value={governance.promptTaskSettings?.[DEFAULT_PROMPT_TASK_KEY] ?? PROMPT_TASK_DEFAULTS[DEFAULT_PROMPT_TASK_KEY]}
                                     providers={providers}
                                     onFieldChange={(key, value) => setPromptTaskField(DEFAULT_PROMPT_TASK_KEY, key, value)}

@@ -1,6 +1,4 @@
-import { call, ApiError } from "./call";
-import { getAccessToken, isAccessTokenExpired } from "../token-store";
-import { getSharedRefreshPromise, setSharedRefreshPromise, refreshAccessToken } from "./call";
+import { call, ApiError, getValidAccessToken } from "./call";
 import type {
     DidacticKnowledgeStatusDto,
     DidacticKnowledgeResponseDto,
@@ -42,19 +40,7 @@ export async function streamDidacticAsk(
 ) {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-    let effectiveToken = getAccessToken() ?? token;
-    if (isAccessTokenExpired()) {
-        try {
-            if (!getSharedRefreshPromise()) {
-                setSharedRefreshPromise(refreshAccessToken());
-            }
-            effectiveToken = await getSharedRefreshPromise()!;
-            setSharedRefreshPromise(null);
-        } catch {
-            setSharedRefreshPromise(null);
-            throw new ApiError(401, { error: "Sessione scaduta" });
-        }
-    }
+    const effectiveToken = await getValidAccessToken(token);
 
     const res = await fetch(`${baseUrl}/v1/projects/${projectId}/didactic/ask/stream`, {
         method: "POST",

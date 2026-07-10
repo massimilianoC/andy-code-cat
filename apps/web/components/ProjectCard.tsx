@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getThumbnail, getPromptExcerpt, getSnapCount } from "@/lib/thumbnail";
-import { getAccessToken } from "@/lib/token-store";
+import { getValidAccessToken, refreshAccessToken } from "@/lib/api/call";
 import CostBadge from "@/components/cost/CostBadge";
 
 interface ProjectCardProps {
@@ -51,17 +51,21 @@ function relativeTime(dateString: string, t: (key: string, opts?: any) => string
 
 /** Fetch a thumbnail JPEG with auth and return an object URL, or null on failure. */
 async function fetchThumbnailBlobUrl(projectId: string, snapshotId: string): Promise<string | null> {
-    const token = getAccessToken();
-    if (!token) return null;
     const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
     const url = `${base}/v1/projects/${projectId}/preview-snapshots/${snapshotId}/thumbnail`;
     try {
-        const res = await fetch(url, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "x-project-id": projectId,
-            },
-        });
+        async function fetchThumbnail(accessToken: string) {
+            return fetch(url, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "x-project-id": projectId,
+                },
+            });
+        }
+        let res = await fetchThumbnail(await getValidAccessToken());
+        if (res.status === 401) {
+            res = await fetchThumbnail(await refreshAccessToken());
+        }
         if (!res.ok) return null;
         const blob = await res.blob();
         return URL.createObjectURL(blob);

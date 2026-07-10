@@ -1,4 +1,5 @@
 import { PRESET_CATALOG } from "../domain/entities/ProjectPreset";
+import { closeDb } from "../infra/db/mongo";
 import { MongoProjectPresetRepository } from "../infra/repositories/MongoProjectPresetRepository";
 
 async function run() {
@@ -8,7 +9,12 @@ async function run() {
     console.log(`Preset seed completed. upserted=${result.upserted}`);
 }
 
-run().catch((error) => {
-    console.error("Preset seed failed", error);
-    process.exit(1);
-});
+run()
+    .then(async () => {
+        await closeDb();
+    })
+    .catch(async (error) => {
+        console.error("Preset seed failed", error);
+        await closeDb().catch(() => undefined);
+        process.exit(1);
+    });
