@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square, Settings } from "lucide-react";
+import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square, Settings, Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { VibeGenerationMode } from "@andy-code-cat/contracts";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
@@ -14,7 +14,8 @@ import { VibeCoreBackground } from "./VibeCoreBackground";
 import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
 import { classifyVibeIntent, getVibeConfig, prefillZeroEffort } from "@/lib/api/vibecore";
 import { getZeroEffortConfig } from "@/lib/api/pipelines";
-import { createProject, getProjectAsset, uploadProjectAsset, updateProject } from "@/lib/api";
+import { createProject, deleteProject, getProjectAsset, uploadProjectAsset, updateProject } from "@/lib/api";
+import { ApiError } from "@/lib/api/call";
 import { getLlmProviders, type LlmProviderCatalogDto } from "@/lib/api/llm";
 import { useNotifications } from "@/lib/notifications";
 
@@ -93,6 +94,57 @@ interface FilePill {
 interface PipelineModelOverride {
     provider: string;
     model: string;
+}
+
+interface VibeErrorDetails {
+    title: string;
+    message: string;
+    status?: number;
+    code?: string;
+    phase: EntryPhase;
+    files?: string[];
+    details?: unknown;
+}
+
+function toVibeErrorDetails(error: unknown, phase: EntryPhase, fallbackTitle: string): VibeErrorDetails {
+    const files = typeof error === "object" && error !== null && Array.isArray((error as { failedUploadNames?: unknown }).failedUploadNames)
+        ? (error as { failedUploadNames: string[] }).failedUploadNames
+        : undefined;
+    if (error instanceof ApiError) {
+        return {
+            title: fallbackTitle,
+            message: error.userMessage ?? error.message,
+            status: error.status,
+            code: error.code,
+            phase,
+            files,
+            details: error.details ?? error.body,
+        };
+    }
+    if (error instanceof Error) {
+        return {
+            title: fallbackTitle,
+            message: error.message,
+            phase,
+            files,
+        };
+    }
+    return {
+        title: fallbackTitle,
+        message: String(error || fallbackTitle),
+        phase,
+    };
+}
+
+function formatErrorDetails(details: VibeErrorDetails): string {
+    return JSON.stringify({
+        phase: details.phase,
+        status: details.status,
+        code: details.code,
+        message: details.message,
+        files: details.files,
+        details: details.details,
+    }, null, 2);
 }
 
 function loadPipelineModelOverride(): PipelineModelOverride | null {
@@ -184,6 +236,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const [prompt, setPrompt] = useState("");
     const [files, setFiles] = useState<FilePill[]>([]);
     const [phase, setPhase] = useState<EntryPhase>("idle");
+    const phaseRef = useRef<EntryPhase>("idle");
     // Cycling hint index — advances every 2.3s with a short fade-out/-in transition
     const [hintIndex, setHintIndex] = useState(0);
     const [hintVisible, setHintVisible] = useState(true);
@@ -205,6 +258,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     }, [phase]);
 
     const [error, setError] = useState<string | null>(null);
+    const [errorDetails, setErrorDetails] = useState<VibeErrorDetails | null>(null);
     const [serverWarnings, setServerWarnings] = useState<string[]>([]);
     const [isDragOver, setIsDragOver] = useState(false);
     const [providersCatalog, setProvidersCatalog] = useState<LlmProviderCatalogDto[]>([]);
@@ -212,6 +266,20 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const [modelOverrideOpen, setModelOverrideOpen] = useState(false);
     const [attachmentPolicy, setAttachmentPolicy] = useState(DEFAULT_ATTACHMENT_POLICY);
     const generationMode: EntryGenerationMode = "auto";
+
+    function setEntryPhase(next: EntryPhase) {
+        phaseRef.current = next;
+        setPhase(next);
+    }
+
+    async function cleanupPrematureProject(projectId: string | null): Promise<void> {
+        if (!projectId) return;
+        try {
+            await deleteProject(token, projectId);
+        } catch (cleanupError) {
+            console.warn("Unable to clean up premature Vibe project", cleanupError);
+        }
+    }
 
     useEffect(() => {
         setPipelineOverride(loadPipelineModelOverride());
@@ -280,17 +348,21 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     * The UI model override wins; otherwise god_mode_generate determines which provider/model is used.
      */
     async function handleHardMode() {
-        setPhase("creating");
+        setEntryPhase("creating");
+        setErrorDetails(null);
+        let createdProjectId: string | null = null;
+        let handoffCompleted = false;
         try {
             const projectName = prompt.trim()
                 ? prompt.trim().slice(0, 64)
                 : t("vibecore.newProject", "Nuovo progetto");
             const projectResult = await createProject(token, projectName);
             const projectId = projectResult.project.id;
+            createdProjectId = projectId;
 
             if (files.length > 0) {
-                setPhase("uploading");
-                await Promise.allSettled(
+                setEntryPhase("uploading");
+                const uploadResults = await Promise.allSettled(
                     files.map((pill) =>
                         uploadProjectAsset(token, projectId, pill.file, {
                             scope: "project",
@@ -298,9 +370,31 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         }),
                     ),
                 );
+                const failedUploadNames = uploadResults
+                    .map((result, index) => result.status === "fulfilled" ? null : (files[index]?.file.name ?? "file"))
+                    .filter((name): name is string => Boolean(name));
+                if (failedUploadNames.length === files.length) {
+                    throw Object.assign(new Error(
+                        t("vibecore.uploadAllFailed", {
+                            files: failedUploadNames.join(", "),
+                            defaultValue: "Unable to upload attached files: {{files}}. Check the session and try again.",
+                        }),
+                    ), { failedUploadNames });
+                }
+                if (failedUploadNames.length > 0) {
+                    setServerWarnings((prev) => [
+                        ...new Set([
+                            ...prev,
+                            t("vibecore.uploadPartialFailed", {
+                                files: failedUploadNames.join(", "),
+                                defaultValue: "Some files were not uploaded: {{files}}",
+                            }),
+                        ]),
+                    ]);
+                }
             }
 
-            setPhase("redirecting");
+            setEntryPhase("redirecting");
             const query = new URLSearchParams({ autoTemplating: "true" });
             if (prompt.trim()) query.set("autoPrompt", prompt.trim().slice(0, 2000));
             applyPipelineModelParams(query);
@@ -318,10 +412,16 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 // Non-blocking: proceed without preferred model if config fetch fails
             }
 
+            handoffCompleted = true;
             router.push(`/workspace/${projectId}?${query.toString()}`);
-        } catch {
-            setError(t("vibecore.error", "An error occurred. Please try again."));
-            setPhase("idle");
+        } catch (err) {
+            if (!handoffCompleted) {
+                await cleanupPrematureProject(createdProjectId);
+            }
+            const details = toVibeErrorDetails(err, phaseRef.current, t("vibecore.error", "An error occurred. Please try again."));
+            setError(details.message || t("vibecore.error", "An error occurred. Please try again."));
+            setErrorDetails(details);
+            setEntryPhase("idle");
         }
     }
 
@@ -397,11 +497,14 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
         )
             return;
         setError(null);
+        setErrorDetails(null);
         setServerWarnings([]);
+        let createdProjectId: string | null = null;
+        let handoffCompleted = false;
 
         try {
             // Layer Φ: classify intent
-            setPhase("classifying");
+            setEntryPhase("classifying");
             const attachmentMeta = files.map((p) => ({
                 filename: p.file.name,
                 mimeType: p.file.type,
@@ -434,7 +537,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
             // Create project early so files (and their Layer D enrichment) can be uploaded
             // before the LLM prefill pass runs
-            setPhase("creating");
+            setEntryPhase("creating");
             const projectName = prompt.trim().slice(0, 64) || t("vibecore.newProject", "New project");
             const presetId = classification?.templateId ?? undefined;
             let projectId = classification?.projectId;
@@ -447,13 +550,14 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             } else {
                 const projectResult = await createProject(token, projectName, presetId);
                 projectId = projectResult.project.id;
+                createdProjectId = projectId;
             }
 
             // Upload files to the new project (triggers async enrichment pipeline)
             const uploadedStructuredAssetIds: string[] = [];
             const uploadedFileNames = files.map((pill) => pill.file.name);
             if (files.length > 0) {
-                setPhase("uploading");
+                setEntryPhase("uploading");
                 const uploadResults = await Promise.allSettled(
                     files.map((pill) =>
                         uploadProjectAsset(token, projectId, pill.file, {
@@ -475,12 +579,12 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 });
                 if (failedUploadNames.length > 0) {
                     if (failedUploadNames.length === files.length) {
-                        throw new Error(
+                        throw Object.assign(new Error(
                             t("vibecore.uploadAllFailed", {
                                 files: failedUploadNames.join(", "),
                                 defaultValue: "Unable to upload attached files: {{files}}. Check the session and try again.",
                             }),
-                        );
+                        ), { failedUploadNames });
                     }
                     setServerWarnings((prev) => [
                         ...new Set([
@@ -495,12 +599,12 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             }
 
             if (uploadedStructuredAssetIds.length > 0) {
-                setPhase("analyzing");
+                setEntryPhase("analyzing");
                 await waitForStructuredAssetReadiness(token, projectId, uploadedStructuredAssetIds);
             }
 
             // LLM prefill pass — now includes Layer D document context from uploaded assets
-            setPhase("prefilling");
+            setEntryPhase("prefilling");
             const prefillResult = await prefillZeroEffort(token, {
                 prompt: prompt.trim(),
                 projectId,
@@ -517,6 +621,9 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     status: "error",
                     message: err instanceof Error ? err.message : undefined,
                 });
+                if (attachmentMeta.length > 0) {
+                    throw err;
+                }
                 return null;
             });
             if (prefillResult?.warnings?.length) {
@@ -551,7 +658,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             }
 
             // Always navigate to launch page (zero-effort flow)
-            setPhase("redirecting");
+            setEntryPhase("redirecting");
             const query = new URLSearchParams({
                 autoPrompt: prompt.trim().slice(0, 2000),
             });
@@ -559,10 +666,16 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             if (classification?.templateId) query.set("templateId", classification.templateId);
             if (hasPrefill) query.set("prefilled", "1");
             applyPipelineModelParams(query);
+            handoffCompleted = true;
             router.push(`/launch/${projectId}?${query.toString()}`);
-        } catch {
-            setError(t("vibecore.error", "An error occurred. Please try again."));
-            setPhase("idle");
+        } catch (err) {
+            if (!handoffCompleted) {
+                await cleanupPrematureProject(createdProjectId);
+            }
+            const details = toVibeErrorDetails(err, phaseRef.current, t("vibecore.error", "An error occurred. Please try again."));
+            setError(details.message || t("vibecore.error", "An error occurred. Please try again."));
+            setErrorDetails(details);
+            setEntryPhase("idle");
         }
     }
 
@@ -979,13 +1092,54 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
                 {/* Error */}
                 {error && (
-                    <p
+                    <div
                         role="alert"
-                        className="mt-3 text-center text-sm"
-                        style={{ color: "#f87171" }}
+                        className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
                     >
-                        {error}
-                    </p>
+                        <p className="text-center font-medium">{error}</p>
+                        {errorDetails ? (
+                            <details className="mt-2 rounded-md border border-border bg-card/90 p-2 text-left text-xs text-muted-foreground">
+                                <summary className="cursor-pointer select-none font-medium text-foreground">
+                                    {t("vibecore.errorDetailsTitle", "Dettagli errore")}
+                                </summary>
+                                <div className="mt-2 space-y-2">
+                                    <div className="grid gap-1 sm:grid-cols-2">
+                                        <span>
+                                            {t("vibecore.errorPhase", "Fase")}: {errorDetails.phase}
+                                        </span>
+                                        {errorDetails.status !== undefined ? (
+                                            <span>HTTP: {errorDetails.status}</span>
+                                        ) : null}
+                                        {errorDetails.code ? (
+                                            <span className="sm:col-span-2">
+                                                {t("vibecore.errorCode", "Codice")}: {errorDetails.code}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                    {errorDetails.files?.length ? (
+                                        <p className="break-words">
+                                            {t("vibecore.errorFiles", "File")}: {errorDetails.files.join(", ")}
+                                        </p>
+                                    ) : null}
+                                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-background p-2 text-[11px] text-muted-foreground">
+                                        {formatErrorDetails(errorDetails)}
+                                    </pre>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-2"
+                                        onClick={() => {
+                                            void navigator.clipboard?.writeText(formatErrorDetails(errorDetails));
+                                        }}
+                                    >
+                                        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                                        {t("vibecore.copyError", "Copia errore")}
+                                    </Button>
+                                </div>
+                            </details>
+                        ) : null}
+                    </div>
                 )}
 
                 {!error && serverWarnings.length > 0 && (

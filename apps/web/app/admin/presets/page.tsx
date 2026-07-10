@@ -408,7 +408,7 @@ export default function AdminPresetsPage() {
                                             label: prev.recommendedModel?.label,
                                         },
                                     }))}
-                                    placeholder="MiniMaxAI/MiniMax-M2.5"
+                                    placeholder="MiniMaxAI/MiniMax-M3"
                                 />
                             </div>
                         </div>

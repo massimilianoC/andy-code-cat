@@ -1,7 +1,7 @@
 /**
  * Brand Identity API client — platform, user, and project scopes.
  */
-import { call, ApiError } from "./call";
+import { call, ApiError, getValidAccessToken, refreshAccessToken } from "./call";
 import type { BrandAssetDto } from "@andy-code-cat/contracts";
 export type { BrandAssetDto };
 
@@ -39,17 +39,26 @@ async function uploadFile(
     meta: { role: string; policy: string; description?: string },
     extraHeaders?: Record<string, string>,
 ): Promise<BrandAssetDto> {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("role", meta.role);
-    formData.append("policy", meta.policy);
-    if (meta.description) formData.append("description", meta.description);
-    const res = await fetch(`${baseUrl()}${url}`, {
-        method: "POST",
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}`, ...extraHeaders },
-        body: formData,
-    });
+    function buildFormData() {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("role", meta.role);
+        formData.append("policy", meta.policy);
+        if (meta.description) formData.append("description", meta.description);
+        return formData;
+    }
+    async function post(accessToken: string) {
+        return fetch(`${baseUrl()}${url}`, {
+            method: "POST",
+            cache: "no-store",
+            headers: { Authorization: `Bearer ${accessToken}`, ...extraHeaders },
+            body: buildFormData(),
+        });
+    }
+    let res = await post(await getValidAccessToken(token));
+    if (res.status === 401) {
+        res = await post(await refreshAccessToken());
+    }
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(res.status, json);
     return (json as BrandAssetResponse).asset;
@@ -69,18 +78,27 @@ async function uploadDocument(
     meta: BrandDocumentMeta,
     extraHeaders?: Record<string, string>,
 ): Promise<BrandAssetDto> {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("policy", meta.policy);
-    if (meta.description) formData.append("description", meta.description);
-    if (meta.isActive !== undefined) formData.append("isActive", String(meta.isActive));
-    if (meta.priority !== undefined) formData.append("priority", String(meta.priority));
-    const res = await fetch(`${baseUrl()}${url}`, {
-        method: "POST",
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}`, ...extraHeaders },
-        body: formData,
-    });
+    function buildFormData() {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("policy", meta.policy);
+        if (meta.description) formData.append("description", meta.description);
+        if (meta.isActive !== undefined) formData.append("isActive", String(meta.isActive));
+        if (meta.priority !== undefined) formData.append("priority", String(meta.priority));
+        return formData;
+    }
+    async function post(accessToken: string) {
+        return fetch(`${baseUrl()}${url}`, {
+            method: "POST",
+            cache: "no-store",
+            headers: { Authorization: `Bearer ${accessToken}`, ...extraHeaders },
+            body: buildFormData(),
+        });
+    }
+    let res = await post(await getValidAccessToken(token));
+    if (res.status === 401) {
+        res = await post(await refreshAccessToken());
+    }
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(res.status, json);
     return (json as BrandAssetResponse).asset;

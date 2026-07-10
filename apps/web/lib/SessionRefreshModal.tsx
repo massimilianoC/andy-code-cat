@@ -1,157 +1,61 @@
 "use client";
 
 import React from "react";
+import { AlertTriangle, LogIn } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { useSession } from "./SessionContext";
-import { LoginForm } from "../components/LoginForm";
-import type { LoginResult } from "./api";
-import { setPasswordChangeRequired } from "./token-store";
 
 export function SessionRefreshModal() {
     const { t } = useTranslation();
-    const { isSessionExpired, requiresFullLogin, onLoginSuccess, clearSession } = useSession();
+    const { isSessionExpired, clearSession } = useSession();
 
-    if (!isSessionExpired) {
-        return null;
-    }
-
-    function handleLoginSuccess(data: LoginResult) {
-        setPasswordChangeRequired(data.requiresPasswordChange);
-        onLoginSuccess(data.accessToken, data.refreshToken, data.activeProjectId);
-    }
-
-    function handleLogout() {
+    function handleRelogin() {
         clearSession();
-        window.location.href = "/login";
+        const params = new URLSearchParams({ expired: "1" });
+        const currentPath = `${window.location.pathname}${window.location.search}`;
+        if (!currentPath.startsWith("/login")) {
+            params.set("next", currentPath);
+        }
+        window.location.href = `/login?${params.toString()}`;
     }
 
     return (
-        <div className="session-modal-overlay">
-            <div className="session-modal">
-                <div className="session-modal-header">
-                    <h2>{t("session.expired")}</h2>
-                </div>
+        <Dialog open={isSessionExpired} onOpenChange={() => undefined}>
+            <DialogContent
+                className="max-w-md"
+                hideClose
+                onEscapeKeyDown={(event) => event.preventDefault()}
+                onPointerDownOutside={(event) => event.preventDefault()}
+            >
+                <DialogHeader>
+                    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive">
+                        <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                    <DialogTitle>{t("session.expired", "Sessione scaduta")}</DialogTitle>
+                    <DialogDescription>
+                        {t(
+                            "session.reloginRequired",
+                            "La sessione non è più valida. Per evitare errori mascherati o operazioni parziali, torna al login e accedi di nuovo.",
+                        )}
+                    </DialogDescription>
+                </DialogHeader>
 
-                <div className="session-modal-body">
-                    {requiresFullLogin ? (
-                        <>
-                            <p className="session-modal-message" style={{ marginBottom: "1rem" }}>
-                                {t("session.requiresLogin")}
-                            </p>
-                            <LoginForm onSuccess={handleLoginSuccess} embedded />
-                        </>
-                    ) : (
-                        // Access token expired but refresh token may be valid.
-                        // The proactive refresh in api.ts normally handles this silently;
-                        // this path is a safety fallback shown during edge-case races.
-                        <>
-                            <p className="session-modal-message">
-                                {t("session.tokenExpired")}
-                            </p>
-                            <div style={{ marginTop: "1rem" }}>
-                                <LoginForm onSuccess={handleLoginSuccess} embedded />
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                <div className="session-modal-footer">
-                    <button
-                        className="btn btn-secondary"
-                        onClick={handleLogout}
-                    >
-                        {t("session.logout")}
-                    </button>
-                </div>
-            </div>
-            <style jsx>{`
-                .session-modal-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-color: rgba(0, 0, 0, 0.6);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 9999;
-                }
-
-                .session-modal {
-                    background-color: white;
-                    border-radius: 8px;
-                    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-                    max-width: 420px;
-                    width: 90%;
-                    overflow: hidden;
-                }
-
-                .session-modal-header {
-                    padding: 24px;
-                    border-bottom: 1px solid #e5e5e5;
-                }
-
-                .session-modal-header h2 {
-                    margin: 0;
-                    font-size: 18px;
-                    font-weight: 600;
-                    color: #1a1a1a;
-                }
-
-                .session-modal-body {
-                    padding: 24px;
-                }
-
-                .session-modal-message {
-                    margin: 0;
-                    font-size: 14px;
-                    line-height: 1.5;
-                    color: #666;
-                }
-
-                .session-modal-footer {
-                    padding: 16px 24px;
-                    border-top: 1px solid #e5e5e5;
-                    display: flex;
-                    gap: 12px;
-                    justify-content: flex-end;
-                }
-
-                .btn {
-                    padding: 10px 16px;
-                    font-size: 14px;
-                    font-weight: 500;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                }
-
-                .btn:disabled {
-                    opacity: 0.6;
-                    cursor: not-allowed;
-                }
-
-                .btn-primary {
-                    background-color: #2563eb;
-                    color: white;
-                }
-
-                .btn-primary:hover:not(:disabled) {
-                    background-color: #1d4ed8;
-                }
-
-                .btn-secondary {
-                    background-color: #f3f4f6;
-                    color: #1a1a1a;
-                    border: 1px solid #d1d5db;
-                }
-
-                .btn-secondary:hover:not(:disabled) {
-                    background-color: #e5e7eb;
-                }
-            `}</style>
-        </div>
+                <DialogFooter>
+                    <Button type="button" onClick={handleRelogin} className="gap-2">
+                        <LogIn className="h-4 w-4" aria-hidden="true" />
+                        {t("session.relogin", "Vai al login")}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }

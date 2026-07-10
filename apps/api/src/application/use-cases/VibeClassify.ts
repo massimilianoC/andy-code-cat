@@ -14,7 +14,7 @@ import { inferDeterministicVibeTemplate } from "../prompting/vibeTemplateIntent"
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
-const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M2.5";
+const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
 const CONFIDENCE_THRESHOLD = 0.65;
 const MAX_PROMPT_CHARS = 2000;
 

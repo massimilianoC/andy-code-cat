@@ -548,8 +548,10 @@ export default function WorkspacePage() {
     const [pendingEnrichmentPolling, setPendingEnrichmentPolling] = useState<string[]>([]);
     const [imageSuggestions, setImageSuggestions] = useState<{ assetId: string; name: string; suggestion: "logo" | "background" | "icon"; dismissed: boolean }[]>([]);
     // When coming from the Zero Effort flow the brief is already structured — skip auto-optimize
-    // to avoid a second LLM compression pass on content that was pre-optimized upstream.
-    const [autoOptimize, setAutoOptimize] = useState(() => searchParams?.get("skipAutoOptimize") !== "1");
+    // for that one automated handoff only. After the first generated artifact is saved, restore
+    // the workspace default so future prompts are optimized unless the user turns it off.
+    const autoOptimizeSuppressedByHandoffRef = useRef(searchParams?.get("skipAutoOptimize") === "1");
+    const [autoOptimize, setAutoOptimize] = useState(() => !autoOptimizeSuppressedByHandoffRef.current);
 
     const [leftWidth, setLeftWidth] = useState(40);
     
@@ -2364,6 +2366,17 @@ export default function WorkspacePage() {
         }
     }, [currentProviderMissingKey, llmErrorDialog?.code]);
 
+    function setUserAutoOptimize(next: React.SetStateAction<boolean>) {
+        autoOptimizeSuppressedByHandoffRef.current = false;
+        setAutoOptimize(next);
+    }
+
+    function restoreAutoOptimizeAfterAutomatedArtifact() {
+        if (!autoOptimizeSuppressedByHandoffRef.current) return;
+        autoOptimizeSuppressedByHandoffRef.current = false;
+        setAutoOptimize(true);
+    }
+
     async function handleSend(e: React.FormEvent) {
         e.preventDefault();
         let content = prompt.trim();
@@ -2867,6 +2880,10 @@ export default function WorkspacePage() {
                             ? t("workspace.notifications.snapshot.newVersionMessage")
                             : t("workspace.notifications.llm.doneMessage", { provider: llm.provider, model: llm.model }),
             });
+
+            if (previewVersionSaved) {
+                restoreAutoOptimizeAfterAutomatedArtifact();
+            }
 
             setThinkingText("");
             setDraftAnswer("");
@@ -4071,7 +4088,7 @@ export default function WorkspacePage() {
                                 role="switch"
                                 aria-checked={autoOptimize}
                                 title={autoOptimize ? t("workspace.ui.autoOptimizeOnTitle") : t("workspace.ui.autoOptimizeOffTitle")}
-                                onClick={() => setAutoOptimize((v) => !v)}
+                                onClick={() => setUserAutoOptimize((v) => !v)}
                                 style={{
                                     position: "relative", display: "inline-flex", height: "1.1rem", width: "2rem",
                                     flexShrink: 0, cursor: "pointer", borderRadius: "9999px", border: "none",

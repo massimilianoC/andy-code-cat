@@ -1,4 +1,4 @@
-import { call, ApiError } from "./call";
+import { call, ApiError, getValidAccessToken, refreshAccessToken } from "./call";
 
 export interface DocumentBriefDto {
     documentType: string;
@@ -373,22 +373,34 @@ export async function uploadProjectAsset(
     };
 }> {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-    const formData = new FormData();
-    formData.append("file", file);
-    if (meta?.label) formData.append("label", meta.label);
-    if (meta?.scope) formData.append("scope", meta.scope);
-    if (meta?.useInProject !== undefined) formData.append("useInProject", String(meta.useInProject));
-    if (meta?.styleRole) formData.append("styleRole", meta.styleRole);
-    if (meta?.descriptionText) formData.append("descriptionText", meta.descriptionText);
-    if (meta?.conversationId) formData.append("conversationId", meta.conversationId);
-    if (meta?.messageId) formData.append("messageId", meta.messageId);
 
-    const res = await fetch(`${baseUrl}/v1/projects/${projectId}/assets`, {
-        method: "POST",
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}`, "x-project-id": projectId },
-        body: formData,
-    });
+    function buildFormData() {
+        const formData = new FormData();
+        formData.append("file", file);
+        if (meta?.label) formData.append("label", meta.label);
+        if (meta?.scope) formData.append("scope", meta.scope);
+        if (meta?.useInProject !== undefined) formData.append("useInProject", String(meta.useInProject));
+        if (meta?.styleRole) formData.append("styleRole", meta.styleRole);
+        if (meta?.descriptionText) formData.append("descriptionText", meta.descriptionText);
+        if (meta?.conversationId) formData.append("conversationId", meta.conversationId);
+        if (meta?.messageId) formData.append("messageId", meta.messageId);
+        return formData;
+    }
+
+    async function postUpload(accessToken: string): Promise<Response> {
+        return fetch(`${baseUrl}/v1/projects/${projectId}/assets`, {
+            method: "POST",
+            cache: "no-store",
+            headers: { Authorization: `Bearer ${accessToken}`, "x-project-id": projectId },
+            body: buildFormData(),
+        });
+    }
+
+    let res = await postUpload(await getValidAccessToken(token));
+    if (res.status === 401) {
+        res = await postUpload(await refreshAccessToken());
+    }
+
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(res.status, json);
     return json as {
@@ -499,10 +511,17 @@ export function getProjectAiAnalytics(token: string, projectId: string) {
 }
 
 export async function downloadProjectAssetDataUrl(token: string, projectId: string, assetId: string): Promise<string> {
-    const res = await fetch(getAssetDownloadUrl(projectId, assetId), {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}`, "x-project-id": projectId },
-    });
+    async function fetchAsset(accessToken: string): Promise<Response> {
+        return fetch(getAssetDownloadUrl(projectId, assetId), {
+            cache: "no-store",
+            headers: { Authorization: `Bearer ${accessToken}`, "x-project-id": projectId },
+        });
+    }
+
+    let res = await fetchAsset(await getValidAccessToken(token));
+    if (res.status === 401) {
+        res = await fetchAsset(await refreshAccessToken());
+    }
 
     const json = await res.clone().json().catch(() => undefined);
     if (!res.ok) throw new ApiError(res.status, json);

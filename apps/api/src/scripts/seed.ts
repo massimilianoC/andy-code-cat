@@ -2,6 +2,7 @@ import { config as loadEnv } from "dotenv";
 import { MongoUserRepository } from "../infra/repositories/MongoUserRepository";
 import { MongoProjectRepository } from "../infra/repositories/MongoProjectRepository";
 import { MongoUserStyleProfileRepository } from "../infra/repositories/MongoUserStyleProfileRepository";
+import { closeDb } from "../infra/db/mongo";
 import { hashPassword } from "../infra/security/password";
 import { env } from "../config";
 
@@ -60,12 +61,16 @@ async function run() {
     console.log("Style profile initialized for seed user.");
 }
 
-run().then(() => {
-    return seedSuperAdmin();
-}).catch((error) => {
-    console.error("Seed failed", error);
-    process.exit(1);
-});
+run()
+    .then(() => seedSuperAdmin())
+    .then(async () => {
+        await closeDb();
+    })
+    .catch(async (error) => {
+        console.error("Seed failed", error);
+        await closeDb().catch(() => undefined);
+        process.exit(1);
+    });
 
 async function seedSuperAdmin() {
     const email = process.env.SUPERADMIN_EMAIL ?? "superadmin@andy-code-cat.local";

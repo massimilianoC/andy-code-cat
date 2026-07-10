@@ -10,6 +10,7 @@ import { Router, type RequestHandler } from "express";
 import type { Response, NextFunction } from "express";
 import { z } from "zod";
 import { authMiddleware } from "../middlewares/authMiddleware";
+import { HttpError } from "../errors/httpError";
 import type { RequestWithContext } from "../types";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
@@ -141,6 +142,47 @@ export function createVibecoreRoutes(): Router {
             return [`Attachment payload is near the cap: ${usedMb} MB / ${capMb} MB.`];
         }
         return [];
+    }
+
+    function assetHasResolvedContext(asset: Awaited<ReturnType<typeof assetRepository.listByProject>>[number], inlineDocumentNames: Set<string>): boolean {
+        if (inlineDocumentNames.has(asset.originalName)) return true;
+        const trace = asset.enrichmentTrace;
+        if (!trace) return false;
+        return Boolean(
+            trace.renderedFragment ||
+            trace.textLayer ||
+            trace.structuredData ||
+            trace.documentBrief ||
+            trace.visualAnalysis ||
+            trace.designSignals ||
+            trace.provenance.enrichmentStatus === "ready",
+        );
+    }
+
+    function assertAttachmentContextReady(input: {
+        attachmentMeta: Array<{ filename: string; sizeBytes: number }>;
+        assets: Awaited<ReturnType<typeof assetRepository.listByProject>>;
+        inlineDocumentNames: string[];
+    }) {
+        if (input.attachmentMeta.length === 0) return;
+
+        const inlineDocumentNames = new Set(input.inlineDocumentNames);
+        const missing = input.attachmentMeta.filter((meta) => {
+            const asset = input.assets.find((candidate) =>
+                candidate.originalName === meta.filename &&
+                candidate.fileSize === meta.sizeBytes
+            );
+            return !asset || !assetHasResolvedContext(asset, inlineDocumentNames);
+        });
+
+        if (missing.length > 0) {
+            throw new HttpError("Attachment context is not ready", {
+                statusCode: 503,
+                code: "ATTACHMENT_CONTEXT_NOT_READY",
+                userMessage: "Sto ancora estraendo il contesto dagli allegati. Riprova tra poco.",
+                details: { files: missing.map((item) => item.filename) },
+            });
+        }
     }
 
     async function resolvePoliciesForProject(
@@ -280,6 +322,7 @@ export function createVibecoreRoutes(): Router {
                 let layerDContext: string | undefined;
                 let layerXDataContext: string | undefined;
                 const layerDocNames: string[] = [];
+                let projectLayerDDocumentNames: string[] = [];
 
                 // Double-sandbox: if client passed a projectId they don't own, refuse.
                 // (Auto-create only when no projectId was provided at all.)
@@ -296,6 +339,7 @@ export function createVibecoreRoutes(): Router {
                 const { attachmentPolicy, documentContextPolicy } = await resolvePoliciesForProject(userId, projectId);
 
                 const attachmentMeta = parsed.data.attachmentMeta ?? [];
+                const hasRequestAttachments = attachmentMeta.length > 0;
                 const violation = validateAttachmentMetaLimits(attachmentMeta, attachmentPolicy);
                 if (violation) {
                     res.status(violation.status).json(violation.body);
@@ -320,10 +364,29 @@ export function createVibecoreRoutes(): Router {
                             maxAssets: documentContextPolicy.maxAssetsPerPrompt,
                             fallbackInlineExtractionMaxAssets: documentContextPolicy.fallbackInlineExtractionMaxAssets,
                             waitForPendingMs: env.enrichmentEnabled ? PROJECT_LAYER_D_WAIT_FOR_PENDING_MS : 0,
-                        }).catch(() => ({ layer: "", assets, documentNames: [] as string[] }));
+                        }).catch((error) => {
+                            if (hasRequestAttachments) {
+                                throw new HttpError("Attachment context extraction failed", {
+                                    statusCode: 503,
+                                    code: "ATTACHMENT_CONTEXT_UNAVAILABLE",
+                                    userMessage: "Non sono riuscito a estrarre il contesto dagli allegati. Riprova tra poco.",
+                                    details: error instanceof Error ? { message: error.message } : undefined,
+                                });
+                            }
+                            return { layer: "", assets, documentNames: [] as string[] };
+                        });
                         assets = projectLayerD.assets;
                         layerDContext = projectLayerD.layer || undefined;
+                        projectLayerDDocumentNames = projectLayerD.documentNames;
                         projectLayerD.documentNames.forEach((name) => layerDocNames.push(name));
+                    }
+
+                    if (hasRequestAttachments) {
+                        assertAttachmentContextReady({
+                            attachmentMeta,
+                            assets,
+                            inlineDocumentNames: projectLayerDDocumentNames,
+                        });
                     }
 
                     if (parsed.data.generationMode === "data_dashboard" || parsed.data.templateId === "data-dashboard" || parsed.data.formatHint === "analytics_dashboard") {

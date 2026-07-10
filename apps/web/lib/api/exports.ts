@@ -1,4 +1,4 @@
-import { call, ApiError } from "./call";
+import { call, ApiError, getValidAccessToken, refreshAccessToken } from "./call";
 
 export interface ExportRecordDto {
     id: string;
@@ -30,9 +30,15 @@ export function requestLayer1Export(token: string, projectId: string, snapshotId
  */
 export async function downloadExportBlob(token: string, exportId: string): Promise<Blob> {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-    const res = await fetch(`${baseUrl}/v1/exports/${exportId}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
+    async function download(accessToken: string) {
+        return fetch(`${baseUrl}/v1/exports/${exportId}/download`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+    }
+    let res = await download(await getValidAccessToken(token));
+    if (res.status === 401) {
+        res = await download(await refreshAccessToken());
+    }
     if (!res.ok) {
         let body: unknown = {};
         try { body = await res.json(); } catch { /* ignore */ }
@@ -51,15 +57,18 @@ export async function downloadSnapshotCapture(
     format: "jpg" | "pdf"
 ): Promise<Blob> {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-    const res = await fetch(
-        `${baseUrl}/v1/projects/${projectId}/preview-snapshots/${snapshotId}/capture?format=${format}`,
-        {
+    async function download(accessToken: string) {
+        return fetch(`${baseUrl}/v1/projects/${projectId}/preview-snapshots/${snapshotId}/capture?format=${format}`, {
             headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization: `Bearer ${accessToken}`,
                 "x-project-id": projectId,
             },
-        }
-    );
+        });
+    }
+    let res = await download(await getValidAccessToken(token));
+    if (res.status === 401) {
+        res = await download(await refreshAccessToken());
+    }
     if (!res.ok) {
         let body: unknown = {};
         try { body = await res.json(); } catch { /* ignore */ }

@@ -19,7 +19,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     optimize_user_prompt: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.7,
         maxCompletionTokens: 1200,
         systemTemplate: "",
@@ -27,7 +27,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     optimize_image_prompt: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.4,
         maxCompletionTokens: 700,
         systemTemplate: "",
@@ -35,7 +35,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     suggest_image_direction: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.5,
         maxCompletionTokens: 500,
         systemTemplate: "",
@@ -43,7 +43,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     draft_template_model: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.5,
         maxCompletionTokens: 1800,
         systemTemplate: "",
@@ -51,7 +51,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     zero_effort_optimize: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.7,
         maxCompletionTokens: 32000,
         systemTemplate: "",
@@ -59,7 +59,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     zero_effort_generate: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.5,
         maxCompletionTokens: 14000,
         systemTemplate: "",
@@ -85,7 +85,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     vibe_intent_classify: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.0,
         maxCompletionTokens: 256,
         systemTemplate: "",
@@ -94,7 +94,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     vibe_intent_prefill: {
         enabled: true,
         provider: "siliconflow",
-        model: "google/gemma-4-12B-it",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.3,
         maxCompletionTokens: 2048,
         systemTemplate: "",
@@ -103,7 +103,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     vibe_mode_generate: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.5,
         maxCompletionTokens: 14000,
         systemTemplate: "",
@@ -112,7 +112,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     god_mode_generate: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.5,
         maxCompletionTokens: 14000,
         systemTemplate: "",
@@ -120,7 +120,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     didactic_knowledge_generate: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.4,
         maxCompletionTokens: 8000,
         systemTemplate: "",
@@ -128,7 +128,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     didactic_ask: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M2.5",
+        model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.3,
         maxCompletionTokens: 4000,
         systemTemplate: "",

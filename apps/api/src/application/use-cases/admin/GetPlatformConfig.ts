@@ -36,7 +36,7 @@ export class GetPlatformConfig {
                             {
                                 enabled: task.enabled ?? true,
                                 provider: task.provider ?? "siliconflow",
-                                model: task.model ?? "MiniMaxAI/MiniMax-M2.5",
+                                model: task.model ?? "MiniMaxAI/MiniMax-M3",
                                 temperature: task.temperature ?? 0.7,
                                 maxCompletionTokens: task.maxCompletionTokens ?? 1200,
                                 systemTemplate: task.systemTemplate ?? "",

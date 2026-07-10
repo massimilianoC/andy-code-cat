@@ -125,7 +125,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Sites & forms",
         tags: ["conversion", "lead-gen", "cta"],
         sortOrder: 10,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Fast start" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Fast start" },
     },
     website: {
         category: "web",
@@ -133,7 +133,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Sites & forms",
         tags: ["company", "services", "multi-section"],
         sortOrder: 20,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Balanced" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Balanced" },
     },
     form: {
         category: "web",
@@ -141,7 +141,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Sites & forms",
         tags: ["wizard", "contact", "lead"],
         sortOrder: 30,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Clear UX" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Clear UX" },
     },
     manifesto: {
         category: "print-graphic",
@@ -149,7 +149,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Poster, print, visual",
         tags: ["brand", "statement", "editorial"],
         sortOrder: 40,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Tone-first" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Tone-first" },
     },
     a4poster: {
         category: "print-graphic",
@@ -157,7 +157,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Poster, print, visual",
         tags: ["a4", "poster", "pdf"],
         sortOrder: 50,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Print-ready" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Print-ready" },
     },
     infographic: {
         category: "print-graphic",
@@ -165,7 +165,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Poster, print, visual",
         tags: ["data", "storytelling", "visual"],
         sortOrder: 60,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Data visual" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Data visual" },
     },
     "data-dashboard": {
         category: "data-analytics",
@@ -174,7 +174,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         tags: ["dataset", "dashboard", "kpi", "analytics"],
         sortOrder: 65,
         isActive: false,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Grounded analysis" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Grounded analysis" },
     },
     slideshow: {
         category: "presentation",
@@ -182,7 +182,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Slides & pitch",
         tags: ["deck", "pitch", "slides"],
         sortOrder: 70,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Pitch flow" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Pitch flow" },
     },
     keynote: {
         category: "presentation",
@@ -190,7 +190,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Slides & pitch",
         tags: ["conference", "visual", "impact"],
         sortOrder: 80,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "High impact" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "High impact" },
     },
     videogame: {
         category: "game-xr",
@@ -198,7 +198,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Playable experiences",
         tags: ["game", "interactive", "arcade"],
         sortOrder: 90,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Gameplay-first" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Gameplay-first" },
     },
     freerunner: {
         category: "game-xr",
@@ -207,7 +207,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         tags: ["runner", "arcade", "mobile"],
         sortOrder: 100,
         isActive: false,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Arcade flow" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Arcade flow" },
     },
     seriousgame: {
         category: "game-xr",
@@ -215,7 +215,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Playable experiences",
         tags: ["learning", "simulation", "training"],
         sortOrder: 110,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Learning UX" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Learning UX" },
     },
     game3d: {
         category: "game-xr",
@@ -223,7 +223,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Playable experiences",
         tags: ["3d", "interaction", "scene"],
         sortOrder: 120,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Immersive scene" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Immersive scene" },
     },
     "vr-aframe": {
         category: "game-xr",
@@ -231,7 +231,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Playable experiences",
         tags: ["vr", "aframe", "immersive"],
         sortOrder: 130,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "VR scene" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "VR scene" },
     },
     "interactive-story": {
         category: "game-xr",
@@ -239,7 +239,7 @@ const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
         categoryHint: "Playable experiences",
         tags: ["story", "branching", "narrative"],
         sortOrder: 140,
-        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", label: "Narrative flow" },
+        recommendedModel: { provider: "siliconflow", modelId: "MiniMaxAI/MiniMax-M3", label: "Narrative flow" },
     },
 };
 

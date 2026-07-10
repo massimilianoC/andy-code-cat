@@ -25,3 +25,14 @@ export async function getDb(): Promise<Db> {
     db = client.db(env.MONGODB_DB_NAME);
     return db;
 }
+
+export async function closeDb(): Promise<void> {
+    if (!client) {
+        db = null;
+        return;
+    }
+
+    await client.close();
+    client = null;
+    db = null;
+}
