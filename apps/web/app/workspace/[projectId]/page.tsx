@@ -87,6 +87,7 @@ import type { PreviewViewport } from "../../../components/workspace/PreviewViewp
 import { SnapshotHistoryPanel } from "../../../components/workspace/SnapshotHistoryPanel";
 import { DualView } from "../../../components/workspace/DualView";
 import { PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT } from "./iframe-scripts";
+import { WorkspaceLayoutProvider, useWorkspaceLayout } from "../contexts/WorkspaceLayoutContext";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
     ssr: false,
@@ -94,8 +95,7 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 
 
 
-const SPLIT_COOKIE = "andy-code-cat_workspace_split";
-const CHAT_VSPLIT_COOKIE = "andy-code-cat_chat_vsplit";
+
 
 type BrowserSpeechRecognitionResult = {
     isFinal: boolean;
@@ -452,7 +452,7 @@ function isFocusContextValidationError(error: unknown): boolean {
     return Array.isArray(details?.fieldErrors?.focusContext) && details.fieldErrors.focusContext.length > 0;
 }
 
-export default function WorkspacePage() {
+function WorkspacePageContent() {
     const { t, i18n } = useTranslation();
     const router = useRouter();
     const params = useParams();
@@ -553,17 +553,16 @@ export default function WorkspacePage() {
     const autoOptimizeSuppressedByHandoffRef = useRef(searchParams?.get("skipAutoOptimize") === "1");
     const [autoOptimize, setAutoOptimize] = useState(() => !autoOptimizeSuppressedByHandoffRef.current);
 
-    const [leftWidth, setLeftWidth] = useState(40);
-    
-    const [isDragging, setIsDragging] = useState(false);
-    const [chatVSplit, setChatVSplit] = useState(65);
-    const chatVSplitRef = useRef<number>(65);
-    const chatBodyRef = useRef<HTMLDivElement>(null);
-    const [isDraggingVChat, setIsDraggingVChat] = useState(false);
-    const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("desktop");
-    const [previewTab, setPreviewTab] = useState<"preview" | "html" | "css" | "js" | "prompt">("preview");
-    const [workMode, setWorkMode] = useState<"build" | "didactic">("build");
-    const [splitMode, setSplitMode] = useState(false);
+    const {
+        leftWidth, setLeftWidth,
+        isDragging, setIsDragging,
+        chatVSplit, setChatVSplit, chatVSplitRef,
+        isDraggingVChat, setIsDraggingVChat, chatBodyRef,
+        previewViewport, setPreviewViewport,
+        previewTab, setPreviewTab,
+        workMode, setWorkMode,
+        splitMode, setSplitMode,
+    } = useWorkspaceLayout();
     const [promptTemplate, setPromptTemplate] = useState("");
     const [promptEnabled, setPromptEnabled] = useState(true);
     const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -1007,14 +1006,6 @@ export default function WorkspacePage() {
         // Load preset catalog (public, no token needed)
         void getPresets().then((r) => setPresetCatalog(r.presets)).catch(() => {});
 
-        const savedSplit = Number(getCookie(SPLIT_COOKIE));
-        if (savedSplit >= 25 && savedSplit <= 60) {
-            setLeftWidth(savedSplit);
-        }
-        const savedVSplit = Number(getCookie(CHAT_VSPLIT_COOKIE));
-        if (savedVSplit >= 30 && savedVSplit <= 85) {
-            setChatVSplit(savedVSplit);
-        }
     }, [router]);
 
     const loadProjectConversation = useCallback(
@@ -2314,51 +2305,7 @@ export default function WorkspacePage() {
             : `${previewDoc}${scripts}`;
     }, [previewDoc, editMode]);
 
-    // ── Drag resize ─────────────────────────────────────────────────────────
-    useEffect(() => {
-        function onMove(e: MouseEvent) {
-            if (!isDragging) return;
-            const width = window.innerWidth;
-            const pct = (e.clientX / width) * 100;
-            const clamped = Math.max(25, Math.min(60, pct));
-            setLeftWidth(clamped);
-        }
 
-        function onUp() {
-            if (!isDragging) return;
-            setIsDragging(false);
-            setCookie(SPLIT_COOKIE, String(Math.round(leftWidth)));
-        }
-
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", onUp);
-        return () => {
-            window.removeEventListener("mousemove", onMove);
-            window.removeEventListener("mouseup", onUp);
-        };
-    }, [isDragging, leftWidth]);
-
-    useEffect(() => {
-        if (!isDraggingVChat) return;
-        function onMove(e: MouseEvent) {
-            const body = chatBodyRef.current;
-            if (!body) return;
-            const rect = body.getBoundingClientRect();
-            const pct = Math.min(85, Math.max(30, ((e.clientY - rect.top) / rect.height) * 100));
-            setChatVSplit(pct);
-            chatVSplitRef.current = pct;
-        }
-        function onUp() {
-            setIsDraggingVChat(false);
-            setCookie(CHAT_VSPLIT_COOKIE, String(Math.round(chatVSplitRef.current)));
-        }
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp);
-        return () => {
-            document.removeEventListener("mousemove", onMove);
-            document.removeEventListener("mouseup", onUp);
-        };
-    }, [isDraggingVChat]);
 
     useEffect(() => {
         if (llmErrorDialog?.code === "LLM_PROVIDER_API_KEY_MISSING" && !currentProviderMissingKey) {
@@ -5671,3 +5618,11 @@ const textareaStyle: React.CSSProperties = {
     outline: "none",
     fontFamily: "var(--font)",
 };
+
+export default function WorkspacePage() {
+    return (
+        <WorkspaceLayoutProvider>
+            <WorkspacePageContent />
+        </WorkspaceLayoutProvider>
+    );
+}
