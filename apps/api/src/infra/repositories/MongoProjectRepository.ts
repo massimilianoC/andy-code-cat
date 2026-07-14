@@ -1,5 +1,5 @@
 import { ObjectId, type Collection, type Filter } from "mongodb";
-import type { Project, ProjectTemplateResolution } from "../../domain/entities/Project";
+import type { Project, ProjectFormSettings, ProjectTemplateResolution } from "../../domain/entities/Project";
 import type { ProjectRepository, AdminProjectFilters, AdminProjectListResult } from "../../domain/repositories/ProjectRepository";
 import { getDb } from "../db/mongo";
 
@@ -10,6 +10,7 @@ interface ProjectDocument {
     presetId?: string;
     templateResolution?: ProjectTemplateResolution;
     outputLanguage?: string;
+    serviceConfig?: Project["serviceConfig"];
     createdAt: Date;
 }
 
@@ -21,6 +22,7 @@ function mapDocument(doc: ProjectDocument): Project {
         presetId: doc.presetId,
         templateResolution: doc.templateResolution,
         outputLanguage: doc.outputLanguage,
+        serviceConfig: doc.serviceConfig,
         createdAt: doc.createdAt
     };
 }
@@ -110,6 +112,16 @@ export class MongoProjectRepository implements ProjectRepository {
             { _id: new ObjectId(projectId), ownerUserId: new ObjectId(userId) },
             { $set: setFields },
             { returnDocument: "after" }
+        );
+        return result ? mapDocument(result) : null;
+    }
+
+    async updateFormSettings(projectId: string, userId: string, settings: ProjectFormSettings): Promise<Project | null> {
+        const collection = await this.collection();
+        const result = await collection.findOneAndUpdate(
+            { _id: new ObjectId(projectId), ownerUserId: new ObjectId(userId) },
+            { $set: { "serviceConfig.forms": settings } },
+            { returnDocument: "after" },
         );
         return result ? mapDocument(result) : null;
     }

@@ -23,6 +23,7 @@ import { DeletePreviewSnapshot } from "../../../application/use-cases/DeletePrev
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { SnapshotThumbnailJob } from "../../../application/services/SnapshotThumbnailJob";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
+import { compileMailtoForms } from "../../../application/forms/FormRuntimeCompiler";
 
 export function createPreviewSnapshotRoutes(): Router {
     const router = Router();
@@ -141,12 +142,21 @@ export function createPreviewSnapshotRoutes(): Router {
                     };
                 }
 
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                const compiledForms = compileMailtoForms(
+                    artifacts,
+                    body.serviceManifest,
+                    project?.serviceConfig?.forms,
+                );
+                artifacts = compiledForms.artifacts;
+
                 const snapshot = await createPreviewSnapshot.execute({
                     projectId: req.sandbox!.projectId,
                     conversationId: body.conversationId,
                     sourceMessageId: body.sourceMessageId,
                     parentSnapshotId: body.parentSnapshotId,
                     artifacts,
+                    serviceManifest: body.serviceManifest,
                     focusContext: body.focusContext,
                     metadata: body.metadata ? { ...body.metadata, structuredParseValid } : undefined,
                     activate: body.activate,

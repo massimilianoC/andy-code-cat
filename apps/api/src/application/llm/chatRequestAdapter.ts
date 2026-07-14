@@ -100,6 +100,20 @@ const ARTIFACT_RESPONSE_SCHEMA = {
                 { type: "null" },
             ],
         },
+        serviceManifest: {
+            anyOf: [
+                {
+                    type: "object",
+                    properties: {
+                        version: { type: "string", enum: ["service-manifest-v1"] },
+                        forms: { type: "array" },
+                    },
+                    required: ["version", "forms"],
+                    additionalProperties: false,
+                },
+                { type: "null" },
+            ],
+        },
         focusPatch: {
             anyOf: [
                 {
@@ -116,7 +130,7 @@ const ARTIFACT_RESPONSE_SCHEMA = {
             ],
         },
     },
-    required: ["chat", "artifacts", "mediaManifest", "focusPatch"],
+    required: ["chat", "artifacts", "mediaManifest", "serviceManifest", "focusPatch"],
     additionalProperties: false,
 };
 

@@ -13,6 +13,7 @@ export interface PreviewSnapshot {
         css: string;
         js: string;
     };
+    serviceManifest?: import("@andy-code-cat/contracts").ServiceManifestV1;
     focusContext?: LlmFocusContext;
     metadata?: {
         model?: string;
@@ -75,6 +76,7 @@ export function createPreviewSnapshot(
         sourceMessageId?: string;
         parentSnapshotId?: string;
         artifacts: { html: string; css: string; js: string };
+        serviceManifest?: import("@andy-code-cat/contracts").ServiceManifestV1;
         rawLlmResponse?: string;
         focusContext?: LlmFocusContext;
         metadata?: {

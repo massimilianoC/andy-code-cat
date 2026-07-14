@@ -12,6 +12,27 @@ export interface ProjectTemplateResolution {
     source: "layer_phi" | "user_explicit" | "zero_effort_form";
 }
 
+/**
+ * The project-owned BaaS configuration is deliberately separate from the LLM
+ * manifest. Future service adapters may extend this object without changing
+ * the immutable artifact contract.
+ */
+export interface ProjectFormSettings {
+    enabled: boolean;
+    mode: "mailto";
+    recipientEmail: string;
+    privacyNotice: {
+        version: string;
+        url: string;
+        controllerName: string;
+        contactEmail: string;
+    };
+}
+
+export interface ProjectServiceConfig {
+    forms?: ProjectFormSettings;
+}
+
 export interface Project {
     id: string;
     ownerUserId: string;
@@ -27,5 +48,6 @@ export interface Project {
      * with the request, and finally to English. See OUTPUT_LANGUAGE_CONTROL_SPEC.md.
      */
     outputLanguage?: string;
+    serviceConfig?: ProjectServiceConfig;
     createdAt: Date;
 }

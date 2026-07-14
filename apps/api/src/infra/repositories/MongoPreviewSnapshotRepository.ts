@@ -14,6 +14,7 @@ interface PreviewSnapshotDocument {
     parentSnapshotId?: string;
     isActive: boolean;
     artifacts: PreviewSnapshot["artifacts"];
+    serviceManifest?: PreviewSnapshot["serviceManifest"];
     focusContext?: PreviewSnapshot["focusContext"];
     metadata?: PreviewSnapshot["metadata"];
     thumbnailPath?: string;
@@ -38,6 +39,7 @@ export class MongoPreviewSnapshotRepository implements PreviewSnapshotRepository
         sourceMessageId?: string;
         parentSnapshotId?: string;
         artifacts: PreviewSnapshot["artifacts"];
+        serviceManifest?: PreviewSnapshot["serviceManifest"];
         focusContext?: PreviewSnapshot["focusContext"];
         metadata?: PreviewSnapshot["metadata"];
         activate: boolean;
@@ -60,6 +62,7 @@ export class MongoPreviewSnapshotRepository implements PreviewSnapshotRepository
             parentSnapshotId: input.parentSnapshotId,
             isActive: input.activate,
             artifacts: input.artifacts,
+            serviceManifest: input.serviceManifest,
             focusContext: input.focusContext,
             metadata: input.metadata,
             createdAt: now,

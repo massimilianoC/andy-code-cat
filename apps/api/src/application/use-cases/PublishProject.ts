@@ -6,6 +6,8 @@ import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAs
 import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 import type { PublishHistoryRepository } from "../../domain/repositories/PublishHistoryRepository";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
+import type { ProjectFormSettings } from "../../domain/entities/Project";
+import { compileMailtoForms } from "../forms/FormRuntimeCompiler";
 import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
 import { SystemNotifier } from "../services/SystemNotifier";
 import { buildPublishedDatasetBindingPackage } from "../datasets/PublishedDatasetBindings";
@@ -209,6 +211,7 @@ export interface PublishProjectInput {
     customSlug?: string;
     /** Preset ID of the project — used to resolve governance injections at publish time. */
     presetId?: string | null;
+    formSettings?: ProjectFormSettings;
 }
 
 export class PublishProject {
@@ -249,7 +252,7 @@ export class PublishProject {
         const existing = await this.deploymentRepo.findActiveByProjectId(input.projectId);
 
         if (existing) {
-            return this.republish(existing, snapshot.id, snapshot.artifacts, snapshot.metadata, input.userId, input.projectId, input.customSlug, input.presetId);
+            return this.republish(existing, snapshot.id, snapshot.artifacts, snapshot.serviceManifest, snapshot.metadata, input.userId, input.projectId, input.customSlug, input.presetId, input.formSettings);
         }
 
         // 4. Generate publish ID
@@ -257,7 +260,8 @@ export class PublishProject {
         const url = `/p/${publishId}`;
 
         // 5. Post-process artifacts and inject cache-busting version hash
-        const processed = postProcess(snapshot.artifacts);
+        const formRuntime = compileMailtoForms(snapshot.artifacts, snapshot.serviceManifest, input.formSettings);
+        const processed = postProcess(formRuntime.artifacts);
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
 
@@ -328,15 +332,18 @@ export class PublishProject {
         existing: SiteDeployment,
         snapshotId: string,
         artifacts: { html: string; css: string; js: string },
+        serviceManifest: import("@andy-code-cat/contracts").ServiceManifestV1 | undefined,
         metadata: import("../../domain/entities/PreviewSnapshot").PreviewSnapshotMetadata | undefined,
         userId: string,
         projectId: string,
         newCustomSlug?: string,
         presetId?: string | null,
+        formSettings?: ProjectFormSettings,
     ): Promise<SiteDeployment> {
         this.assertPublishableMedia(artifacts, { projectId, userId, snapshotId });
 
-        const processed = postProcess(artifacts);
+        const formRuntime = compileMailtoForms(artifacts, serviceManifest, formSettings);
+        const processed = postProcess(formRuntime.artifacts);
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
 

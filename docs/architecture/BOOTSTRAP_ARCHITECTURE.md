@@ -79,6 +79,7 @@ Forbidden:
 - `AssetEnrichmentTrace`
 - `UserTemplate`
 - `WysiwygEditSession`
+- `Project.serviceConfig.forms` (owner-controlled declarative form delivery settings)
 
 ### Application/use-case surface implemented
 

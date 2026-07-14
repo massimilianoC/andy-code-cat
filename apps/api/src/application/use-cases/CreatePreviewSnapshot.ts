@@ -17,6 +17,7 @@ export class CreatePreviewSnapshot {
         sourceMessageId?: string;
         parentSnapshotId?: string;
         artifacts: PreviewSnapshot["artifacts"];
+        serviceManifest?: PreviewSnapshot["serviceManifest"];
         focusContext?: PreviewSnapshot["focusContext"];
         metadata?: PreviewSnapshot["metadata"];
         activate: boolean;
@@ -40,7 +41,15 @@ export class CreatePreviewSnapshot {
             }
         }
 
-        const snapshot = await this.previewSnapshotRepository.create(input);
+        const parentSnapshot = input.parentSnapshotId
+            ? await this.previewSnapshotRepository.findById(input.projectId, input.parentSnapshotId)
+            : null;
+        const snapshot = await this.previewSnapshotRepository.create({
+            ...input,
+            // Focused edits and WYSIWYG commits do not regenerate a manifest. Preserve the
+            // explicitly selected parent definition rather than silently dropping forms.
+            serviceManifest: input.serviceManifest ?? parentSnapshot?.serviceManifest,
+        });
         const traceIds = input.metadata?.mediaResolution?.traceIds ?? [];
         if (traceIds.length > 0) {
             await this.mediaTraceRepository?.attachSnapshot(input.projectId, traceIds, snapshot.id);

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ArtifactMediaManifest } from "./mediaManifest";
 import type { MediaResolutionMetadata } from "./mediaResolution";
+import type { ServiceManifestV1 } from "./serviceManifest";
 
 const optionalTrimmedString = (max: number) =>
     z.preprocess(
@@ -157,6 +158,8 @@ export interface LlmStructuredResponse {
      * provider-specific image URLs.
      */
     mediaManifest?: ArtifactMediaManifest;
+    /** Optional, declarative BaaS intent. No endpoint, credential, or executable code may appear here. */
+    serviceManifest?: ServiceManifestV1;
     /** Present only when the LLM operated in focused-edit mode. */
     focusPatch?: LlmFocusedPatch;
 }

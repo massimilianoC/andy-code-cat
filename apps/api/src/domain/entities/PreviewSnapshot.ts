@@ -1,3 +1,5 @@
+import type { ServiceManifestV1 } from "@andy-code-cat/contracts";
+
 export interface PreviewSnapshotArtifacts {
     html: string;
     css: string;
@@ -109,6 +111,8 @@ export interface PreviewSnapshot {
     parentSnapshotId?: string;
     isActive: boolean;
     artifacts: PreviewSnapshotArtifacts;
+    /** Immutable declarative service definition paired with this artifact version. */
+    serviceManifest?: ServiceManifestV1;
     focusContext?: PreviewSnapshotFocusContext;
     metadata?: PreviewSnapshotMetadata;
     /**

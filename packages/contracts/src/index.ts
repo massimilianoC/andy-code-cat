@@ -22,3 +22,5 @@ export * from "./datasetBindings";
 export * from "./brandAssets";
 export * from "./userPreferences";
 export * from "./didactic";
+export * from "./serviceManifest";
+export * from "./forms";

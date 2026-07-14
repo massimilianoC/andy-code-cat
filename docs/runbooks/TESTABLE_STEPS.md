@@ -98,6 +98,17 @@
 - Save for `productKey = default`
 - Expected: success state in UI and persisted values returned by `GET /v1/admin/config`
 
+### Step 11b - Declarative Form Runtime (mailto)
+
+- Configure `PUT /v1/projects/:projectId/services/forms` with bearer token and matching
+  `x-project-id`; use `mode: "mailto"`, a recipient, and an HTTPS privacy notice.
+- Generate or save an artifact with a `service-manifest-v1` and a matching
+  `data-pf-form-id` slot.
+- Expected: the saved preview, publish output, and ZIP use the same deterministic form runtime.
+- Expected: submission opens an email draft and says only that the draft was opened; no form data
+  is sent to or persisted by the API.
+- Verify: a different user or a mismatched project header receives a sandbox denial.
+
 ### Step 11b - Backward Compatibility of Platform Config
 
 - Call `PATCH /v1/admin/config` with payload containing only legacy fields:

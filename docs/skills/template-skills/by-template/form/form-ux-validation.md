@@ -32,6 +32,25 @@ prototype without backend submission.
 - Error messages must be readable and specific.
 - Keyboard navigation must work across steps.
 
+## Declarative platform form runtime
+
+When the artifact needs a real contact or lead action, declare it instead of inventing an endpoint
+or recipient. Emit one empty slot for each form:
+
+```html
+<div data-pf-form-id='contact'></div>
+```
+
+Also emit a top-level `serviceManifest` with `version: "service-manifest-v1"`. Each form needs
+an ID matching its slot, a purpose key, 1–5 steps, and typed fields. Use only standard field types
+(`text`, `email`, `tel`, `textarea`, `number`, `select`, `radio`, `checkbox`, `date`, `time`,
+`url`, `hidden_context`). Keep fields minimal and separate `privacy-acknowledgement` from
+`marketing-consent` for newsletter requests.
+
+The platform owns recipient, delivery mode, validation behaviour, and user data. Never create a
+custom endpoint, recipient email, credential, or submission handler. If no form capability is
+configured, the artifact remains a complete static prototype.
+
 ## Avoid
 
 - One long generic contact form.

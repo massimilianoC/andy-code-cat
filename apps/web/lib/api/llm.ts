@@ -106,6 +106,7 @@ export interface LlmChatPreviewResult {
             css: string;
             js: string;
         };
+        serviceManifest?: import("@andy-code-cat/contracts").ServiceManifestV1;
     };
     mediaResolution?: {
         version: "media-resolution-v1";
