@@ -147,6 +147,92 @@ export const serviceManifestSchema = z.object({
     }
 });
 
+const nullableJsonSchema = (schema: Record<string, unknown>) => ({
+    anyOf: [schema, { type: "null" }],
+});
+
+const formFieldOptionJsonSchema = {
+    type: "object",
+    properties: {
+        value: { type: "string", minLength: 1, maxLength: 80 },
+        label: { type: "string", minLength: 1, maxLength: 120 },
+    },
+    required: ["value", "label"],
+    additionalProperties: false,
+};
+
+const formFieldJsonSchema = {
+    type: "object",
+    properties: {
+        id: { type: "string", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 48 },
+        type: { type: "string", enum: formFieldTypeSchema.options },
+        label: { type: "string", minLength: 1, maxLength: 120 },
+        description: nullableJsonSchema({ type: "string", maxLength: 300 }),
+        placeholder: nullableJsonSchema({ type: "string", maxLength: 160 }),
+        required: { type: "boolean" },
+        autocomplete: nullableJsonSchema({ type: "string", maxLength: 80 }),
+        minLength: nullableJsonSchema({ type: "integer", minimum: 0, maximum: 1000 }),
+        maxLength: nullableJsonSchema({ type: "integer", minimum: 1, maximum: 1000 }),
+        min: nullableJsonSchema({ type: "number" }),
+        max: nullableJsonSchema({ type: "number" }),
+        patternKey: nullableJsonSchema({ type: "string", enum: ["postal_code", "vat_id", "fiscal_code", "custom_safe"] }),
+        options: nullableJsonSchema({ type: "array", minItems: 1, maxItems: 20, items: formFieldOptionJsonSchema }),
+        dataCategory: { type: "string", enum: formDataCategorySchema.options },
+    },
+    required: [
+        "id", "type", "label", "description", "placeholder", "required", "autocomplete",
+        "minLength", "maxLength", "min", "max", "patternKey", "options", "dataCategory",
+    ],
+    additionalProperties: false,
+};
+
+const formStepJsonSchema = {
+    type: "object",
+    properties: {
+        id: { type: "string", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 48 },
+        title: { type: "string", minLength: 1, maxLength: 120 },
+        description: nullableJsonSchema({ type: "string", maxLength: 300 }),
+        fields: { type: "array", minItems: 1, maxItems: 5, items: formFieldJsonSchema },
+    },
+    required: ["id", "title", "description", "fields"],
+    additionalProperties: false,
+};
+
+const formDefinitionJsonSchema = {
+    type: "object",
+    properties: {
+        id: { type: "string", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 48 },
+        kind: { type: "string", enum: formKindSchema.options },
+        title: { type: "string", minLength: 1, maxLength: 120 },
+        description: nullableJsonSchema({ type: "string", maxLength: 500 }),
+        purposeKey: { type: "string", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 48 },
+        steps: { type: "array", minItems: 1, maxItems: 5, items: formStepJsonSchema },
+        submitLabel: { type: "string", minLength: 1, maxLength: 60 },
+        successMessage: { type: "string", minLength: 1, maxLength: 300 },
+        privacyNoticeRef: { type: "string", enum: ["project-default"] },
+    },
+    required: [
+        "id", "kind", "title", "description", "purposeKey", "steps",
+        "submitLabel", "successMessage", "privacyNoticeRef",
+    ],
+    additionalProperties: false,
+};
+
+/**
+ * Provider-facing strict JSON Schema. Optional Zod fields are represented as
+ * required nullable properties because strict structured-output providers
+ * require every object property to appear in `required`.
+ */
+export const SERVICE_MANIFEST_JSON_SCHEMA = {
+    type: "object",
+    properties: {
+        version: { type: "string", enum: ["service-manifest-v1"] },
+        forms: { type: "array", minItems: 1, maxItems: 5, items: formDefinitionJsonSchema },
+    },
+    required: ["version", "forms"],
+    additionalProperties: false,
+} as const;
+
 export type ServiceManifestV1 = z.infer<typeof serviceManifestSchema>;
 export type FormDefinitionV1 = z.infer<typeof formDefinitionSchema>;
 export type FormFieldV1 = z.infer<typeof formFieldSchema>;

@@ -1,3 +1,5 @@
+import { SERVICE_MANIFEST_JSON_SCHEMA } from "@andy-code-cat/contracts";
+
 type ChatCompletionMessage = {
     role: string;
     content: string | Array<unknown>;
@@ -102,15 +104,7 @@ const ARTIFACT_RESPONSE_SCHEMA = {
         },
         serviceManifest: {
             anyOf: [
-                {
-                    type: "object",
-                    properties: {
-                        version: { type: "string", enum: ["service-manifest-v1"] },
-                        forms: { type: "array" },
-                    },
-                    required: ["version", "forms"],
-                    additionalProperties: false,
-                },
+                SERVICE_MANIFEST_JSON_SCHEMA,
                 { type: "null" },
             ],
         },

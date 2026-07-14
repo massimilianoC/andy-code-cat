@@ -35,7 +35,10 @@ Current active platform tracks:
 - **Artifact Media Orchestrator continuation**: media resolution reliability, trace completeness, resolver expansion, browser E2E
 - **Guided entry / Zero Effort / VibeCore evolution**: additive intake flows that reuse the same backend orchestration and project model
 
-BaaS remains a deferred R4 direction. Do not start backend-as-a-service implementation unless a newer roadmap update explicitly reactivates it.
+BaaS remains a deferred R4 direction beyond the explicitly activated mailto v1 form foundation.
+For that bounded capability, follow `docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md`; do not add a
+public router, capture, SMTP, arbitrary external endpoints, or further BaaS services without a
+newer roadmap update.
 
 When touching prompting code, treat the prompt architecture as an implemented foundation to extend carefully, not as an unbuilt milestone.
 

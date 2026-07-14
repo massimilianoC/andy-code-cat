@@ -10,8 +10,8 @@
  */
 import type { Page } from "@playwright/test";
 
-export const BASE_URL = "http://localhost:8081";
-export const API_URL = "http://localhost:4000";
+export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:8081";
+export const API_URL = process.env.E2E_API_URL ?? "http://localhost:4000";
 
 const BOT_EMAIL = "bot@andy-code-cat-e2e.invalid";
 const BOT_PASSWORD = "E2e-Bot-Pass#2024";

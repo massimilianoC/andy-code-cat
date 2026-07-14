@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     activatePreviewSnapshotSchema,
     createPreviewSnapshotSchema,
+    type ProjectFormSettingsInput,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson } from "../../../application/llm/llmParser";
 import { injectStableIds, normalizeStoredHtml } from "../../../application/llm/htmlIdInjector";
@@ -23,7 +24,18 @@ import { DeletePreviewSnapshot } from "../../../application/use-cases/DeletePrev
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { SnapshotThumbnailJob } from "../../../application/services/SnapshotThumbnailJob";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
-import { compileMailtoForms } from "../../../application/forms/FormRuntimeCompiler";
+import { compileConfiguredForms } from "../../../application/forms/FormRuntimeCompiler";
+import type { PreviewSnapshot } from "../../../domain/entities/PreviewSnapshot";
+
+function withConfiguredFormRuntime(
+    snapshot: PreviewSnapshot,
+    settings: ProjectFormSettingsInput | undefined,
+): PreviewSnapshot {
+    return {
+        ...snapshot,
+        artifacts: compileConfiguredForms(snapshot.artifacts, snapshot.serviceManifest, settings).artifacts,
+    };
+}
 
 export function createPreviewSnapshotRoutes(): Router {
     const router = Router();
@@ -69,7 +81,11 @@ export function createPreviewSnapshotRoutes(): Router {
 
                 const snapshots = await listPreviewSnapshots.execute(req.sandbox!.projectId, conversationId);
                 const activeSnapshotId = snapshots.find((s) => s.isActive)?.id;
-                res.json({ snapshots, activeSnapshotId });
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                res.json({
+                    snapshots: snapshots.map((snapshot) => withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms)),
+                    activeSnapshotId,
+                });
             } catch (error) {
                 next(error);
             }
@@ -143,12 +159,18 @@ export function createPreviewSnapshotRoutes(): Router {
                 }
 
                 const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
-                const compiledForms = compileMailtoForms(
+                const inheritedManifest = body.parentSnapshotId
+                    ? (await previewSnapshotRepository.findById(req.sandbox!.projectId, body.parentSnapshotId))?.serviceManifest
+                    : undefined;
+                // Validate and prepare the response/thumbnail view, but persist only
+                // canonical LLM artifacts. Runtime settings can then change without
+                // regenerating or mutating the immutable snapshot.
+                const compiledForms = compileConfiguredForms(
                     artifacts,
-                    body.serviceManifest,
+                    body.serviceManifest ?? inheritedManifest,
                     project?.serviceConfig?.forms,
                 );
-                artifacts = compiledForms.artifacts;
+                const runtimeArtifacts = compiledForms.artifacts;
 
                 const snapshot = await createPreviewSnapshot.execute({
                     projectId: req.sandbox!.projectId,
@@ -197,17 +219,19 @@ export function createPreviewSnapshotRoutes(): Router {
                 // ── end execution log ─────────────────────────────────────────
 
                 // ── Background thumbnail job (fire-and-forget) ────────────────
-                if (body.activate && artifacts.html) {
+                if (body.activate && runtimeArtifacts.html) {
                     SnapshotThumbnailJob.schedule(
                         req.sandbox!.projectId,
                         snapshot.id,
-                        artifacts,
+                        runtimeArtifacts,
                         previewSnapshotRepository
                     );
                 }
                 // ── end thumbnail job ─────────────────────────────────────────
 
-                res.status(201).json({ snapshot });
+                res.status(201).json({
+                    snapshot: { ...snapshot, artifacts: runtimeArtifacts },
+                });
             } catch (error) {
                 next(error);
             }
@@ -224,7 +248,8 @@ export function createPreviewSnapshotRoutes(): Router {
                     res.status(404).json({ error: "Snapshot not found" });
                     return;
                 }
-                res.json({ snapshot });
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                res.json({ snapshot: withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms) });
             } catch (error) {
                 next(error);
             }
@@ -269,17 +294,19 @@ export function createPreviewSnapshotRoutes(): Router {
                 // ── end execution log ─────────────────────────────────────────
 
                 // ── Background thumbnail job (fire-and-forget) ────────────────
-                if (snapshot.artifacts.html && !snapshot.thumbnailPath) {
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                const runtimeSnapshot = withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms);
+                if (runtimeSnapshot.artifacts.html && !runtimeSnapshot.thumbnailPath) {
                     SnapshotThumbnailJob.schedule(
                         req.sandbox!.projectId,
-                        snapshot.id,
-                        snapshot.artifacts,
+                        runtimeSnapshot.id,
+                        runtimeSnapshot.artifacts,
                         previewSnapshotRepository
                     );
                 }
                 // ── end thumbnail job ─────────────────────────────────────────
 
-                res.json({ snapshot });
+                res.json({ snapshot: runtimeSnapshot });
             } catch (error) {
                 next(error);
             }

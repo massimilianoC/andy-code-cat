@@ -43,6 +43,36 @@ describe("composeSystemPromptWithLayers — SSOT contract", () => {
         expect(result.composed).not.toContain("PF_LAYER id=S");
     });
 
+    it("keeps structural form protocol in Layer V and craft guidance in Layer S", async () => {
+        const { composeSystemPromptWithLayers } = await loadComposer();
+        const result = composeSystemPromptWithLayers({
+            presetId: "form",
+            skillsLayer: "FORM CRAFT: minimize fields and provide clear labels.",
+            sources: { V: "preset-capability", S: "filesystem-template-skills:form:form-ux-validation" },
+        });
+        const layerV = result.layers.find((layer) => layer.id === "V")!;
+        const layerS = result.layers.find((layer) => layer.id === "S")!;
+
+        expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("serviceManifest");
+        expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("data-pf-form-id");
+        expect(result.composed.slice(layerS.span[0], layerS.span[1])).not.toContain("serviceManifest");
+        expect(layerV.source).toBe("preset-capability");
+    });
+
+    it("enables Layer V for a non-form preset only when the project capability is configured", async () => {
+        const { composeSystemPromptWithLayers } = await loadComposer();
+        const withoutCapability = composeSystemPromptWithLayers({ presetId: "landing" });
+        const withCapability = composeSystemPromptWithLayers({
+            presetId: "landing",
+            enabledServiceCapabilities: ["forms"],
+            sources: { V: "project-service-config" },
+        });
+
+        expect(withoutCapability.layers.find((layer) => layer.id === "V")!.chars).toBe(0);
+        expect(withCapability.layers.find((layer) => layer.id === "V")!.chars).toBeGreaterThan(0);
+        expect(withCapability.layers.find((layer) => layer.id === "V")!.source).toBe("project-service-config");
+    });
+
     it("honours caller-provided sources and defaults the rest", async () => {
         const { composeSystemPromptWithLayers } = await loadComposer();
         const result = composeSystemPromptWithLayers({

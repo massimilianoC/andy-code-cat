@@ -1,15 +1,6 @@
 import type { FormDefinitionV1, FormFieldV1, ProjectFormSettingsInput, ServiceManifestV1 } from "@andy-code-cat/contracts";
-
-export interface FormRuntimeArtifacts {
-    html: string;
-    css: string;
-    js: string;
-}
-
-export interface FormRuntimeCompileResult {
-    artifacts: FormRuntimeArtifacts;
-    compiledFormIds: string[];
-}
+import type { FormRuntimeAdapter, FormRuntimeArtifacts, FormRuntimeCompileResult } from "./FormRuntimeAdapter";
+export type { FormRuntimeArtifacts, FormRuntimeCompileResult } from "./FormRuntimeAdapter";
 
 const RUNTIME_MARKER = "data-pf-form-runtime=\"service-manifest-v1\"";
 
@@ -61,13 +52,26 @@ function renderField(field: FormFieldV1, formId: string): string {
 }
 
 function renderForm(form: FormDefinitionV1, settings: ProjectFormSettingsInput): string {
-    const fields = form.steps.flatMap((step) => step.fields).map((field) => renderField(field, form.id)).join("");
+    const steps = form.steps.map((step, index) => {
+        const fields = step.fields.map((field) => renderField(field, form.id)).join("");
+        const isFirst = index === 0;
+        const isLast = index === form.steps.length - 1;
+        return `<fieldset class='pf-form__step' data-pf-step='${index}'${isFirst ? "" : " hidden"}>
+    <legend>${escapeHtml(step.title)}</legend>
+    ${step.description ? `<p class='pf-form__description'>${escapeHtml(step.description)}</p>` : ""}
+    ${fields}
+    <div class='pf-form__actions'>
+      ${isFirst ? "" : "<button type='button' data-pf-back>Indietro</button>"}
+      ${isLast ? `<button type='submit'>${escapeHtml(form.submitLabel)}</button>` : "<button type='button' data-pf-next>Continua</button>"}
+    </div>
+  </fieldset>`;
+    }).join("");
     return `<form class='pf-form' ${RUNTIME_MARKER} data-pf-form-id='${escapeHtml(form.id)}' novalidate>
   <h2 class='pf-form__title'>${escapeHtml(form.title)}</h2>
   ${form.description ? `<p class='pf-form__intro'>${escapeHtml(form.description)}</p>` : ""}
-  ${fields}
+  ${form.steps.length > 1 ? `<p class='pf-form__progress' aria-live='polite'>Passaggio <span data-pf-step-current>1</span> di ${form.steps.length}</p>` : ""}
+  ${steps}
   <p class='pf-form__privacy'>I dati saranno trattati da ${escapeHtml(settings.privacyNotice.controllerName)} secondo la <a href='${escapeHtml(settings.privacyNotice.url)}' target='_blank' rel='noopener noreferrer'>privacy policy</a>.</p>
-  <div class='pf-form__actions'><button type='submit'>${escapeHtml(form.submitLabel)}</button></div>
   <p class='pf-form__status' aria-live='polite' role='status'></p>
 </form>`;
 }
@@ -99,8 +103,40 @@ function mailtoRuntime(config: string): string {
   document.querySelectorAll("form[data-pf-form-runtime='service-manifest-v1']").forEach((form) => {
     if (form.dataset.pfMounted === "true") return;
     form.dataset.pfMounted = "true";
+    const steps = Array.from(form.querySelectorAll("[data-pf-step]"));
+    let currentStep = 0;
+    const showStep = (index) => {
+      currentStep = Math.max(0, Math.min(index, steps.length - 1));
+      steps.forEach((step, stepIndex) => { step.hidden = stepIndex !== currentStep; });
+      const progress = form.querySelector("[data-pf-step-current]");
+      if (progress) progress.textContent = String(currentStep + 1);
+    };
+    const validateStep = () => {
+      const fields = Array.from(steps[currentStep]?.querySelectorAll("input, select, textarea") || []);
+      const invalid = fields.find((field) => !field.checkValidity());
+      if (invalid) {
+        invalid.reportValidity();
+        showStatus(form, "Completa i campi obbligatori prima di continuare.");
+        return false;
+      }
+      showStatus(form, "");
+      return true;
+    };
+    form.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-pf-next]")) {
+        if (validateStep()) showStep(currentStep + 1);
+      } else if (target.closest("[data-pf-back]")) {
+        showStep(currentStep - 1);
+      }
+    });
     form.addEventListener("submit", (event) => {
       event.preventDefault();
+      if (!validateStep() || !form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
       const definition = config.forms.find((item) => item.id === form.dataset.pfFormId);
       if (!definition) return;
       const values = new FormData(form);
@@ -117,15 +153,20 @@ function mailtoRuntime(config: string): string {
         showStatus(form, "Il riepilogo è stato copiato. Apri la tua app email e incollalo nel messaggio.");
         return;
       }
-      window.location.assign(uri);
       showStatus(form, "La bozza è stata aperta. Verifica e invia dalla tua app email.");
+      const deliveryEvent = new CustomEvent("pf:mailto", {
+        cancelable: true,
+        detail: { formId: definition.id, uri },
+      });
+      if (document.dispatchEvent(deliveryEvent)) window.location.assign(uri);
     });
+    showStep(0);
   });
 })();`;
 }
 
 const RUNTIME_CSS = `
-.pf-form{display:grid;gap:1rem;max-width:42rem}.pf-form__field{display:grid;gap:.4rem}.pf-form__label,.pf-form legend{font-weight:600}.pf-form input,.pf-form select,.pf-form textarea{width:100%;box-sizing:border-box}.pf-form__choice{display:flex;gap:.5rem;align-items:flex-start}.pf-form__choice input{width:auto;margin-top:.25rem}.pf-form__description,.pf-form__privacy,.pf-form__status{margin:0;color:inherit;opacity:.8}.pf-form__actions button{cursor:pointer}
+.pf-form{display:grid;gap:1rem;max-width:42rem}.pf-form__step{display:grid;gap:1rem;border:0;padding:0;margin:0}.pf-form__step[hidden]{display:none}.pf-form__field{display:grid;gap:.4rem}.pf-form__label,.pf-form legend{font-weight:600}.pf-form input,.pf-form select,.pf-form textarea{width:100%;box-sizing:border-box}.pf-form__choice{display:flex;gap:.5rem;align-items:flex-start}.pf-form__choice input{width:auto;margin-top:.25rem}.pf-form__description,.pf-form__privacy,.pf-form__status,.pf-form__progress{margin:0;color:inherit;opacity:.8}.pf-form__actions{display:flex;gap:.75rem}.pf-form__actions button{cursor:pointer}
 `;
 
 /**
@@ -168,4 +209,25 @@ export function compileMailtoForms(
         },
         compiledFormIds,
     };
+}
+
+export const mailtoFormRuntimeAdapter: FormRuntimeAdapter<ProjectFormSettingsInput> = {
+    mode: "mailto",
+    compile: (artifacts, manifest, settings) => compileMailtoForms(artifacts, manifest, settings),
+};
+
+const FORM_RUNTIME_ADAPTERS: readonly FormRuntimeAdapter[] = [mailtoFormRuntimeAdapter];
+
+/** Selects an explicitly registered platform adapter from owner settings. */
+export function compileConfiguredForms(
+    artifacts: FormRuntimeArtifacts,
+    manifest: ServiceManifestV1 | undefined,
+    settings: ProjectFormSettingsInput | undefined,
+): FormRuntimeCompileResult {
+    if (!settings) return { artifacts: { ...artifacts }, compiledFormIds: [] };
+    const adapter = FORM_RUNTIME_ADAPTERS.find((candidate) => candidate.mode === settings.mode);
+    if (!adapter) {
+        throw Object.assign(new Error(`Unsupported form runtime mode '${settings.mode}'`), { statusCode: 422 });
+    }
+    return adapter.compile(artifacts, manifest, settings);
 }

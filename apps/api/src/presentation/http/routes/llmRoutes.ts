@@ -494,6 +494,9 @@ export function createLlmRoutes(): Router {
         const layerSources: Partial<Record<import("../../../application/llm/systemPromptComposer").PromptLayerId, string>> = {
             L: outputLanguageSource,
             B: project?.presetId ? "preset-catalog" : "code-default",
+            V: project?.serviceConfig?.forms?.enabled
+                ? "project-service-config"
+                : project?.presetId === "form" ? "preset-capability" : "empty",
             S: templateSkills
                 ? `filesystem-template-skills:${templateSkills.presetId}:${templateSkills.documents.map((doc) => doc.id).join(",")}`
                 : "empty",
@@ -508,6 +511,7 @@ export function createLlmRoutes(): Router {
         const composedLayers = composeSystemPromptWithLayers({
             presetId: project?.presetId,
             presetLayer,
+            enabledServiceCapabilities: project?.serviceConfig?.forms?.enabled ? ["forms"] : [],
             skillsLayer: templateSkills?.layer,
             templateResolution,
             styleBlock,

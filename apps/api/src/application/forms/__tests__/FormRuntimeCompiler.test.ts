@@ -64,4 +64,32 @@ describe("compileMailtoForms", () => {
     it("fails closed when a configured manifest has no matching declarative slot", () => {
         expect(() => compileMailtoForms({ html: "<main></main>", css: "", js: "" }, manifest, settings)).toThrow("Form slot missing");
     });
+
+    it("renders deterministic multi-step navigation and an interceptable delivery event", () => {
+        const multiStepManifest: ServiceManifestV1 = {
+            ...manifest,
+            forms: [{
+                ...manifest.forms[0]!,
+                steps: [
+                    manifest.forms[0]!.steps[0]!,
+                    {
+                        id: "request",
+                        title: "Richiesta",
+                        fields: [{ id: "topic", type: "text", label: "Argomento", required: true, dataCategory: "request" }],
+                    },
+                ],
+            }],
+        };
+        const result = compileMailtoForms(
+            { html: "<div data-pf-form-id='contact'></div>", css: "", js: "" },
+            multiStepManifest,
+            settings,
+        );
+
+        expect(result.artifacts.html).toContain("data-pf-step='1' hidden");
+        expect(result.artifacts.html).toContain("data-pf-next");
+        expect(result.artifacts.html).toContain("data-pf-back");
+        expect(result.artifacts.js).toContain("form.checkValidity()");
+        expect(result.artifacts.js).toContain("cancelable: true");
+    });
 });

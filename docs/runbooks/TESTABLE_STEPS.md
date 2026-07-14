@@ -107,7 +107,16 @@
 - Expected: the saved preview, publish output, and ZIP use the same deterministic form runtime.
 - Expected: submission opens an email draft and says only that the draft was opened; no form data
   is sent to or persisted by the API.
+- Change the recipient after snapshot creation, then fetch the same snapshot again.
+- Expected: the preview runtime contains the new recipient and not the previous recipient, proving
+  that canonical snapshots do not persist compiled tenant configuration.
+- For a multi-step manifest, verify required fields block Continue/Submit and Back/Continue update
+  the announced step count.
 - Verify: a different user or a mismatched project header receives a sandbox denial.
+- Automated isolated gate:
+  `npx playwright test tests/e2e/form-runtime.spec.ts --project=chromium` with
+  `E2E_API_URL` and `E2E_BASE_URL` pointing at the isolated stack documented in
+  `docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md`.
 
 ### Step 11b - Backward Compatibility of Platform Config
 

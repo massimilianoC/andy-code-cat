@@ -7,7 +7,7 @@ import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 import type { PublishHistoryRepository } from "../../domain/repositories/PublishHistoryRepository";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { ProjectFormSettings } from "../../domain/entities/Project";
-import { compileMailtoForms } from "../forms/FormRuntimeCompiler";
+import { compileConfiguredForms } from "../forms/FormRuntimeCompiler";
 import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
 import { SystemNotifier } from "../services/SystemNotifier";
 import { buildPublishedDatasetBindingPackage } from "../datasets/PublishedDatasetBindings";
@@ -260,7 +260,7 @@ export class PublishProject {
         const url = `/p/${publishId}`;
 
         // 5. Post-process artifacts and inject cache-busting version hash
-        const formRuntime = compileMailtoForms(snapshot.artifacts, snapshot.serviceManifest, input.formSettings);
+        const formRuntime = compileConfiguredForms(snapshot.artifacts, snapshot.serviceManifest, input.formSettings);
         const processed = postProcess(formRuntime.artifacts);
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
@@ -342,7 +342,7 @@ export class PublishProject {
     ): Promise<SiteDeployment> {
         this.assertPublishableMedia(artifacts, { projectId, userId, snapshotId });
 
-        const formRuntime = compileMailtoForms(artifacts, serviceManifest, formSettings);
+        const formRuntime = compileConfiguredForms(artifacts, serviceManifest, formSettings);
         const processed = postProcess(formRuntime.artifacts);
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);

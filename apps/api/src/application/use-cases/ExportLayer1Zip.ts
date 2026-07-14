@@ -14,7 +14,7 @@ import { env } from "../../config";
 import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
 import { SystemNotifier } from "../services/SystemNotifier";
 import type { ProjectFormSettings } from "../../domain/entities/Project";
-import { compileMailtoForms } from "../forms/FormRuntimeCompiler";
+import { compileConfiguredForms } from "../forms/FormRuntimeCompiler";
 
 // ---------------------------------------------------------------------------
 // Post-processor: separates inline CSS/JS from HTML artifacts
@@ -384,7 +384,7 @@ export class ExportLayer1Zip {
         }
 
         // Post-process artifacts
-        const formRuntime = compileMailtoForms(snapshot.artifacts, snapshot.serviceManifest, input.formSettings);
+        const formRuntime = compileConfiguredForms(snapshot.artifacts, snapshot.serviceManifest, input.formSettings);
         const processed = postProcess(formRuntime.artifacts);
 
         const filesIncluded: string[] = ["index.html"];
@@ -423,9 +423,9 @@ export class ExportLayer1Zip {
 
             // Capture JPG and PDF screenshots in parallel
             const captureHtmlDoc = buildFullDoc(
-                snapshot.artifacts.html,
-                snapshot.artifacts.css,
-                snapshot.artifacts.js
+                formRuntime.artifacts.html,
+                formRuntime.artifacts.css,
+                formRuntime.artifacts.js,
             );
             const [captureJpg, capturePdf] = await Promise.all([
                 captureHtml(captureHtmlDoc, "jpg").catch(() => null),

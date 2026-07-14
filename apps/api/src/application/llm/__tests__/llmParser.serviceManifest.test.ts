@@ -46,4 +46,28 @@ describe("llmParser serviceManifest", () => {
         expect(invalid.parseValid).toBe(true);
         expect(invalid.structured?.serviceManifest).toBeUndefined();
     });
+
+    it("normalizes nullable optional properties emitted by strict structured-output providers", () => {
+        const providerManifest = structuredClone(serviceManifest);
+        Object.assign(providerManifest.forms[0]!, { description: null });
+        Object.assign(providerManifest.forms[0]!.steps[0]!, { description: null });
+        Object.assign(providerManifest.forms[0]!.steps[0]!.fields[0]!, {
+            description: null,
+            placeholder: null,
+            autocomplete: null,
+            minLength: null,
+            maxLength: null,
+            min: null,
+            max: null,
+            patternKey: null,
+            options: null,
+        });
+        const result = tryParseStructuredJson(JSON.stringify({
+            chat: { summary: "Done", bullets: [], nextActions: [] },
+            artifacts: { html: "<div data-pf-form-id='contact'></div>", css: "", js: "" },
+            serviceManifest: providerManifest,
+        }));
+
+        expect(result.structured?.serviceManifest?.forms[0]?.steps[0]?.fields[0]?.id).toBe("email");
+    });
 });

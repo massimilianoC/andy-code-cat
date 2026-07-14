@@ -110,6 +110,21 @@ Prompting and generation support:
 - `resolveFilesystemTemplateSkills` (Layer S) — reads `docs/skills/template-skills/by-template/<presetId>/*.md`
   inside the canonical `resolveContext()` prompt path. The compose files bind-mount this directory
   into the API container and the production Dockerfile copies it into the image.
+- `buildServiceContractLayer` (Layer V) — non-editable service protocol generated from platform
+  capabilities; the first implementation owns `service-manifest-v1` form slots and JSON limits.
+
+Declarative artifact services:
+
+- `service-manifest-v1` is validated in `packages/contracts` and persisted beside canonical
+  snapshot artifacts.
+- `Project.serviceConfig.forms` stores owner-only mailto/privacy configuration behind the double
+  sandbox.
+- `FormRuntimeAdapter` is the typed application boundary and registry for platform-owned delivery
+  modes; `FormRuntimeCompiler` implements the currently registered `mailto` adapter. Preview,
+  publish, and export all dispatch through that registry. Compiled recipient-specific runtime is
+  never stored back into the snapshot.
+- The project configuration dialog exposes the optional operational form panel; the workspace
+  artifact tabs remain focused on generated content and prompt trace.
 
 Project/profile/content operations:
 

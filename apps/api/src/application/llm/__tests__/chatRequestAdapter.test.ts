@@ -90,6 +90,16 @@ describe("buildChatCompletionRequestBody", () => {
             },
             provider: { require_parameters: true },
         });
+
+        const responseFormat = body.response_format as {
+            json_schema: { schema: { properties: Record<string, any> } };
+        };
+        const serviceSchema = responseFormat.json_schema.schema.properties.serviceManifest.anyOf[0];
+        const fieldSchema = serviceSchema.properties.forms.items.properties.steps.items.properties.fields.items;
+        expect(serviceSchema.properties.forms.maxItems).toBe(5);
+        expect(fieldSchema.additionalProperties).toBe(false);
+        expect(fieldSchema.required).toContain("dataCategory");
+        expect(fieldSchema.properties.type.enum).toContain("email");
     });
 
     it("falls back to JSON mode for OpenRouter models that only advertise response_format", () => {
