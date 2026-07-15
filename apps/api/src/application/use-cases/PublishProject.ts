@@ -9,6 +9,7 @@ import type { PlatformConfigRepository } from "../../domain/repositories/Platfor
 import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
 import { SystemNotifier } from "../services/SystemNotifier";
 import { buildPublishedDatasetBindingPackage } from "../datasets/PublishedDatasetBindings";
+import { repairArtifactsForVisibility } from "../llm/artifactSafetyRepair";
 
 // ---------------------------------------------------------------------------
 // Artifact post-processing (same logic as ExportLayer1Zip, minimal version)
@@ -26,7 +27,10 @@ function extractInlineCss(html: string): { html: string; extracted: string } {
 
 function extractInlineJs(html: string): { html: string; extracted: string } {
     const blocks: string[] = [];
-    const cleaned = html.replace(/<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi, (_match, content: string) => {
+    const cleaned = html.replace(/<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi, (match, content: string) => {
+        // Tailwind consumes this head configuration immediately after its CDN
+        // runtime. Moving it to script.js would execute it too late.
+        if (/\btailwind\s*\.config\s*=/.test(content)) return match;
         const trimmed = content.trim();
         if (trimmed) blocks.push(trimmed);
         return "";
@@ -85,8 +89,26 @@ function injectVersionHash(html: string, version: string): string {
         .replace(/src="script\.js"/g, `src="script.js?v=${version}"`);
 }
 
+const ABSOLUTE_HTTP_URL_RE = /https?:\/\/[^"'()\s]+/gi;
+
+/** Published media is served by the same /p router as the site itself. */
+export function normalizePublishedMediaUrls(content: string): string {
+    return content.replace(ABSOLUTE_HTTP_URL_RE, (rawUrl) => {
+        try {
+            const url = new URL(rawUrl);
+            if (!/^\/p\/media\/[^/]+$/i.test(url.pathname)) return rawUrl;
+            return `${url.pathname}${url.search}${url.hash}`;
+        } catch {
+            return rawUrl;
+        }
+    });
+}
+
 function postProcess(artifacts: { html: string; css: string; js: string }) {
-    let { html, css, js } = artifacts;
+    // Also repair here: snapshots created before a guardrail was introduced
+    // must still publish correctly without being rewritten in the database.
+    const repaired = repairArtifactsForVisibility(artifacts);
+    let { html, css, js } = repaired;
 
     html = stripMetaCsp(html);
 
@@ -257,7 +279,12 @@ export class PublishProject {
         const url = `/p/${publishId}`;
 
         // 5. Post-process artifacts and inject cache-busting version hash
-        const processed = postProcess(snapshot.artifacts);
+        const rawProcessed = postProcess(snapshot.artifacts);
+        const processed = {
+            html: normalizePublishedMediaUrls(rawProcessed.html),
+            css: normalizePublishedMediaUrls(rawProcessed.css),
+            js: normalizePublishedMediaUrls(rawProcessed.js),
+        };
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
 
@@ -270,6 +297,7 @@ export class PublishProject {
                 html = injectGovernanceHtml(html, injections);
             }
         }
+        html = normalizePublishedMediaUrls(html);
 
         // 6. Write files to /data/www/{publishId}/
         const files: Record<string, string> = { "index.html": html };
@@ -336,7 +364,12 @@ export class PublishProject {
     ): Promise<SiteDeployment> {
         this.assertPublishableMedia(artifacts, { projectId, userId, snapshotId });
 
-        const processed = postProcess(artifacts);
+        const rawProcessed = postProcess(artifacts);
+        const processed = {
+            html: normalizePublishedMediaUrls(rawProcessed.html),
+            css: normalizePublishedMediaUrls(rawProcessed.css),
+            js: normalizePublishedMediaUrls(rawProcessed.js),
+        };
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
 
@@ -349,6 +382,7 @@ export class PublishProject {
                 html = injectGovernanceHtml(html, injections);
             }
         }
+        html = normalizePublishedMediaUrls(html);
 
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;

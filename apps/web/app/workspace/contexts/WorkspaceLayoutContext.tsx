@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useRef, useEffect } from "react";
 
 import { PreviewViewport } from "../../../components/workspace/PreviewViewportSelector";
 
@@ -64,7 +64,7 @@ const WorkspaceLayoutContext = createContext<WorkspaceLayoutContextValue | undef
 export function WorkspaceLayoutProvider({ children }: { children: React.ReactNode }) {
     const [leftWidth, setLeftWidth] = useState(40);
     const [isDragging, setIsDragging] = useState(false);
-    
+
     const [chatVSplit, setChatVSplit] = useState(65);
     const chatVSplitRef = useRef<number>(65);
     const [isDraggingVChat, setIsDraggingVChat] = useState(false);
@@ -78,11 +78,11 @@ export function WorkspaceLayoutProvider({ children }: { children: React.ReactNod
     // Load initial state from cookies on mount
     useEffect(() => {
         const savedSplit = Number(getCookie(SPLIT_COOKIE));
-        if (!isNaN(savedSplit) && savedSplit >= 20 && savedSplit <= 70) {
+        if (!isNaN(savedSplit) && savedSplit >= 25 && savedSplit <= 60) {
             setLeftWidth(savedSplit);
         }
         const savedVSplit = Number(getCookie(CHAT_VSPLIT_COOKIE));
-        if (!isNaN(savedVSplit) && savedVSplit >= 20 && savedVSplit <= 80) {
+        if (!isNaN(savedVSplit) && savedVSplit >= 30 && savedVSplit <= 85) {
             setChatVSplit(savedVSplit);
             chatVSplitRef.current = savedVSplit;
         }
@@ -93,9 +93,8 @@ export function WorkspaceLayoutProvider({ children }: { children: React.ReactNod
         if (!isDragging) return;
         function onMove(e: MouseEvent) {
             const newWidth = (e.clientX / window.innerWidth) * 100;
-            if (newWidth > 20 && newWidth < 70) {
-                setLeftWidth(newWidth);
-            }
+            const clampedWidth = Math.max(25, Math.min(60, newWidth));
+            setLeftWidth(clampedWidth);
         }
         function onUp() {
             setIsDragging(false);

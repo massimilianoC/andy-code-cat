@@ -37,14 +37,6 @@ import {
     type LlmFocusContext,
     type LlmChatDefaults,
     type LlmChatStreamEvent,
-    requestLayer1Export,
-    downloadExportBlob,
-    downloadSnapshotCapture,
-    publishProject,
-    getPublishStatus,
-    unpublishProject,
-    checkSlugAvailability,
-    updateDeploymentSlug,
     listProjectAssets,
     getProjectAiAnalytics,
     generateProjectImage,
@@ -54,7 +46,6 @@ import {
     suggestProjectImageIdea,
     downloadProjectAssetDataUrl,
     getPublicAssetUrl,
-    type SiteDeploymentDto,
     type ProjectAssetDto,
     type AiUsageAnalyticsDto,
     type SuggestProjectImageIdeaResult,
@@ -88,6 +79,33 @@ import { SnapshotHistoryPanel } from "../../../components/workspace/SnapshotHist
 import { DualView } from "../../../components/workspace/DualView";
 import { PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT } from "./iframe-scripts";
 import { WorkspaceLayoutProvider, useWorkspaceLayout } from "../contexts/WorkspaceLayoutContext";
+import { usePublish } from "../features/header/usePublish";
+import {
+    clipIdentifier,
+    estimateTokens,
+    formatCostEur,
+    formatDuration,
+    getMediaFailedCount,
+    getMediaResolvedCount,
+    getMessageOutcomeSummary,
+    parseChatFromContent,
+    type MessageMediaResolutionView,
+} from "../features/chat/messageUtils";
+import {
+    appendPromptSegment,
+    extractMediaKeyFromSelectedElement,
+    getElementTargetType,
+    inferStockImageQuery,
+    isFocusContextValidationError,
+    sanitizeMediaElementPayload,
+    sanitizeRuntimeMediaUrl,
+    sanitizeSelectedElementForFocus,
+    type SelectedFocusElement,
+} from "../features/focus/focusUtils";
+import {
+    parseProtectedAssetDownloadUrl,
+    resolvePreviewAssetUrls,
+} from "../features/preview/resolvePreviewAssetUrls";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
     ssr: false,
@@ -146,310 +164,10 @@ declare global {
     }
 }
 
-function getCookie(name: string): string | null {
-    if (typeof document === "undefined") return null;
-    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-    return match ? decodeURIComponent(match[1]) : null;
-}
-
-function setCookie(name: string, value: string, days = 365) {
-    if (typeof document === "undefined") return;
-    const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
-    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
-}
-
-// ── Cost formatting helper ────────────────────────────────────────────────────
-/**
- * Formats a EUR cost amount for compact display.
- * Returns empty string for zero / undefined (no badge shown).
- */
-function formatCostEur(amount: number | undefined): string {
-    if (!amount || amount <= 0) return "";
-    if (amount < 0.0001) return "<€0.0001";
-    if (amount < 0.01)   return `€${amount.toFixed(4)}`;
-    if (amount < 1)      return `€${amount.toFixed(3)}`;
-    return `€${amount.toFixed(2)}`;
-}
-
-type MessageMetadataView = NonNullable<MessageDto["metadata"]>;
-type MessageMediaResolutionView = NonNullable<MessageMetadataView["mediaResolution"]>;
-
-function clipIdentifier(value: string | undefined, head = 8, tail = 4): string {
-    if (!value) return "—";
-    if (value.length <= head + tail + 1) return value;
-    return `${value.slice(0, head)}…${value.slice(-tail)}`;
-}
-
-function getMediaResolvedCount(mediaResolution: MessageMediaResolutionView | undefined): number {
-    if (!mediaResolution) return 0;
-    return mediaResolution.directives?.filter((directive) =>
-        directive.status === "resolved" || directive.status === "fallback_resolved",
-    ).length ?? mediaResolution.assetIds?.length ?? 0;
-}
-
-function getMediaFailedCount(mediaResolution: MessageMediaResolutionView | undefined): number {
-    if (!mediaResolution) return 0;
-    return mediaResolution.directives?.filter((directive) => directive.status === "unresolved").length
-        ?? Math.max(0, (mediaResolution.mediaKeys?.length ?? 0) - getMediaResolvedCount(mediaResolution));
-}
-
-function getMessageOutcomeSummary(message: MessageDto | undefined) {
-    const metadata = message?.metadata;
-    const mediaResolution = metadata?.mediaResolution;
-    return {
-        hasSnapshot: Boolean(metadata?.snapshotId),
-        hasMedia: Boolean(mediaResolution?.mediaKeys?.length),
-        resolvedCount: getMediaResolvedCount(mediaResolution),
-        failedCount: getMediaFailedCount(mediaResolution),
-        degraded: Boolean(mediaResolution?.degraded),
-    };
-}
-
 function getStringDetail(details: unknown, key: string): string | undefined {
     if (!details || typeof details !== "object") return undefined;
     const value = (details as Record<string, unknown>)[key];
     return typeof value === "string" ? value : undefined;
-}
-
-function appendPromptSegment(base: string, addition: string): string {
-    const normalizedAddition = addition.trim();
-    if (!normalizedAddition) return base;
-    if (!base.trim()) return normalizedAddition;
-    const needsSpace = !/[\s\n]$/.test(base);
-    return `${base}${needsSpace ? " " : ""}${normalizedAddition}`;
-}
-
-const PROJECT_ASSET_DOWNLOAD_PATH_RE = /\/v1\/projects\/([^/]+)\/assets\/([^/]+)\/download(?:$|\?)/i;
-const PUBLIC_MEDIA_PATH_RE = /\/p\/media\/([^/?#]+)/i;
-const ARTIFACT_URL_RE = /(?:https?:\/\/[^"'()\s]+|\/(?:p\/media|v1\/projects)\/[^"'()\s]+)/gi;
-
-function parseProtectedAssetDownloadUrl(rawSrc: string): { projectId: string; assetId: string } | null {
-    const trimmed = String(rawSrc ?? "").trim();
-    if (!trimmed || typeof window === "undefined") return null;
-
-    try {
-        const url = new URL(trimmed, window.location.origin);
-        const match = url.pathname.match(PROJECT_ASSET_DOWNLOAD_PATH_RE);
-        if (!match?.[1] || !match?.[2]) return null;
-        return {
-            projectId: decodeURIComponent(match[1]),
-            assetId: decodeURIComponent(match[2]),
-        };
-    } catch {
-        return null;
-    }
-}
-
-function parsePublicMediaUrl(rawSrc: string): { assetId: string } | null {
-    const trimmed = String(rawSrc ?? "").trim();
-    if (!trimmed || typeof window === "undefined") return null;
-
-    try {
-        const url = new URL(trimmed, window.location.origin);
-        const match = url.pathname.match(PUBLIC_MEDIA_PATH_RE);
-        if (!match?.[1]) return null;
-        return { assetId: decodeURIComponent(match[1]) };
-    } catch {
-        return null;
-    }
-}
-
-async function resolvePreviewAssetUrls(input: {
-    html: string;
-    css: string;
-    token: string;
-    projectId: string;
-}): Promise<{ html: string; css: string }> {
-    const source = `${input.html}\n${input.css}`;
-    const urls = Array.from(new Set(source.match(ARTIFACT_URL_RE) ?? []));
-    if (urls.length === 0) return { html: input.html, css: input.css };
-
-    const replacements = new Map<string, string>();
-    await Promise.all(urls.map(async (url) => {
-        const protectedAsset = parseProtectedAssetDownloadUrl(url);
-        const publicAsset = parsePublicMediaUrl(url);
-        const assetId = protectedAsset?.assetId ?? publicAsset?.assetId;
-        const assetProjectId = protectedAsset?.projectId ?? input.projectId;
-        if (!assetId) return;
-
-        try {
-            const dataUrl = await downloadProjectAssetDataUrl(input.token, assetProjectId, assetId);
-            if (dataUrl) replacements.set(url, dataUrl);
-        } catch {
-            // Keep the original URL. The preview should degrade without blocking rendering.
-        }
-    }));
-
-    if (replacements.size === 0) return { html: input.html, css: input.css };
-
-    let html = input.html;
-    let css = input.css;
-    for (const [from, to] of replacements) {
-        html = html.split(from).join(to);
-        css = css.split(from).join(to);
-    }
-
-    return { html, css };
-}
-
-function sanitizeRuntimeMediaUrl(value?: string): string | undefined {
-    const trimmed = value?.trim();
-    if (!trimmed || /^data:/i.test(trimmed) || /^asset:\/\/media\//i.test(trimmed)) {
-        return undefined;
-    }
-
-    const scheme = trimmed.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
-    if (scheme && !["http", "https", "blob"].includes(scheme)) {
-        return undefined;
-    }
-
-    return trimmed.length > 1500 ? trimmed.slice(0, 1500) : trimmed;
-}
-
-function sanitizeMediaElementPayload(element: SelectedFocusElement) {
-    return {
-        stableNodeId: element.stableNodeId,
-        selector: element.selector,
-        tag: element.tag,
-        textSnippet: clipFocusValue(element.textSnippet, 500),
-        currentSrc: sanitizeRuntimeMediaUrl(element.currentSrc),
-        currentAlt: clipFocusValue(element.currentAlt, 300),
-        backgroundImageUrl: sanitizeRuntimeMediaUrl(element.backgroundImageUrl),
-        mediaMode: element.mediaMode,
-        originalWidth: element.originalWidth,
-        originalHeight: element.originalHeight,
-        aspectRatio: element.aspectRatio,
-    };
-}
-
-function inferStockImageQuery(element: SelectedFocusElement, fallbackPrompt: string): string {
-    const candidates = [
-        element.currentAlt,
-        element.textSnippet,
-        fallbackPrompt,
-    ];
-
-    for (const candidate of candidates) {
-        const cleaned = candidate?.replace(/\s+/g, " ").trim();
-        if (cleaned && cleaned.length >= 3) {
-            return cleaned.slice(0, 120);
-        }
-    }
-
-    const src = sanitizeRuntimeMediaUrl(element.currentSrc) || sanitizeRuntimeMediaUrl(element.backgroundImageUrl) || "";
-    try {
-        const url = new URL(src);
-        if (url.hostname.includes("loremflickr.com")) {
-            const parts = url.pathname.split("/").filter(Boolean);
-            const keyword = parts[2]?.replace(/[,+_-]+/g, " ");
-            if (keyword) return decodeURIComponent(keyword).slice(0, 120);
-        }
-        if (url.hostname.includes("picsum.photos")) {
-            const parts = url.pathname.split("/").filter(Boolean);
-            const seed = parts[1]?.replace(/[,+_-]+/g, " ");
-            if (seed) return decodeURIComponent(seed).slice(0, 120);
-        }
-    } catch {
-        // Ignore malformed current src and use a stable default below.
-    }
-
-    return "website image";
-}
-
-type SelectedFocusElement = NonNullable<LlmFocusContext["selectedElement"]>;
-
-const MAX_FOCUS_SELECTOR_LEN = 240;
-const MAX_FOCUS_NODE_ID_LEN = 120;
-const MAX_FOCUS_TEXT_LEN = 160;
-const MAX_FOCUS_OUTER_HTML_LEN = 8000;
-const MAX_FOCUS_CLASSES = 8;
-const INVALID_FOCUS_TAGS = new Set(["html", "body", "head", "script", "style", "link", "meta"]);
-
-function clipFocusValue(value: string | undefined, max: number): string | undefined {
-    if (typeof value !== "string") return undefined;
-    const trimmed = value.trim();
-    if (!trimmed) return undefined;
-    return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
-}
-
-function sanitizeSelectedElementForFocus(
-    element: LlmFocusContext["selectedElement"] | null | undefined,
-): SelectedFocusElement | null {
-    if (!element) return null;
-
-    const tag = clipFocusValue(element.tag?.toLowerCase(), 64);
-    if (!tag || INVALID_FOCUS_TAGS.has(tag)) {
-        return null;
-    }
-
-    const stableNodeId = clipFocusValue(element.stableNodeId, MAX_FOCUS_NODE_ID_LEN);
-    const selector = clipFocusValue(element.selector, MAX_FOCUS_SELECTOR_LEN);
-    if (!stableNodeId || !selector) {
-        return null;
-    }
-
-    const classes = Array.isArray(element.classes)
-        ? element.classes
-            .map((item) => clipFocusValue(item, 60))
-            .filter((item): item is string => Boolean(item))
-            .slice(0, MAX_FOCUS_CLASSES)
-        : [];
-
-    const textSnippet = clipFocusValue(element.textSnippet, MAX_FOCUS_TEXT_LEN);
-    const outerHtml = clipFocusValue(element.outerHtml, MAX_FOCUS_OUTER_HTML_LEN);
-    const currentSrc = sanitizeRuntimeMediaUrl(clipFocusValue(element.currentSrc, 1500));
-    const currentAlt = clipFocusValue(element.currentAlt, 300);
-    const backgroundImageUrl = sanitizeRuntimeMediaUrl(clipFocusValue(element.backgroundImageUrl, 1500));
-    const mediaMode = element.mediaMode === "foreground" || element.mediaMode === "background"
-        ? element.mediaMode
-        : ((currentSrc || backgroundImageUrl) ? "none" : undefined);
-    const originalWidth = typeof element.originalWidth === "number" && Number.isFinite(element.originalWidth) && element.originalWidth > 0
-        ? Math.round(element.originalWidth)
-        : undefined;
-    const originalHeight = typeof element.originalHeight === "number" && Number.isFinite(element.originalHeight) && element.originalHeight > 0
-        ? Math.round(element.originalHeight)
-        : undefined;
-    const aspectRatio = typeof element.aspectRatio === "number" && Number.isFinite(element.aspectRatio) && element.aspectRatio > 0
-        ? Math.round(element.aspectRatio * 1000) / 1000
-        : (originalWidth && originalHeight ? Math.round((originalWidth / originalHeight) * 1000) / 1000 : undefined);
-
-    if (outerHtml && /^<(html|body)\b/i.test(outerHtml)) {
-        return null;
-    }
-
-    return {
-        stableNodeId,
-        selector,
-        tag,
-        classes,
-        ...(textSnippet ? { textSnippet } : {}),
-        ...(outerHtml ? { outerHtml } : {}),
-        ...(currentSrc ? { currentSrc } : {}),
-        ...(currentAlt ? { currentAlt } : {}),
-        ...(backgroundImageUrl ? { backgroundImageUrl } : {}),
-        ...(mediaMode ? { mediaMode } : {}),
-        ...(originalWidth ? { originalWidth } : {}),
-        ...(originalHeight ? { originalHeight } : {}),
-        ...(aspectRatio ? { aspectRatio } : {}),
-    };
-}
-
-function extractMediaKeyFromSelectedElement(element: LlmFocusContext["selectedElement"] | null | undefined): string | null {
-    const outerHtml = element?.outerHtml ?? "";
-    const match = outerHtml.match(/\bdata-media-key=["']([a-z0-9]+(?:-[a-z0-9]+)*)["']/i);
-    return match?.[1] ?? null;
-}
-
-function isFocusContextValidationError(error: unknown): boolean {
-    if (!(error instanceof ApiError) || error.status !== 400) {
-        return false;
-    }
-
-    const details = error.details as
-        | { fieldErrors?: { focusContext?: unknown } }
-        | undefined;
-
-    return Array.isArray(details?.fieldErrors?.focusContext) && details.fieldErrors.focusContext.length > 0;
 }
 
 function WorkspacePageContent() {
@@ -531,7 +249,9 @@ function WorkspacePageContent() {
     // Read once on mount so they survive the router.replace that clears autoPrompt.
     const preferredProviderRef = useRef(searchParams?.get("preferredProvider") ?? "");
     const preferredModelRef = useRef(searchParams?.get("preferredModel") ?? "");
-    const preferredModelAppliedRef = useRef(false);
+    const [preferredModelResolutionComplete, setPreferredModelResolutionComplete] = useState(
+        () => !preferredProviderRef.current && !preferredModelRef.current,
+    );
     // Track whether we arrived from the Zero Effort / Vibe pipeline.
     // True when a sessionStorage handoff key exists for the conv param (new path)
     // or when an autoPrompt URL param is present (legacy/fallback path).
@@ -663,133 +383,53 @@ function WorkspacePageContent() {
     const pendingEditHtmlRef = useRef<string | null>(null);
     const handleCommitEditVersionRef = useRef<(html: string) => Promise<void>>(null as any);
 
-    const [exportState, setExportState] = useState<"idle" | "loading" | "error">("idle");
-    const [exportError, setExportError] = useState<string | null>(null);
-    const [captureState, setCaptureState] = useState<"idle" | "loading" | "error">("idle");
     // Preview refresh feedback
     const [previewRefreshing, setPreviewRefreshing] = useState(false);
     const [previewPending, setPreviewPending] = useState(false);
     // Watchdog: bumped when iframe fails to fire onLoad within timeout
     const [previewForceKey, setPreviewForceKey] = useState(0);
     const iframeLoadedRef = useRef(false);
-    const [captureDropdownOpen, setCaptureDropdownOpen] = useState(false);
-    const captureDropdownRef = useRef<HTMLDivElement>(null);
-
-    // Publish state
-    const [publishState, setPublishState] = useState<"idle" | "loading" | "error">("idle");
-    const [publishDeployment, setPublishDeployment] = useState<SiteDeploymentDto | null>(null);
-    const [publishCopied, setPublishCopied] = useState(false);
-    // Slug edit state
-    const [slugEditMode, setSlugEditMode] = useState(false);
-    const [slugInput, setSlugInput] = useState("");
-    const [slugCheckState, setSlugCheckState] = useState<"idle" | "checking" | "available" | "taken" | "invalid" | "reserved" | "error">("idle");
-    const [slugSaving, setSlugSaving] = useState(false);
-    const slugDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const handleExportLayer1 = useCallback(async () => {
-        if (!token) return;
-        setExportState("loading");
-        setExportError(null);
-        const notifId = addNotification({
-            label: t("workspace.notifications.export.label"),
-            status: "running",
-            message: t("workspace.notifications.export.running"),
-        });
-        try {
-            // 1. Create the export record on the server
-            const snapshotId = selectedBackendSnapshotId ?? undefined;
-            const res = await requestLayer1Export(token, projectId, snapshotId);
-
-            // 2. Download the ZIP blob using the Bearer token (no JWT-in-URL fragility)
-            updateNotification(notifId, { message: t("workspace.notifications.export.downloading") });
-            const blob = await downloadExportBlob(token, res.id);
-
-            // 3. Trigger browser download
-            const objectUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = objectUrl;
-            a.download = "export-layer1.zip";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(objectUrl);
-
-            setExportState("idle");
-            updateNotification(notifId, { status: "done", message: t("workspace.notifications.export.done") });
-        } catch (err) {
-            // 401 from the blob download = sessione scaduta — mostra la modal
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-                setExportState("idle");
-                updateNotification(notifId, { status: "error", message: t("workspace.notifications.export.sessionExpired") });
-                return;
-            }
-            const msg = err instanceof Error ? err.message : t("workspace.notifications.export.error");
-            setExportError(msg);
-            setExportState("error");
-            updateNotification(notifId, { status: "error", message: msg });
-        }
-    }, [token, projectId, selectedBackendSnapshotId, addNotification, updateNotification]);
-
-    // Close camera dropdown on outside click
-    useEffect(() => {
-        function onDown(e: MouseEvent) {
-            if (captureDropdownRef.current && !captureDropdownRef.current.contains(e.target as Node)) {
-                setCaptureDropdownOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", onDown);
-        return () => document.removeEventListener("mousedown", onDown);
-    }, []);
-
-    const handleCaptureSnapshot = useCallback(async (format: "jpg" | "pdf") => {
-        if (!token || !selectedBackendSnapshotId) return;
-        setCaptureState("loading");
-        setCaptureDropdownOpen(false);
-        const notifId = addNotification({
-        label: t("workspace.notifications.capture.label", { format: format.toUpperCase() }),
-            status: "running",
-            message: t("workspace.notifications.capture.running"),
-        });
-        try {
-            // Calls the backend Puppeteer endpoint:
-            // GET /v1/projects/:projectId/preview-snapshots/:snapshotId/capture?format=jpg|pdf
-            const blob = await downloadSnapshotCapture(token, projectId, selectedBackendSnapshotId, format);
-
-            const objectUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = objectUrl;
-            a.download = `preview-snapshot.${format}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(objectUrl);
-
-            setCaptureState("idle");
-            updateNotification(notifId, { status: "done", message: t("workspace.notifications.capture.done") });
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-                setCaptureState("idle");
-                updateNotification(notifId, { status: "error", message: t("workspace.notifications.capture.sessionExpired") });
-                return;
-            }
-            const msg = err instanceof Error ? err.message : t("workspace.notifications.capture.error");
-            console.error("[snapshot-capture]", err);
-            setCaptureState("error");
-            updateNotification(notifId, { status: "error", message: msg });
-            window.setTimeout(() => setCaptureState("idle"), 3000);
-        }
-    }, [token, projectId, selectedBackendSnapshotId, addNotification, updateNotification]);
-
-    // ── Publish handlers ────────────────────────────────────────────
-    // Fetch current deployment status on mount / when projectId changes
-    useEffect(() => {
-        if (!token) return;
-        getPublishStatus(token, projectId)
-            .then((d) => setPublishDeployment(d))
-            .catch(() => setPublishDeployment(null));
-    }, [token, projectId]);
+    const {
+        export: {
+            state: exportState,
+            error: exportError,
+            run: handleExportLayer1,
+        },
+        capture: {
+            state: captureState,
+            dropdownOpen: captureDropdownOpen,
+            dropdownRef: captureDropdownRef,
+            toggleDropdown: toggleCaptureDropdown,
+            run: handleCaptureSnapshot,
+        },
+        publish: {
+            state: publishState,
+            deployment: publishDeployment,
+            url: publishUrl,
+            copied: publishCopied,
+            run: handlePublish,
+            unpublish: handleUnpublish,
+            copyLink: handleCopyPublishLink,
+        },
+        slug: {
+            editMode: slugEditMode,
+            input: slugInput,
+            checkState: slugCheckState,
+            saving: slugSaving,
+            toggleEditor: toggleSlugEditor,
+            updateInput: updateSlugInput,
+            save: handleSlugSave,
+            remove: handleSlugRemove,
+            cancel: cancelSlugEdit,
+        },
+    } = usePublish({
+        token,
+        projectId,
+        selectedBackendSnapshotId,
+        previewSnapshots,
+        addNotification,
+        updateNotification,
+    });
 
     useEffect(() => {
         if (!token) return;
@@ -797,144 +437,6 @@ function WorkspacePageContent() {
             .then((summary) => setPromptOpsSummary(summary))
             .catch(() => setPromptOpsSummary({ totalCost: 0, totalTokens: 0, runs: 0 }));
     }, [token, projectId]);
-
-    // Debounced slug availability check.
-    // Mirrors the backend slug format (2-30 chars, no leading/trailing hyphen) and
-    // maps the server's `reason` 1:1 so the UI message always matches the real verdict.
-    useEffect(() => {
-        if (!slugEditMode) { setSlugCheckState("idle"); return; }
-        const slug = slugInput.trim().toLowerCase();
-        if (!slug) { setSlugCheckState("idle"); return; }
-        // Re-entering your own current slug is always allowed (it's already yours).
-        if (slug === (publishDeployment?.customSlug ?? "")) {
-            setSlugCheckState("available");
-            return;
-        }
-        if (!/^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$/.test(slug)) {
-            setSlugCheckState("invalid");
-            return;
-        }
-        setSlugCheckState("checking");
-        if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current);
-        slugDebounceRef.current = setTimeout(async () => {
-            try {
-                const result = await checkSlugAvailability(slug, publishDeployment?.id);
-                if (result.available) {
-                    setSlugCheckState("available");
-                } else if (result.reason === "reserved") {
-                    setSlugCheckState("reserved");
-                } else if (result.reason === "invalid") {
-                    setSlugCheckState("invalid");
-                } else {
-                    setSlugCheckState("taken");
-                }
-            } catch {
-                // Surface the failure instead of silently resetting to idle, otherwise
-                // a network error looks identical to "not yet checked".
-                setSlugCheckState("error");
-            }
-        }, 450);
-        return () => { if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current); };
-    }, [slugInput, slugEditMode, publishDeployment?.customSlug, publishDeployment?.id]);
-
-    const handlePublish = useCallback(async () => {
-        if (!token) return;
-        setPublishState("loading");
-        const activeId = previewSnapshots.find((s) => s.isActive)?.id ?? null;
-        const notifId = addNotification({
-            label: t("workspace.notifications.publish.label"),
-            status: "running",
-            message: t("workspace.notifications.publish.running"),
-        });
-        try {
-            // Never pass selectedBackendSnapshotId here — the user may have browsed to an
-            // old version without "applying" it, which would republish the wrong snapshot.
-            // Always publish whatever snapshot is marked isActive in the DB (no snapshotId
-            // param → backend calls getActiveForProject()). If the user wants to publish a
-            // specific version they must first "Applica" it in the history panel.
-            const deployment = await publishProject(token, projectId, undefined);
-            setPublishDeployment(deployment);
-            setPublishState("idle");
-            const vn = (() => {
-                if (!activeId) return null;
-                const idx = previewSnapshots.findIndex((s) => s.id === activeId);
-                return idx === -1 ? null : previewSnapshots.length - idx;
-            })();
-            updateNotification(notifId, {
-                status: "done",
-                message: vn ? t("workspace.notifications.publish.doneVersioned", { vn }) : t("workspace.notifications.publish.done"),
-            });
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-                setPublishState("idle");
-                updateNotification(notifId, { status: "error", message: t("workspace.notifications.publish.sessionExpired") });
-                return;
-            }
-            setPublishState("error");
-            const msg = err instanceof Error ? err.message : t("workspace.notifications.publish.error");
-            updateNotification(notifId, { status: "error", message: msg });
-            window.setTimeout(() => setPublishState("idle"), 3000);
-        }
-    }, [token, projectId, previewSnapshots, addNotification, updateNotification]);
-
-    const handleUnpublish = useCallback(async () => {
-        if (!token || !publishDeployment) return;
-        setPublishState("loading");
-        try {
-            await unpublishProject(token, projectId, publishDeployment.id);
-            setPublishDeployment(null);
-            setPublishState("idle");
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-                setPublishState("idle");
-                return;
-            }
-            setPublishState("error");
-            window.setTimeout(() => setPublishState("idle"), 3000);
-        }
-    }, [token, projectId, publishDeployment]);
-
-    const handleCopyPublishLink = useCallback(() => {
-        if (!publishDeployment) return;
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-        // Prefer subdomain URL when set (human-readable), fall back to path URL
-        const link = publishDeployment.subdomainUrl ?? `${baseUrl}/p/${publishDeployment.publishId}`;
-        navigator.clipboard.writeText(link).then(() => {
-            setPublishCopied(true);
-            window.setTimeout(() => setPublishCopied(false), 2000);
-        });
-    }, [publishDeployment]);
-
-    const handleSlugSave = useCallback(async () => {
-        if (!token || !publishDeployment) return;
-        const trimmed = slugInput.trim().toLowerCase();
-        const newSlug = trimmed || null;
-        setSlugSaving(true);
-        try {
-            const updated = await updateDeploymentSlug(token, projectId, newSlug);
-            setPublishDeployment(updated);
-            setSlugEditMode(false);
-            setSlugInput("");
-            setSlugCheckState("idle");
-        } catch (err) {
-            // Surface the failure in the inline status and keep the editor open so the
-            // user understands why the save didn't take (previously swallowed silently,
-            // making the Save button look broken on a 409/400).
-            if (err instanceof ApiError && err.status === 409) {
-                setSlugCheckState("taken");
-            } else if (err instanceof ApiError && err.status === 400) {
-                setSlugCheckState("invalid");
-            } else if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-            } else {
-                setSlugCheckState("error");
-            }
-        } finally {
-            setSlugSaving(false);
-        }
-    }, [token, projectId, slugInput, publishDeployment]);
 
     const handleSavePromptConfig = useCallback(async () => {
         if (!token) return;
@@ -1096,14 +598,14 @@ function WorkspacePageContent() {
     useEffect(() => {
         if (!autoPromptPending) return;
         if (autoPromptFiredRef.current) return;
-        if ((preferredProviderRef.current || preferredModelRef.current) && !preferredModelAppliedRef.current) return;
+        if (!preferredModelResolutionComplete) return;
         if (conversationLoading || !selectedModel || sending || !token) return;
         autoPromptFiredRef.current = true;
         setAutoPromptPending(false);
         // Trigger send with a fake FormEvent — handleSend will read the current prompt state.
         void handleSend({ preventDefault: () => {} } as React.FormEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [autoPromptPending, conversationLoading, selectedModel, sending, token]);
+    }, [autoPromptPending, conversationLoading, preferredModelResolutionComplete, selectedModel, sending, token]);
 
     useEffect(() => {
         if (!selectedProvider) return;
@@ -1155,28 +657,39 @@ function WorkspacePageContent() {
     // Runs after the catalog and preset recommendation have been applied so that
     // the pipeline-configured model always wins over the preset default.
     useEffect(() => {
-        if (preferredModelAppliedRef.current) return;
+        if (preferredModelResolutionComplete) return;
         const prefProvider = preferredProviderRef.current;
         const prefModel = preferredModelRef.current;
-        if (!prefProvider && !prefModel) return;
+        if (!prefProvider && !prefModel) {
+            setPreferredModelResolutionComplete(true);
+            return;
+        }
         if (providersCatalog.length === 0) return;
 
         const provider = prefProvider
             ? providersCatalog.find((p) => p.provider === prefProvider)
             : providersCatalog.find((p) => p.models.some((m) => m.isActive && m.id === prefModel));
-        if (!provider) return;
+        if (!provider) {
+            setPipelineModelOverride(null);
+            setPreferredModelResolutionComplete(true);
+            return;
+        }
 
         const model = prefModel
             ? provider.models.find((m) => m.isActive && m.id === prefModel)
             : provider.models.find((m) => m.isActive && m.isDefault) ?? provider.models.find((m) => m.isActive);
-        if (!model) return;
+        if (!model) {
+            setPipelineModelOverride(null);
+            setPreferredModelResolutionComplete(true);
+            return;
+        }
 
         setSelectedProvider(provider.provider);
         setSelectedModel(model.id);
         setPipelineModelOverride({ provider: provider.provider, model: model.id, applied: true });
-        preferredModelAppliedRef.current = true;
+        setPreferredModelResolutionComplete(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [providersCatalog]);
+    }, [preferredModelResolutionComplete, providersCatalog]);
 
     // Auto-load prompt preview when user opens the prompt tab
     useEffect(() => {
@@ -4147,7 +3660,7 @@ function WorkspacePageContent() {
                                     type="button"
                                     className="secondary"
                                     disabled={captureState === "loading"}
-                                    onClick={() => setCaptureDropdownOpen((v) => !v)}
+                                    onClick={toggleCaptureDropdown}
                                     style={{ fontSize: "0.72rem", padding: "0.18rem 0.5rem" }}
                                     title={t("workspace.ui.captureTitle")}
                                 >
@@ -4397,7 +3910,7 @@ function WorkspacePageContent() {
                             ) : null}
                             {/* Path URL (secondary / always shown) */}
                             <a
-                                href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/p/${publishDeployment.publishId}`}
+                                href={publishUrl ?? publishDeployment.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style={{ color: "#7dd3fc", textDecoration: "underline", opacity: publishDeployment.subdomainUrl ? 0.6 : 1 }}
@@ -4422,11 +3935,7 @@ function WorkspacePageContent() {
                             {/* Slug edit toggle */}
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setSlugInput(publishDeployment.customSlug ?? "");
-                                    setSlugEditMode((v) => !v);
-                                    setSlugCheckState("idle");
-                                }}
+                                onClick={toggleSlugEditor}
                                 style={{
                                     background: "transparent",
                                     border: "1px solid rgba(125,211,252,0.25)",
@@ -4487,7 +3996,7 @@ function WorkspacePageContent() {
                                 <input
                                     type="text"
                                     value={slugInput}
-                                    onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                                    onChange={(e) => updateSlugInput(e.target.value)}
                                     placeholder={t("workspace.ui.slugPlaceholder")}
                                     maxLength={30}
                                     style={{
@@ -4540,15 +4049,7 @@ function WorkspacePageContent() {
                                 {publishDeployment.customSlug && (
                                     <button
                                         type="button"
-                                        onClick={async () => {
-                                            setSlugSaving(true);
-                                            try {
-                                                const updated = await updateDeploymentSlug(token!, projectId, null);
-                                                setPublishDeployment(updated);
-                                                setSlugEditMode(false);
-                                                setSlugInput("");
-                                            } catch { /* ignore */ } finally { setSlugSaving(false); }
-                                        }}
+                                        onClick={() => void handleSlugRemove()}
                                         disabled={slugSaving}
                                         style={{
                                             background: "transparent",
@@ -4565,7 +4066,7 @@ function WorkspacePageContent() {
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => { setSlugEditMode(false); setSlugInput(""); setSlugCheckState("idle"); }}
+                                    onClick={cancelSlugEdit}
                                     style={{
                                         background: "transparent",
                                         border: "none",
@@ -4750,32 +4251,6 @@ function WorkspacePageContent() {
 // ─── Inspect infrastructure: PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT → see ./iframe-scripts.ts ───
 
 
-
-function getElementTargetType(
-    tag: string,
-    mediaMode?: SelectedFocusElement["mediaMode"],
-): "html" | "css" | "js" | "component" | "section" {
-    if (mediaMode === "foreground" || mediaMode === "background") return "component";
-    if (["section", "main", "article", "header", "footer", "nav", "aside"].includes(tag)) return "section";
-    if (["button", "input", "select", "textarea", "form", "canvas", "svg", "img", "picture", "figure", "video"].includes(tag)) return "component";
-    return "html";
-}
-
-function parseChatFromContent(content: string): { summary: string; bullets: string[]; nextActions: string[] } | null {
-    if (!content?.startsWith("```json")) return null;
-    try {
-        let jsonText = content.replace(/^```(?:json)?\s*\n?/i, "");
-        const lastFence = jsonText.lastIndexOf("```");
-        if (lastFence > 0) jsonText = jsonText.slice(0, lastFence).trim();
-        const parsed = JSON.parse(jsonText) as { chat?: { summary?: string; bullets?: unknown; nextActions?: unknown } };
-        if (parsed?.chat?.summary) return {
-            summary: String(parsed.chat.summary),
-            bullets: Array.isArray(parsed.chat.bullets) ? (parsed.chat.bullets as unknown[]).map(String) : [],
-            nextActions: Array.isArray(parsed.chat.nextActions) ? (parsed.chat.nextActions as unknown[]).map(String) : [],
-        };
-    } catch { /* fall through */ }
-    return null;
-}
 
 async function copyTextToClipboard(text: string) {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -5005,19 +4480,6 @@ function CodeEditorPanel({
             />
         </div>
     );
-}
-
-/** Estimated token count for a string (char/4 heuristic). */
-function estimateTokens(text: string | undefined): number {
-    if (!text) return 0;
-    return Math.max(1, Math.round(text.length / 4));
-}
-
-/** Compact time label: <1 s → "540ms", else seconds with 1 decimal. */
-function formatDuration(ms: number | undefined): string {
-    if (!ms) return "—";
-    if (ms < 1000) return `${Math.round(ms)}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function MetaStat({

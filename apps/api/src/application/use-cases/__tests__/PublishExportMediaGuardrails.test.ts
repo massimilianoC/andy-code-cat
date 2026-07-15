@@ -29,6 +29,66 @@ afterEach(() => {
 });
 
 describe("publish/export unresolved media guardrails", () => {
+    it("repairs a legacy utility-only snapshot before publishing it", async () => {
+        const { PublishProject } = await import("../PublishProject");
+        const snapshot: PreviewSnapshot = {
+            ...unresolvedSnapshot,
+            artifacts: {
+                html: "<html><head></head><body><main class='max-w-7xl flex gap-6 bg-ink text-cream'>Ready</main></body></html>",
+                css: ":root { --ink: #0A1628; --cream: #F5F1E8; }",
+                js: "",
+            },
+        };
+        const writtenFiles = vi.fn(async (_publishId: string, files: Record<string, string>) => Object.keys(files));
+        const deployment: SiteDeployment = {
+            id: "deployment-1",
+            publishId: "abcd1234",
+            projectId: "project-1",
+            userId: "user-1",
+            snapshotId: snapshot.id,
+            status: "deploying",
+            url: "/p/abcd1234",
+            filesDeployed: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+        const deploymentRepo = {
+            isCustomSlugTaken: vi.fn(async () => false),
+            findActiveByProjectId: vi.fn(async () => null),
+            isPublishIdTaken: vi.fn(async () => false),
+            create: vi.fn(async () => deployment),
+            updateStatus: vi.fn(async () => ({ ...deployment, status: "live" as const })),
+        };
+        const useCase = new PublishProject(
+            deploymentRepo as any,
+            createSnapshotRepo(snapshot) as any,
+            { writePublishFiles: writtenFiles } as any,
+        );
+
+        await useCase.execute({ projectId: "project-1", userId: "user-1", snapshotId: snapshot.id });
+
+        const files = writtenFiles.mock.calls[0]?.[1] as Record<string, string>;
+        const indexHtml = files["index.html"];
+        expect(indexHtml).toContain("tailwind.config");
+        expect(indexHtml).toContain("cdn.tailwindcss.com/3.4.17");
+        expect(indexHtml?.indexOf("cdn.tailwindcss.com")).toBeLessThan(indexHtml?.indexOf("tailwind.config") ?? -1);
+    });
+
+    it("normalizes published media URLs to the public same-origin path", async () => {
+        const { normalizePublishedMediaUrls } = await import("../PublishProject");
+        const content = [
+            'src="http://localhost:4000/p/media/asset-1"',
+            "url(https://api.example.test/p/media/asset-2?size=large)",
+            'href="https://cdn.example.test/image.jpg"',
+        ].join("\n");
+
+        expect(normalizePublishedMediaUrls(content)).toBe([
+            'src="/p/media/asset-1"',
+            "url(/p/media/asset-2?size=large)",
+            'href="https://cdn.example.test/image.jpg"',
+        ].join("\n"));
+    });
+
     it("blocks publish before writing files when a snapshot still has media placeholders", async () => {
         const { PublishProject } = await import("../PublishProject");
         const notifierSpy = vi.spyOn(SystemNotifier.instance, "emit").mockImplementation(() => undefined);
