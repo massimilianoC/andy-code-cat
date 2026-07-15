@@ -11,7 +11,7 @@ function presetLabel(presetId: string): string {
     return preset?.labelEn ?? preset?.label ?? presetId;
 }
 
-function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
+export function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
     const siteLabel = presetLabel(input.presetId);
     const outputLanguage = (input as { outputLanguage?: string }).outputLanguage ?? "en";
     const sections: string[] = [];
@@ -24,6 +24,18 @@ function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
         `- **Template:** ${siteLabel} (${input.presetId})\n` +
         `- **Output language:** ${outputLanguage}`,
     );
+
+    // The original request is the authority boundary. All inferred sections below
+    // enrich it and must never be interpreted as permission to remove or weaken it.
+    const sourceRequest = input.sourceRequest?.trim() || input.primaryGoal?.trim();
+    if (sourceRequest) {
+        sections.push(
+            `## [SOURCE_REQUEST] Original user request — authoritative\n\n` +
+            `${sourceRequest}\n\n` +
+            `> Preserve every explicit fact, preference, requirement and prohibition above. ` +
+            `Later sections are additive clarification only; on conflict, this source request wins.`,
+        );
+    }
 
     // ── [GOAL] ──────────────────────────────────────────────────────────────
     if (input.primaryGoal?.trim()) {
@@ -39,6 +51,21 @@ function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
             `## [AUDIENCE] Target audience\n\n` +
             input.audience.trim(),
         );
+    }
+
+    const expressiveSections: Array<[string, string, string | undefined]> = [
+        ["CONCEPT", "Project concept and value proposition", input.projectSummary],
+        ["STRUCTURE", "Required content structure, screens and states", input.contentStructure],
+        ["CONTENT", "Content, data, entities and asset requirements", input.contentRequirements],
+        ["FUNCTIONS", "Functional requirements and behavior", input.functionalRequirements],
+        ["INTERACTIONS", "Interaction model, controls and feedback", input.interactionModel],
+        ["VISUAL_DIRECTION", "Visual and experiential direction", input.visualDirection],
+        ["SUCCESS", "Completion and success criteria", input.successCriteria],
+        ["CONSTRAINTS", "Constraints and compatibility requirements", input.constraints],
+        ["MUST_AVOID", "Explicit exclusions and negative requirements", input.mustAvoid],
+    ];
+    for (const [key, title, value] of expressiveSections) {
+        if (value?.trim()) sections.push(`## [${key}] ${title}\n\n${value.trim()}`);
     }
 
     // ── [STYLE] ─────────────────────────────────────────────────────────────

@@ -1,131 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { PRESET_MAP } from "../../../domain/entities/ProjectPreset";
+import { buildNormalizedBrief } from "../LaunchZeroEffortProject";
 
-// ── Inline the pure brief builder (no I/O, no class instantiation needed) ────
-
-function presetLabel(presetId: string): string {
-    const preset = PRESET_MAP.get(presetId);
-    return preset?.labelEn ?? preset?.label ?? presetId;
-}
-
-function buildNormalizedBrief(input: {
-    businessName: string;
-    presetId: string;
-    primaryGoal?: string;
-    audience?: string;
-    tone?: string;
-    primaryCta?: string;
-    styleHint?: string;
-    contactInfo?: Array<{ key: string; value: string }>;
-    styleAttributes?: string[];
-    outputLanguage?: string;
-}): string {
-    const siteLabel = presetLabel(input.presetId);
-    const outputLanguage = input.outputLanguage ?? "en";
-    const sections: string[] = [];
-
-    sections.push(
-        `# PROJECT BRIEF — ${input.businessName}\n\n` +
-        `## [IDENTITY] Brand and template\n` +
-        `- **Brand:** ${input.businessName}\n` +
-        `- **Template:** ${siteLabel} (${input.presetId})\n` +
-        `- **Output language:** ${outputLanguage}`,
-    );
-
-    if (input.primaryGoal?.trim()) {
-        sections.push(`## [GOAL] Description and primary objective\n\n${input.primaryGoal.trim()}`);
-    }
-    if (input.audience?.trim()) {
-        sections.push(`## [AUDIENCE] Target audience\n\n${input.audience.trim()}`);
-    }
-    const styleLines: string[] = [];
-    if (input.styleAttributes && input.styleAttributes.length > 0) {
-        styleLines.push(`- **Visual attributes:** ${input.styleAttributes.join(", ")}`);
-    }
-    if (input.tone?.trim()) styleLines.push(`- **Tone of voice:** ${input.tone.trim()}`);
-    if (input.primaryCta?.trim()) styleLines.push(`- **Primary CTA:** ${input.primaryCta.trim()}`);
-    if (input.styleHint?.trim()) styleLines.push(`- **Additional style notes:** ${input.styleHint.trim()}`);
-    if (styleLines.length > 0) sections.push(`## [STYLE] Visual attributes, tone and CTA\n\n${styleLines.join("\n")}`);
-
-    if (input.contactInfo && input.contactInfo.length > 0) {
-        const contactLines = input.contactInfo.map((c) => `- **${c.key}:** ${c.value}`).join("\n");
-        sections.push(`## [CONTACTS] Contact information\n\n${contactLines}`);
-    }
-
-    const footer = `\n---\n*Structured brief — Guided Mode · ${siteLabel} · Sections: ${sections.length - 1}*`;
-    return sections.join("\n\n") + footer;
-}
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
-describe("buildNormalizedBrief — presetId", () => {
-    it("includes the preset label for slideshow", () => {
-        const brief = buildNormalizedBrief({ businessName: "Deck Co", presetId: "slideshow" });
-        expect(brief).toContain("slideshow");
-        // Should include human-readable label from PRESET_MAP
-        const label = presetLabel("slideshow");
-        expect(brief).toContain(label);
-    });
-
-    it("includes the preset label for videogame", () => {
-        const brief = buildNormalizedBrief({ businessName: "Game Inc", presetId: "videogame" });
-        expect(brief).toContain("videogame");
-        expect(brief).toContain(presetLabel("videogame"));
-    });
-
-    it("includes the preset label for landing page", () => {
-        const brief = buildNormalizedBrief({ businessName: "Acme", presetId: "landing" });
-        expect(brief).toContain("landing");
-        expect(brief).toContain(presetLabel("landing"));
-    });
-
-    it("falls back to raw presetId when not in catalog", () => {
-        const brief = buildNormalizedBrief({ businessName: "X", presetId: "custom-unknown" });
-        expect(brief).toContain("custom-unknown");
-    });
-});
-
-describe("buildNormalizedBrief — outputLanguage", () => {
-    it("includes the output language in the IDENTITY section", () => {
-        const brief = buildNormalizedBrief({ businessName: "X", presetId: "landing", outputLanguage: "de" });
-        expect(brief).toContain("de");
-        expect(brief).toContain("Output language");
-    });
-
-    it("defaults to 'en' when outputLanguage is absent", () => {
-        const brief = buildNormalizedBrief({ businessName: "X", presetId: "landing" });
-        expect(brief).toContain("en");
-    });
-});
-
-describe("buildNormalizedBrief — sections", () => {
-    it("includes GOAL section when primaryGoal is present", () => {
-        const brief = buildNormalizedBrief({ businessName: "X", presetId: "landing", primaryGoal: "Grow sales" });
-        expect(brief).toContain("[GOAL]");
-        expect(brief).toContain("Grow sales");
-    });
-
-    it("includes AUDIENCE section when present", () => {
-        const brief = buildNormalizedBrief({ businessName: "X", presetId: "landing", audience: "Tech professionals" });
-        expect(brief).toContain("[AUDIENCE]");
-        expect(brief).toContain("Tech professionals");
-    });
-
-    it("includes CONTACTS section when contactInfo is provided", () => {
+describe("buildNormalizedBrief", () => {
+    it("keeps the original request authoritative and emits every expressive section", () => {
         const brief = buildNormalizedBrief({
-            businessName: "X", presetId: "landing",
-            contactInfo: [{ key: "Email", value: "hi@x.com" }],
+            businessName: "Runner Lab",
+            presetId: "freerunner",
+            outputLanguage: "it",
+            sourceRequest: "Crea un infinite runner senza acquisti in-app.",
+            primaryGoal: "Un runner arcade completo.",
+            audience: "Studenti e giocatori casual.",
+            projectSummary: "Esperienza rapida ambientata in una scuola d'arte.",
+            contentStructure: "Start, tutorial, partita, game over e retry.",
+            contentRequirements: "Titolo, istruzioni, punteggio e record.",
+            functionalRequirements: "Corsa automatica, salto, ostacoli e collisioni.",
+            interactionModel: "Tastiera e touch con feedback immediato.",
+            visualDirection: "Collage editoriale ad alto contrasto.",
+            successCriteria: "Partita completa e rigiocabile senza ricaricare.",
+            constraints: "Responsive e accessibile da tastiera.",
+            mustAvoid: "Nessun acquisto in-app.",
         });
-        expect(brief).toContain("[CONTACTS]");
-        expect(brief).toContain("hi@x.com");
+
+        expect(brief).toContain("Free Runner (freerunner)");
+        expect(brief).toContain("[SOURCE_REQUEST]");
+        expect(brief).toContain("on conflict, this source request wins");
+        for (const section of ["[CONCEPT]", "[STRUCTURE]", "[CONTENT]", "[FUNCTIONS]", "[INTERACTIONS]", "[VISUAL_DIRECTION]", "[SUCCESS]", "[CONSTRAINTS]", "[MUST_AVOID]"]) {
+            expect(brief).toContain(section);
+        }
     });
 
-    it("includes footer with preset label and section count", () => {
+    it("uses the primary goal as source authority for backward-compatible manual drafts", () => {
         const brief = buildNormalizedBrief({
-            businessName: "X", presetId: "landing",
-            primaryGoal: "goal", audience: "audience",
+            businessName: "Acme",
+            presetId: "landing",
+            primaryGoal: "Preserva esattamente questa richiesta.",
+            audience: "Clienti",
         });
-        expect(brief).toContain("Structured brief — Guided Mode");
-        expect(brief).toContain("Sections: 2");
+        expect(brief).toContain("[SOURCE_REQUEST]");
+        expect(brief).toContain("Preserva esattamente questa richiesta.");
     });
 });

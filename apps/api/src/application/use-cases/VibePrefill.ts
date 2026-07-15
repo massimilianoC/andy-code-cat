@@ -10,6 +10,8 @@ import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
+import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
+import { inferDeterministicVibeTemplate } from "../prompting/vibeTemplateIntent";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -52,13 +54,14 @@ function normalizeLang(raw?: string | null): string {
 
 // ── Default draft ─────────────────────────────────────────────────────────────
 
-function defaultDraft(prompt: string, outputLanguage = "en", presetId = "landing"): ZeroEffortDraft {
+function defaultDraft(prompt: string, outputLanguage = "en", presetId = "neutral"): ZeroEffortDraft {
     const projectName = prompt.trim().slice(0, 64) || "Project";
     return {
         businessName: projectName,
         presetId,
         primaryGoal: prompt.trim().slice(0, 500) || "Modern, professional website.",
         audience: "General audience interested in this project.",
+        sourceRequest: prompt.trim().slice(0, 4000),
         outputLanguage,
     };
 }
@@ -74,7 +77,7 @@ function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" 
 
 // ── Prompts ───────────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a web project brief extractor.
+const SYSTEM_PROMPT = `You are a multi-format project brief architect.
 Given a user's free-form description of a project, return a JSON object that
 populates a structured project brief.
 
@@ -88,6 +91,15 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
   "tone": "communication tone, e.g. professional, playful (string or null)",
   "primaryCta": "main call-to-action button text (string or null)",
   "styleHint": "visual, UX, interaction, and production notes — 180 to 900 chars when useful (string or null)",
+  "projectSummary": "concise product/output concept and value proposition (string or null)",
+  "contentStructure": "ordered sections, screens, slides, scenes, steps, states or levels with purpose (string or null)",
+  "contentRequirements": "copy, data, entities, messages, assets and information that must appear (string or null)",
+  "functionalRequirements": "behaviors, mechanics, validation, calculations and user capabilities (string or null)",
+  "interactionModel": "navigation, controls, input methods, feedback, state transitions and edge cases (string or null)",
+  "visualDirection": "composition, hierarchy, palette, typography, imagery, motion and atmosphere (string or null)",
+  "successCriteria": "observable criteria for a complete and successful first generation (string or null)",
+  "constraints": "explicit limits, compatibility, accessibility, responsive, legal or content constraints (string or null)",
+  "mustAvoid": "things the result must not do, inferred only from explicit negative instructions (string or null)",
   "contactInfo": [{"key": "Email", "value": "..."}],
   "styleAttributes": ["minimal"]
 }
@@ -103,7 +115,7 @@ presetId guidance — choose the best match:
   a4poster        A4 print-ready poster or flyer
   infographic     data infographic / visual storytelling
   videogame       2D browser arcade or action game
-  freerunner      open canvas browser game / creative sandbox
+  freerunner      2D infinite/endless runner with continuous movement, obstacles, score and retry loop
   seriousgame     educational or training serious game
   game3d          3D WebGL browser game
   vr-aframe       WebVR / A-Frame immersive experience
@@ -125,6 +137,9 @@ Rules:
   Adapt to the chosen presetId: a videogame brief describes gameplay and controls;
   a slideshow brief describes slides and narrative arc; a form brief describes steps and fields.
 - audience: infer who uses or views the result; include needs, context, and expectations.
+- Fill every applicable expressive field. Prefer concrete ordered modules and behaviors over generic adjectives.
+- Preserve every explicit user fact, preference, requirement and prohibition. Enrichment is additive: never replace,
+  weaken or contradict a specific request with a generic best practice. Leave unknown facts unspecified.
 - If a Detected template block is present, its id takes priority as the presetId.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
@@ -211,7 +226,9 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
     // prefill LLM emits (which often collapses a specific template like "infographic" into a
     // generic siteType → "neutral"). The user can still change it in the zero-effort form
     // before launch. Without this anchor the identified template was silently lost.
-    const detectedPreset = detectedTemplateId && VALID_PRESET_IDS.has(detectedTemplateId) ? detectedTemplateId : "";
+    const deterministicPreset = inferDeterministicVibeTemplate(prompt)?.templateId ?? "";
+    const detectedPreset = deterministicPreset
+        || (detectedTemplateId && VALID_PRESET_IDS.has(detectedTemplateId) ? detectedTemplateId : "");
     let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
     const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
 
@@ -228,7 +245,7 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
         const presetId: string = detectedPreset
             || (VALID_PRESET_IDS.has(rawPreset)
                 ? rawPreset
-                : (SITE_TYPE_COMPAT[rawPreset] ?? "landing"));
+                : (SITE_TYPE_COMPAT[rawPreset] ?? "neutral"));
 
         const primaryGoal = typeof parsed.primaryGoal === "string" && parsed.primaryGoal.trim().length >= 8
             ? parsed.primaryGoal.trim().slice(0, 3000)
@@ -249,6 +266,21 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
         const styleHint = typeof parsed.styleHint === "string" && parsed.styleHint.trim()
             ? parsed.styleHint.trim().slice(0, 1000)
             : undefined;
+
+        const optionalBriefField = (key: string, max: number): string | undefined => {
+            const value = parsed[key];
+            return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined;
+        };
+        const sourceRequest = prompt.trim().slice(0, 4000);
+        const projectSummary = optionalBriefField("projectSummary", 1600);
+        const contentStructure = optionalBriefField("contentStructure", 2400);
+        const contentRequirements = optionalBriefField("contentRequirements", 2400);
+        const functionalRequirements = optionalBriefField("functionalRequirements", 2400);
+        const interactionModel = optionalBriefField("interactionModel", 1800);
+        const visualDirection = optionalBriefField("visualDirection", 1800);
+        const successCriteria = optionalBriefField("successCriteria", 1600);
+        const constraints = optionalBriefField("constraints", 1600);
+        const mustAvoid = optionalBriefField("mustAvoid", 1200);
 
         const rawContacts = Array.isArray(parsed.contactInfo) ? parsed.contactInfo : [];
         const contactInfo = rawContacts
@@ -272,12 +304,16 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
 
         // Validate with zod to ensure the draft is safe to use downstream
         const zodResult = zeroEffortLaunchSchema.safeParse({
-            businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage,
+            businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, sourceRequest,
+            projectSummary, contentStructure, contentRequirements, functionalRequirements, interactionModel,
+            visualDirection, successCriteria, constraints, mustAvoid, contactInfo, styleAttributes, outputLanguage,
         });
 
         const draft: ZeroEffortDraft = zodResult.success
             ? { ...zodResult.data, outputLanguage }
-            : { businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, contactInfo, styleAttributes, outputLanguage };
+            : { businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, sourceRequest,
+                projectSummary, contentStructure, contentRequirements, functionalRequirements, interactionModel,
+                visualDirection, successCriteria, constraints, mustAvoid, contactInfo, styleAttributes, outputLanguage };
 
         return { draft, confidence: 0.85 };
     } catch {
@@ -294,17 +330,18 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
             const partialPresetId = detectedPreset
                 || (VALID_PRESET_IDS.has(partialPresetRaw)
                     ? partialPresetRaw
-                    : (SITE_TYPE_COMPAT[partialPresetRaw] ?? "landing"));
+                    : (SITE_TYPE_COMPAT[partialPresetRaw] ?? "neutral"));
             const recoveredDraft: ZeroEffortDraft = {
                 businessName: partialName?.slice(0, 120) || prompt.trim().slice(0, 64) || "Project",
                 presetId: partialPresetId,
                 primaryGoal: partialGoal?.slice(0, 3000) || prompt.trim().slice(0, 500) || "Modern web project.",
                 audience: partialAudience?.slice(0, 1000) || "General audience.",
+                sourceRequest: prompt.trim().slice(0, 4000),
                 outputLanguage: normalizeLang(partialLangRaw ?? uiLanguage),
             };
             return { draft: recoveredDraft, confidence: 0.4 };
         }
-        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage), detectedPreset || "landing"), confidence: 0 };
+        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage), detectedPreset || "neutral"), confidence: 0 };
     }
 }
 
@@ -477,7 +514,14 @@ export class VibePrefill {
 
         // Use custom systemTemplate from platform config if set; fall back to hardcoded SYSTEM_PROMPT
         const defaultSystemPrompt = resolvedMode === "data_dashboard" ? DATA_DASHBOARD_SYSTEM_PROMPT : SYSTEM_PROMPT;
-        const basePrompt = taskSettings.systemTemplate?.trim() || defaultSystemPrompt;
+        const configuredPrompt = taskSettings.systemTemplate?.trim() || defaultSystemPrompt;
+        // Configuration can specialize the extractor but never erase the current schema
+        // and catalog contract. This also upgrades legacy persisted overrides safely.
+        const basePrompt = resolvedMode === "data_dashboard"
+            ? configuredPrompt
+            : taskSettings.systemTemplate?.trim()
+                ? `${configuredPrompt}\n\nCURRENT ZERO EFFORT OUTPUT CONTRACT:\n${SYSTEM_PROMPT}\n\n${buildCanonicalPresetSelectionRules()}`
+                : `${SYSTEM_PROMPT}\n\n${buildCanonicalPresetSelectionRules()}`;
         const contextLayers = [input.layerDContext, input.layerXDataContext].filter((value): value is string => Boolean(value && value.trim()));
         const systemPrompt = contextLayers.length > 0
             ? `${basePrompt}\n\n${contextLayers.join("\n\n")}`

@@ -10,6 +10,16 @@ export interface ZeroEffortLaunchInput {
     tone?: string;
     primaryCta?: string;
     styleHint?: string;
+    sourceRequest?: string;
+    projectSummary?: string;
+    contentStructure?: string;
+    contentRequirements?: string;
+    functionalRequirements?: string;
+    interactionModel?: string;
+    visualDirection?: string;
+    successCriteria?: string;
+    constraints?: string;
+    mustAvoid?: string;
     contactInfo?: Array<{ key: string; value: string }>;
     styleAttributes?: string[];
     /** BCP-47 output language directive (e.g. "it", "en", "fr"). */

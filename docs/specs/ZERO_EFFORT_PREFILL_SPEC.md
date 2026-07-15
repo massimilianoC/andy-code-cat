@@ -1,8 +1,8 @@
 # Zero-Effort LLM Prefill — Specification
 
-**Version:** 1.0  
+**Version:** 1.1
 **Status:** Implemented  
-**Date:** 2026-05-14  
+**Date:** 2026-07-13
 **Branch:** `feat/dashboard-lovable-chat`
 
 ---
@@ -217,3 +217,32 @@ No additional piping is needed — the LLM workspace context already includes pr
   the token counter and waits.
 - No new DB collections or domain entities needed.
 - The feature is additive: zero-effort manual mode is untouched.
+
+---
+
+## 13. Canonical preset context and expressive brief contract (v1.1)
+
+`VibeClassify` and `VibePrefill` consume the same canonical context generated from
+`PRESET_CATALOG` by `application/prompting/vibePresetCatalog.ts`. The AI selection catalog
+contains every censused preset, including specialist presets hidden from ordinary catalog UI.
+UI visibility (`isActive`) must not be reused as an intent-matching policy.
+
+Persisted superadmin system-template overrides are customization prefixes. The API always appends
+the current canonical catalog and output contract, so a legacy override cannot silently restore an
+obsolete website-only schema or remove newly supported presets and fields.
+
+The Zero Effort draft additionally carries:
+
+- `sourceRequest` — verbatim authority boundary for the original request;
+- `projectSummary`, `contentStructure`, `contentRequirements`;
+- `functionalRequirements`, `interactionModel`, `visualDirection`;
+- `successCriteria`, `constraints`, `mustAvoid`.
+
+The normalized brief emits these as separate semantic sections. Inferred content is additive only:
+it may clarify incomplete information but cannot weaken, remove, or contradict explicit user facts,
+preferences, requirements, or prohibitions. If a conflict exists, `[SOURCE_REQUEST]` wins.
+The `zero_effort_optimize` task always appends the same preservation contract even when an operator
+has configured a custom system template, preventing the optimization pass from degrading the brief.
+
+Specific runner intent in supported natural-language variants maps to `freerunner`; generic playable
+intent maps to `videogame`. Missing or invalid classification falls back to `neutral`, not `landing`.
