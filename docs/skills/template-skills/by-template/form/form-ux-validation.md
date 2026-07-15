@@ -32,6 +32,13 @@ prototype without backend submission.
 - Error messages must be readable and specific.
 - Keyboard navigation must work across steps.
 
+## Platform runtime craft
+
+When Layer V exposes the form capability, choose the smallest set of fields that fulfils the
+stated purpose. Use clear labels, sensible autocomplete hints, and short step descriptions.
+Layer V is the sole authority for slot markup and the `serviceManifest` protocol; do not restate
+or alter that structural contract here.
+
 ## Avoid
 
 - One long generic contact form.

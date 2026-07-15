@@ -18,6 +18,7 @@ The Layer 1 (chat-preview) pipeline composes the system prompt in the following 
 |---|---|---|---|
 | **A** | `buildBaseConstraintsLayer()` in `systemPromptLayers.ts` | **Architecture** (human maintainer or architecture agent) | Immutable **technical** floor: 1+1+1 output format, CDN-only, no framework, JS exclusively in artifacts.js, HTML compactness, visibility-without-JS, canvas/engine container safety, accessibility baseline, **completeness & ship-readiness contract** (every output a complete, publish-ready, fully-functional POC/MVP — never a skeleton or deferred-to-next-steps stub; token efficiency never reduces scope). **No layout/viewport/document-structure directives** (those belong to Layer B). Responsiveness is stated only as a soft, overridable default. |
 | **B** | `buildPresetLayerFromPreset()` in `systemPromptLayers.ts` | **Preset agent** | `outputSpec.systemPromptModule` + `cssConstraints` + the deterministic **VIEWPORT MODE** block derived from `outputSpec.viewportModel` (`buildViewportModeBlock`). Owns all layout/viewport/document-structure framing — never free text |
+| **V** | `buildServiceContractLayer()` in `systemPromptLayers.ts` | **Service-contract agent** | Non-editable, deterministic structural protocols for enabled artifact services: versioned JSON envelope, slots, limits and forbidden executable/configuration values. |
 | **S** | `resolveFilesystemTemplateSkills()` in `templateSkillsLayer.ts`, passed as `skillsLayer` to `composeSystemPromptWithLayers()` | **Template skills agent** | Curated Markdown manuals selected by current `ProjectPreset.id` from `docs/skills/template-skills/by-template/<presetId>/*.md`. Owns template-specific craft, UX, style, interaction, and review guidance. Must stay budget-capped and file-backed. |
 | **C** | `buildStyleContextBlock()` in `styleContextBuilder.ts` | **Style / moodboard agent** | Visual tags, palette, typography, layout, tone — no technical rules |
 | **D** | `buildProjectKnowledgeLayer()` *(to be implemented)* in `systemPromptLayers.ts` | **Context / embed agent** | Asset enrichment traces, document briefs, fetched resource snippets — pure content, no technical rules |
@@ -122,6 +123,17 @@ than emitting the JSON artifact.
 - **`PP-019` SHOULD:** prefer compact imperative wording over anxious phrasing such as repeated
   "final authority", "non-editable", or multi-step self-audit instructions unless the rule must
   genuinely override an editable template.
+
+### 3.7 Service contract ownership (PP-022)
+
+- **`PP-022` MUST:** keep versioned service envelopes, slot syntax, field allowlists and limits in
+  deterministic Layer V and the shared contracts package.
+- **`PP-022` MUST NOT:** place recipients, endpoints, secrets, retention policy, tenant settings,
+  or executable handlers in any prompt layer.
+- **`PP-022` MUST NOT:** let Layer S redefine the service envelope. Layer S may provide only
+  preset-specific craft and UX guidance within Layer V's capabilities.
+- The provider structured-output schema and runtime validation must derive from the same shared
+  contract version.
 
 ---
 
@@ -294,24 +306,23 @@ Implemented per `docs/specs/PROMPT_LAYER_SSOT_SPEC.md` /
 
 ## 9. Exact Sent-Prompt Trace Parity (PP-021)
 
-- **`PP-021` MUST:** `promptingTrace.messagesSentToLlm` persist the complete,
-  ordered message array supplied to the provider. It is the authoritative audit
-  record for the real request, not a reconstruction.
-- **`PP-021` MUST:** `promptingTrace.effectiveSystemPrompt` be byte-identical to
-  the system-message content in `messagesSentToLlm`.
-- **`PP-021` MUST:** `promptingTrace.layers` contain one entry for every
-  `PROMPT_LAYER_DESCRIPTORS` item in canonical order, including layers with
-  `chars: 0` and source `empty`. Every non-empty span must slice the exact
-  marker-wrapped segment from `effectiveSystemPrompt`.
-- **`PP-021` MUST:** the Prompt Inspector render persisted `promptingTrace` for a
-  completed request and label a `/llm/prompt-preview` result only as a dry-run
-  estimate for the next request.
-- **`PP-021` MUST NOT:** focused-mode, governance, model, capability, or runtime
-  prompt text be appended after `composeSystemPromptWithLayers()`. Such text
-  must have a registered descriptor, marker, source, span, Mongo trace entry,
-  and UI row.
-- **`PP-021` MUST:** once Layer V is integrated, register it in
-  `PROMPT_LAYER_DESCRIPTORS` and expose it in every trace, including as an empty
-  row when no service capability is active. Missing Layer V from the registry,
-  omitting `layers[]`, truncating prompt text, or storing a system prompt that
+- **`PP-021` MUST:** `promptingTrace.messagesSentToLlm` persist the complete, ordered message array
+  supplied to the provider. It is the authoritative audit record, not a reconstruction.
+- **`PP-021` MUST:** `promptingTrace.effectiveSystemPrompt` be byte-identical to the system-message
+  content in `messagesSentToLlm`.
+- **`PP-021` MUST:** `promptingTrace.layers` contain every `PROMPT_LAYER_DESCRIPTORS` item in
+  canonical order, including entries with `chars: 0` and source `empty`. Every non-empty span must
+  slice the exact marker-wrapped segment from `effectiveSystemPrompt`.
+- **`PP-021` MUST:** Layer V appear in every trace, including as an empty row when no capability is
+  active. Missing Layer V, omitted layers, truncated prompt text, or a stored system prompt that
   differs from the provider message is a trace-integrity failure.
+- **`PP-021` MUST:** the Prompt Inspector render persisted `promptingTrace` for a completed request
+  and label `/llm/prompt-preview` only as a dry-run estimate for the next request.
+- **`PP-021` MUST NOT:** focused-mode, governance, model, capability, or runtime prompt text be
+  appended after `composeSystemPromptWithLayers()`. Register such text as a descriptor with a
+  marker, source and span before provider send.
+- **`PP-021` MUST:** use Layer Q (`focused-edit-protocol`) for focused edit instructions and
+  focused governance. Layer Q remains present with `chars: 0` and source `empty` for normal
+  generation.
+- **`PP-021` MUST:** run `assertPromptTraceParity()` against the exact messages before the provider
+  call. The frontend must not reconstruct missing legacy layers from prompt markers.

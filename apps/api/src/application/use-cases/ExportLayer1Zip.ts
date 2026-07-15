@@ -13,6 +13,9 @@ import { buildFullDoc, captureHtml } from "../../infra/capture/PuppeteerCaptureS
 import { env } from "../../config";
 import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
 import { SystemNotifier } from "../services/SystemNotifier";
+import type { ProjectFormSettings } from "../../domain/entities/Project";
+import { prepareArtifactServices } from "../platform-runtime/prepareArtifactServices";
+import { assertGeneratedJavaScriptSyntax } from "../artifacts/generatedJavaScriptSyntax";
 
 // ---------------------------------------------------------------------------
 // Post-processor: separates inline CSS/JS from HTML artifacts
@@ -319,6 +322,7 @@ export class ExportLayer1Zip {
         projectName: string;
         snapshotId?: string;
         conversationId?: string;
+        formSettings?: ProjectFormSettings;
     }): Promise<ExportRecord & { downloadToken: string; downloadUrl: string }> {
         // Resolve snapshot
         let snapshot;
@@ -381,11 +385,20 @@ export class ExportLayer1Zip {
         }
 
         // Post-process artifacts
-        const processed = postProcess(snapshot.artifacts);
+        assertGeneratedJavaScriptSyntax(snapshot.artifacts.js);
+        const formRuntime = prepareArtifactServices({
+            artifacts: snapshot.artifacts,
+            serviceManifest: snapshot.serviceManifest,
+            formSettings: input.formSettings,
+            delivery: "external-files",
+        });
+        const processed = postProcess(formRuntime.artifacts);
 
         const filesIncluded: string[] = ["index.html"];
         if (processed.css.trim()) filesIncluded.push("style.css");
         if (processed.js.trim()) filesIncluded.push("script.js");
+        if (formRuntime.compiledFormIds.length > 0) filesIncluded.push("serviceManifest.json");
+        filesIncluded.push(...Object.keys(formRuntime.runtimeFiles));
         filesIncluded.push("preview-screenshot.jpg", "preview-screenshot.pdf", "README.md");
 
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
@@ -417,10 +430,16 @@ export class ExportLayer1Zip {
             const zipPath = this.storage.exportZipPath(input.userId, input.projectId, record.id);
 
             // Capture JPG and PDF screenshots in parallel
+            const captureRuntime = prepareArtifactServices({
+                artifacts: snapshot.artifacts,
+                serviceManifest: snapshot.serviceManifest,
+                formSettings: input.formSettings,
+                delivery: "inline-preview",
+            });
             const captureHtmlDoc = buildFullDoc(
-                snapshot.artifacts.html,
-                snapshot.artifacts.css,
-                snapshot.artifacts.js
+                captureRuntime.artifacts.html,
+                captureRuntime.artifacts.css,
+                captureRuntime.artifacts.js,
             );
             const [captureJpg, capturePdf] = await Promise.all([
                 captureHtml(captureHtmlDoc, "jpg").catch(() => null),
@@ -432,7 +451,11 @@ export class ExportLayer1Zip {
                 "style.css": processed.css,
                 "script.js": processed.js,
                 "README.md": readme,
+                ...formRuntime.runtimeFiles,
             };
+            if (formRuntime.compiledFormIds.length > 0 && snapshot.serviceManifest) {
+                files["serviceManifest.json"] = JSON.stringify(snapshot.serviceManifest, null, 2);
+            }
             if (captureJpg) files["preview-screenshot.jpg"] = captureJpg;
             if (capturePdf) files["preview-screenshot.pdf"] = capturePdf;
 

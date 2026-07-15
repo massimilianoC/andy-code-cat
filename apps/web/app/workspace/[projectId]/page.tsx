@@ -2190,11 +2190,13 @@ function WorkspacePageContent() {
                     const snap = await createPreviewSnapshot(token, projectId, {
                         conversationId: convId,
                         sourceMessageId: assistantSaved.message.id,
+                        parentSnapshotId: selectedBackendSnapshotIdRef.current ?? undefined,
                         artifacts: {
                             html: llm.structured.artifacts.html ?? "",
                             css: llm.structured.artifacts.css ?? "",
                             js: llm.structured.artifacts.js ?? "",
                         },
+                        serviceManifest: llm.structured.serviceManifest,
                         // In focused-patch mode the rawResponse has artifacts.html=""; the
                         // server already merged the patch and returned full HTML via
                         // structured.artifacts. Sending rawResponse here would cause the

@@ -64,7 +64,7 @@ export interface MessageDto {
                 role: "system" | "user";
                 content: string;
             }>;
-            /** Structured system-prompt layer breakdown, in composition order. Absent for legacy traces or focused-mode edits. */
+            /** Structured system-prompt layer breakdown, in composition order. Absent only for legacy traces. */
             layers?: PromptLayerEntryDto[];
         };
         generatedArtifacts?: {

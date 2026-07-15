@@ -6,6 +6,10 @@
 > **Implementation plan:** [Form Runtime + BaaS Delivery](../specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md)
 > **Legacy parent spec:** [BaaS Services Layer](../specs/BAAS_SERVICES_SPEC.md)
 
+The bounded local `mailto` foundation is implemented in the integration candidate through Layer V,
+`service-manifest-v1`, `runtime-plan-v1` and allowlisted browser assets. Public `relay`, `capture`
+and the broader networked capability catalog remain deferred until their roadmap gate is reopened.
+
 This document is the current source of truth for capability-runtime boundaries, tenant data
 isolation and the order in which BaaS services should be introduced. Where the older BaaS spec
 describes LLM-generated SDK calls, direct public notification/webhook triggers, or one-off

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { llmFocusContextSchema } from "./llm";
 import { mediaResolutionMetadataSchema } from "./mediaResolution";
 import { dataDashboardArtifactMetadataSchema } from "./datasetBindings";
+import { serviceManifestSchema } from "./serviceManifest";
 
 export const previewArtifactsSchema = z.object({
     html: z.string().max(10000000),
@@ -36,6 +37,7 @@ export const createPreviewSnapshotSchema = z.object({
     sourceMessageId: z.string().min(1).optional(),
     parentSnapshotId: z.string().min(1).optional(),
     artifacts: previewArtifactsSchema,
+    serviceManifest: serviceManifestSchema.optional(),
     rawLlmResponse: z.string().max(500000).optional(),
     focusContext: llmFocusContextSchema.optional(),
     metadata: previewSnapshotMetadataSchema,
@@ -61,6 +63,7 @@ export interface PreviewSnapshotDto {
         css: string;
         js: string;
     };
+    serviceManifest?: import("./serviceManifest").ServiceManifestV1;
     focusContext?: {
         mode: "project" | "preview-element" | "code-selection";
         targetType: "html" | "css" | "js" | "component" | "section";

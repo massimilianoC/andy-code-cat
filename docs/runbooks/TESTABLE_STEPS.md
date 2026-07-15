@@ -98,6 +98,33 @@
 - Save for `productKey = default`
 - Expected: success state in UI and persisted values returned by `GET /v1/admin/config`
 
+### Step 11b - Declarative Form Runtime (mailto)
+
+- Configure `PUT /v1/projects/:projectId/services/forms` with bearer token and matching
+  `x-project-id`; use `mode: "mailto"`, a recipient, and an HTTPS privacy notice.
+- Generate or save an artifact with a `service-manifest-v1` and a matching
+  `data-pf-form-id` slot.
+- Expected: preview/capture load distinct platform script elements before generated JS; publish
+  and ZIP contain `pf-runtime-core.v1.js`, `pf-runtime-config.v1.js`, `pf-forms-ui.v1.js`, and
+  `pf-forms-mailto.v1.js` plus a matching `runtime-plan-v1` in API responses.
+- Expected: submission requests an email draft and asks the visitor to verify the email app; no
+  form data is sent to or persisted by the API, and `pf:mailto` contains no values or complete URI.
+- Save invalid generated JS with `activate: false`: preview form runtime still mounts. Activation,
+  publish and ZIP must return `422` mentioning invalid `artifacts.js`.
+- Change the recipient after snapshot creation, then fetch the same snapshot again.
+- Expected: the preview runtime contains the new recipient and not the previous recipient, proving
+  that canonical snapshots do not persist compiled tenant configuration.
+- Reopen a legacy snapshot whose `artifacts.js` ends with the historical `form-runtime-v1`
+  mailto IIFE. Expected: delivery removes that exact suffix and emits the separate v1 runtime
+  files; a similar incomplete or non-terminal project script is left untouched.
+- For a multi-step manifest, verify required fields block Continue/Submit and Back/Continue update
+  the announced step count.
+- Verify: a different user or a mismatched project header receives a sandbox denial.
+- Automated isolated gate:
+  `npx playwright test tests/e2e/form-runtime.spec.ts --project=chromium` with
+  `E2E_API_URL` and `E2E_BASE_URL` pointing at the isolated stack documented in
+  `docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md`.
+
 ### Step 11b - Backward Compatibility of Platform Config
 
 - Call `PATCH /v1/admin/config` with payload containing only legacy fields:
@@ -406,7 +433,11 @@ This gate verifies the filesystem-backed Layer S resolver.
 
 - Click `Use in prompt` and send a message such as "optimize this block"
 - Expected: request backend include `focusContext.mode = "preview-element"`
-- Expected: tracing `messagesSentToLlm` contains the focus block
+- Expected: tracing `messagesSentToLlm` contains the focus block inside registered Layer Q; Layer Q
+  is an empty row for non-focused requests.
+- Verify: `effectiveSystemPrompt` is byte-identical to `messagesSentToLlm[0].content`, every
+  descriptor is present in canonical order, and every non-empty span slices its complete marker
+  block. A mismatch must fail before the provider call.
 
 ### Step 15 - Code Selection Focus
 

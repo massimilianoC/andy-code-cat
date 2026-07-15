@@ -1,0 +1,165 @@
+{
+  "_comment": "Static tips seed — source of truth for TipsPanel content. Update i18n/en.json and i18n/it.json accordingly.",
+  "tips": [
+    {
+      "id": "tip-style-profile",
+      "type": "tip",
+      "icon": "🎨",
+      "key": "style_profile",
+      "translations": {
+        "en": {
+          "title": "Complete your style profile",
+          "body": "Select style tags in onboarding to get AI generations that match your visual identity."
+        },
+        "it": {
+          "title": "Completa il profilo stile",
+          "body": "Seleziona i tag di stile nell'onboarding per ottenere generazioni AI coerenti con la tua identità visiva."
+        }
+      }
+    },
+    {
+      "id": "tip-duplicate",
+      "type": "tip",
+      "icon": "📋",
+      "key": "duplicate",
+      "translations": {
+        "en": {
+          "title": "Duplicate before you experiment",
+          "body": "Use 'Duplicate' from the project menu to keep a safe copy before making big changes."
+        },
+        "it": {
+          "title": "Duplica prima di sperimentare",
+          "body": "Usa 'Duplica' dal menu progetto per conservare una copia sicura prima di grandi modifiche."
+        }
+      }
+    },
+    {
+      "id": "tip-prompt-reuse",
+      "type": "tip",
+      "icon": "💬",
+      "key": "prompt_reuse",
+      "translations": {
+        "en": {
+          "title": "Reuse your best prompts",
+          "body": "Use 'Copy prompt' to transfer your instruction system to a new project without rewriting it."
+        },
+        "it": {
+          "title": "Riutilizza i tuoi prompt migliori",
+          "body": "Usa 'Copia prompt' per trasferire il tuo sistema di istruzioni in un nuovo progetto senza riscriverlo."
+        }
+      }
+    },
+    {
+      "id": "tip-iterative",
+      "type": "tip",
+      "icon": "🔄",
+      "key": "iterative",
+      "translations": {
+        "en": {
+          "title": "Describe changes naturally",
+          "body": "Just tell the AI what to change: 'Make it more minimal', 'Add a CTA', 'Use warmer colors'. No code needed."
+        },
+        "it": {
+          "title": "Descrivi le modifiche in modo naturale",
+          "body": "Dì all'AI cosa cambiare: 'Rendilo più minimal', 'Aggiungi una CTA', 'Usa colori più caldi'. Nessun codice necessario."
+        }
+      }
+    },
+    {
+      "id": "tip-workspace",
+      "type": "tip",
+      "icon": "🗂️",
+      "key": "workspace_isolation",
+      "translations": {
+        "en": {
+          "title": "Organize projects by workspace",
+          "body": "Create separate workspaces for each client or brand to keep prompts and styles isolated."
+        },
+        "it": {
+          "title": "Organizza i progetti per workspace",
+          "body": "Crea workspace separati per ogni cliente o brand per mantenere prompt e stili isolati."
+        }
+      }
+    },
+    {
+      "id": "news-streaming",
+      "type": "news",
+      "icon": "⚡",
+      "key": "streaming",
+      "translations": {
+        "en": {
+          "title": "Real-time AI streaming",
+          "body": "Responses now appear progressively as they are generated — no more waiting for the full output."
+        },
+        "it": {
+          "title": "Streaming AI in tempo reale",
+          "body": "Le risposte appaiono progressivamente mentre vengono generate — niente più attesa per l'output completo."
+        }
+      }
+    },
+    {
+      "id": "news-publish",
+      "type": "news",
+      "icon": "🚀",
+      "key": "publish",
+      "translations": {
+        "en": {
+          "title": "Publish your site in one click",
+          "body": "Project ready? Hit 'Publish' in the editor to make it live instantly on your subdomain."
+        },
+        "it": {
+          "title": "Pubblica il tuo sito con un click",
+          "body": "Progetto pronto? Premi 'Pubblica' nell'editor per renderlo live istantaneamente sul tuo sottodominio."
+        }
+      }
+    },
+    {
+      "id": "tip-model-choice",
+      "type": "tip",
+      "icon": "🤖",
+      "key": "model_choice",
+      "translations": {
+        "en": {
+          "title": "Choose the right AI model",
+          "body": "Different models suit different tasks. Use a faster model for quick iterations and a powerful one for final quality."
+        },
+        "it": {
+          "title": "Scegli il modello AI giusto",
+          "body": "Modelli diversi si adattano a compiti diversi. Usa un modello veloce per iterare e uno più potente per la qualità finale."
+        }
+      }
+    },
+    {
+      "id": "shortcut-save",
+      "type": "shortcut",
+      "icon": "⌨️",
+      "key": "save_snapshot",
+      "translations": {
+        "en": {
+          "title": "Save a snapshot with Ctrl+S",
+          "body": "Press Ctrl+S in the editor to save a snapshot you can return to at any time."
+        },
+        "it": {
+          "title": "Salva uno snapshot con Ctrl+S",
+          "body": "Premi Ctrl+S nell'editor per salvare uno snapshot a cui puoi tornare in qualsiasi momento."
+        }
+      }
+    },
+    {
+      "id": "tip-rollback",
+      "type": "tip",
+      "icon": "↩️",
+      "key": "rollback",
+      "translations": {
+        "en": {
+          "title": "Roll back to any snapshot",
+          "body": "Open the history panel to see all saved snapshots and restore any previous version of your project."
+        },
+        "it": {
+          "title": "Torna a qualsiasi snapshot",
+          "body": "Apri il pannello cronologia per vedere tutti gli snapshot salvati e ripristinare qualsiasi versione precedente del progetto."
+        }
+      }
+    }
+  ]
+}

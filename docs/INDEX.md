@@ -34,6 +34,7 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) | Current implementation shape: services, route surface, frontend modes, media/storage, and governance baseline |
+| [docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md](architecture/PLATFORM_CAPABILITY_RUNTIME.md) | Declarative capability boundary, runtimePlan registry, separate browser assets, generated-JS gate, and mailto privacy contract |
 | [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) | Layer 1 preview flow, Layer 2 generation pipeline, and transition mechanics |
 | [docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md](architecture/PLATFORM_CAPABILITY_RUNTIME.md) | Current deferred-R4 architecture decision for declarative capabilities, Layer V/runtime separation, tenant/project/capability data scope, Forms Inbox, GDPR tooling, secure automations and service roadmap |
 | [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, and operational security rules |
@@ -126,6 +127,7 @@ Read in this order before making changes:
 | [docs/specs/IMAGE_PROMPTING_PIPELINE_SPEC.md](specs/IMAGE_PROMPTING_PIPELINE_SPEC.md) | Structured image prompting, context enrichment, and versioning-aligned pipeline |
 | [docs/specs/BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | Broad BaaS capability catalog; historical SDK sketches are superseded by the Platform Capability Runtime decision and event-driven security model |
 | [docs/specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md](specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md) | Agent-executable first capability: declarative forms, mailto/relay/capture, scoped Forms Inbox persistence, Layer V/runtime parity, privacy policy, tests and delivery waves |
+| [docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md](specs/FORM_RUNTIME_MAILTO_FOUNDATION.md) | Definitive mailto v1 form runtime: Layer V ownership, canonical snapshots, owner configuration, deterministic multi-step compilation, and isolated E2E |
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
 | [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-model platform playbook |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin controls and platform governance |

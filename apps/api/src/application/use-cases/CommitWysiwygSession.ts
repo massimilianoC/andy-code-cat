@@ -26,6 +26,8 @@ export class CommitWysiwygSession {
         const session = await this.wysiwygRepo.findById(input.sessionId, input.projectId);
         if (!session || session.status !== "active") return null;
 
+        const originSnapshot = await this.snapshotRepo.findById(session.projectId, session.originSnapshotId);
+
         const snapshot = await this.snapshotRepo.create({
             projectId: session.projectId,
             conversationId: session.conversationId,
@@ -35,6 +37,7 @@ export class CommitWysiwygSession {
                 css: session.currentCss,
                 js: session.currentJs,
             },
+            serviceManifest: originSnapshot?.serviceManifest,
             metadata: {
                 finishReason: "wysiwyg-edit-light",
                 wysiwygSessionId: session.id,

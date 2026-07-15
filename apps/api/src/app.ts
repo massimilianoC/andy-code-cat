@@ -26,6 +26,7 @@ import { createVibecoreRoutes } from "./presentation/http/routes/vibecoreRoutes"
 import { createNotificationRoutes } from "./presentation/http/routes/notificationRoutes";
 import { createDatasetRoutes } from "./presentation/http/routes/datasetRoutes";
 import { createDidacticRoutes } from "./presentation/http/routes/didacticRoutes";
+import { createFormServiceRoutes } from "./presentation/http/routes/formServiceRoutes";
 
 export function createApp() {
     const app = express();
@@ -74,6 +75,7 @@ export function createApp() {
     // that apply global authMiddleware, otherwise the public route is blocked)
     app.use("/v1", createUserProfileRoutes());
     app.use("/v1", createProjectRoutes());
+    app.use("/v1", createFormServiceRoutes());
     app.use("/v1", createConversationRoutes());
     app.use("/v1", createLlmRoutes());
     app.use("/v1", createPreviewSnapshotRoutes());

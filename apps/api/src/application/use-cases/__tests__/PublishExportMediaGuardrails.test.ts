@@ -16,6 +16,16 @@ const unresolvedSnapshot: PreviewSnapshot = {
     createdAt: new Date("2026-05-29T00:00:00.000Z"),
 };
 
+const invalidJavaScriptSnapshot: PreviewSnapshot = {
+    ...unresolvedSnapshot,
+    id: "snapshot-invalid-js",
+    artifacts: {
+        html: "<main>Preview</main>",
+        css: "",
+        js: 'const ready = true;\n{ "version": "media-manifest-v1" }',
+    },
+};
+
 function createSnapshotRepo(snapshot: PreviewSnapshot) {
     return {
         findById: vi.fn(async () => snapshot),
@@ -197,5 +207,54 @@ describe("publish/export unresolved media guardrails", () => {
             sourceEventType: "export_blocked_unresolved_media",
             metadata: expect.objectContaining({ unresolvedMediaKeys: ["hero-main"] }),
         }));
+    });
+
+    it("blocks invalid generated JavaScript before publish writes", async () => {
+        const { PublishProject } = await import("../PublishProject");
+        const deploymentRepo = {
+            findActiveByProjectId: vi.fn(async () => null),
+            isPublishIdTaken: vi.fn(async () => false),
+            create: vi.fn(),
+        };
+        const storage = { writePublishFiles: vi.fn() };
+        const useCase = new PublishProject(
+            deploymentRepo as any,
+            createSnapshotRepo(invalidJavaScriptSnapshot) as any,
+            storage as any,
+        );
+
+        await expect(useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            snapshotId: invalidJavaScriptSnapshot.id,
+        })).rejects.toMatchObject({ statusCode: 422, code: "INVALID_GENERATED_JAVASCRIPT" });
+
+        expect(storage.writePublishFiles).not.toHaveBeenCalled();
+        expect(deploymentRepo.create).not.toHaveBeenCalled();
+    });
+
+    it("blocks invalid generated JavaScript before export records or ZIP files", async () => {
+        process.env.MONGODB_URI = "mongodb://localhost:27017/test";
+        process.env.JWT_ACCESS_SECRET = "test-access-secret";
+        process.env.JWT_REFRESH_SECRET = "test-refresh-secret";
+        process.env.EXPORT_JWT_SECRET = "test-export-secret";
+        const { ExportLayer1Zip } = await import("../ExportLayer1Zip");
+        const exportRepo = { create: vi.fn(), updateFailed: vi.fn(), updateReady: vi.fn() };
+        const storage = { exportZipPath: vi.fn(() => "unused.zip"), ensureDir: vi.fn() };
+        const useCase = new ExportLayer1Zip(
+            exportRepo as any,
+            createSnapshotRepo(invalidJavaScriptSnapshot) as any,
+            storage as any,
+        );
+
+        await expect(useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            projectName: "Project",
+            snapshotId: invalidJavaScriptSnapshot.id,
+        })).rejects.toMatchObject({ statusCode: 422, code: "INVALID_GENERATED_JAVASCRIPT" });
+
+        expect(exportRepo.create).not.toHaveBeenCalled();
+        expect(storage.ensureDir).not.toHaveBeenCalled();
     });
 });

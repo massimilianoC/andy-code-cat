@@ -6,6 +6,9 @@ import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAs
 import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 import type { PublishHistoryRepository } from "../../domain/repositories/PublishHistoryRepository";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
+import type { ProjectFormSettings } from "../../domain/entities/Project";
+import { prepareArtifactServices } from "../platform-runtime/prepareArtifactServices";
+import { assertGeneratedJavaScriptSyntax } from "../artifacts/generatedJavaScriptSyntax";
 import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
 import { SystemNotifier } from "../services/SystemNotifier";
 import { buildPublishedDatasetBindingPackage } from "../datasets/PublishedDatasetBindings";
@@ -231,6 +234,7 @@ export interface PublishProjectInput {
     customSlug?: string;
     /** Preset ID of the project — used to resolve governance injections at publish time. */
     presetId?: string | null;
+    formSettings?: ProjectFormSettings;
 }
 
 export class PublishProject {
@@ -271,7 +275,7 @@ export class PublishProject {
         const existing = await this.deploymentRepo.findActiveByProjectId(input.projectId);
 
         if (existing) {
-            return this.republish(existing, snapshot.id, snapshot.artifacts, snapshot.metadata, input.userId, input.projectId, input.customSlug, input.presetId);
+            return this.republish(existing, snapshot.id, snapshot.artifacts, snapshot.serviceManifest, snapshot.metadata, input.userId, input.projectId, input.customSlug, input.presetId, input.formSettings);
         }
 
         // 4. Generate publish ID
@@ -279,7 +283,14 @@ export class PublishProject {
         const url = `/p/${publishId}`;
 
         // 5. Post-process artifacts and inject cache-busting version hash
-        const rawProcessed = postProcess(snapshot.artifacts);
+        assertGeneratedJavaScriptSyntax(snapshot.artifacts.js);
+        const formRuntime = prepareArtifactServices({
+            artifacts: snapshot.artifacts,
+            serviceManifest: snapshot.serviceManifest,
+            formSettings: input.formSettings,
+            delivery: "external-files",
+        });
+        const rawProcessed = postProcess(formRuntime.artifacts);
         const processed = {
             html: normalizePublishedMediaUrls(rawProcessed.html),
             css: normalizePublishedMediaUrls(rawProcessed.css),
@@ -303,6 +314,7 @@ export class PublishProject {
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;
         if (processed.js) files["script.js"] = processed.js;
+        Object.assign(files, formRuntime.runtimeFiles);
         const datasetPackage = this.assetRepository
             ? await buildPublishedDatasetBindingPackage({
                 publishId,
@@ -356,15 +368,24 @@ export class PublishProject {
         existing: SiteDeployment,
         snapshotId: string,
         artifacts: { html: string; css: string; js: string },
+        serviceManifest: import("@andy-code-cat/contracts").ServiceManifestV1 | undefined,
         metadata: import("../../domain/entities/PreviewSnapshot").PreviewSnapshotMetadata | undefined,
         userId: string,
         projectId: string,
         newCustomSlug?: string,
         presetId?: string | null,
+        formSettings?: ProjectFormSettings,
     ): Promise<SiteDeployment> {
         this.assertPublishableMedia(artifacts, { projectId, userId, snapshotId });
 
-        const rawProcessed = postProcess(artifacts);
+        assertGeneratedJavaScriptSyntax(artifacts.js);
+        const formRuntime = prepareArtifactServices({
+            artifacts,
+            serviceManifest,
+            formSettings,
+            delivery: "external-files",
+        });
+        const rawProcessed = postProcess(formRuntime.artifacts);
         const processed = {
             html: normalizePublishedMediaUrls(rawProcessed.html),
             css: normalizePublishedMediaUrls(rawProcessed.css),
@@ -387,6 +408,7 @@ export class PublishProject {
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;
         if (processed.js) files["script.js"] = processed.js;
+        Object.assign(files, formRuntime.runtimeFiles);
         const datasetPackage = this.assetRepository
             ? await buildPublishedDatasetBindingPackage({
                 publishId: existing.publishId,
