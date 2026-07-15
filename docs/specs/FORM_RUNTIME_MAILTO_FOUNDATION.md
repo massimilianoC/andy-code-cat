@@ -5,14 +5,15 @@ disabled.
 
 ## Architectural decision
 
-The feature is split into three independently versioned concerns:
+The feature is split into four independently versioned concerns:
 
 1. `service-manifest-v1` is the immutable, declarative artifact contract emitted by the LLM.
 2. `Project.serviceConfig.forms` is private owner configuration protected by JWT and the project
    sandbox.
-3. The `FormRuntimeAdapter` registry selects an explicitly supported platform mode and
-   `FormRuntimeCompiler` combines the two only at a delivery boundary: preview response,
-   thumbnail, publish, or ZIP export.
+3. `runtime-plan-v1` is the public, non-secret list of exact allowlisted assets, versions,
+   dependencies and SHA-256 content hashes.
+4. `prepareArtifactServices()` resolves the adapter and platform registry at the delivery
+   boundary: preview response, thumbnail, publish, or ZIP export.
 
 Snapshots store the original HTML slot plus manifest, never the compiled runtime or recipient.
 This preserves snapshot immutability, avoids leaking owner configuration into prompting, and lets
@@ -25,6 +26,9 @@ an owner change the recipient or privacy notice without another LLM generation.
   recipients, secrets, and custom submission code.
 - **Layer S — Template skills** owns form craft: field minimisation, labels, autocomplete,
   accessibility, and UX review. It must not restate or redefine the structural protocol.
+- **Layer Q — Focused edit protocol** owns focused element/selection instructions and focused
+  governance. It is composed and traced before provider send, never appended through a hidden
+  route path.
 - The provider structured-output schema uses the same full contract exported by
   `packages/contracts/src/serviceManifest.ts`.
 
@@ -44,13 +48,20 @@ source is visible in the normal prompt trace. There is no second hidden prompt p
 ## Deterministic runtime behaviour
 
 - The compiler fails closed with `422` when a declared slot is absent or duplicated.
+- Platform behaviour ships as separate core, config, forms UI and mailto scripts. It is never
+  concatenated into generated `artifacts.js` or published `script.js`.
+- The delivery boundary strips only a complete, fingerprinted legacy `form-runtime-v1` suffix
+  previously appended to `artifacts.js`; incomplete, embedded or unrelated project code is kept.
+- Generated JavaScript is parsed without execution and invalid code is blocked before activation,
+  publish, and ZIP export with an actionable `422` diagnostic.
 - Multi-step forms render as accessible fieldsets with Back/Continue navigation.
 - Native field constraints are checked before advancing and before delivery.
 - Submission builds a local `mailto:` draft; values are not sent to or persisted by the API.
-- The runtime reports only that a draft was opened, never that a message was sent.
-- Long payloads are copied locally when possible instead of constructing an oversized URI.
-- A cancelable `pf:mailto` browser event exposes the proposed URI for host integration and
-  deterministic testing; preventing it suppresses external-protocol navigation.
+- The runtime reports only that draft opening was requested, never that a client opened or sent it.
+- Long payloads are copied locally when possible; failed clipboard access renders a manual-copy
+  field instead of claiming success.
+- `pf:mailto` is cancelable but PII-free. It exposes form ID, mode, status and URI length, never
+  submitted values, recipient, or the complete URI; preventing it suppresses protocol navigation.
 
 ## Owner UI
 
@@ -73,8 +84,8 @@ configuration, not an LLM artifact editor or a required generation step.
 ## Acceptance and E2E
 
 `tests/e2e/form-runtime.spec.ts` proves the owner and cross-tenant API boundary, Layer V trace,
-snapshot creation, runtime recompilation after a recipient change, two-step browser behaviour,
-published output, and ZIP inclusion of `serviceManifest.json`.
+snapshot creation, runtime recompilation after a recipient change, PII-free events, separate
+published/ZIP runtime files, generated-JS isolation, and activation/publish syntax gates.
 
 The isolated stack is `tests/e2e/docker-compose.form-runtime.yml`. It uses unique container names,
 port `4100`, and tmpfs storage, so it does not touch either canonical MongoDB storage strategy.

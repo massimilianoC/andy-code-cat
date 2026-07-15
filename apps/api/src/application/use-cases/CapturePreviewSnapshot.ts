@@ -3,7 +3,7 @@ import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
 import type { ProjectPresetRepository } from "../../domain/repositories/ProjectPresetRepository";
 import type { ProjectRepository } from "../../domain/repositories/ProjectRepository";
 import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
-import { compileConfiguredForms } from "../forms/FormRuntimeCompiler";
+import { prepareArtifactServices } from "../platform-runtime/prepareArtifactServices";
 
 export type { CaptureFormat } from "../../infra/capture/PuppeteerCaptureService";
 
@@ -30,11 +30,12 @@ export class CapturePreviewSnapshot {
         }
 
         const project = await this.projectRepository.findById(projectId);
-        const runtimeArtifacts = compileConfiguredForms(
-            snapshot.artifacts,
-            snapshot.serviceManifest,
-            project?.serviceConfig?.forms,
-        ).artifacts;
+        const runtimeArtifacts = prepareArtifactServices({
+            artifacts: snapshot.artifacts,
+            serviceManifest: snapshot.serviceManifest,
+            formSettings: project?.serviceConfig?.forms,
+            delivery: "inline-preview",
+        }).artifacts;
         const html = buildFullDoc(
             runtimeArtifacts.html,
             runtimeArtifacts.css,

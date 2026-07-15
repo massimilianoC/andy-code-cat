@@ -55,6 +55,8 @@ describe("composeSystemPromptWithLayers — SSOT contract", () => {
 
         expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("serviceManifest");
         expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("data-pf-form-id");
+        expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("serviceManifest appears ONLY in the top-level JSON response field");
+        expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("artifacts.js MUST NOT query the slot");
         expect(result.composed.slice(layerS.span[0], layerS.span[1])).not.toContain("serviceManifest");
         expect(layerV.source).toBe("preset-capability");
     });
@@ -89,6 +91,20 @@ describe("composeSystemPromptWithLayers — SSOT contract", () => {
         const nonEmpty = result.layers.filter((l) => l.chars > 0);
         expect(nonEmpty[nonEmpty.length - 1]!.id).toBe("R");
         expect(result.composed.trimEnd().endsWith("<!-- /PF_LAYER id=R -->")).toBe(true);
+    });
+
+    it("registers focused edit instructions as Layer Q after the request override", async () => {
+        const { composeSystemPromptWithLayers } = await loadComposer();
+        const result = composeSystemPromptWithLayers({
+            requestSystemPrompt: "REQ OVERRIDE",
+            focusedModeLayer: "FOCUSED PROTOCOL",
+            sources: { R: "request", Q: "focused-mode+governance" },
+        });
+        const nonEmpty = result.layers.filter((layer) => layer.chars > 0);
+        expect(nonEmpty.slice(-2).map((layer) => layer.id)).toEqual(["R", "Q"]);
+        const layerQ = result.layers.find((layer) => layer.id === "Q")!;
+        expect(result.composed.slice(layerQ.span[0], layerQ.span[1])).toContain("FOCUSED PROTOCOL");
+        expect(layerQ.source).toBe("focused-mode+governance");
     });
 
     // Regression guard: Layer L (OUTPUT LANGUAGE) must be injected when a language is

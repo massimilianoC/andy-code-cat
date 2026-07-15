@@ -7,7 +7,8 @@ import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 import type { PublishHistoryRepository } from "../../domain/repositories/PublishHistoryRepository";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { ProjectFormSettings } from "../../domain/entities/Project";
-import { compileConfiguredForms } from "../forms/FormRuntimeCompiler";
+import { prepareArtifactServices } from "../platform-runtime/prepareArtifactServices";
+import { assertGeneratedJavaScriptSyntax } from "../artifacts/generatedJavaScriptSyntax";
 import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
 import { SystemNotifier } from "../services/SystemNotifier";
 import { buildPublishedDatasetBindingPackage } from "../datasets/PublishedDatasetBindings";
@@ -260,7 +261,13 @@ export class PublishProject {
         const url = `/p/${publishId}`;
 
         // 5. Post-process artifacts and inject cache-busting version hash
-        const formRuntime = compileConfiguredForms(snapshot.artifacts, snapshot.serviceManifest, input.formSettings);
+        assertGeneratedJavaScriptSyntax(snapshot.artifacts.js);
+        const formRuntime = prepareArtifactServices({
+            artifacts: snapshot.artifacts,
+            serviceManifest: snapshot.serviceManifest,
+            formSettings: input.formSettings,
+            delivery: "external-files",
+        });
         const processed = postProcess(formRuntime.artifacts);
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
@@ -279,6 +286,7 @@ export class PublishProject {
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;
         if (processed.js) files["script.js"] = processed.js;
+        Object.assign(files, formRuntime.runtimeFiles);
         const datasetPackage = this.assetRepository
             ? await buildPublishedDatasetBindingPackage({
                 publishId,
@@ -342,7 +350,13 @@ export class PublishProject {
     ): Promise<SiteDeployment> {
         this.assertPublishableMedia(artifacts, { projectId, userId, snapshotId });
 
-        const formRuntime = compileConfiguredForms(artifacts, serviceManifest, formSettings);
+        assertGeneratedJavaScriptSyntax(artifacts.js);
+        const formRuntime = prepareArtifactServices({
+            artifacts,
+            serviceManifest,
+            formSettings,
+            delivery: "external-files",
+        });
         const processed = postProcess(formRuntime.artifacts);
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
@@ -360,6 +374,7 @@ export class PublishProject {
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;
         if (processed.js) files["script.js"] = processed.js;
+        Object.assign(files, formRuntime.runtimeFiles);
         const datasetPackage = this.assetRepository
             ? await buildPublishedDatasetBindingPackage({
                 publishId: existing.publishId,

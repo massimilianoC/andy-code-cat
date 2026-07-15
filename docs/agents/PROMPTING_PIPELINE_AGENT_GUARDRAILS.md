@@ -124,13 +124,13 @@ than emitting the JSON artifact.
   "final authority", "non-editable", or multi-step self-audit instructions unless the rule must
   genuinely override an editable template.
 
-### 3.7 Service contract ownership (PP-020)
+### 3.7 Service contract ownership (PP-022)
 
-- **`PP-020` MUST:** keep versioned service envelopes, slot syntax, field allowlists and limits in
+- **`PP-022` MUST:** keep versioned service envelopes, slot syntax, field allowlists and limits in
   deterministic Layer V and the shared contracts package.
-- **`PP-020` MUST NOT:** place recipients, endpoints, secrets, retention policy, tenant settings,
+- **`PP-022` MUST NOT:** place recipients, endpoints, secrets, retention policy, tenant settings,
   or executable handlers in any prompt layer.
-- **`PP-020` MUST NOT:** let Layer S redefine the service envelope. Layer S may provide only
+- **`PP-022` MUST NOT:** let Layer S redefine the service envelope. Layer S may provide only
   preset-specific craft and UX guidance within Layer V's capabilities.
 - The provider structured-output schema and runtime validation must derive from the same shared
   contract version.
@@ -300,3 +300,26 @@ Implemented per `docs/specs/PROMPT_LAYER_SSOT_SPEC.md` /
 - **`PP-020` MUST:** real generation, prompt preview, and persisted traces all
   use the same `resolveContext()` composition path. Do not add a second Layer S
   preview/composition path.
+
+---
+
+## 9. Exact Sent-Prompt Trace Parity (PP-021)
+
+- **`PP-021` MUST:** `promptingTrace.messagesSentToLlm` persist the complete, ordered message array
+  supplied to the provider. It is an audit record, not a reconstruction.
+- **`PP-021` MUST:** `promptingTrace.effectiveSystemPrompt` be byte-identical to the system-message
+  content in `messagesSentToLlm`.
+- **`PP-021` MUST:** `promptingTrace.layers` contain every `PROMPT_LAYER_DESCRIPTORS` item in
+  canonical order, including entries with `chars: 0` and source `empty`. Every non-empty span must
+  slice the exact marker-wrapped segment from `effectiveSystemPrompt`.
+- **`PP-021` MUST:** Layer V appear in every trace, including as an empty row when no capability is
+  active. Missing Layer V, omitted layers, truncated prompt text, or a stored system prompt that
+  differs from the provider message is a trace-integrity failure.
+- **`PP-021` MUST NOT:** focused-mode, governance, model, capability, or runtime prompt text be
+  appended after `composeSystemPromptWithLayers()`. Register such text as a descriptor with a
+  marker, source and span before provider send.
+- **`PP-021` MUST:** use Layer Q (`focused-edit-protocol`) for focused edit instructions and
+  focused governance. Layer Q remains present with `chars: 0` and source `empty` for normal
+  generation.
+- **`PP-021` MUST:** run `assertPromptTraceParity()` against the exact messages before the provider
+  call. The frontend must not reconstruct missing legacy layers from prompt markers.

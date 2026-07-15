@@ -40,6 +40,10 @@ For that bounded capability, follow `docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.m
 public router, capture, SMTP, arbitrary external endpoints, or further BaaS services without a
 newer roadmap update.
 
+The mailto foundation uses `prepareArtifactServices()` plus an allowlisted `runtime-plan-v1`.
+Platform core/config/forms/mailto scripts stay separate from generated `artifacts.js`; invalid
+generated JS is blocked before activation, publish, and ZIP export.
+
 When touching prompting code, treat the prompt architecture as an implemented foundation to extend carefully, not as an unbuilt milestone.
 
 ---

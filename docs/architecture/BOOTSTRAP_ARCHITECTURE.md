@@ -112,6 +112,10 @@ Prompting and generation support:
   into the API container and the production Dockerfile copies it into the image.
 - `buildServiceContractLayer` (Layer V) — non-editable service protocol generated from platform
   capabilities; the first implementation owns `service-manifest-v1` form slots and JSON limits.
+- `buildFocusedModeSystemAddendum` plus focused governance (Layer Q) — non-editable focused edit
+  protocol composed inside the same canonical layer registry before provider send.
+- `assertPromptTraceParity` — fail-closed parity check between the provider system message,
+  effective prompt and every descriptor marker/span, including empty layers.
 
 Declarative artifact services:
 
@@ -119,10 +123,15 @@ Declarative artifact services:
   snapshot artifacts.
 - `Project.serviceConfig.forms` stores owner-only mailto/privacy configuration behind the double
   sandbox.
-- `FormRuntimeAdapter` is the typed application boundary and registry for platform-owned delivery
-  modes; `FormRuntimeCompiler` implements the currently registered `mailto` adapter. Preview,
-  publish, and export all dispatch through that registry. Compiled recipient-specific runtime is
-  never stored back into the snapshot.
+- `prepareArtifactServices()` is the single preview/capture/publish/ZIP boundary. The
+  `FormRuntimeAdapter` and generic platform registry resolve `runtime-plan-v1` plus separate,
+  SHA-256-pinned `pf-runtime-core`, config, forms UI, and mailto browser files. Generated
+  `artifacts.js`/`script.js` is never concatenated with platform runtime code.
+- The boundary recognizes and removes only the complete historical mailto runtime suffix from
+  legacy `artifacts.js`; unrelated generated JavaScript remains byte-preserved.
+- `assertGeneratedJavaScriptSyntax()` parses generated JS without executing it and blocks invalid
+  code before activation, publish, and ZIP export. Compiled recipient-specific runtime is never
+  stored back into the snapshot.
 - The project configuration dialog exposes the optional operational form panel; the workspace
   artifact tabs remain focused on generated content and prompt trace.
 

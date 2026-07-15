@@ -11,7 +11,7 @@ const LAYER_SEPARATOR = "\n\n---\n\n";
  *
  * See docs/specs/PROMPT_LAYER_SSOT_SPEC.md for the full rationale.
  */
-export type PromptLayerId = "A" | "L" | "B" | "V" | "S" | "T" | "C" | "G" | "D" | "X" | "E" | "F" | "P" | "R";
+export type PromptLayerId = "A" | "L" | "B" | "V" | "S" | "T" | "C" | "G" | "D" | "X" | "E" | "F" | "P" | "R" | "Q";
 
 export interface PromptLayerDescriptor {
     id: PromptLayerId;
@@ -43,6 +43,7 @@ export const PROMPT_LAYER_DESCRIPTORS: readonly PromptLayerDescriptor[] = [
     { id: "F", field: "layerF", key: "governance", label: "Layer F — Governance system prompt", editableBy: "superadmin" },
     { id: "P", field: "budgetPolicy", key: "output-budget-policy", label: "Output budget policy", editableBy: "none" },
     { id: "R", field: "layerR", key: "request-override", label: "Request-level system prompt override", editableBy: "none" },
+    { id: "Q", field: "layerQ", key: "focused-edit-protocol", label: "Layer Q — Focused edit protocol", editableBy: "none" },
 ] as const;
 
 export interface ResolvedPromptLayers {
@@ -62,6 +63,8 @@ export interface ResolvedPromptLayers {
     layerF: string;
     budgetPolicy: string;
     layerR: string;
+    /** Focused edit protocol and focused governance, empty for normal generation. */
+    layerQ: string;
     composed: string;
     /** Structured breakdown of `composed`, in composition order — the same data the frontend renders. */
     layers: PromptLayerTraceEntry[];
@@ -102,6 +105,7 @@ interface ComposeOpts {
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
     governanceSystemPrompt?: string;
+    focusedModeLayer?: string;
     /** BCP-47 output language (e.g. "it", "en"). When provided, injects Layer L after Layer A. */
     outputLanguage?: string | null;
     /**
@@ -140,9 +144,10 @@ export function composeSystemPromptWithLayers(opts: ComposeOpts): ResolvedPrompt
     const layerF = opts.governanceSystemPrompt ?? "";
     const budgetPolicy = opts.outputBudgetPolicy ?? "";
     const layerR = opts.requestSystemPrompt ?? "";
+    const layerQ = opts.focusedModeLayer ?? "";
 
     const raw: Record<string, string> = {
-        layerA, layerL, layerB, layerV, layerS, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, layerR,
+        layerA, layerL, layerB, layerV, layerS, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, layerR, layerQ,
     };
 
     const defaultSource = (id: PromptLayerId): string => {
@@ -181,5 +186,5 @@ export function composeSystemPromptWithLayers(opts: ComposeOpts): ResolvedPrompt
     // leading/trailing whitespace, so spans stay byte-exact against `composed`.
     const composed = segments.join(LAYER_SEPARATOR);
 
-    return { layerA, layerL, layerB, layerV, layerS, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, layerR, composed, layers };
+    return { layerA, layerL, layerB, layerV, layerS, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, layerR, layerQ, composed, layers };
 }

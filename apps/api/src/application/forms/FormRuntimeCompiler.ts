@@ -1,8 +1,45 @@
 import type { FormDefinitionV1, FormFieldV1, ProjectFormSettingsInput, ServiceManifestV1 } from "@andy-code-cat/contracts";
-import type { FormRuntimeAdapter, FormRuntimeArtifacts, FormRuntimeCompileResult } from "./FormRuntimeAdapter";
+import {
+    buildPlatformRuntimePackage,
+    injectRuntimeTags,
+    stripPlatformRuntimeTags,
+} from "../platform-runtime/PlatformRuntimeRegistry";
+import type {
+    FormRuntimeAdapter,
+    FormRuntimeArtifacts,
+    FormRuntimeCompileResult,
+    FormRuntimeMarkupResult,
+    PlatformRuntimeDelivery,
+} from "./FormRuntimeAdapter";
 export type { FormRuntimeArtifacts, FormRuntimeCompileResult } from "./FormRuntimeAdapter";
 
 const RUNTIME_MARKER = "data-pf-form-runtime=\"service-manifest-v1\"";
+const LEGACY_MAILTO_RUNTIME_START = "\n;(() => {\n  const config = {\"version\":\"form-runtime-v1\",\"mode\":\"mailto\",\"recipientEmail\":";
+const LEGACY_MAILTO_RUNTIME_FINGERPRINTS = [
+    "document.querySelectorAll(\"form[data-pf-form-runtime='service-manifest-v1']\")",
+    "form.dataset.pfMounted = \"true\"",
+    "window.location.assign(uri)",
+] as const;
+
+/**
+ * Removes only the complete platform-owned mailto runtime appended by the v1
+ * compiler. It deliberately requires the historic header, multiple body
+ * fingerprints and an end-of-file closure so generated project code is not
+ * modified by a broad text search.
+ */
+export function stripLegacyConcatenatedMailtoRuntime(js: string): string {
+    const start = Math.max(
+        js.lastIndexOf(LEGACY_MAILTO_RUNTIME_START),
+        js.lastIndexOf(LEGACY_MAILTO_RUNTIME_START.replace(/\n/g, "\r\n")),
+    );
+    if (start < 0) return js;
+
+    const suffix = js.slice(start);
+    if (!suffix.trimEnd().endsWith("})();")) return js;
+    if (!LEGACY_MAILTO_RUNTIME_FINGERPRINTS.every((fingerprint) => suffix.includes(fingerprint))) return js;
+
+    return js.slice(0, start).trimEnd();
+}
 
 function escapeHtml(value: string): string {
     return value.replace(/[&<>"']/g, (character) => ({
@@ -76,114 +113,58 @@ function renderForm(form: FormDefinitionV1, settings: ProjectFormSettingsInput):
 </form>`;
 }
 
-function runtimeConfig(manifest: ServiceManifestV1, settings: ProjectFormSettingsInput): string {
-    return JSON.stringify({
-        version: "form-runtime-v1",
-        mode: "mailto",
-        recipientEmail: settings.recipientEmail,
-        forms: manifest.forms.map((form) => ({
-            id: form.id,
-            title: form.title,
-            successMessage: form.successMessage,
-            fields: form.steps.flatMap((step) => step.fields).map((field) => ({
-                id: field.id,
-                label: field.label,
-                type: field.type,
-                required: field.required,
-            })),
-        })),
-    }).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
-}
-
-function mailtoRuntime(config: string): string {
-    return `\n;(() => {
-  const config = ${config};
-  const encode = (value) => encodeURIComponent(String(value).replace(/[\\r\\n]+/g, " "));
-  const showStatus = (form, message) => { const node = form.querySelector(".pf-form__status"); if (node) node.textContent = message; };
-  document.querySelectorAll("form[data-pf-form-runtime='service-manifest-v1']").forEach((form) => {
-    if (form.dataset.pfMounted === "true") return;
-    form.dataset.pfMounted = "true";
-    const steps = Array.from(form.querySelectorAll("[data-pf-step]"));
-    let currentStep = 0;
-    const showStep = (index) => {
-      currentStep = Math.max(0, Math.min(index, steps.length - 1));
-      steps.forEach((step, stepIndex) => { step.hidden = stepIndex !== currentStep; });
-      const progress = form.querySelector("[data-pf-step-current]");
-      if (progress) progress.textContent = String(currentStep + 1);
-    };
-    const validateStep = () => {
-      const fields = Array.from(steps[currentStep]?.querySelectorAll("input, select, textarea") || []);
-      const invalid = fields.find((field) => !field.checkValidity());
-      if (invalid) {
-        invalid.reportValidity();
-        showStatus(form, "Completa i campi obbligatori prima di continuare.");
-        return false;
-      }
-      showStatus(form, "");
-      return true;
-    };
-    form.addEventListener("click", (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest("[data-pf-next]")) {
-        if (validateStep()) showStep(currentStep + 1);
-      } else if (target.closest("[data-pf-back]")) {
-        showStep(currentStep - 1);
-      }
-    });
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      if (!validateStep() || !form.checkValidity()) {
-        form.reportValidity();
-        return;
-      }
-      const definition = config.forms.find((item) => item.id === form.dataset.pfFormId);
-      if (!definition) return;
-      const values = new FormData(form);
-      const lines = definition.fields.map((field) => {
-        const raw = field.type === "checkbox"
-          ? (form.querySelector("[name='" + CSS.escape(field.id) + "']")?.checked ? "Sì" : "No")
-          : (values.get(field.id) || "");
-        return field.label + ": " + String(raw).trim();
-      }).filter((line) => !line.endsWith(": "));
-      const body = lines.join("\\n");
-      const uri = "mailto:" + encode(config.recipientEmail) + "?subject=" + encode(definition.title) + "&body=" + encode(body);
-      if (uri.length > 1800) {
-        navigator.clipboard?.writeText(body).catch(() => undefined);
-        showStatus(form, "Il riepilogo è stato copiato. Apri la tua app email e incollalo nel messaggio.");
-        return;
-      }
-      showStatus(form, "La bozza è stata aperta. Verifica e invia dalla tua app email.");
-      const deliveryEvent = new CustomEvent("pf:mailto", {
-        cancelable: true,
-        detail: { formId: definition.id, uri },
-      });
-      if (document.dispatchEvent(deliveryEvent)) window.location.assign(uri);
-    });
-    showStep(0);
-  });
-})();`;
-}
-
 const RUNTIME_CSS = `
-.pf-form{display:grid;gap:1rem;max-width:42rem}.pf-form__step{display:grid;gap:1rem;border:0;padding:0;margin:0}.pf-form__step[hidden]{display:none}.pf-form__field{display:grid;gap:.4rem}.pf-form__label,.pf-form legend{font-weight:600}.pf-form input,.pf-form select,.pf-form textarea{width:100%;box-sizing:border-box}.pf-form__choice{display:flex;gap:.5rem;align-items:flex-start}.pf-form__choice input{width:auto;margin-top:.25rem}.pf-form__description,.pf-form__privacy,.pf-form__status,.pf-form__progress{margin:0;color:inherit;opacity:.8}.pf-form__actions{display:flex;gap:.75rem}.pf-form__actions button{cursor:pointer}
+.pf-form{display:grid;gap:1rem;max-width:42rem}.pf-form__step{display:grid;gap:1rem;border:0;padding:0;margin:0}.pf-form__step[hidden]{display:none}.pf-form__field{display:grid;gap:.4rem}.pf-form__label,.pf-form legend{font-weight:600}.pf-form input,.pf-form select,.pf-form textarea{width:100%;box-sizing:border-box}.pf-form__choice{display:flex;gap:.5rem;align-items:flex-start}.pf-form__choice input{width:auto;margin-top:.25rem}.pf-form__description,.pf-form__privacy,.pf-form__status,.pf-form__progress{margin:0;color:inherit;opacity:.8}.pf-form__actions{display:flex;gap:.75rem}.pf-form__actions button{cursor:pointer}.pf-form__manual-copy{display:grid;gap:.5rem}.pf-form__manual-copy textarea{width:100%;box-sizing:border-box}
 `;
+
+function buildPublicConfig(manifest: ServiceManifestV1, settings: ProjectFormSettingsInput): Record<string, unknown> {
+    return {
+        version: "platform-runtime-config-v1",
+        forms: {
+            enabled: true,
+            mode: "mailto",
+            recipientEmail: settings.recipientEmail,
+            mailtoMaxUriChars: 1800,
+            definitions: manifest.forms.map((form) => ({
+                id: form.id,
+                title: form.title,
+                successMessage: form.successMessage,
+                fields: form.steps.flatMap((step) => step.fields).map((field) => ({
+                    id: field.id,
+                    label: field.label,
+                    type: field.type,
+                    required: field.required,
+                })),
+            })),
+        },
+    };
+}
 
 /**
  * Deterministically replaces declared slots with a portable mailto form.
  * It has no network behaviour and is deliberately independent from Express,
  * MongoDB, and React so the same result can be used by preview, publish and ZIP.
  */
-export function compileMailtoForms(
+function compileMailtoMarkup(
     artifacts: FormRuntimeArtifacts,
     manifest: ServiceManifestV1 | undefined,
     settings: ProjectFormSettingsInput | undefined,
-): FormRuntimeCompileResult {
+): FormRuntimeMarkupResult {
     if (!manifest || !settings?.enabled) {
-        return { artifacts: { ...artifacts }, compiledFormIds: [] };
+        return {
+            artifacts: { ...artifacts },
+            compiledFormIds: [],
+            runtimeModuleIds: [],
+            publicConfig: {},
+        };
     }
     if (artifacts.html.includes(RUNTIME_MARKER)) {
-        return { artifacts: { ...artifacts }, compiledFormIds: manifest.forms.map((form) => form.id) };
+        return {
+            artifacts: { ...artifacts },
+            compiledFormIds: manifest.forms.map((form) => form.id),
+            runtimeModuleIds: ["forms-mailto"],
+            publicConfig: buildPublicConfig(manifest, settings),
+        };
     }
 
     let html = artifacts.html;
@@ -204,16 +185,21 @@ export function compileMailtoForms(
     return {
         artifacts: {
             html,
-            css: `${artifacts.css.trim()}\n${RUNTIME_CSS}`.trim(),
-            js: `${artifacts.js.trim()}\n${mailtoRuntime(runtimeConfig(manifest, settings))}`.trim(),
+            css: artifacts.css.includes(".pf-form{")
+                ? artifacts.css
+                : `${artifacts.css.trim()}\n${RUNTIME_CSS}`.trim(),
+            // Generated JavaScript stays byte-separate from platform-owned runtime modules.
+            js: artifacts.js,
         },
         compiledFormIds,
+        runtimeModuleIds: ["forms-mailto"],
+        publicConfig: buildPublicConfig(manifest, settings),
     };
 }
 
 export const mailtoFormRuntimeAdapter: FormRuntimeAdapter<ProjectFormSettingsInput> = {
     mode: "mailto",
-    compile: (artifacts, manifest, settings) => compileMailtoForms(artifacts, manifest, settings),
+    compileMarkup: (artifacts, manifest, settings) => compileMailtoMarkup(artifacts, manifest, settings),
 };
 
 const FORM_RUNTIME_ADAPTERS: readonly FormRuntimeAdapter[] = [mailtoFormRuntimeAdapter];
@@ -223,11 +209,43 @@ export function compileConfiguredForms(
     artifacts: FormRuntimeArtifacts,
     manifest: ServiceManifestV1 | undefined,
     settings: ProjectFormSettingsInput | undefined,
+    options: { delivery?: PlatformRuntimeDelivery } = {},
 ): FormRuntimeCompileResult {
-    if (!settings) return { artifacts: { ...artifacts }, compiledFormIds: [] };
+    if (!settings) return { artifacts: { ...artifacts }, compiledFormIds: [], runtimeFiles: {} };
     const adapter = FORM_RUNTIME_ADAPTERS.find((candidate) => candidate.mode === settings.mode);
     if (!adapter) {
         throw Object.assign(new Error(`Unsupported form runtime mode '${settings.mode}'`), { statusCode: 422 });
     }
-    return adapter.compile(artifacts, manifest, settings);
+    const cleanArtifacts = {
+        ...artifacts,
+        html: stripPlatformRuntimeTags(artifacts.html),
+        js: stripLegacyConcatenatedMailtoRuntime(artifacts.js),
+    };
+    const markup = adapter.compileMarkup(cleanArtifacts, manifest, settings);
+    if (markup.runtimeModuleIds.length === 0) {
+        return { artifacts: markup.artifacts, compiledFormIds: markup.compiledFormIds, runtimeFiles: {} };
+    }
+    const runtime = buildPlatformRuntimePackage({
+        moduleIds: markup.runtimeModuleIds,
+        publicConfig: markup.publicConfig,
+        delivery: options.delivery ?? "inline-preview",
+    });
+    return {
+        artifacts: {
+            ...markup.artifacts,
+            html: injectRuntimeTags(markup.artifacts.html, runtime.tags),
+        },
+        compiledFormIds: markup.compiledFormIds,
+        runtimePlan: runtime.plan,
+        runtimeFiles: runtime.files,
+    };
+}
+
+export function compileMailtoForms(
+    artifacts: FormRuntimeArtifacts,
+    manifest: ServiceManifestV1 | undefined,
+    settings: ProjectFormSettingsInput | undefined,
+    options: { delivery?: PlatformRuntimeDelivery } = {},
+): FormRuntimeCompileResult {
+    return compileConfiguredForms(artifacts, manifest, settings, options);
 }

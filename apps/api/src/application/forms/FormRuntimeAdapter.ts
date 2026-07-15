@@ -1,4 +1,4 @@
-import type { ProjectFormSettingsInput, ServiceManifestV1 } from "@andy-code-cat/contracts";
+import type { ProjectFormSettingsInput, RuntimePlanV1, ServiceManifestV1 } from "@andy-code-cat/contracts";
 
 export interface FormRuntimeArtifacts {
     html: string;
@@ -9,6 +9,17 @@ export interface FormRuntimeArtifacts {
 export interface FormRuntimeCompileResult {
     artifacts: FormRuntimeArtifacts;
     compiledFormIds: string[];
+    runtimePlan?: RuntimePlanV1;
+    runtimeFiles: Record<string, string>;
+}
+
+export type PlatformRuntimeDelivery = "inline-preview" | "external-files";
+
+export interface FormRuntimeMarkupResult {
+    artifacts: FormRuntimeArtifacts;
+    compiledFormIds: string[];
+    runtimeModuleIds: string[];
+    publicConfig: Record<string, unknown>;
 }
 
 /**
@@ -18,9 +29,9 @@ export interface FormRuntimeCompileResult {
  */
 export interface FormRuntimeAdapter<TSettings extends { mode: string } = ProjectFormSettingsInput> {
     readonly mode: TSettings["mode"];
-    compile(
+    compileMarkup(
         artifacts: FormRuntimeArtifacts,
         manifest: ServiceManifestV1 | undefined,
         settings: TSettings,
-    ): FormRuntimeCompileResult;
+    ): FormRuntimeMarkupResult;
 }

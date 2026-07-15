@@ -24,16 +24,25 @@ import { DeletePreviewSnapshot } from "../../../application/use-cases/DeletePrev
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { SnapshotThumbnailJob } from "../../../application/services/SnapshotThumbnailJob";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
-import { compileConfiguredForms } from "../../../application/forms/FormRuntimeCompiler";
+import { prepareArtifactServices } from "../../../application/platform-runtime/prepareArtifactServices";
+import { assertGeneratedJavaScriptSyntax } from "../../../application/artifacts/generatedJavaScriptSyntax";
 import type { PreviewSnapshot } from "../../../domain/entities/PreviewSnapshot";
+import type { RuntimePlanV1 } from "@andy-code-cat/contracts";
 
 function withConfiguredFormRuntime(
     snapshot: PreviewSnapshot,
     settings: ProjectFormSettingsInput | undefined,
-): PreviewSnapshot {
+): PreviewSnapshot & { runtimePlan?: RuntimePlanV1 } {
+    const prepared = prepareArtifactServices({
+        artifacts: snapshot.artifacts,
+        serviceManifest: snapshot.serviceManifest,
+        formSettings: settings,
+        delivery: "inline-preview",
+    });
     return {
         ...snapshot,
-        artifacts: compileConfiguredForms(snapshot.artifacts, snapshot.serviceManifest, settings).artifacts,
+        artifacts: prepared.artifacts,
+        runtimePlan: prepared.runtimePlan,
     };
 }
 
@@ -165,11 +174,13 @@ export function createPreviewSnapshotRoutes(): Router {
                 // Validate and prepare the response/thumbnail view, but persist only
                 // canonical LLM artifacts. Runtime settings can then change without
                 // regenerating or mutating the immutable snapshot.
-                const compiledForms = compileConfiguredForms(
+                if (body.activate) assertGeneratedJavaScriptSyntax(artifacts.js);
+                const compiledForms = prepareArtifactServices({
                     artifacts,
-                    body.serviceManifest ?? inheritedManifest,
-                    project?.serviceConfig?.forms,
-                );
+                    serviceManifest: body.serviceManifest ?? inheritedManifest,
+                    formSettings: project?.serviceConfig?.forms,
+                    delivery: "inline-preview",
+                });
                 const runtimeArtifacts = compiledForms.artifacts;
 
                 const snapshot = await createPreviewSnapshot.execute({
@@ -230,7 +241,7 @@ export function createPreviewSnapshotRoutes(): Router {
                 // ── end thumbnail job ─────────────────────────────────────────
 
                 res.status(201).json({
-                    snapshot: { ...snapshot, artifacts: runtimeArtifacts },
+                    snapshot: { ...snapshot, artifacts: runtimeArtifacts, runtimePlan: compiledForms.runtimePlan },
                 });
             } catch (error) {
                 next(error);
@@ -270,6 +281,16 @@ export function createPreviewSnapshotRoutes(): Router {
                         return;
                     }
                 }
+
+                const candidate = await previewSnapshotRepository.findById(
+                    req.sandbox!.projectId,
+                    req.params.snapshotId!,
+                );
+                if (!candidate) {
+                    res.status(404).json({ error: "Snapshot not found" });
+                    return;
+                }
+                assertGeneratedJavaScriptSyntax(candidate.artifacts.js);
 
                 const snapshot = await activatePreviewSnapshot.execute({
                     projectId: req.sandbox!.projectId,

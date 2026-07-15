@@ -34,6 +34,7 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) | Current implementation shape: services, route surface, frontend modes, media/storage, and governance baseline |
+| [docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md](architecture/PLATFORM_CAPABILITY_RUNTIME.md) | Declarative capability boundary, runtimePlan registry, separate browser assets, generated-JS gate, and mailto privacy contract |
 | [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) | Layer 1 preview flow, Layer 2 generation pipeline, and transition mechanics |
 | [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, and operational security rules |
 

@@ -154,7 +154,10 @@ test.describe.serial("declarative form runtime", () => {
         ));
         const snapshot = (await snapshotResponse.json()).snapshot;
         expect(snapshot.artifacts.html).toContain("data-pf-form-runtime");
-        expect(snapshot.artifacts.js).toContain(initialSettings.recipientEmail);
+        expect(snapshot.artifacts.js).not.toContain(initialSettings.recipientEmail);
+        expect(snapshot.artifacts.html).toContain(initialSettings.recipientEmail);
+        expect(snapshot.runtimePlan.version).toBe("runtime-plan-v1");
+        expect(snapshot.runtimePlan.assets.map((asset: { fileName: string }) => asset.fileName)).toContain("pf-forms-mailto.v1.js");
 
         const updatedSettings = { ...initialSettings, recipientEmail: "owner-v2@example.test" };
         await expectOk(await request.put(`${API_URL}/v1/projects/${projectId}/services/forms`, {
@@ -167,8 +170,9 @@ test.describe.serial("declarative form runtime", () => {
             { headers: headers(token, projectId) },
         ));
         const refreshed = (await refreshedResponse.json()).snapshot;
-        expect(refreshed.artifacts.js).toContain(updatedSettings.recipientEmail);
-        expect(refreshed.artifacts.js).not.toContain(initialSettings.recipientEmail);
+        expect(refreshed.artifacts.html).toContain(updatedSettings.recipientEmail);
+        expect(refreshed.artifacts.html).not.toContain(initialSettings.recipientEmail);
+        expect(refreshed.artifacts.js).toBe("");
 
         const deploymentResponse = await expectOk(await request.post(
             `${API_URL}/v1/projects/${projectId}/publish`,
@@ -176,13 +180,22 @@ test.describe.serial("declarative form runtime", () => {
         ));
         const deployment = await deploymentResponse.json();
 
+        const publishedHtmlResponse = await expectOk(await request.get(`${API_URL}${deployment.url}`));
+        const publishedHtml = await publishedHtmlResponse.text();
+        expect(publishedHtml.indexOf("pf-runtime-core.v1.js")).toBeLessThan(publishedHtml.indexOf("pf-forms-mailto.v1.js"));
+        expect(publishedHtml).not.toContain(updatedSettings.recipientEmail);
+        const publishedConfigResponse = await expectOk(await request.get(
+            `${API_URL}${deployment.url.replace(/\/?$/, "/")}pf-runtime-config.v1.js`,
+        ));
+        expect(await publishedConfigResponse.text()).toContain(updatedSettings.recipientEmail);
+
         await page.goto(`${API_URL}${deployment.url}`);
         await page.evaluate(() => {
-            (window as unknown as { capturedMailto?: string }).capturedMailto = "";
+            (window as unknown as { capturedMailto?: Record<string, unknown> }).capturedMailto = undefined;
             document.addEventListener("pf:mailto", (event) => {
                 event.preventDefault();
-                const detail = (event as CustomEvent<{ uri: string }>).detail;
-                (window as unknown as { capturedMailto?: string }).capturedMailto = detail.uri;
+                const detail = (event as CustomEvent<Record<string, unknown>>).detail;
+                (window as unknown as { capturedMailto?: Record<string, unknown> }).capturedMailto = detail;
             });
         });
         await page.getByLabel("Email").fill("visitor@example.test");
@@ -190,12 +203,18 @@ test.describe.serial("declarative form runtime", () => {
         await expect(page.getByText("Passaggio 2 di 2")).toBeVisible();
         await page.getByLabel("Messaggio").fill("Vorrei maggiori informazioni");
         await page.getByRole("button", { name: "Prepara email" }).click();
-        const mailto = await page.waitForFunction(() => (
-            window as unknown as { capturedMailto?: string }
-        ).capturedMailto || null).then((handle) => handle.jsonValue() as Promise<string>);
-        expect(decodeURIComponent(mailto)).toContain("mailto:owner-v2@example.test");
-        expect(decodeURIComponent(mailto)).toContain("visitor@example.test");
-        expect(decodeURIComponent(mailto)).toContain("Vorrei maggiori informazioni");
+        const mailtoEvent = await page.waitForFunction(() => (
+            window as unknown as { capturedMailto?: Record<string, unknown> }
+        ).capturedMailto || null).then((handle) => handle.jsonValue() as Promise<Record<string, unknown>>);
+        expect(mailtoEvent).toMatchObject({
+            version: "pf-event-v1",
+            formId: "contact",
+            mode: "mailto",
+            status: "draft-requested",
+        });
+        expect(JSON.stringify(mailtoEvent)).not.toContain(updatedSettings.recipientEmail);
+        expect(JSON.stringify(mailtoEvent)).not.toContain("visitor@example.test");
+        await expect(page.getByRole("status")).toContainText("Verifica la tua app email");
 
         const exportResponse = await expectOk(await request.post(
             `${API_URL}/v1/projects/${projectId}/export/layer1`,
@@ -209,11 +228,71 @@ test.describe.serial("declarative form runtime", () => {
         ));
         const zip = new AdmZip(await zipResponse.body());
         expect(zip.getEntry("serviceManifest.json")).not.toBeNull();
-        expect(zip.readAsText("script.js")).toContain(updatedSettings.recipientEmail);
+        expect(zip.getEntry("pf-runtime-core.v1.js")).not.toBeNull();
+        expect(zip.getEntry("pf-forms-ui.v1.js")).not.toBeNull();
+        expect(zip.getEntry("pf-forms-mailto.v1.js")).not.toBeNull();
+        expect(zip.readAsText("pf-runtime-config.v1.js")).toContain(updatedSettings.recipientEmail);
 
         await expectOk(await request.delete(
             `${API_URL}/v1/projects/${projectId}/publish/${deployment.id}`,
             { headers: headers(token, projectId) },
         ));
+    });
+
+    test("invalid generated JavaScript cannot disable preview services or pass activation/publish gates", async ({ page, request }) => {
+        await expectOk(await request.put(`${API_URL}/v1/projects/${projectId}/services/forms`, {
+            headers: headers(token, projectId),
+            data: {
+                enabled: true,
+                mode: "mailto",
+                recipientEmail: "owner@example.test",
+                privacyNotice: {
+                    version: "2026-07-15",
+                    url: "https://example.test/privacy",
+                    controllerName: "Example SRL",
+                    contactEmail: "privacy@example.test",
+                },
+            },
+        }));
+        const conversationResponse = await expectOk(await request.get(
+            `${API_URL}/v1/projects/${projectId}/conversation`,
+            { headers: headers(token, projectId) },
+        ));
+        const conversationId = (await conversationResponse.json()).conversation.id as string;
+        const invalidJs = `const artifactStarted = true;\n/* mediaManifest */ { "version": "media-manifest-v1" }`;
+        const createResponse = await expectOk(await request.post(
+            `${API_URL}/v1/projects/${projectId}/preview-snapshots`,
+            {
+                headers: headers(token, projectId),
+                data: {
+                    conversationId,
+                    artifacts: {
+                        html: "<main><div data-pf-form-id='contact'></div></main>",
+                        css: "",
+                        js: invalidJs,
+                    },
+                    serviceManifest: manifest,
+                    metadata: { structuredParseValid: true },
+                    activate: false,
+                },
+            },
+        ));
+        const snapshot = (await createResponse.json()).snapshot;
+        await page.setContent(`<!doctype html><html><head><style>${snapshot.artifacts.css}</style></head><body>${snapshot.artifacts.html}<script>${snapshot.artifacts.js}<\/script></body></html>`);
+        await expect(page.locator("form[data-pf-form-id='contact']")).toHaveAttribute("data-pf-mounted", "true");
+
+        const activateResponse = await request.post(
+            `${API_URL}/v1/projects/${projectId}/preview-snapshots/${snapshot.id}/activate`,
+            { headers: headers(token, projectId), data: { conversationId } },
+        );
+        expect(activateResponse.status()).toBe(422);
+        expect(await activateResponse.text()).toContain("artifacts.js");
+
+        const publishResponse = await request.post(`${API_URL}/v1/projects/${projectId}/publish`, {
+            headers: headers(token, projectId),
+            data: { snapshotId: snapshot.id },
+        });
+        expect(publishResponse.status()).toBe(422);
+        expect(await publishResponse.text()).toContain("artifacts.js");
     });
 });

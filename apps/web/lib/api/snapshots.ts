@@ -14,6 +14,7 @@ export interface PreviewSnapshot {
         js: string;
     };
     serviceManifest?: import("@andy-code-cat/contracts").ServiceManifestV1;
+    runtimePlan?: import("@andy-code-cat/contracts").RuntimePlanV1;
     focusContext?: LlmFocusContext;
     metadata?: {
         model?: string;
