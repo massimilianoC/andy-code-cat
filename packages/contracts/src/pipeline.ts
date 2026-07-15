@@ -37,6 +37,17 @@ export const zeroEffortLaunchSchema = z.object({
     tone: optionalTrimmedString(80),
     primaryCta: optionalTrimmedString(120),
     styleHint: optionalTrimmedString(1000),
+    /** Original user request. It remains authoritative over inferred enrichment. */
+    sourceRequest: optionalTrimmedString(4000),
+    projectSummary: optionalTrimmedString(1600),
+    contentStructure: optionalTrimmedString(2400),
+    contentRequirements: optionalTrimmedString(2400),
+    functionalRequirements: optionalTrimmedString(2400),
+    interactionModel: optionalTrimmedString(1800),
+    visualDirection: optionalTrimmedString(1800),
+    successCriteria: optionalTrimmedString(1600),
+    constraints: optionalTrimmedString(1600),
+    mustAvoid: optionalTrimmedString(1200),
     // New fields from guided 4-step flow (all optional for backward compat)
     contactInfo: z.array(zeroEffortContactItemSchema).max(15).optional(),
     styleAttributes: z.array(z.string().trim().max(80)).max(20).optional(),

@@ -6,9 +6,13 @@ import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAs
 import type { LocalFileStorage } from "../../infra/storage/LocalFileStorage";
 import type { PublishHistoryRepository } from "../../domain/repositories/PublishHistoryRepository";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
+import type { ProjectFormSettings } from "../../domain/entities/Project";
+import { prepareArtifactServices } from "../platform-runtime/prepareArtifactServices";
+import { assertGeneratedJavaScriptSyntax } from "../artifacts/generatedJavaScriptSyntax";
 import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } from "../media/assertResolvedMediaPlaceholders";
 import { SystemNotifier } from "../services/SystemNotifier";
 import { buildPublishedDatasetBindingPackage } from "../datasets/PublishedDatasetBindings";
+import { repairArtifactsForVisibility } from "../llm/artifactSafetyRepair";
 
 // ---------------------------------------------------------------------------
 // Artifact post-processing (same logic as ExportLayer1Zip, minimal version)
@@ -26,7 +30,10 @@ function extractInlineCss(html: string): { html: string; extracted: string } {
 
 function extractInlineJs(html: string): { html: string; extracted: string } {
     const blocks: string[] = [];
-    const cleaned = html.replace(/<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi, (_match, content: string) => {
+    const cleaned = html.replace(/<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi, (match, content: string) => {
+        // Tailwind consumes this head configuration immediately after its CDN
+        // runtime. Moving it to script.js would execute it too late.
+        if (/\btailwind\s*\.config\s*=/.test(content)) return match;
         const trimmed = content.trim();
         if (trimmed) blocks.push(trimmed);
         return "";
@@ -85,8 +92,26 @@ function injectVersionHash(html: string, version: string): string {
         .replace(/src="script\.js"/g, `src="script.js?v=${version}"`);
 }
 
+const ABSOLUTE_HTTP_URL_RE = /https?:\/\/[^"'()\s]+/gi;
+
+/** Published media is served by the same /p router as the site itself. */
+export function normalizePublishedMediaUrls(content: string): string {
+    return content.replace(ABSOLUTE_HTTP_URL_RE, (rawUrl) => {
+        try {
+            const url = new URL(rawUrl);
+            if (!/^\/p\/media\/[^/]+$/i.test(url.pathname)) return rawUrl;
+            return `${url.pathname}${url.search}${url.hash}`;
+        } catch {
+            return rawUrl;
+        }
+    });
+}
+
 function postProcess(artifacts: { html: string; css: string; js: string }) {
-    let { html, css, js } = artifacts;
+    // Also repair here: snapshots created before a guardrail was introduced
+    // must still publish correctly without being rewritten in the database.
+    const repaired = repairArtifactsForVisibility(artifacts);
+    let { html, css, js } = repaired;
 
     html = stripMetaCsp(html);
 
@@ -209,6 +234,7 @@ export interface PublishProjectInput {
     customSlug?: string;
     /** Preset ID of the project — used to resolve governance injections at publish time. */
     presetId?: string | null;
+    formSettings?: ProjectFormSettings;
 }
 
 export class PublishProject {
@@ -249,7 +275,7 @@ export class PublishProject {
         const existing = await this.deploymentRepo.findActiveByProjectId(input.projectId);
 
         if (existing) {
-            return this.republish(existing, snapshot.id, snapshot.artifacts, snapshot.metadata, input.userId, input.projectId, input.customSlug, input.presetId);
+            return this.republish(existing, snapshot.id, snapshot.artifacts, snapshot.serviceManifest, snapshot.metadata, input.userId, input.projectId, input.customSlug, input.presetId, input.formSettings);
         }
 
         // 4. Generate publish ID
@@ -257,7 +283,19 @@ export class PublishProject {
         const url = `/p/${publishId}`;
 
         // 5. Post-process artifacts and inject cache-busting version hash
-        const processed = postProcess(snapshot.artifacts);
+        assertGeneratedJavaScriptSyntax(snapshot.artifacts.js);
+        const formRuntime = prepareArtifactServices({
+            artifacts: snapshot.artifacts,
+            serviceManifest: snapshot.serviceManifest,
+            formSettings: input.formSettings,
+            delivery: "external-files",
+        });
+        const rawProcessed = postProcess(formRuntime.artifacts);
+        const processed = {
+            html: normalizePublishedMediaUrls(rawProcessed.html),
+            css: normalizePublishedMediaUrls(rawProcessed.css),
+            js: normalizePublishedMediaUrls(rawProcessed.js),
+        };
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
 
@@ -270,11 +308,13 @@ export class PublishProject {
                 html = injectGovernanceHtml(html, injections);
             }
         }
+        html = normalizePublishedMediaUrls(html);
 
         // 6. Write files to /data/www/{publishId}/
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;
         if (processed.js) files["script.js"] = processed.js;
+        Object.assign(files, formRuntime.runtimeFiles);
         const datasetPackage = this.assetRepository
             ? await buildPublishedDatasetBindingPackage({
                 publishId,
@@ -328,15 +368,29 @@ export class PublishProject {
         existing: SiteDeployment,
         snapshotId: string,
         artifacts: { html: string; css: string; js: string },
+        serviceManifest: import("@andy-code-cat/contracts").ServiceManifestV1 | undefined,
         metadata: import("../../domain/entities/PreviewSnapshot").PreviewSnapshotMetadata | undefined,
         userId: string,
         projectId: string,
         newCustomSlug?: string,
         presetId?: string | null,
+        formSettings?: ProjectFormSettings,
     ): Promise<SiteDeployment> {
         this.assertPublishableMedia(artifacts, { projectId, userId, snapshotId });
 
-        const processed = postProcess(artifacts);
+        assertGeneratedJavaScriptSyntax(artifacts.js);
+        const formRuntime = prepareArtifactServices({
+            artifacts,
+            serviceManifest,
+            formSettings,
+            delivery: "external-files",
+        });
+        const rawProcessed = postProcess(formRuntime.artifacts);
+        const processed = {
+            html: normalizePublishedMediaUrls(rawProcessed.html),
+            css: normalizePublishedMediaUrls(rawProcessed.css),
+            js: normalizePublishedMediaUrls(rawProcessed.js),
+        };
         const version = computeContentVersion(processed.css, processed.js);
         let html = injectVersionHash(processed.html, version);
 
@@ -349,10 +403,12 @@ export class PublishProject {
                 html = injectGovernanceHtml(html, injections);
             }
         }
+        html = normalizePublishedMediaUrls(html);
 
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;
         if (processed.js) files["script.js"] = processed.js;
+        Object.assign(files, formRuntime.runtimeFiles);
         const datasetPackage = this.assetRepository
             ? await buildPublishedDatasetBindingPackage({
                 publishId: existing.publishId,

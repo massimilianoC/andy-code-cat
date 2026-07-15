@@ -1,4 +1,4 @@
-import { buildBaseConstraintsLayer, buildLanguageLayer, buildLayerT, buildPresetLayer, type TemplateResolution } from "./systemPromptLayers";
+import { buildBaseConstraintsLayer, buildLanguageLayer, buildLayerT, buildPresetLayer, buildServiceContractLayer, type TemplateResolution } from "./systemPromptLayers";
 export type { TemplateResolution };
 
 const LAYER_SEPARATOR = "\n\n---\n\n";
@@ -11,7 +11,7 @@ const LAYER_SEPARATOR = "\n\n---\n\n";
  *
  * See docs/specs/PROMPT_LAYER_SSOT_SPEC.md for the full rationale.
  */
-export type PromptLayerId = "A" | "L" | "B" | "S" | "T" | "C" | "G" | "D" | "X" | "E" | "F" | "P" | "R";
+export type PromptLayerId = "A" | "L" | "B" | "V" | "S" | "T" | "C" | "G" | "D" | "X" | "E" | "F" | "P" | "R" | "Q";
 
 export interface PromptLayerDescriptor {
     id: PromptLayerId;
@@ -32,6 +32,7 @@ export const PROMPT_LAYER_DESCRIPTORS: readonly PromptLayerDescriptor[] = [
     { id: "A", field: "layerA", key: "base-constraints", label: "Layer A — Base constraints", editableBy: "none" },
     { id: "L", field: "layerL", key: "output-language", label: "Layer L — Output language", editableBy: "none" },
     { id: "B", field: "layerB", key: "preset-format", label: "Layer B — Preset output format", editableBy: "superadmin" },
+    { id: "V", field: "layerV", key: "service-contract", label: "Layer V — Service contract", editableBy: "none" },
     { id: "S", field: "layerS", key: "template-skills", label: "Layer S — Template skills", editableBy: "superadmin" },
     { id: "T", field: "layerT", key: "template-resolution", label: "Layer T — Template resolution", editableBy: "user-template" },
     { id: "C", field: "layerC", key: "style-context", label: "Layer C — Style context", editableBy: "none" },
@@ -42,12 +43,15 @@ export const PROMPT_LAYER_DESCRIPTORS: readonly PromptLayerDescriptor[] = [
     { id: "F", field: "layerF", key: "governance", label: "Layer F — Governance system prompt", editableBy: "superadmin" },
     { id: "P", field: "budgetPolicy", key: "output-budget-policy", label: "Output budget policy", editableBy: "none" },
     { id: "R", field: "layerR", key: "request-override", label: "Request-level system prompt override", editableBy: "none" },
+    { id: "Q", field: "layerQ", key: "focused-edit-protocol", label: "Layer Q — Focused edit protocol", editableBy: "none" },
 ] as const;
 
 export interface ResolvedPromptLayers {
     layerA: string;
     layerL: string;
     layerB: string;
+    /** Deterministic JSON/slot protocol for enabled artifact services. */
+    layerV: string;
     /** Filesystem-selected template skills, empty when no preset skill folder is resolved. */
     layerS: string;
     layerT: string;
@@ -59,6 +63,8 @@ export interface ResolvedPromptLayers {
     layerF: string;
     budgetPolicy: string;
     layerR: string;
+    /** Focused edit protocol and focused governance, empty for normal generation. */
+    layerQ: string;
     composed: string;
     /** Structured breakdown of `composed`, in composition order — the same data the frontend renders. */
     layers: PromptLayerTraceEntry[];
@@ -90,6 +96,7 @@ interface ComposeOpts {
     userTemplatePreprompt?: string;
     /** Layer S content resolved from docs/skills/template-skills/by-template/<presetId>/*.md. */
     skillsLayer?: string;
+    enabledServiceCapabilities?: readonly "forms"[];
     styleBlock?: string;
     brandContextLayer?: string;
     documentContextLayer?: string;
@@ -98,6 +105,7 @@ interface ComposeOpts {
     outputBudgetPolicy?: string;
     requestSystemPrompt?: string;
     governanceSystemPrompt?: string;
+    focusedModeLayer?: string;
     /** BCP-47 output language (e.g. "it", "en"). When provided, injects Layer L after Layer A. */
     outputLanguage?: string | null;
     /**
@@ -125,6 +133,7 @@ export function composeSystemPromptWithLayers(opts: ComposeOpts): ResolvedPrompt
     const layerA = buildBaseConstraintsLayer();
     const layerL = opts.outputLanguage ? buildLanguageLayer(opts.outputLanguage) : "";
     const layerB = opts.presetLayer ?? buildPresetLayer(opts.presetId);
+    const layerV = buildServiceContractLayer({ presetId: opts.presetId, enabledCapabilities: opts.enabledServiceCapabilities });
     const layerS = opts.skillsLayer ?? "";
     const layerT = buildLayerT(opts.templateResolution, { userTemplatePreprompt: opts.userTemplatePreprompt });
     const layerC = opts.styleBlock ?? "";
@@ -135,9 +144,10 @@ export function composeSystemPromptWithLayers(opts: ComposeOpts): ResolvedPrompt
     const layerF = opts.governanceSystemPrompt ?? "";
     const budgetPolicy = opts.outputBudgetPolicy ?? "";
     const layerR = opts.requestSystemPrompt ?? "";
+    const layerQ = opts.focusedModeLayer ?? "";
 
     const raw: Record<string, string> = {
-        layerA, layerL, layerB, layerS, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, layerR,
+        layerA, layerL, layerB, layerV, layerS, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, layerR, layerQ,
     };
 
     const defaultSource = (id: PromptLayerId): string => {
@@ -176,5 +186,5 @@ export function composeSystemPromptWithLayers(opts: ComposeOpts): ResolvedPrompt
     // leading/trailing whitespace, so spans stay byte-exact against `composed`.
     const composed = segments.join(LAYER_SEPARATOR);
 
-    return { layerA, layerL, layerB, layerS, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, layerR, composed, layers };
+    return { layerA, layerL, layerB, layerV, layerS, layerT, layerC, layerG, layerD, layerX, layerE, layerF, budgetPolicy, layerR, layerQ, composed, layers };
 }

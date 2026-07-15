@@ -7,6 +7,7 @@ export interface PreviewSnapshotRepository {
         sourceMessageId?: string;
         parentSnapshotId?: string;
         artifacts: PreviewSnapshot["artifacts"];
+        serviceManifest?: PreviewSnapshot["serviceManifest"];
         focusContext?: PreviewSnapshot["focusContext"];
         metadata?: PreviewSnapshot["metadata"];
         activate: boolean;

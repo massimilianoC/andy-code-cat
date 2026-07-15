@@ -25,6 +25,13 @@ OUTPUT RULES
 - Write in the same language as the user's input.
 - Make it directly usable as the next user prompt in a generation workflow.`;
 
+const AUTHORITATIVE_BRIEF_PRESERVATION_CONTRACT = `AUTHORITATIVE BRIEF PRESERVATION
+- Treat [SOURCE_REQUEST] as the highest-authority user content when present.
+- Preserve every explicit fact, requested deliverable, template choice, named section/state, functional requirement, preference, constraint and prohibition.
+- Enrichment is additive only. Never generalize a specific requirement into a weaker one, silently remove details, reverse a negative instruction, or replace the selected project type.
+- Keep [MUST_AVOID] exclusions explicit in the optimized result.
+- If contextual suggestions conflict with the source request, discard the conflicting suggestion.`;
+
 function formatTagLine(label: string, values: string[] | undefined): string {
     if (!values || values.length === 0) return "";
     return `${label}: ${values.join(", ")}`;
@@ -69,7 +76,10 @@ export function buildOptimizeUserPromptRequest(input: {
         return `- ${asset.originalName}${hints ? ` — ${hints}` : ""}`;
     }).join("\n");
 
-    const systemPrompt = (input.taskSettings?.systemTemplate || DEFAULT_OPTIMIZE_USER_PROMPT_SYSTEM_TEMPLATE).trim();
+    const configuredSystemPrompt = (input.taskSettings?.systemTemplate || DEFAULT_OPTIMIZE_USER_PROMPT_SYSTEM_TEMPLATE).trim();
+    // Operator overrides customize tone/depth but cannot remove the non-destructive
+    // handoff contract protecting the user's Zero Effort brief.
+    const systemPrompt = `${configuredSystemPrompt}\n\n${AUTHORITATIVE_BRIEF_PRESERVATION_CONTRACT}`;
 
     const userPrompt = [
         "Optimize the following user prompt for the active project context.",

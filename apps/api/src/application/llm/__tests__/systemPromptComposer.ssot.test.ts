@@ -43,6 +43,38 @@ describe("composeSystemPromptWithLayers — SSOT contract", () => {
         expect(result.composed).not.toContain("PF_LAYER id=S");
     });
 
+    it("keeps structural form protocol in Layer V and craft guidance in Layer S", async () => {
+        const { composeSystemPromptWithLayers } = await loadComposer();
+        const result = composeSystemPromptWithLayers({
+            presetId: "form",
+            skillsLayer: "FORM CRAFT: minimize fields and provide clear labels.",
+            sources: { V: "preset-capability", S: "filesystem-template-skills:form:form-ux-validation" },
+        });
+        const layerV = result.layers.find((layer) => layer.id === "V")!;
+        const layerS = result.layers.find((layer) => layer.id === "S")!;
+
+        expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("serviceManifest");
+        expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("data-pf-form-id");
+        expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("serviceManifest appears ONLY in the top-level JSON response field");
+        expect(result.composed.slice(layerV.span[0], layerV.span[1])).toContain("artifacts.js MUST NOT query the slot");
+        expect(result.composed.slice(layerS.span[0], layerS.span[1])).not.toContain("serviceManifest");
+        expect(layerV.source).toBe("preset-capability");
+    });
+
+    it("enables Layer V for a non-form preset only when the project capability is configured", async () => {
+        const { composeSystemPromptWithLayers } = await loadComposer();
+        const withoutCapability = composeSystemPromptWithLayers({ presetId: "landing" });
+        const withCapability = composeSystemPromptWithLayers({
+            presetId: "landing",
+            enabledServiceCapabilities: ["forms"],
+            sources: { V: "project-service-config" },
+        });
+
+        expect(withoutCapability.layers.find((layer) => layer.id === "V")!.chars).toBe(0);
+        expect(withCapability.layers.find((layer) => layer.id === "V")!.chars).toBeGreaterThan(0);
+        expect(withCapability.layers.find((layer) => layer.id === "V")!.source).toBe("project-service-config");
+    });
+
     it("honours caller-provided sources and defaults the rest", async () => {
         const { composeSystemPromptWithLayers } = await loadComposer();
         const result = composeSystemPromptWithLayers({
@@ -59,6 +91,20 @@ describe("composeSystemPromptWithLayers — SSOT contract", () => {
         const nonEmpty = result.layers.filter((l) => l.chars > 0);
         expect(nonEmpty[nonEmpty.length - 1]!.id).toBe("R");
         expect(result.composed.trimEnd().endsWith("<!-- /PF_LAYER id=R -->")).toBe(true);
+    });
+
+    it("registers focused edit instructions as Layer Q after the request override", async () => {
+        const { composeSystemPromptWithLayers } = await loadComposer();
+        const result = composeSystemPromptWithLayers({
+            requestSystemPrompt: "REQ OVERRIDE",
+            focusedModeLayer: "FOCUSED PROTOCOL",
+            sources: { R: "request", Q: "focused-mode+governance" },
+        });
+        const nonEmpty = result.layers.filter((layer) => layer.chars > 0);
+        expect(nonEmpty.slice(-2).map((layer) => layer.id)).toEqual(["R", "Q"]);
+        const layerQ = result.layers.find((layer) => layer.id === "Q")!;
+        expect(result.composed.slice(layerQ.span[0], layerQ.span[1])).toContain("FOCUSED PROTOCOL");
+        expect(layerQ.source).toBe("focused-mode+governance");
     });
 
     // Regression guard: Layer L (OUTPUT LANGUAGE) must be injected when a language is

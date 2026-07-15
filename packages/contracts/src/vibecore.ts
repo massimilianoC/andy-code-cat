@@ -97,6 +97,17 @@ export interface ZeroEffortDraft {
     tone?: string;
     primaryCta?: string;
     styleHint?: string;
+    /** Verbatim user request; inferred fields may enrich but never contradict it. */
+    sourceRequest?: string;
+    projectSummary?: string;
+    contentStructure?: string;
+    contentRequirements?: string;
+    functionalRequirements?: string;
+    interactionModel?: string;
+    visualDirection?: string;
+    successCriteria?: string;
+    constraints?: string;
+    mustAvoid?: string;
     contactInfo?: Array<{ key: string; value: string }>;
     styleAttributes?: string[];
     /** Filenames of project documents that were analysed to generate this draft (informational only). */

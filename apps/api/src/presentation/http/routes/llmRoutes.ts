@@ -4,11 +4,13 @@ import {
     llmPromptConfigSchema,
     optimizePromptSchema,
     type LlmChatPreviewResult,
+    type LlmFocusContext,
     type MediaResolutionMetadata,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson, buildFormattedReply } from "../../../application/llm/llmParser";
 import { applyFocusPatch } from "../../../application/llm/llmPatchMerger";
 import { buildFocusedModeSystemAddendum } from "../../../application/llm/focusedPrompt";
+import { assertPromptTraceParity } from "../../../application/llm/promptTraceParity";
 import { buildChatCompletionRequestBody } from "../../../application/llm/chatRequestAdapter";
 import {
     buildOutputBudgetPolicy,
@@ -86,7 +88,6 @@ type LlmRuntimeContext = {
     promptConfigId?: string;
     prePromptTemplate?: string;
     systemPrompt: string;
-    governanceFocusedSystemPrompt?: string;
     /** Structured breakdown of systemPrompt — same spans, persisted in promptingTrace.layers. */
     promptLayers: PromptLayerTraceEntry[];
 };
@@ -340,6 +341,10 @@ export function createLlmRoutes(): Router {
         systemPrompt?: string;
         /** BCP-47 output language for Layer L injection (e.g. "it", "en"). When absent, Layer L is omitted. */
         outputLanguage?: string;
+        focusedMode?: {
+            focusContext: LlmFocusContext;
+            pageMap?: Parameters<typeof buildFocusedModeSystemAddendum>[1];
+        };
     }): Promise<LlmRuntimeContext> {
         const catalog = await getLlmCatalog.execute();
         const promptConfig = await getLlmPromptConfig.execute(input.projectId);
@@ -490,10 +495,28 @@ export function createLlmRoutes(): Router {
         const templateSkills = resolveFilesystemTemplateSkills({
             presetId: project?.presetId,
         });
+        const governanceFocusedSystemPrompt = [
+            roleModel?.focusPromptTemplate,
+            governanceFocusedBasePrompt,
+        ]
+            .filter((value): value is string => Boolean(value && value.trim()))
+            .join("\n\n");
+        const focusedModeLayer = input.focusedMode
+            ? [
+                buildFocusedModeSystemAddendum(
+                    input.focusedMode.focusContext,
+                    input.focusedMode.pageMap,
+                ),
+                governanceFocusedSystemPrompt,
+            ].filter(Boolean).join("\n\n")
+            : "";
 
         const layerSources: Partial<Record<import("../../../application/llm/systemPromptComposer").PromptLayerId, string>> = {
             L: outputLanguageSource,
             B: project?.presetId ? "preset-catalog" : "code-default",
+            V: project?.serviceConfig?.forms?.enabled
+                ? "project-service-config"
+                : project?.presetId === "form" ? "preset-capability" : "empty",
             S: templateSkills
                 ? `filesystem-template-skills:${templateSkills.presetId}:${templateSkills.documents.map((doc) => doc.id).join(",")}`
                 : "empty",
@@ -504,10 +527,14 @@ export function createLlmRoutes(): Router {
                     : promptConfig.enabled && promptConfig.prePromptTemplate ? "project-config" : "empty",
             F: governanceResolved.source,
             R: input.systemPrompt ? "request" : "empty",
+            Q: input.focusedMode
+                ? governanceFocusedSystemPrompt ? "focused-mode+governance" : "focused-mode"
+                : "empty",
         };
         const composedLayers = composeSystemPromptWithLayers({
             presetId: project?.presetId,
             presetLayer,
+            enabledServiceCapabilities: project?.serviceConfig?.forms?.enabled ? ["forms"] : [],
             skillsLayer: templateSkills?.layer,
             templateResolution,
             styleBlock,
@@ -518,17 +545,11 @@ export function createLlmRoutes(): Router {
             outputBudgetPolicy: buildOutputBudgetPolicy(),
             requestSystemPrompt: input.systemPrompt,
             governanceSystemPrompt,
+            focusedModeLayer,
             outputLanguage: resolvedOutputLanguage,
             sources: layerSources,
         });
         const systemPrompt = composedLayers.composed;
-
-        const governanceFocusedSystemPrompt = [
-            roleModel?.focusPromptTemplate,
-            governanceFocusedBasePrompt,
-        ]
-            .filter((value): value is string => Boolean(value && value.trim()))
-            .join("\n\n");
 
         // For openai-compatible providers with an explicit model request, trust the
         // requested id directly. The catalog is already live-hydrated (GetLlmCatalog →
@@ -542,7 +563,6 @@ export function createLlmRoutes(): Router {
                 promptConfigId: promptConfig.id,
                 prePromptTemplate: effectivePrePromptTemplate || undefined,
                 systemPrompt,
-                governanceFocusedSystemPrompt: governanceFocusedSystemPrompt || undefined,
                 promptLayers: composedLayers.layers,
             };
         }
@@ -558,7 +578,6 @@ export function createLlmRoutes(): Router {
             promptConfigId: promptConfig.id,
             prePromptTemplate: effectivePrePromptTemplate || undefined,
             systemPrompt,
-            governanceFocusedSystemPrompt: governanceFocusedSystemPrompt || undefined,
             promptLayers: composedLayers.layers,
         };
     }
@@ -824,6 +843,13 @@ export function createLlmRoutes(): Router {
 
         try {
             const body = parseLlmChatPreviewBody(req.body);
+            const isFocusedMode = Boolean(
+                body.focusContext
+                && body.focusContext.mode !== "project"
+                && body.currentArtifacts
+                && (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
+            );
+            const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
             const context = await resolveContext({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
@@ -834,19 +860,12 @@ export function createLlmRoutes(): Router {
                 assetIds: body.assetIds,
                 systemPrompt: body.systemPrompt,
                 outputLanguage: body.uiLanguage,
+                focusedMode: isFocusedMode ? {
+                    focusContext: body.focusContext!,
+                    pageMap: sectionOpts?.pageMap,
+                } : undefined,
             });
-
-            const isFocusedMode = Boolean(
-                body.focusContext &&
-                body.focusContext.mode !== "project" &&
-                body.currentArtifacts &&
-                (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
-            );
-            const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
-            const effectiveSystemPrompt = isFocusedMode
-                ? context.systemPrompt + "\n\n" + buildFocusedModeSystemAddendum(body.focusContext!, sectionOpts?.pageMap)
-                + (context.governanceFocusedSystemPrompt ? "\n\n" + context.governanceFocusedSystemPrompt : "")
-                : context.systemPrompt;
+            const effectiveSystemPrompt = context.systemPrompt;
 
             const { messages } = buildMessagesWithHistory(
                 effectiveSystemPrompt,
@@ -856,6 +875,11 @@ export function createLlmRoutes(): Router {
                 body.focusContext,
                 sectionOpts,
             );
+            assertPromptTraceParity({
+                effectiveSystemPrompt,
+                layers: context.promptLayers,
+                messagesSentToLlm: messages,
+            });
 
             const authHeader = resolveAuthHeader(context.providerCatalog.provider, context.providerCatalog.authType);
 
@@ -1087,7 +1111,7 @@ export function createLlmRoutes(): Router {
                     promptConfigId: context.promptConfigId,
                     prePromptTemplate: context.prePromptTemplate,
                     effectiveSystemPrompt: effectiveSystemPrompt,
-                    layers: effectiveSystemPrompt === context.systemPrompt ? context.promptLayers : undefined,
+                    layers: context.promptLayers,
                     messagesSentToLlm: messages,
                     focusContext: body.focusContext,
                 },
@@ -1225,6 +1249,13 @@ export function createLlmRoutes(): Router {
 
         try {
             const body = parseLlmChatPreviewBody(req.body);
+            const isFocusedMode = Boolean(
+                body.focusContext
+                && body.focusContext.mode !== "project"
+                && body.currentArtifacts
+                && (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
+            );
+            const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
             const context = await resolveContext({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
@@ -1235,19 +1266,12 @@ export function createLlmRoutes(): Router {
                 assetIds: body.assetIds,
                 systemPrompt: body.systemPrompt,
                 outputLanguage: body.uiLanguage,
+                focusedMode: isFocusedMode ? {
+                    focusContext: body.focusContext!,
+                    pageMap: sectionOpts?.pageMap,
+                } : undefined,
             });
-
-            const isFocusedMode = Boolean(
-                body.focusContext &&
-                body.focusContext.mode !== "project" &&
-                body.currentArtifacts &&
-                (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
-            );
-            const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
-            const effectiveSystemPrompt = isFocusedMode
-                ? context.systemPrompt + "\n\n" + buildFocusedModeSystemAddendum(body.focusContext!, sectionOpts?.pageMap)
-                + (context.governanceFocusedSystemPrompt ? "\n\n" + context.governanceFocusedSystemPrompt : "")
-                : context.systemPrompt;
+            const effectiveSystemPrompt = context.systemPrompt;
 
             const { messages, historyIncluded } = buildMessagesWithHistory(
                 effectiveSystemPrompt,
@@ -1257,6 +1281,11 @@ export function createLlmRoutes(): Router {
                 body.focusContext,
                 sectionOpts,
             );
+            assertPromptTraceParity({
+                effectiveSystemPrompt,
+                layers: context.promptLayers,
+                messagesSentToLlm: messages,
+            });
 
             const authHeader = resolveAuthHeader(context.providerCatalog.provider, context.providerCatalog.authType);
             console.log(`[stream-debug] provider=${context.providerCatalog.provider} model=${context.modelId} authType=${context.providerCatalog.authType} hasAuth=${Boolean(authHeader)} historyIncluded=${historyIncluded} msgCount=${messages.length}`);
@@ -1617,7 +1646,7 @@ export function createLlmRoutes(): Router {
                     promptConfigId: context.promptConfigId,
                     prePromptTemplate: context.prePromptTemplate,
                     effectiveSystemPrompt: effectiveSystemPrompt,
-                    layers: effectiveSystemPrompt === context.systemPrompt ? context.promptLayers : undefined,
+                    layers: context.promptLayers,
                     messagesSentToLlm: messages,
                     focusContext: body.focusContext,
                 },

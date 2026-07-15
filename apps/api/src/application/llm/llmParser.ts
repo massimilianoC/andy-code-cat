@@ -1,4 +1,4 @@
-import { artifactMediaManifestSchema, type LlmStructuredResponse } from "@andy-code-cat/contracts";
+import { artifactMediaManifestSchema, serviceManifestSchema, type LlmStructuredResponse } from "@andy-code-cat/contracts";
 import { jsonrepair } from "jsonrepair";
 
 /**
@@ -298,6 +298,12 @@ function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredRe
     const manifest = rawManifest
         ? artifactMediaManifestSchema.safeParse(rawManifest)
         : null;
+    const rawServiceManifest =
+        coerceManifestCandidate(parsed.serviceManifest)
+        ?? coerceManifestCandidate((parsed.artifacts as unknown as Record<string, unknown>)?.serviceManifest);
+    const serviceManifest = rawServiceManifest
+        ? serviceManifestSchema.safeParse(rawServiceManifest)
+        : null;
 
     return {
         chat: {
@@ -307,6 +313,7 @@ function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredRe
         },
         artifacts: { html: htmlStr, css: cssStr, js: jsStr },
         mediaManifest: manifest?.success ? manifest.data : undefined,
+        serviceManifest: serviceManifest?.success ? serviceManifest.data : undefined,
         focusPatch: extractFocusPatch(parsed),
     };
 }

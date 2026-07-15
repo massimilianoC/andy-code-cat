@@ -1,4 +1,4 @@
-import type { Project, ProjectTemplateResolution } from "../entities/Project";
+import type { Project, ProjectFormSettings, ProjectTemplateResolution } from "../entities/Project";
 
 export interface AdminProjectFilters {
     search?: string;   // matches project name (case-insensitive)
@@ -22,6 +22,8 @@ export interface ProjectRepository {
     rename(projectId: string, userId: string, name: string): Promise<Project | null>;
     /** Update mutable project metadata; returns updated project or null if not found / not owned. */
     update(projectId: string, userId: string, input: { name?: string; presetId?: string; templateResolution?: ProjectTemplateResolution; outputLanguage?: string }): Promise<Project | null>;
+    /** Updates only owner-managed form delivery configuration. Auth/sandbox stays in the presentation layer. */
+    updateFormSettings(projectId: string, userId: string, settings: ProjectFormSettings): Promise<Project | null>;
     // ── Admin ops ─────────────────────────────────────────────────────────────
     listAllPaginated(page: number, limit: number, filters?: AdminProjectFilters): Promise<AdminProjectListResult>;
     countAll(): Promise<number>;

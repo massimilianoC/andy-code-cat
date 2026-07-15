@@ -52,6 +52,37 @@ interface ExtendedForm {
     contactFields: ContactField[];
     styleAttributes: string[];
     outputLanguage: string;
+    sourceRequest?: string;
+    projectSummary?: string;
+    contentStructure?: string;
+    contentRequirements?: string;
+    functionalRequirements?: string;
+    interactionModel?: string;
+    visualDirection?: string;
+    successCriteria?: string;
+    constraints?: string;
+    mustAvoid?: string;
+}
+
+function ExpressiveBriefField({ id, label, hint, value, onChange }: {
+    id: string;
+    label: string;
+    hint: string;
+    value?: string;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <div className="space-y-2">
+            <Label htmlFor={id}>{label}</Label>
+            <p className="text-xs text-muted-foreground">{hint}</p>
+            <textarea
+                id={id}
+                className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+                value={value ?? ""}
+                onChange={(event) => onChange(event.target.value)}
+            />
+        </div>
+    );
 }
 
 type GenerationPhase =
@@ -132,6 +163,21 @@ function Step1Content({ form, onChange, onNext, canProceed }: Step1Props) {
                 />
             </div>
 
+            <ExpressiveBriefField
+                id="projectSummary"
+                label={t("launch.expressive.projectSummary", "Concept and value proposition")}
+                hint={t("launch.expressive.projectSummaryHint", "What is being created, why it matters, and what makes it distinctive.")}
+                value={form.projectSummary}
+                onChange={(value) => onChange({ projectSummary: value })}
+            />
+            <ExpressiveBriefField
+                id="contentStructure"
+                label={t("launch.expressive.contentStructure", "Structure, screens and states")}
+                hint={t("launch.expressive.contentStructureHint", "Ordered sections, screens, slides, scenes, form steps, game states or levels.")}
+                value={form.contentStructure}
+                onChange={(value) => onChange({ contentStructure: value })}
+            />
+
             <div className="space-y-2">
                 <Label>{t("launch.step1.presetId")}</Label>
                 <p className="text-xs text-muted-foreground">{t("launch.step1.presetIdHint")}</p>
@@ -208,6 +254,28 @@ function Step2Content({ form, onChange, onNext, onBack, canProceed, addContact, 
                     placeholder={t("launch.step2.audiencePlaceholder")}
                 />
             </div>
+
+            <ExpressiveBriefField
+                id="contentRequirements"
+                label={t("launch.expressive.contentRequirements", "Content and data requirements")}
+                hint={t("launch.expressive.contentRequirementsHint", "Copy, messages, entities, data, assets and information that must be present.")}
+                value={form.contentRequirements}
+                onChange={(value) => onChange({ contentRequirements: value })}
+            />
+            <ExpressiveBriefField
+                id="functionalRequirements"
+                label={t("launch.expressive.functionalRequirements", "Functions and mechanics")}
+                hint={t("launch.expressive.functionalRequirementsHint", "Behaviors, validation, calculations, mechanics and capabilities required from the result.")}
+                value={form.functionalRequirements}
+                onChange={(value) => onChange({ functionalRequirements: value })}
+            />
+            <ExpressiveBriefField
+                id="interactionModel"
+                label={t("launch.expressive.interactionModel", "Interactions, controls and feedback")}
+                hint={t("launch.expressive.interactionModelHint", "Navigation, input methods, controls, transitions, feedback and important edge cases.")}
+                value={form.interactionModel}
+                onChange={(value) => onChange({ interactionModel: value })}
+            />
 
             <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -334,6 +402,35 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
                 </div>
             </div>
 
+            <ExpressiveBriefField
+                id="visualDirection"
+                label={t("launch.expressive.visualDirection", "Detailed visual direction")}
+                hint={t("launch.expressive.visualDirectionHint", "Composition, hierarchy, palette, typography, imagery, motion and atmosphere.")}
+                value={form.visualDirection}
+                onChange={(value) => onChange({ visualDirection: value })}
+            />
+            <ExpressiveBriefField
+                id="successCriteria"
+                label={t("launch.expressive.successCriteria", "Success and completion criteria")}
+                hint={t("launch.expressive.successCriteriaHint", "Observable conditions the first generation must satisfy to be considered complete.")}
+                value={form.successCriteria}
+                onChange={(value) => onChange({ successCriteria: value })}
+            />
+            <ExpressiveBriefField
+                id="constraints"
+                label={t("launch.expressive.constraints", "Constraints and compatibility")}
+                hint={t("launch.expressive.constraintsHint", "Accessibility, responsive behavior, legal, content, device or compatibility constraints.")}
+                value={form.constraints}
+                onChange={(value) => onChange({ constraints: value })}
+            />
+            <ExpressiveBriefField
+                id="mustAvoid"
+                label={t("launch.expressive.mustAvoid", "Must avoid")}
+                hint={t("launch.expressive.mustAvoidHint", "Only explicit exclusions: patterns, content or behaviors that must not appear.")}
+                value={form.mustAvoid}
+                onChange={(value) => onChange({ mustAvoid: value })}
+            />
+
             <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                     <Label htmlFor="tone">{t("launch.step3.tone")}</Label>
@@ -430,6 +527,15 @@ function buildStructuredBrief(
         `- **${t("launch.brief.siteType")}:** ${siteLabel}`,
     );
 
+    const sourceRequest = form.sourceRequest?.trim() || form.primaryGoal.trim();
+    if (sourceRequest) {
+        sections.push(
+            `## [SOURCE_REQUEST] Original user request — authoritative\n\n${sourceRequest}\n\n` +
+            `> Preserve every explicit fact, preference, requirement and prohibition. ` +
+            `The enriched sections below are additive; if they conflict, this source request wins.`,
+        );
+    }
+
     if (form.primaryGoal.trim()) {
         sections.push(
             `## ${t("launch.brief.goal")}\n\n` +
@@ -442,6 +548,21 @@ function buildStructuredBrief(
             `## ${t("launch.brief.audience")}\n\n` +
             form.audience.trim(),
         );
+    }
+
+    const expressiveSections: Array<[string, string, string | undefined]> = [
+        ["CONCEPT", "Project concept and value proposition", form.projectSummary],
+        ["STRUCTURE", "Required content structure, screens and states", form.contentStructure],
+        ["CONTENT", "Content, data, entities and asset requirements", form.contentRequirements],
+        ["FUNCTIONS", "Functional requirements and behavior", form.functionalRequirements],
+        ["INTERACTIONS", "Interaction model, controls and feedback", form.interactionModel],
+        ["VISUAL_DIRECTION", "Detailed visual and experiential direction", form.visualDirection],
+        ["SUCCESS", "Completion and success criteria", form.successCriteria],
+        ["CONSTRAINTS", "Constraints and compatibility requirements", form.constraints],
+        ["MUST_AVOID", "Explicit exclusions and negative requirements", form.mustAvoid],
+    ];
+    for (const [key, title, value] of expressiveSections) {
+        if (value?.trim()) sections.push(`## [${key}] ${title}\n\n${value.trim()}`);
     }
 
     const styleLines: string[] = [];
@@ -557,7 +678,7 @@ export default function ZeroEffortLaunchPage() {
     const defaultUiLang = i18n.language?.split("-")[0] ?? "en";
     const [form, setForm] = useState<ExtendedForm>({
         businessName: "",
-        presetId: "landing",
+        presetId: "neutral",
         primaryGoal: "",
         audience: "",
         tone: "clear and modern",
@@ -566,6 +687,16 @@ export default function ZeroEffortLaunchPage() {
         contactFields: [],
         styleAttributes: [],
         outputLanguage: defaultUiLang,
+        sourceRequest: "",
+        projectSummary: "",
+        contentStructure: "",
+        contentRequirements: "",
+        functionalRequirements: "",
+        interactionModel: "",
+        visualDirection: "",
+        successCriteria: "",
+        constraints: "",
+        mustAvoid: "",
     });
 
     function patch(update: Partial<ExtendedForm>) {
@@ -580,7 +711,13 @@ export default function ZeroEffortLaunchPage() {
             .then((res) => {
                 setProject(res.project);
                 setPrefillTemplateId((prev) => prev || res.project.presetId || null);
-                setForm((prev) => ({ ...prev, businessName: prev.businessName || res.project.name }));
+                setForm((prev) => ({
+                    ...prev,
+                    businessName: prev.businessName || res.project.name,
+                    presetId: prev.presetId === "neutral"
+                        ? (res.project.presetId || prev.presetId)
+                        : prev.presetId,
+                }));
             })
             .catch(() => setError("Unable to load the project."))
             .finally(() => setLoading(false));
@@ -626,6 +763,16 @@ export default function ZeroEffortLaunchPage() {
                 outputLanguage: typeof draft.outputLanguage === "string" && draft.outputLanguage.trim()
                     ? draft.outputLanguage.trim()
                     : defaultUiLang,
+                sourceRequest: typeof draft.sourceRequest === "string" ? draft.sourceRequest : "",
+                projectSummary: typeof draft.projectSummary === "string" ? draft.projectSummary : "",
+                contentStructure: typeof draft.contentStructure === "string" ? draft.contentStructure : "",
+                contentRequirements: typeof draft.contentRequirements === "string" ? draft.contentRequirements : "",
+                functionalRequirements: typeof draft.functionalRequirements === "string" ? draft.functionalRequirements : "",
+                interactionModel: typeof draft.interactionModel === "string" ? draft.interactionModel : "",
+                visualDirection: typeof draft.visualDirection === "string" ? draft.visualDirection : "",
+                successCriteria: typeof draft.successCriteria === "string" ? draft.successCriteria : "",
+                constraints: typeof draft.constraints === "string" ? draft.constraints : "",
+                mustAvoid: typeof draft.mustAvoid === "string" ? draft.mustAvoid : "",
             });
             // Restore the names of documents that the AI used to generate this brief
             if (Array.isArray(draft.attachedDocuments)) {
@@ -652,7 +799,9 @@ export default function ZeroEffortLaunchPage() {
         [form.businessName, form.primaryGoal],
     );
     const step2Valid = useMemo(() => form.audience.trim().length >= 3, [form.audience]);
-    const selectedTemplateId = prefillTemplateId || project?.presetId || null;
+    // The editable form is the single source of truth after prefill. This keeps
+    // the visible badge, brief and persisted project preset aligned.
+    const selectedTemplateId = form.presetId || prefillTemplateId || project?.presetId || null;
     const selectedTemplateLabel = templateLabel(selectedTemplateId, t);
     const selectedFormatLabel = !selectedTemplateLabel && prefillFormatHint
         ? t(`launch.formatHints.${prefillFormatHint}`, {
@@ -718,6 +867,16 @@ export default function ZeroEffortLaunchPage() {
             tone: form.tone,
             primaryCta: form.primaryCta,
             styleHint: form.styleHint,
+            sourceRequest: form.sourceRequest || form.primaryGoal,
+            projectSummary: form.projectSummary,
+            contentStructure: form.contentStructure,
+            contentRequirements: form.contentRequirements,
+            functionalRequirements: form.functionalRequirements,
+            interactionModel: form.interactionModel,
+            visualDirection: form.visualDirection,
+            successCriteria: form.successCriteria,
+            constraints: form.constraints,
+            mustAvoid: form.mustAvoid,
             contactInfo: form.contactFields
                 .filter((cf) => cf.key.trim() && cf.value.trim())
                 .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
@@ -802,10 +961,21 @@ export default function ZeroEffortLaunchPage() {
             tone:           form.tone,
             primaryCta:     form.primaryCta,
             styleHint:      form.styleHint,
+            sourceRequest: form.sourceRequest || form.primaryGoal,
+            projectSummary: form.projectSummary,
+            contentStructure: form.contentStructure,
+            contentRequirements: form.contentRequirements,
+            functionalRequirements: form.functionalRequirements,
+            interactionModel: form.interactionModel,
+            visualDirection: form.visualDirection,
+            successCriteria: form.successCriteria,
+            constraints: form.constraints,
+            mustAvoid: form.mustAvoid,
             contactInfo:    form.contactFields
                 .filter((cf) => cf.key.trim() && cf.value.trim())
                 .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
             styleAttributes: form.styleAttributes,
+            outputLanguage: form.outputLanguage,
         };
         try {
             const [briefResult, configResult] = await Promise.all([

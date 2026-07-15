@@ -79,6 +79,7 @@ Forbidden:
 - `AssetEnrichmentTrace`
 - `UserTemplate`
 - `WysiwygEditSession`
+- `Project.serviceConfig.forms` (owner-controlled declarative form delivery settings)
 
 ### Application/use-case surface implemented
 
@@ -109,6 +110,30 @@ Prompting and generation support:
 - `resolveFilesystemTemplateSkills` (Layer S) — reads `docs/skills/template-skills/by-template/<presetId>/*.md`
   inside the canonical `resolveContext()` prompt path. The compose files bind-mount this directory
   into the API container and the production Dockerfile copies it into the image.
+- `buildServiceContractLayer` (Layer V) — non-editable service protocol generated from platform
+  capabilities; the first implementation owns `service-manifest-v1` form slots and JSON limits.
+- `buildFocusedModeSystemAddendum` plus focused governance (Layer Q) — non-editable focused edit
+  protocol composed inside the same canonical layer registry before provider send.
+- `assertPromptTraceParity` — fail-closed parity check between the provider system message,
+  effective prompt and every descriptor marker/span, including empty layers.
+
+Declarative artifact services:
+
+- `service-manifest-v1` is validated in `packages/contracts` and persisted beside canonical
+  snapshot artifacts.
+- `Project.serviceConfig.forms` stores owner-only mailto/privacy configuration behind the double
+  sandbox.
+- `prepareArtifactServices()` is the single preview/capture/publish/ZIP boundary. The
+  `FormRuntimeAdapter` and generic platform registry resolve `runtime-plan-v1` plus separate,
+  SHA-256-pinned `pf-runtime-core`, config, forms UI, and mailto browser files. Generated
+  `artifacts.js`/`script.js` is never concatenated with platform runtime code.
+- The boundary recognizes and removes only the complete historical mailto runtime suffix from
+  legacy `artifacts.js`; unrelated generated JavaScript remains byte-preserved.
+- `assertGeneratedJavaScriptSyntax()` parses generated JS without executing it and blocks invalid
+  code before activation, publish, and ZIP export. Compiled recipient-specific runtime is never
+  stored back into the snapshot.
+- The project configuration dialog exposes the optional operational form panel; the workspace
+  artifact tabs remain focused on generated content and prompt trace.
 
 Project/profile/content operations:
 
@@ -147,6 +172,8 @@ Guided entry / Zero Effort / VibeCore:
 - `LaunchZeroEffortProject`
 - `VibeClassify`
 - `VibePrefill`
+- `vibePresetCatalog` builds the single canonical preset context shared by classification and prefill; AI matching includes censused specialist presets independently from UI visibility
+- Zero Effort carries an expressive, additive brief contract through the form and normalized conversation brief; `[SOURCE_REQUEST]` remains authoritative before God Mode optimization
 
 Grounded data runtime:
 
@@ -284,6 +311,19 @@ Critical ordering rule:
 - **Grounded data dashboard**: additive analytics route for dataset assets with per-table inspection, deterministic row browsing, table-scoped insights/suggestions, and grounded queries with explicit filters/sort
 - **Zero Effort launch flow**: simplified guided project setup under `/launch/[projectId]`
 - **GodMode workspace**: split preview/chat/editor workflow under `/workspace/[projectId]`
+  - layout-only state is owned by `app/workspace/contexts/WorkspaceLayoutContext.tsx`
+  - publish, unpublish, export, capture, and slug actions are owned by the grouped, typed controller in `app/workspace/features/header/usePublish.ts`
+  - public deployment links are resolved by `app/workspace/features/header/publishUrl.ts`; local compose links use the nginx front-door and published `/p/media/*` references remain same-origin
+  - pure chat metadata formatting lives in `app/workspace/features/chat/messageUtils.ts`
+  - focus/media input normalization lives in `app/workspace/features/focus/focusUtils.ts`
+  - authenticated preview asset URL resolution lives in `app/workspace/features/preview/resolvePreviewAssetUrls.ts`
+  - these feature modules contain no React state or providers, so they introduce no additional render boundary or runtime coordination cost
+
+### Local deploy persistence and routing
+
+- The deploy-stack API mounts `./data` at `/workspace/data`; local storage for uploads, exports, workspaces, profiles, thumbnails, and published sites remains under that root.
+- The local nginx front-door resolves `api` and `web` through Docker DNS for each request, so recreating either service does not leave nginx pinned to an obsolete container IP.
+  - chat, editor, project, and LLM state remain in the route component until their boundaries have characterization coverage
 - **Superadmin control plane**: governance, presets, integrations, model/runtime, user management
 
 ### Notable frontend components already present
@@ -297,6 +337,9 @@ Critical ordering rule:
 - `TipsPanel` / `TipsFab`
 - `NotificationPanel`
 - `MediaInspectorPanel`
+- `WorkspaceLayoutContext`
+- `usePublish`
+- `tests/e2e/workspace-refactor.spec.ts` as the workspace refactor characterization gate
 - `TagPicker`
 
 ---
@@ -320,6 +363,8 @@ The current artifact-media flow is implemented and live:
 - `MediaResolutionTrace` records resolution lineage and replay context
 - snapshot metadata persists `mediaResolution`
 - publish/export activation paths block unresolved media placeholders
+- snapshot creation repairs verified visibility failures before persistence; utility-only Tailwind artifacts receive the pinned CDN runtime and a theme derived from their CSS custom properties
+- publication reapplies the same idempotent repair for legacy snapshots, while preserving Tailwind configuration in `<head>` so it executes after the CDN runtime
 - edit-mode keyed regeneration reuses persisted traces and disables fallback
 
 Additional implemented behaviors:

@@ -62,6 +62,28 @@ describe("repairArtifactsForVisibility", () => {
         assert.doesNotMatch(r.html, /<canvas\b[^>]*id='game-canvas'/);
     });
 
+    it("restores the Tailwind runtime and custom colour config for utility-only artifacts", () => {
+        const html = `<html><head></head><body><main class='max-w-7xl flex gap-6 bg-ink text-cream font-display'>Hello</main></body></html>`;
+        const css = `:root { --ink: #0A1628; --cream: #F5F1E8; }`;
+
+        const r = repairArtifactsForVisibility({ html, css, js: "" });
+
+        assert.ok(r.repairs.includes("tailwind-runtime-injected"));
+        assert.match(r.html, /tailwind\.config=/);
+        assert.match(r.html, /"ink":"var\(--ink\)"/);
+        assert.match(r.html, /cdn\.tailwindcss\.com\/3\.4\.17/);
+        assert.ok(r.html.indexOf("cdn.tailwindcss.com") < r.html.indexOf("tailwind.config"));
+    });
+
+    it("does not inject Tailwind when compiled utility CSS is already supplied", () => {
+        const html = `<body><div class='flex grid hidden gap-4'>Hello</div></body>`;
+        const css = `.flex { display: flex; } .grid { display: grid; }`;
+
+        const r = repairArtifactsForVisibility({ html, css, js: "" });
+
+        assert.equal(r.repairs.includes("tailwind-runtime-injected"), false);
+    });
+
     it("leaves clean artifacts untouched (idempotent no-op)", () => {
         const html = `<body><h1>Hello</h1><script src='app.js'></script></body>`;
         const css = "body{margin:0}";

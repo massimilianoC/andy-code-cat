@@ -18,6 +18,7 @@
 14. `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md` — filesystem-first Layer S template-skills architecture and runtime strategy
 15. `docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md` — Layer S ownership, filesystem source of truth, validation workflow, and impact rubric
 16. `docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md` — implemented Layer S resolver, env flags, prompt trace, DB logging, and Docker packaging
+17. `docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md` — current deferred-R4 decision for declarative service manifests, runtime ownership, multi-tenant data scope, Forms Inbox and secure capability rollout
 
 ---
 
@@ -35,7 +36,15 @@ Current active platform tracks:
 - **Artifact Media Orchestrator continuation**: media resolution reliability, trace completeness, resolver expansion, browser E2E
 - **Guided entry / Zero Effort / VibeCore evolution**: additive intake flows that reuse the same backend orchestration and project model
 
-BaaS remains a deferred R4 direction. Do not start backend-as-a-service implementation unless a newer roadmap update explicitly reactivates it.
+BaaS remains a deferred R4 direction beyond the explicitly activated mailto v1 form foundation.
+`docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md` records the target architecture and supersedes
+older generated-SDK mechanics. For the bounded capability, follow
+`docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md`; do not add a public router, capture, SMTP,
+arbitrary external endpoints or further BaaS services without a newer roadmap update.
+
+The mailto foundation uses `prepareArtifactServices()` plus an allowlisted `runtime-plan-v1`.
+Platform core/config/forms/mailto scripts stay separate from generated `artifacts.js`; invalid
+generated JS is blocked before activation, publish, and ZIP export.
 
 When touching prompting code, treat the prompt architecture as an implemented foundation to extend carefully, not as an unbuilt milestone.
 

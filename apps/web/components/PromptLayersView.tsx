@@ -3,46 +3,6 @@
 import { useState } from "react";
 import type { PromptLayerEntryDto } from "@/lib/api/llm";
 
-const PF_LAYER_OPEN_RE = /<!-- PF_LAYER id=([A-Z]) key=([a-z0-9-]+) -->/g;
-
-// Sentence-case, mirroring the canonical registry label style
-// (PROMPT_LAYER_DESCRIPTORS: "Layer A — Base constraints", not "Base Constraints").
-// The persisted layers[] carry the exact SSOT labels; this reconstruction is a
-// best-effort fallback for legacy/focused traces that lack the persisted array,
-// which is why entries built here are tagged source "trace-marker".
-function humanizeLayerKey(key: string): string {
-    const words = key.split("-").filter(Boolean).join(" ");
-    return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function parseLayersFromMarkers(fullText: string): PromptLayerEntryDto[] {
-    const entries: PromptLayerEntryDto[] = [];
-
-    for (const match of fullText.matchAll(PF_LAYER_OPEN_RE)) {
-        const id = match[1];
-        const key = match[2];
-        const marker = match[0];
-        const start = match.index ?? -1;
-        if (start < 0) continue;
-
-        const closeMarker = `<!-- /PF_LAYER id=${id} -->`;
-        const end = fullText.indexOf(closeMarker, start + marker.length);
-        if (end < 0) continue;
-
-        const sliceEnd = end + closeMarker.length;
-        entries.push({
-            id,
-            key,
-            label: `Layer ${id} — ${humanizeLayerKey(key)}`,
-            source: "trace-marker",
-            chars: fullText.slice(start + marker.length, end).trim().length,
-            span: [start, sliceEnd],
-        });
-    }
-
-    return entries;
-}
-
 interface PromptLayersViewProps {
     /** "sent" = persisted trace of a real generation; "dry-run" = preview of next request. */
     mode: "sent" | "dry-run";
@@ -52,7 +12,7 @@ interface PromptLayersViewProps {
     layers: PromptLayerEntryDto[];
     /** Header metadata line (model, provider, timestamp) — already formatted by the caller. */
     subtitle?: string;
-    /** When true, the Raw toggle starts ON (used when `layers` is empty — legacy/focused-mode traces). */
+    /** When true, the Raw toggle starts ON. Legacy traces without `layers` are always raw. */
     defaultRaw?: boolean;
 }
 
@@ -63,8 +23,8 @@ interface PromptLayersViewProps {
  * text-splitting, no mock/fallback content. See docs/specs/PROMPT_LAYER_SSOT_SPEC.md.
  */
 export default function PromptLayersView({ mode, fullText, layers, subtitle, defaultRaw }: PromptLayersViewProps) {
-    const resolvedLayers = layers.length > 0 ? layers : parseLayersFromMarkers(fullText);
-    const [raw, setRaw] = useState(Boolean(defaultRaw) && resolvedLayers.length === 0);
+    const resolvedLayers = layers;
+    const [raw, setRaw] = useState(Boolean(defaultRaw) || resolvedLayers.length === 0);
     const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
     const badgeLabel = mode === "sent" ? "PROMPT REALMENTE INVIATO" : "DRY-RUN — PROSSIMA RICHIESTA";

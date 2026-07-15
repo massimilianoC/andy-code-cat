@@ -10,8 +10,8 @@
  */
 import type { Page } from "@playwright/test";
 
-export const BASE_URL = "http://localhost:8081";
-export const API_URL = "http://localhost:4000";
+export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:8081";
+export const API_URL = process.env.E2E_API_URL ?? "http://localhost:4000";
 
 const BOT_EMAIL = "bot@andy-code-cat-e2e.invalid";
 const BOT_PASSWORD = "E2e-Bot-Pass#2024";
@@ -103,6 +103,68 @@ export async function createTestProject(
     );
     if (!projectId) throw new Error("createTestProject: no id returned");
     return projectId;
+}
+
+/**
+ * Creates an active preview snapshot with deterministic HTML for workspace E2E tests.
+ * The project conversation is resolved through the same endpoint used by the workspace.
+ */
+export async function createTestPreviewSnapshot(
+    page: Page,
+    projectId: string,
+    versionLabel: string,
+): Promise<string> {
+    const token = await getAccessToken(page);
+    const snapshotId = await page.evaluate(
+        async ({ apiUrl, token, projectId, versionLabel }) => {
+            const headers = {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                "x-project-id": projectId,
+            };
+            const conversationResponse = await fetch(
+                `${apiUrl}/v1/projects/${projectId}/conversation`,
+                { headers },
+            );
+            if (!conversationResponse.ok) {
+                throw new Error(`createTestPreviewSnapshot conversation failed: ${conversationResponse.status}`);
+            }
+            const conversationData = await conversationResponse.json();
+            const conversationId = conversationData.conversation?.id;
+            if (!conversationId) throw new Error("createTestPreviewSnapshot: no conversation id returned");
+
+            const snapshotResponse = await fetch(
+                `${apiUrl}/v1/projects/${projectId}/preview-snapshots`,
+                {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({
+                        conversationId,
+                        artifacts: {
+                            html: `<!doctype html><html><body><main><h1>${versionLabel}</h1><p>${"preview ".repeat(24)}</p></main></body></html>`,
+                            css: "body { margin: 0; font-family: sans-serif; } main { padding: 2rem; }",
+                            js: "",
+                        },
+                        metadata: {
+                            model: "e2e-characterization",
+                            provider: "test",
+                            finishReason: "manual-save",
+                            structuredParseValid: true,
+                        },
+                        activate: true,
+                    }),
+                },
+            );
+            if (!snapshotResponse.ok) {
+                throw new Error(`createTestPreviewSnapshot failed: ${snapshotResponse.status}`);
+            }
+            const snapshotData = await snapshotResponse.json();
+            return snapshotData.snapshot?.id;
+        },
+        { apiUrl: API_URL, token, projectId, versionLabel },
+    );
+    if (!snapshotId) throw new Error("createTestPreviewSnapshot: no snapshot id returned");
+    return snapshotId;
 }
 
 /**

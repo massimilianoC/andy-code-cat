@@ -1,0 +1,52 @@
+name: andy-code-cat-forms-e2e
+
+# Isolated API-only stack for the form-runtime Playwright scenario. It does not
+# reuse the dev bind mount or the deploy named volumes and exposes unique ports.
+services:
+  mongodb:
+    image: mongo:7
+    container_name: andy-code-cat-forms-e2e-mongodb
+    command: ["--bind_ip_all"]
+    tmpfs:
+      - /data/db
+    networks: [forms-e2e]
+
+  redis:
+    image: redis:7-alpine
+    container_name: andy-code-cat-forms-e2e-redis
+    tmpfs:
+      - /data
+    networks: [forms-e2e]
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      target: prod
+    container_name: andy-code-cat-forms-e2e-api
+    environment:
+      NODE_ENV: test
+      API_PORT: 4000
+      PUBLIC_API_BASE_URL: http://localhost:4100
+      MONGODB_URI: mongodb://mongodb:27017/andy-code-cat-forms-e2e
+      MONGODB_DB_NAME: andy-code-cat-forms-e2e
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: forms-e2e-access-secret-at-least-32-chars
+      JWT_REFRESH_SECRET: forms-e2e-refresh-secret-at-least-32-chars
+      EXPORT_JWT_SECRET: forms-e2e-export-secret-at-least-32-chars
+      AUTH_BYPASS_EMAIL_VERIFICATION: "true"
+      LLM_CATALOG_SOURCE: env
+      LLM_AUTO_SEED_ON_STARTUP: "false"
+      STORAGE_ADAPTER: local
+      DATA_DIR: /workspace/data
+      CORS_ORIGIN: "*"
+    depends_on: [mongodb, redis]
+    ports:
+      - "4100:4000"
+    tmpfs:
+      - /workspace/data
+    networks: [forms-e2e]
+
+networks:
+  forms-e2e:
+    name: andy-code-cat-forms-e2e-net

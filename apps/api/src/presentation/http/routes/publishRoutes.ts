@@ -145,6 +145,7 @@ export function createPublishRoutes() {
                     snapshotId: body.snapshotId,
                     customSlug: body.customSlug,
                     presetId: project?.presetId,
+                    formSettings: project?.serviceConfig?.forms,
                 });
 
                 res.status(201).json(toDto(deployment));

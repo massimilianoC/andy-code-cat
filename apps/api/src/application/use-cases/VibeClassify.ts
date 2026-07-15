@@ -1,5 +1,6 @@
 import type { VibeClassifyResponse, AttachmentMeta, FormatHint, VibeGenerationMode, VibeResolvedMode } from "@andy-code-cat/contracts";
 import { PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
+import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
@@ -19,6 +20,7 @@ const CONFIDENCE_THRESHOLD = 0.65;
 const MAX_PROMPT_CHARS = 2000;
 
 const VALID_FORMAT_HINTS = new Set<string>(Object.keys(FORMAT_HINT_RULES));
+const VALID_PRESET_IDS = new Set(PRESET_CATALOG.map((preset) => preset.id));
 function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none"): string | undefined {
     if (authType === "none") return undefined;
     const key = env.providerApiKeys[providerKey];
@@ -125,7 +127,7 @@ function parseClassifyResponse(raw: string): Omit<VibeClassifyResponse, "skipped
     try {
         const parsed = JSON.parse(candidate) as Record<string, unknown>;
         const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0;
-        const templateId = typeof parsed.templateId === "string" && parsed.templateId !== "null"
+        const templateId = typeof parsed.templateId === "string" && parsed.templateId !== "null" && VALID_PRESET_IDS.has(parsed.templateId)
             ? parsed.templateId
             : null;
         const rawHint = typeof parsed.formatHint === "string" ? parsed.formatHint : null;
@@ -173,13 +175,8 @@ export class VibeClassify {
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier disabled", skipped: true, ...echoProject };
         }
 
-        // Only expose active presets to the classifier — inactive ones (freerunner,
-        // data-dashboard) split probability mass and push game/generic requests below
-        // the confidence threshold, causing templateId to return null and Layer B to be empty.
         const templateListBlock = buildTemplateListBlock(
-            PRESET_CATALOG
-                .filter((p) => p.isActive !== false)
-                .map((p) => ({
+            PRESET_CATALOG.map((p) => ({
                     id: p.id,
                     label: p.label,
                     hint: p.hint ?? "",
@@ -195,9 +192,12 @@ export class VibeClassify {
 
         // If a custom systemTemplate is set in platform config, use it as template
         // ({{TEMPLATE_LIST}} is substituted with the live catalog block).
-        const systemPrompt = taskSettings.systemTemplate?.trim()
+        const configuredPrompt = taskSettings.systemTemplate?.trim()
             ? taskSettings.systemTemplate.replace("{{TEMPLATE_LIST}}", templateListBlock)
             : buildSystemPrompt(templateListBlock);
+        // Persisted overrides may customize the task but cannot remove the live catalog
+        // or its current selection semantics.
+        const systemPrompt = `${configuredPrompt}\n\n${buildCanonicalPresetSelectionRules()}`;
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta);
 
         const catalog = await this.getLlmCatalog.execute();

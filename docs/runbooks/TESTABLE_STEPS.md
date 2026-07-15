@@ -98,6 +98,33 @@
 - Save for `productKey = default`
 - Expected: success state in UI and persisted values returned by `GET /v1/admin/config`
 
+### Step 11b - Declarative Form Runtime (mailto)
+
+- Configure `PUT /v1/projects/:projectId/services/forms` with bearer token and matching
+  `x-project-id`; use `mode: "mailto"`, a recipient, and an HTTPS privacy notice.
+- Generate or save an artifact with a `service-manifest-v1` and a matching
+  `data-pf-form-id` slot.
+- Expected: preview/capture load distinct platform script elements before generated JS; publish
+  and ZIP contain `pf-runtime-core.v1.js`, `pf-runtime-config.v1.js`, `pf-forms-ui.v1.js`, and
+  `pf-forms-mailto.v1.js` plus a matching `runtime-plan-v1` in API responses.
+- Expected: submission requests an email draft and asks the visitor to verify the email app; no
+  form data is sent to or persisted by the API, and `pf:mailto` contains no values or complete URI.
+- Save invalid generated JS with `activate: false`: preview form runtime still mounts. Activation,
+  publish and ZIP must return `422` mentioning invalid `artifacts.js`.
+- Change the recipient after snapshot creation, then fetch the same snapshot again.
+- Expected: the preview runtime contains the new recipient and not the previous recipient, proving
+  that canonical snapshots do not persist compiled tenant configuration.
+- Reopen a legacy snapshot whose `artifacts.js` ends with the historical `form-runtime-v1`
+  mailto IIFE. Expected: delivery removes that exact suffix and emits the separate v1 runtime
+  files; a similar incomplete or non-terminal project script is left untouched.
+- For a multi-step manifest, verify required fields block Continue/Submit and Back/Continue update
+  the announced step count.
+- Verify: a different user or a mismatched project header receives a sandbox denial.
+- Automated isolated gate:
+  `npx playwright test tests/e2e/form-runtime.spec.ts --project=chromium` with
+  `E2E_API_URL` and `E2E_BASE_URL` pointing at the isolated stack documented in
+  `docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md`.
+
 ### Step 11b - Backward Compatibility of Platform Config
 
 - Call `PATCH /v1/admin/config` with payload containing only legacy fields:
@@ -323,8 +350,12 @@ This gate verifies the filesystem-backed Layer S resolver.
 - Expected: `templateId = "videogame"`, `confidence >= 0.65`
 - Expected: project is created/updated with `presetId = "videogame"`
 - Expected: Layer B in the system prompt contains the `VIDEOGAME EXPERIENCE` module
-- Verify: inactive presets (`freerunner`, `data-dashboard`) do NOT appear in the classifier template list — they would split probability mass below the confidence threshold causing Layer B to be empty
-- Verify: a prompt for "endless runner" or other explicit game sub-type still resolves to `videogame`
+- Verify: every preset in `PRESET_CATALOG`, including UI-hidden specialist presets, appears in the canonical AI matching context used by both classifier and prefill
+- `POST /v1/vibecore/classify` with `{ "prompt": "crea un gioco infinite runner con ostacoli e punteggio" }`
+- Expected: `templateId = "freerunner"`; the persisted project preset, launch badge, normalized brief and Layer S template id all remain `freerunner`
+- Verify: `POST /v1/vibecore/prefill` returns the same `presetId` and populates applicable expressive fields (`contentStructure`, `functionalRequirements`, `interactionModel`, `successCriteria`)
+- Verify: the normalized brief contains `[SOURCE_REQUEST]` and states that inferred sections are additive; an explicit negative instruction is preserved in `[MUST_AVOID]`
+- Verify: a legacy non-empty admin override cannot remove the current preset catalog or reduce the response to the old four-value `siteType` contract
 
 ### Step 11o - Global Brand Identity: Platform Scope (Admin)
 
@@ -402,7 +433,11 @@ This gate verifies the filesystem-backed Layer S resolver.
 
 - Click `Use in prompt` and send a message such as "optimize this block"
 - Expected: request backend include `focusContext.mode = "preview-element"`
-- Expected: tracing `messagesSentToLlm` contains the focus block
+- Expected: tracing `messagesSentToLlm` contains the focus block inside registered Layer Q; Layer Q
+  is an empty row for non-focused requests.
+- Verify: `effectiveSystemPrompt` is byte-identical to `messagesSentToLlm[0].content`, every
+  descriptor is present in canonical order, and every non-empty span slices its complete marker
+  block. A mismatch must fail before the provider call.
 
 ### Step 15 - Code Selection Focus
 
@@ -800,6 +835,27 @@ If provider fails: `4xx` error (no fallback in edit mode).
 2. Reload the workspace.
 3. Check `GET /v1/projects/:projectId/images/provider-status` — `activeProvider` matches the new setting.
 4. Generate a new artifact and check that `mediaResolution` traces show the new provider.
+
+### Step M10 — Workspace refactor no-regression smoke
+
+1. Run `npm run build -w apps/web`.
+2. Start the freshly built web app on a free local port without replacing the running Docker web service.
+3. Log in with the isolated E2E bot and create a disposable project.
+4. Set `andy-code-cat_workspace_split=60` and `andy-code-cat_chat_vsplit=85`, then open `/workspace/:projectId`.
+5. Expected: HTTP 200, `.workspace-shell` and `.workspace-chat-panel` are visible, and no client-side context/provider exception is logged.
+6. Expected: the horizontal grid starts at 60% and the vertical chat split starts at 85% after mount/reload.
+7. Delete the disposable bot project.
+8. Permanent gate: run `npx playwright test tests/e2e/workspace-refactor.spec.ts --project=chromium` with `E2E_BASE_URL` pointing to the freshly built web app and `E2E_API_URL` pointing to the isolated API stack.
+9. When adding workspace behavior, place deterministic chat, focus/media, or preview transformation logic under the matching `app/workspace/features/*` directory; do not add a context unless state must be shared by independent render subtrees.
+10. From Vibe Mode, complete the Zero Effort handoff and launch God Mode with a configured preferred model that is also the active default.
+11. Expected: the stored handoff prompt is consumed exactly once and content generation starts automatically; an unavailable preferred model must fall back to the active workspace model rather than blocking generation.
+12. Publish or republish a snapshot containing project media, then open the path link shown by the workspace.
+13. Expected locally: the link uses `http://<browser-host>/p/<publishId>/` through nginx, CSS/JS return 200, and generated media references use `/p/media/<assetId>` rather than a build-time `localhost:4000` origin.
+14. Recreate only the deploy-stack API with `docker compose -f docker-compose.deploy.yml up -d --no-deps --force-recreate api`, then reload the published path.
+15. Expected: nginx continues to route `/p/*` to the recreated API without a 502; all local file storage remains available under `./data/`.
+16. Create a snapshot whose HTML uses at least three Tailwind utility classes but deliberately omits the Tailwind CDN script; include CSS custom properties used by colour utilities.
+17. Publish it and open the nginx path URL. Expected: Tailwind 3.4.17 and the derived theme are injected, layout and custom colours are applied, and the published head keeps the Tailwind config immediately after the CDN runtime.
+18. Permanent gate: run `npx playwright test tests/e2e/publish-local.spec.ts --project=chromium` with `E2E_PUBLIC_BASE_URL=http://localhost`.
 
 ### Diagnosis checklist: images not appearing
 

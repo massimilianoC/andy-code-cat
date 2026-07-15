@@ -85,7 +85,7 @@ presetId guidance — choose the best match:
   a4poster        A4 print-ready poster or flyer
   infographic     data infographic / visual storytelling
   videogame       2D browser arcade or action game
-  freerunner      open canvas browser game / creative sandbox
+  freerunner      2D infinite/endless runner with continuous movement, obstacles, score and retry loop
   seriousgame     educational or training serious game
   game3d          3D WebGL browser game
   vr-aframe       WebVR / A-Frame immersive experience
@@ -121,6 +121,7 @@ IMPORTANT BOUNDARIES
 - Do NOT mention technical output architecture.
 - Do NOT mention HTML, CSS, JS, JSON, single-file output, embedding, implementation details, or code constraints.
 - Focus only on business intent, content direction, storytelling quality, brand feel, and creative guidance.
+- Treat [SOURCE_REQUEST] as authoritative. Enrichment is additive only: never remove, weaken or contradict explicit requirements, template choices, constraints or prohibitions; preserve [MUST_AVOID].
 
 OUTPUT RULES
 - Return only the optimized prompt text.
@@ -305,8 +306,8 @@ export default function ZeroEffortAdminPage() {
                     />
                     <PromptTaskSettingsCard
                         title="Prefill Brief — Estrazione brief (vibe_intent_prefill)"
-                        description="Estrae businessName, siteType, obiettivo, audience e stile dal prompt utente."
-                        helperText="Usa un modello capace di estrarre JSON strutturato. Max token: 768."
+                        description="Seleziona presetId dallo stesso catalogo di Vibe e compila il brief Zero Effort completo: struttura, contenuti, funzioni, interazioni, visual, vincoli e criteri di successo."
+                        helperText="Il backend aggiunge sempre contratto e catalogo correnti: questo override può specializzare il comportamento, ma non rimuoverli. Consigliati almeno 2048 token."
                         value={prefillTask}
                         providers={providers}
                         onFieldChange={(field, value) =>

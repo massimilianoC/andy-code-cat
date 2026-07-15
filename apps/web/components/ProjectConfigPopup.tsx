@@ -35,6 +35,7 @@ import { getToken } from "@/lib/token-store";
 import { cn } from "@/lib/utils";
 import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { BrandAssetsManager } from "@/components/brand/BrandAssetsManager";
+import { ProjectFormSettingsPanel } from "@/components/forms/ProjectFormSettingsPanel";
 
 // ── Tag category → moodboard field mapping ────────────────────────────────────
 
@@ -592,6 +593,15 @@ export default function ProjectConfigPopup({
                                                 token={token}
                                                 allowFileUpload={false}
                                             />
+                                        </DisclosurePanel>
+                                    ) : null}
+
+                                    {token ? (
+                                        <DisclosurePanel
+                                            title={t("config.forms.title")}
+                                            subtitle={t("config.forms.subtitle")}
+                                        >
+                                            <ProjectFormSettingsPanel token={token} projectId={projectId} />
                                         </DisclosurePanel>
                                     ) : null}
                                 </div>

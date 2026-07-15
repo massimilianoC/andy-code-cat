@@ -34,7 +34,9 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](architecture/BOOTSTRAP_ARCHITECTURE.md) | Current implementation shape: services, route surface, frontend modes, media/storage, and governance baseline |
+| [docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md](architecture/PLATFORM_CAPABILITY_RUNTIME.md) | Declarative capability boundary, runtimePlan registry, separate browser assets, generated-JS gate, and mailto privacy contract |
 | [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) | Layer 1 preview flow, Layer 2 generation pipeline, and transition mechanics |
+| [docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md](architecture/PLATFORM_CAPABILITY_RUNTIME.md) | Current deferred-R4 architecture decision for declarative capabilities, Layer V/runtime separation, tenant/project/capability data scope, Forms Inbox, GDPR tooling, secure automations and service roadmap |
 | [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, and operational security rules |
 
 ---
@@ -54,7 +56,7 @@ Read in this order before making changes:
 
 | Document | Description |
 | --- | --- |
-| [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Baseline checks plus current active validation tracks and deferred backlog verification steps |
+| [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Baseline checks plus current active validation tracks, including local publish persistence, Tailwind artifact-repair, and nginx-recreation checks |
 | [docs/runbooks/PRESET_RESEED.md](runbooks/PRESET_RESEED.md) | Local, deploy-stack, and Droplet procedure for reseeding project template models from the static preset catalog |
 | [docs/runbooks/CDN_COMPATIBILITY.md](runbooks/CDN_COMPATIBILITY.md) | Verified CDN whitelist and compatibility notes for generated interactive, game, 3D, and VR artifacts |
 | [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Production hardening and deployment safety guidance |
@@ -123,7 +125,9 @@ Read in this order before making changes:
 | [docs/specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md](specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md) | Asset-aware prompt enrichment plan |
 | [docs/specs/DOCUMENT_CONTEXT_LAYER_SPEC.md](specs/DOCUMENT_CONTEXT_LAYER_SPEC.md) | Document Context Layer — PDF/DOCX parsing, image vision analysis, AssetEnrichmentTrace envelope, and Layer D prompt injection |
 | [docs/specs/IMAGE_PROMPTING_PIPELINE_SPEC.md](specs/IMAGE_PROMPTING_PIPELINE_SPEC.md) | Structured image prompting, context enrichment, and versioning-aligned pipeline |
-| [docs/specs/BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | Backend-as-a-service extension layer |
+| [docs/specs/BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | Broad BaaS capability catalog; historical SDK sketches are superseded by the Platform Capability Runtime decision and event-driven security model |
+| [docs/specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md](specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md) | Agent-executable first capability: declarative forms, mailto/relay/capture, scoped Forms Inbox persistence, Layer V/runtime parity, privacy policy, tests and delivery waves |
+| [docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md](specs/FORM_RUNTIME_MAILTO_FOUNDATION.md) | Definitive mailto v1 form runtime: Layer V ownership, canonical snapshots, owner configuration, deterministic multi-step compilation, and isolated E2E |
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
 | [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-model platform playbook |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin controls and platform governance |
@@ -160,6 +164,7 @@ Read in this order before making changes:
 | `packages/contracts/src/vibecore.ts` | Shared VibeCore types: `FormatHint`, `AttachmentMeta`, `VibeClassifyRequest/Response` |
 | `apps/api/src/application/use-cases/VibeClassify.ts` | Layer Φ intent + format classifier use-case (LLM call, confidence threshold, graceful skip) |
 | `apps/api/src/application/use-cases/VibePrefill.ts` | Structured Zero Effort brief prefill use-case with optional Layer D document context |
+| `apps/api/src/application/prompting/vibePresetCatalog.ts` | Canonical full-preset descriptive context shared by Vibe classification and Zero Effort prefill |
 | `apps/api/src/application/prompting/formatHintRules.ts` | Format hint catalog (7 categories) and template list block builder |
 | `apps/api/src/presentation/http/routes/vibecoreRoutes.ts` | `GET /v1/vibecore/config` + `POST /v1/vibecore/classify` + `POST /v1/vibecore/prefill` — auth-protected, project-aware vibe entry surface |
 
@@ -189,6 +194,7 @@ pattern proven in this codebase.
 | [docs/reports/MINIMAX_M3_PARITY_IMPLEMENTATION_2026-06-02.md](reports/MINIMAX_M3_PARITY_IMPLEMENTATION_2026-06-02.md) | Wave-1 implementation report for MiniMax M3 conversation/media parity: message-to-snapshot linkage, first-class asset lineage, MongoDB query paths, and audit correlation strategy |
 | [docs/reports/DATA_DASHBOARD_ARCHITECTURAL_STATUS_2026-06-04.md](reports/DATA_DASHBOARD_ARCHITECTURAL_STATUS_2026-06-04.md) | Architectural report for the grounded data-dashboard work: implementation status, integration with the native generative pipeline, additive vs native boundaries, and remaining convergence gaps toward public runtime completion |
 | [docs/reports/DATA_DASHBOARD_ALPHA_RESCOPING_2026-06-05.md](reports/DATA_DASHBOARD_ALPHA_RESCOPING_2026-06-05.md) | Scope-correction report: detach data-dashboard from the main UX, keep it admin-experimental only, and clarify what runtime value is reusable for Layer D vs what remains separate |
+| [docs/reports/WORKSPACE_REFACTORING_REPORT_2026-07-13.md](reports/WORKSPACE_REFACTORING_REPORT_2026-07-13.md) | No-regression workspace refactor review: retained incremental boundaries, rejected the all-at-once chat/context extraction, and defined the runtime verification gate |
 
 ---
 

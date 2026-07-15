@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     activatePreviewSnapshotSchema,
     createPreviewSnapshotSchema,
+    type ProjectFormSettingsInput,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson } from "../../../application/llm/llmParser";
 import { injectStableIds, normalizeStoredHtml } from "../../../application/llm/htmlIdInjector";
@@ -23,6 +24,27 @@ import { DeletePreviewSnapshot } from "../../../application/use-cases/DeletePrev
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { SnapshotThumbnailJob } from "../../../application/services/SnapshotThumbnailJob";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
+import { prepareArtifactServices } from "../../../application/platform-runtime/prepareArtifactServices";
+import { assertGeneratedJavaScriptSyntax } from "../../../application/artifacts/generatedJavaScriptSyntax";
+import type { PreviewSnapshot } from "../../../domain/entities/PreviewSnapshot";
+import type { RuntimePlanV1 } from "@andy-code-cat/contracts";
+
+function withConfiguredFormRuntime(
+    snapshot: PreviewSnapshot,
+    settings: ProjectFormSettingsInput | undefined,
+): PreviewSnapshot & { runtimePlan?: RuntimePlanV1 } {
+    const prepared = prepareArtifactServices({
+        artifacts: snapshot.artifacts,
+        serviceManifest: snapshot.serviceManifest,
+        formSettings: settings,
+        delivery: "inline-preview",
+    });
+    return {
+        ...snapshot,
+        artifacts: prepared.artifacts,
+        runtimePlan: prepared.runtimePlan,
+    };
+}
 
 export function createPreviewSnapshotRoutes(): Router {
     const router = Router();
@@ -68,7 +90,11 @@ export function createPreviewSnapshotRoutes(): Router {
 
                 const snapshots = await listPreviewSnapshots.execute(req.sandbox!.projectId, conversationId);
                 const activeSnapshotId = snapshots.find((s) => s.isActive)?.id;
-                res.json({ snapshots, activeSnapshotId });
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                res.json({
+                    snapshots: snapshots.map((snapshot) => withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms)),
+                    activeSnapshotId,
+                });
             } catch (error) {
                 next(error);
             }
@@ -141,12 +167,29 @@ export function createPreviewSnapshotRoutes(): Router {
                     };
                 }
 
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                const inheritedManifest = body.parentSnapshotId
+                    ? (await previewSnapshotRepository.findById(req.sandbox!.projectId, body.parentSnapshotId))?.serviceManifest
+                    : undefined;
+                // Validate and prepare the response/thumbnail view, but persist only
+                // canonical LLM artifacts. Runtime settings can then change without
+                // regenerating or mutating the immutable snapshot.
+                if (body.activate) assertGeneratedJavaScriptSyntax(artifacts.js);
+                const compiledForms = prepareArtifactServices({
+                    artifacts,
+                    serviceManifest: body.serviceManifest ?? inheritedManifest,
+                    formSettings: project?.serviceConfig?.forms,
+                    delivery: "inline-preview",
+                });
+                const runtimeArtifacts = compiledForms.artifacts;
+
                 const snapshot = await createPreviewSnapshot.execute({
                     projectId: req.sandbox!.projectId,
                     conversationId: body.conversationId,
                     sourceMessageId: body.sourceMessageId,
                     parentSnapshotId: body.parentSnapshotId,
                     artifacts,
+                    serviceManifest: body.serviceManifest,
                     focusContext: body.focusContext,
                     metadata: body.metadata ? { ...body.metadata, structuredParseValid } : undefined,
                     activate: body.activate,
@@ -187,17 +230,19 @@ export function createPreviewSnapshotRoutes(): Router {
                 // ── end execution log ─────────────────────────────────────────
 
                 // ── Background thumbnail job (fire-and-forget) ────────────────
-                if (body.activate && artifacts.html) {
+                if (body.activate && runtimeArtifacts.html) {
                     SnapshotThumbnailJob.schedule(
                         req.sandbox!.projectId,
                         snapshot.id,
-                        artifacts,
+                        runtimeArtifacts,
                         previewSnapshotRepository
                     );
                 }
                 // ── end thumbnail job ─────────────────────────────────────────
 
-                res.status(201).json({ snapshot });
+                res.status(201).json({
+                    snapshot: { ...snapshot, artifacts: runtimeArtifacts, runtimePlan: compiledForms.runtimePlan },
+                });
             } catch (error) {
                 next(error);
             }
@@ -214,7 +259,8 @@ export function createPreviewSnapshotRoutes(): Router {
                     res.status(404).json({ error: "Snapshot not found" });
                     return;
                 }
-                res.json({ snapshot });
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                res.json({ snapshot: withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms) });
             } catch (error) {
                 next(error);
             }
@@ -235,6 +281,16 @@ export function createPreviewSnapshotRoutes(): Router {
                         return;
                     }
                 }
+
+                const candidate = await previewSnapshotRepository.findById(
+                    req.sandbox!.projectId,
+                    req.params.snapshotId!,
+                );
+                if (!candidate) {
+                    res.status(404).json({ error: "Snapshot not found" });
+                    return;
+                }
+                assertGeneratedJavaScriptSyntax(candidate.artifacts.js);
 
                 const snapshot = await activatePreviewSnapshot.execute({
                     projectId: req.sandbox!.projectId,
@@ -259,17 +315,19 @@ export function createPreviewSnapshotRoutes(): Router {
                 // ── end execution log ─────────────────────────────────────────
 
                 // ── Background thumbnail job (fire-and-forget) ────────────────
-                if (snapshot.artifacts.html && !snapshot.thumbnailPath) {
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                const runtimeSnapshot = withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms);
+                if (runtimeSnapshot.artifacts.html && !runtimeSnapshot.thumbnailPath) {
                     SnapshotThumbnailJob.schedule(
                         req.sandbox!.projectId,
-                        snapshot.id,
-                        snapshot.artifacts,
+                        runtimeSnapshot.id,
+                        runtimeSnapshot.artifacts,
                         previewSnapshotRepository
                     );
                 }
                 // ── end thumbnail job ─────────────────────────────────────────
 
-                res.json({ snapshot });
+                res.json({ snapshot: runtimeSnapshot });
             } catch (error) {
                 next(error);
             }
