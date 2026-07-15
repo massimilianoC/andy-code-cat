@@ -253,6 +253,7 @@ array; never remove an existing repair without consensus):
 | `aos-css-opacity-neutralized` | Inline `[data-aos]{opacity:0}` rule with no AOS JS at all | Remove the `opacity:0` declaration |
 | `css-literal-escapes-unescaped` | Literal `\n` / `\t` / `\r` inside the CSS artifact | Convert to real whitespace |
 | `phaser-parent-canvas-rewritten` | Phaser `parent: 'X'` while `<canvas id='X'>` exists | Rewrite that `<canvas>` element to a `<div>` with the same id |
+| `tailwind-runtime-injected` | Three or more Tailwind utility classes, with neither Tailwind CDN nor compiled utility CSS | Inject pinned Tailwind 3.4.17 and a safe config for CSS custom-property colours |
 
 When a repair fires, the route emits an `artifact_repaired` execution-log event
 containing the list of triggered tags. Use those events as the canary metric for
@@ -288,3 +289,29 @@ Implemented per `docs/specs/PROMPT_LAYER_SSOT_SPEC.md` /
 - **`PP-020` MUST:** real generation, prompt preview, and persisted traces all
   use the same `resolveContext()` composition path. Do not add a second Layer S
   preview/composition path.
+
+---
+
+## 9. Exact Sent-Prompt Trace Parity (PP-021)
+
+- **`PP-021` MUST:** `promptingTrace.messagesSentToLlm` persist the complete,
+  ordered message array supplied to the provider. It is the authoritative audit
+  record for the real request, not a reconstruction.
+- **`PP-021` MUST:** `promptingTrace.effectiveSystemPrompt` be byte-identical to
+  the system-message content in `messagesSentToLlm`.
+- **`PP-021` MUST:** `promptingTrace.layers` contain one entry for every
+  `PROMPT_LAYER_DESCRIPTORS` item in canonical order, including layers with
+  `chars: 0` and source `empty`. Every non-empty span must slice the exact
+  marker-wrapped segment from `effectiveSystemPrompt`.
+- **`PP-021` MUST:** the Prompt Inspector render persisted `promptingTrace` for a
+  completed request and label a `/llm/prompt-preview` result only as a dry-run
+  estimate for the next request.
+- **`PP-021` MUST NOT:** focused-mode, governance, model, capability, or runtime
+  prompt text be appended after `composeSystemPromptWithLayers()`. Such text
+  must have a registered descriptor, marker, source, span, Mongo trace entry,
+  and UI row.
+- **`PP-021` MUST:** once Layer V is integrated, register it in
+  `PROMPT_LAYER_DESCRIPTORS` and expose it in every trace, including as an empty
+  row when no service capability is active. Missing Layer V from the registry,
+  omitting `layers[]`, truncating prompt text, or storing a system prompt that
+  differs from the provider message is a trace-integrity failure.

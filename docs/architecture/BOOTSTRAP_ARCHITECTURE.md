@@ -147,6 +147,8 @@ Guided entry / Zero Effort / VibeCore:
 - `LaunchZeroEffortProject`
 - `VibeClassify`
 - `VibePrefill`
+- `vibePresetCatalog` builds the single canonical preset context shared by classification and prefill; AI matching includes censused specialist presets independently from UI visibility
+- Zero Effort carries an expressive, additive brief contract through the form and normalized conversation brief; `[SOURCE_REQUEST]` remains authoritative before God Mode optimization
 
 Grounded data runtime:
 
@@ -284,6 +286,19 @@ Critical ordering rule:
 - **Grounded data dashboard**: additive analytics route for dataset assets with per-table inspection, deterministic row browsing, table-scoped insights/suggestions, and grounded queries with explicit filters/sort
 - **Zero Effort launch flow**: simplified guided project setup under `/launch/[projectId]`
 - **GodMode workspace**: split preview/chat/editor workflow under `/workspace/[projectId]`
+  - layout-only state is owned by `app/workspace/contexts/WorkspaceLayoutContext.tsx`
+  - publish, unpublish, export, capture, and slug actions are owned by the grouped, typed controller in `app/workspace/features/header/usePublish.ts`
+  - public deployment links are resolved by `app/workspace/features/header/publishUrl.ts`; local compose links use the nginx front-door and published `/p/media/*` references remain same-origin
+  - pure chat metadata formatting lives in `app/workspace/features/chat/messageUtils.ts`
+  - focus/media input normalization lives in `app/workspace/features/focus/focusUtils.ts`
+  - authenticated preview asset URL resolution lives in `app/workspace/features/preview/resolvePreviewAssetUrls.ts`
+  - these feature modules contain no React state or providers, so they introduce no additional render boundary or runtime coordination cost
+
+### Local deploy persistence and routing
+
+- The deploy-stack API mounts `./data` at `/workspace/data`; local storage for uploads, exports, workspaces, profiles, thumbnails, and published sites remains under that root.
+- The local nginx front-door resolves `api` and `web` through Docker DNS for each request, so recreating either service does not leave nginx pinned to an obsolete container IP.
+  - chat, editor, project, and LLM state remain in the route component until their boundaries have characterization coverage
 - **Superadmin control plane**: governance, presets, integrations, model/runtime, user management
 
 ### Notable frontend components already present
@@ -297,6 +312,9 @@ Critical ordering rule:
 - `TipsPanel` / `TipsFab`
 - `NotificationPanel`
 - `MediaInspectorPanel`
+- `WorkspaceLayoutContext`
+- `usePublish`
+- `tests/e2e/workspace-refactor.spec.ts` as the workspace refactor characterization gate
 - `TagPicker`
 
 ---
@@ -320,6 +338,8 @@ The current artifact-media flow is implemented and live:
 - `MediaResolutionTrace` records resolution lineage and replay context
 - snapshot metadata persists `mediaResolution`
 - publish/export activation paths block unresolved media placeholders
+- snapshot creation repairs verified visibility failures before persistence; utility-only Tailwind artifacts receive the pinned CDN runtime and a theme derived from their CSS custom properties
+- publication reapplies the same idempotent repair for legacy snapshots, while preserving Tailwind configuration in `<head>` so it executes after the CDN runtime
 - edit-mode keyed regeneration reuses persisted traces and disables fallback
 
 Additional implemented behaviors:
