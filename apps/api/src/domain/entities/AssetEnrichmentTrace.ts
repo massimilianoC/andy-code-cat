@@ -1,6 +1,8 @@
 export type EnrichmentAssetKind =
     | "pdf"
     | "docx"
+    | "rtf"
+    | "odt"
     | "txt"
     | "md"
     | "html"
