@@ -1,5 +1,8 @@
 # Testing Policy
 
+> For *what* to test next and in what order, see `docs/guides/TEST_COVERAGE_ROADMAP.md`. This
+> document is about *how* to write a test once you've picked a target.
+
 This repository's test discipline is enforced by convention, not by a written rule — until
 now. This document codifies the conventions already followed by the healthiest parts of the
 `apps/api` test suite, states the one rule that was found being violated during the RTF/ODT/
