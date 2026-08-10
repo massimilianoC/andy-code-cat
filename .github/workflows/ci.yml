@@ -47,6 +47,15 @@ jobs:
   test-e2e:
     name: Test (E2E, mongodb-memory-server)
     runs-on: ubuntu-latest
+    # NON-BLOCKING for now: mongodb-memory-server's binary download has been observed to
+    # hang for 9+ minutes on this runner pool on a cold cache, even after pinning
+    # MONGOMS_VERSION — root cause not yet confirmed (network path to the download source
+    # vs. runner resource limits). continue-on-error + a hard timeout keep this job from ever
+    # blocking a merge while it's unreliable; it still runs and reports for visibility.
+    # Tracked in docs/guides/TEST_COVERAGE_ROADMAP.md §7.1 — remove continue-on-error once
+    # the hang is root-caused and this job is consistently fast.
+    continue-on-error: true
+    timeout-minutes: 5
     env:
       # mongodb-memory-server's own default (DEFAULT_VERSION in resolveConfig.js) tracks the
       # latest MongoDB release, which does not always have a prebuilt binary readily resolvable

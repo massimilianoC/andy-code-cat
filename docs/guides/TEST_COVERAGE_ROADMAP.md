@@ -180,6 +180,22 @@ Keep this list current — check an item off with the PR that landed it, not bef
   ceiling, not a product limit). Fixed in the same commit. This is exactly the failure mode this
   whole roadmap exists to prevent — a real regression (well, a stale assertion left behind by an
   intentional change) sat undetected because nothing forced the test to run.
+- **The `test-e2e` CI job itself is currently unreliable and is marked `continue-on-error` +
+  `timeout-minutes: 5`, NOT a required check.** First live runs on `ubuntu-latest` hung for
+  9+ minutes at `npm run test:e2e` — cancelled each time. Two hypotheses were tried and did not
+  fully resolve it: pinning `MONGOMS_VERSION` to `7.0.14` (matching `docker-compose*.yml`'s
+  `mongo:7`) instead of the package's own latest-tracking default, and running each test file as
+  its own OS process (`&&`-chained) instead of one shared `--test` invocation across files —
+  the latter was based on a real observed symptom (the first two files completed in ~3s each,
+  then the run went silent before the third), but the hang recurred at similar duration even
+  after that fix, so a slow/rate-limited network path from this specific runner pool to the
+  MongoDB binary source is the more likely remaining cause, not yet confirmed. All test content
+  itself is verified correct and fast locally (all 5 files, ~16s total, both bash and
+  PowerShell). **Follow-up needed:** either root-cause the download path (try an explicit
+  `MONGOMS_DOWNLOAD_URL` mirror, or pre-warm the binary in a dedicated cache-only job) or replace
+  `mongodb-memory-server` in CI with a MongoDB service container (`services:` in the workflow,
+  pulling `mongo:7` the same way the E2E job's `MONGOMS_VERSION` already mirrors) — the latter
+  avoids the ad-hoc binary download entirely and is likely the more robust long-term fix.
 
 Each unchecked item is sized to land as its own `feat/*` or `test/*` PR — do not batch several
 Tier-1 items into one branch; a failing check should point at exactly one concern.
