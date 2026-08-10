@@ -47,12 +47,23 @@ jobs:
   test-e2e:
     name: Test (E2E, mongodb-memory-server)
     runs-on: ubuntu-latest
+    env:
+      # mongodb-memory-server's own default (DEFAULT_VERSION in resolveConfig.js) tracks the
+      # latest MongoDB release, which does not always have a prebuilt binary readily resolvable
+      # for the runner's exact Ubuntu image — this hung for 9+ minutes on an unpinned first run.
+      # Pin to the same major version already used by docker-compose*.yml (mongo:7) instead.
+      MONGOMS_VERSION: "7.0.14"
+      MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongodb-binaries
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ env.MONGOMS_VERSION }}
       - run: npm ci
       - run: npm run build -w packages/contracts
         # tests/api/*.test.ts run against apps/api/src directly via tsx (no build needed there);
