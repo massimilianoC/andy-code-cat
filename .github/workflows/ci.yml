@@ -43,3 +43,18 @@ jobs:
       - run: npm ci
       - run: npm run build -w packages/contracts
       - run: npm run test -w apps/api
+
+  test-e2e:
+    name: Test (E2E, mongodb-memory-server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/contracts
+        # tests/api/*.test.ts run against apps/api/src directly via tsx (no build needed there);
+        # packages/contracts resolves through its published dist/, so it must be built first.
+      - run: npm run test:e2e
