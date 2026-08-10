@@ -72,6 +72,8 @@ Read in this order before making changes:
 | [docs/guides/I18N.md](guides/I18N.md) | Internationalization guide and translation workflow |
 | [docs/guides/LLM_JSON_PARSING_GUIDELINES.md](guides/LLM_JSON_PARSING_GUIDELINES.md) | Reusable guide: parsing, repair, and normalization of LLM JSON output |
 | [docs/guides/MULTIPROVIDER_LLM_BEST_PRACTICES.md](guides/MULTIPROVIDER_LLM_BEST_PRACTICES.md) | Best practices for multi-provider LLM systems: catalog, routing, cost, background tasks, image gen |
+| [docs/guides/TESTING_POLICY.md](guides/TESTING_POLICY.md) | Test co-location and naming, real-fixtures-over-mocks rule with system-boundary exception, anti-drift parity tests for duplicated maps, CI enforcement, and known gaps (no `apps/web` tests, no coverage gate) |
+| [docs/guides/TEST_COVERAGE_ROADMAP.md](guides/TEST_COVERAGE_ROADMAP.md) | Risk-ordered roadmap of what to test next: prompt-trace enforcement (PP-021), active-artifact-version integrity, AGENTS.md non-negotiable rules mapped to concrete test targets, startup/vibe-pipeline smoke tests, `apps/web` test infra |
 
 ---
 
@@ -85,7 +87,7 @@ Read in this order before making changes:
 | [docs/specs/COST_PRICING_SSOT_SIMPLIFICATION_PLAN.md](specs/COST_PRICING_SSOT_SIMPLIFICATION_PLAN.md) | Low-overhead implementation plan to standardize pricing around `CostTransactionService`, `PlatformConfig.costRates`, and the `cost_transactions` ledger as the single source of truth |
 | [docs/specs/COST_ANALYTICS_DASHBOARDS_SPEC.md](specs/COST_ANALYTICS_DASHBOARDS_SPEC.md) | User Usage tab and Admin Cost Intelligence dashboard — multi-dimensional cost explorer across providers, models, users, and projects |
 | [docs/specs/DIDACTIC_MODE_SPEC.md](specs/DIDACTIC_MODE_SPEC.md) | Didactic Mode — read-only artifact interrogation layer: knowledge generation, Q&A, quizzes, dual-view, and cost tracking |
-| [docs/DIDACTIC_MODE_PROGRESS.md](DIDACTIC_MODE_PROGRESS.md) | Implementation progress log for Didactic Mode (branch `feat/didactic-mode`)
+| [docs/DIDACTIC_MODE_PROGRESS.md](DIDACTIC_MODE_PROGRESS.md) | Implementation progress log for Didactic Mode (branch `feat/didactic-mode`) |
 | [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
 | [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | Preprompt engine service and composition flow |
 | [docs/specs/PROMPT_LAYER_SSOT_SPEC.md](specs/PROMPT_LAYER_SSOT_SPEC.md) | Prompt Layer SSOT — canonical layer registry, MongoDB override chain, self-describing markers, persisted trace, 1:1 superadmin/sent/stored/displayed correspondence |

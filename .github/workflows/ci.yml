@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  guard:
+    name: Gitflow guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        # actions/checkout on a pull_request event leaves HEAD detached (refs/pull/N/merge),
+        # so `git branch --show-current` returns empty — pass the real head branch explicitly.
+      - run: node scripts/gitflow-guard.mjs "${{ github.head_ref }}"
+      - run: node scripts/release-version.mjs validate
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/contracts
+      - run: npx tsc -p apps/api/tsconfig.json --noEmit
+      - run: npx tsc -p apps/web/tsconfig.json --noEmit
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/contracts
+      - run: npm run test -w apps/api
+
+  test-e2e:
+    name: Test (E2E, mongodb-memory-server)
+    runs-on: ubuntu-latest
+    # NON-BLOCKING for now: mongodb-memory-server's binary download has been observed to
+    # hang for 9+ minutes on this runner pool on a cold cache, even after pinning
+    # MONGOMS_VERSION — root cause not yet confirmed (network path to the download source
+    # vs. runner resource limits). continue-on-error + a hard timeout keep this job from ever
+    # blocking a merge while it's unreliable; it still runs and reports for visibility.
+    # Tracked in docs/guides/TEST_COVERAGE_ROADMAP.md §7.1 — remove continue-on-error once
+    # the hang is root-caused and this job is consistently fast.
+    continue-on-error: true
+    timeout-minutes: 5
+    env:
+      # mongodb-memory-server's own default (DEFAULT_VERSION in resolveConfig.js) tracks the
+      # latest MongoDB release, which does not always have a prebuilt binary readily resolvable
+      # for the runner's exact Ubuntu image — this hung for 9+ minutes on an unpinned first run.
+      # Pin to the same major version already used by docker-compose*.yml (mongo:7) instead.
+      MONGOMS_VERSION: "7.0.14"
+      MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongodb-binaries
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ env.MONGOMS_VERSION }}
+      - run: npm ci
+      - run: npm run build -w packages/contracts
+        # tests/api/*.test.ts run against apps/api/src directly via tsx (no build needed there);
+        # packages/contracts resolves through its published dist/, so it must be built first.
+      - run: npm run test:e2e

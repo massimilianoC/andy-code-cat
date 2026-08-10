@@ -145,9 +145,14 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
         assert.equal(res.status, 400);
     });
 
-    it("400 when attachmentMeta exceeds 3 items", async () => {
+    // classifyBodySchema caps attachmentMeta at 100 (a defensive ceiling against
+    // abuse, not the product-level per-request limit — see the comment on
+    // classifyBodySchema in vibecoreRoutes.ts). This test was stale at "3 items"
+    // until this suite was wired into CI surfaced the mismatch — see
+    // docs/guides/TEST_COVERAGE_ROADMAP.md §3.2 item 2 delivery notes.
+    it("400 when attachmentMeta exceeds the 100-item schema ceiling", async () => {
         const token = signToken(userId);
-        const meta = Array.from({ length: 4 }, (_, i) => ({
+        const meta = Array.from({ length: 101 }, (_, i) => ({
             filename: `file${i}.pdf`,
             mimeType: "application/pdf",
             sizeBytes: 1024,

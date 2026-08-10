@@ -46,6 +46,7 @@
     "droplet:minio:init": "bash scripts/minio-init.sh",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces",
+    "test:e2e": "tsx --test tests/api/artifact-safety-repair.test.ts && tsx --test tests/api/cost-routes.test.ts && tsx --test tests/api/vibecore-routes.test.ts && tsx --test tests/api/previewSnapshot-activation.test.ts && tsx --test tests/api/prompt-trace-generation.test.ts",
     "seed": "npm run seed -w apps/api",
     "seed:presets": "npm run seed:presets -w apps/api",
     "seed:llm": "npm run seed:llm -w apps/api"
