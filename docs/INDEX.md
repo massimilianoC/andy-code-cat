@@ -72,6 +72,7 @@ Read in this order before making changes:
 | [docs/guides/I18N.md](guides/I18N.md) | Internationalization guide and translation workflow |
 | [docs/guides/LLM_JSON_PARSING_GUIDELINES.md](guides/LLM_JSON_PARSING_GUIDELINES.md) | Reusable guide: parsing, repair, and normalization of LLM JSON output |
 | [docs/guides/MULTIPROVIDER_LLM_BEST_PRACTICES.md](guides/MULTIPROVIDER_LLM_BEST_PRACTICES.md) | Best practices for multi-provider LLM systems: catalog, routing, cost, background tasks, image gen |
+| [docs/guides/TESTING_POLICY.md](guides/TESTING_POLICY.md) | Test co-location and naming, real-fixtures-over-mocks rule with system-boundary exception, anti-drift parity tests for duplicated maps, CI enforcement, and known gaps (no `apps/web` tests, no coverage gate) |
 
 ---
 
