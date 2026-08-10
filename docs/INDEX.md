@@ -95,6 +95,7 @@ Read in this order before making changes:
 | [docs/specs/EXECUTION_LOG_SPEC.md](specs/EXECUTION_LOG_SPEC.md) | Structured operational audit logging |
 | [docs/specs/FOCUSED_EDIT_SPEC.md](specs/FOCUSED_EDIT_SPEC.md) | Focused editing behavior and constraints |
 | [docs/specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md](specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md) | Output language control — Layer L, per-mode resolution chain, contract changes, UI selector, God Mode fallback |
+| [docs/specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md](specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md) | ⏳ Proposed — optimistic concurrency guard for the active `PreviewSnapshot`: explicit `expectedActiveSnapshotId` precondition, project-scoped conflict detection, 409 contract, frontend resync/notification, use-case + real-Mongo regression tests (closes TEST_COVERAGE_ROADMAP §3.2 item 3) |
 
 ---
 
