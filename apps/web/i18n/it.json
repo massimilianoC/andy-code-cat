@@ -730,6 +730,8 @@
                 "saved": "Snapshot attivato.",
                 "editSavedLabel": "Versione EDIT salvata",
                 "editSaved": "Modifiche manuali versionate.",
+                "conflictLabel": "Conflitto di versione",
+                "conflict": "La versione attiva del progetto è cambiata altrove (altra scheda o sessione). La tua modifica non è stata applicata per non sovrascriverla. Abbiamo ricaricato l'ultima versione: rivedila e ripeti l'operazione.",
                 "activatedLabel": "Versione attivata",
                 "activated": "Snapshot selezionato come versione attiva.",
                 "newVersionLabel": "Nuova versione salvata",

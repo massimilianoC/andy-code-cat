@@ -19,6 +19,12 @@ export const saveWysiwygEditStateSchema = z.object({
 export const commitWysiwygSessionSchema = z.object({
     /** Optional human-readable description stored in snapshot metadata. */
     description: z.string().max(300).optional(),
+    /**
+     * Optimistic concurrency precondition — same semantics as
+     * createPreviewSnapshotSchema.expectedActiveSnapshotId. See
+     * docs/specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md.
+     */
+    expectedActiveSnapshotId: z.string().min(1).max(100).nullish(),
 });
 
 // ── Types ─────────────────────────────────────────────────────────────────────

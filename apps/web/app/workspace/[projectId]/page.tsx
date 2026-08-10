@@ -292,6 +292,12 @@ function WorkspacePageContent() {
     const [selectedBackendSnapshotId, setSelectedBackendSnapshotId] = useState<string | null>(null);
     const [loadingSnapshots, setLoadingSnapshots] = useState(false);
     const selectedBackendSnapshotIdRef = useRef<string | null>(null);
+    /**
+     * The client's belief about which snapshot is active project-wide, kept in sync with
+     * `previewSnapshots` — sent as `expectedActiveSnapshotId` so the backend can detect a
+     * stale-tab write. See docs/specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md.
+     */
+    const activeSnapshotIdRef = useRef<string | null>(null);
     const [editorHtml, setEditorHtml] = useState("");
     const [editorCss, setEditorCss] = useState("");
     const [editorJs, setEditorJs] = useState("");
@@ -766,9 +772,34 @@ function WorkspacePageContent() {
         [projectId]
     );
 
+    /**
+     * Detects the optimistic-concurrency 409 (PREVIEW_SNAPSHOT_ACTIVE_VERSION_CONFLICT):
+     * the active version changed elsewhere while this tab's edit was in flight. Resyncs
+     * snapshot/editor state from the server and notifies the user — never silent.
+     * See docs/specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md §8.
+     * Returns true if the error was a snapshot conflict (caller should stop its own
+     * error handling for this error), false otherwise.
+     */
+    const handleSnapshotConflict = useCallback(async (err: unknown): Promise<boolean> => {
+        if (!(err instanceof ApiError) || err.status !== 409 || err.code !== "PREVIEW_SNAPSHOT_ACTIVE_VERSION_CONFLICT") {
+            return false;
+        }
+        if (token) await loadSnapshots(token);
+        addNotification({
+            label: t("workspace.notifications.snapshot.conflictLabel"),
+            status: "error",
+            message: t("workspace.notifications.snapshot.conflict"),
+        });
+        return true;
+    }, [token, loadSnapshots, addNotification, t]);
+
     useEffect(() => {
         selectedBackendSnapshotIdRef.current = selectedBackendSnapshotId;
     }, [selectedBackendSnapshotId]);
+
+    useEffect(() => {
+        activeSnapshotIdRef.current = previewSnapshots.find((s) => s.isActive)?.id ?? null;
+    }, [previewSnapshots]);
 
     useEffect(() => { editorHtmlRef.current = editorHtml; }, [editorHtml]);
     useEffect(() => { editorCssRef.current = editorCss; }, [editorCss]);
@@ -1038,13 +1069,15 @@ function WorkspacePageContent() {
                 artifacts: { html, css: editorCssRef.current, js: editorJsRef.current },
                 metadata: { finishReason },
                 activate: true,
+                expectedActiveSnapshotId: activeSnapshotIdRef.current,
             });
             await persistWorkspaceSnapshot(result.snapshot.id, { html, css: editorCssRef.current, js: editorJsRef.current }, options);
             return true;
-        } catch {
+        } catch (err) {
+            await handleSnapshotConflict(err);
             return false;
         }
-    }, [token, activeConvId, projectId, persistWorkspaceSnapshot]);
+    }, [token, activeConvId, projectId, persistWorkspaceSnapshot, handleSnapshotConflict]);
 
     const handleApplyAsset = useCallback(async (asset: ProjectAssetDto) => {
         if (!token || !selectedElement) return;
@@ -1428,6 +1461,7 @@ function WorkspacePageContent() {
                 artifacts: { html: editorHtml, css: editorCss, js: editorJs },
                 metadata: { finishReason: "manual-save" },
                 activate: true,
+                expectedActiveSnapshotId: activeSnapshotIdRef.current,
             });
             saveThumbnail(projectId, { html: editorHtml, css: editorCss, js: editorJs });
             incrementSnapCount(projectId);
@@ -1435,13 +1469,15 @@ function WorkspacePageContent() {
             setSelectedBackendSnapshotId(result.snapshot.id);
             addNotification({ label: t("workspace.notifications.snapshot.savedLabel"), status: "done", message: t("workspace.notifications.snapshot.saved") });
         } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
+            if (await handleSnapshotConflict(err)) {
+                // handled: resynced + notified
+            } else if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
             }
         } finally {
             setIsSavingEditorSnapshot(false);
         }
-    }, [token, projectId, activeConvId, editorHtml, editorCss, editorJs, loadSnapshots, addNotification]);
+    }, [token, projectId, activeConvId, editorHtml, editorCss, editorJs, loadSnapshots, addNotification, handleSnapshotConflict]);
 
     // Receive element selections + EDIT mode messages from the sandboxed preview iframe
     useEffect(() => {
@@ -1600,6 +1636,7 @@ function WorkspacePageContent() {
                     artifacts: { html, css: editorCss, js: editorJs },
                     metadata: { finishReason: "wysiwyg-edit-light" },
                     activate: true,
+                    expectedActiveSnapshotId: activeSnapshotIdRef.current,
                 });
                 saveThumbnail(projectId, { html, css: editorCss, js: editorJs });
                 incrementSnapCount(projectId);
@@ -1609,13 +1646,15 @@ function WorkspacePageContent() {
             addNotification({ label: t("workspace.notifications.snapshot.editSavedLabel"), status: "done", message: t("workspace.notifications.snapshot.editSaved") });
             setEditMode(false);
         } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
+            if (await handleSnapshotConflict(err)) {
+                // handled: resynced + notified
+            } else if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
             }
         } finally {
             setIsSavingEditVersion(false);
         }
-    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification]);
+    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification, handleSnapshotConflict]);
     handleCommitEditVersionRef.current = handleCommitEditVersion;
 
     // ── Derived values ──────────────────────────────────────────────────────
@@ -2213,6 +2252,7 @@ function WorkspacePageContent() {
                             mediaResolution: llm.mediaResolution,
                         },
                         activate: true,
+                        expectedActiveSnapshotId: activeSnapshotIdRef.current,
                     });
                     // Cache thumbnail and prompt excerpt locally for ProjectCard display
                     saveThumbnail(projectId, {
@@ -2274,8 +2314,13 @@ function WorkspacePageContent() {
                         setPreviewRefreshing(false);
                     }, 3000);
                     previewVersionSaved = true;
-                } catch {
-                    // non-blocking — UI works without snapshot persistence
+                } catch (err) {
+                    // non-blocking — UI works without snapshot persistence. On a snapshot
+                    // conflict specifically: the LLM reply was already saved as a message and
+                    // tokens were already spent, but the new version was NOT persisted/activated
+                    // (to avoid clobbering whatever became active elsewhere). No automatic
+                    // retry — retrying would spend cost again against a base the user never saw.
+                    await handleSnapshotConflict(err);
                 }
             }
 

@@ -42,6 +42,17 @@ export const createPreviewSnapshotSchema = z.object({
     focusContext: llmFocusContextSchema.optional(),
     metadata: previewSnapshotMetadataSchema,
     activate: z.boolean().default(true),
+    /**
+     * Optimistic concurrency precondition. The client's belief about which snapshot is
+     * currently active PROJECT-WIDE — deliberately independent from parentSnapshotId,
+     * which records provenance (which version this edit was derived from), not a claim
+     * about the server's current state.
+     *   undefined -> no precondition asserted (server-side/background callers, E2E setup)
+     *   null      -> "I believe no snapshot is active yet"
+     *   "<id>"    -> "I believe this snapshot is the active one"
+     * Checked only when activate is true. See docs/specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md.
+     */
+    expectedActiveSnapshotId: z.string().min(1).max(100).nullish(),
 });
 
 export const activatePreviewSnapshotSchema = z.object({
