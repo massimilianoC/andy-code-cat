@@ -39,7 +39,7 @@ const ALLOWED_MIME_EXACT = new Set([
 const QUOTA_TOTAL_BYTES = 100 * 1024 * 1024; // 100 MB
 const QUOTA_MAX_FILES = 50;
 
-function isAllowedMime(mimeType: string): boolean {
+export function isAllowedMime(mimeType: string): boolean {
     const mime = mimeType.toLowerCase().split(";")[0]!.trim();
     return ALLOWED_MIME_PREFIXES.some((p) => mime.startsWith(p)) || ALLOWED_MIME_EXACT.has(mime);
 }
