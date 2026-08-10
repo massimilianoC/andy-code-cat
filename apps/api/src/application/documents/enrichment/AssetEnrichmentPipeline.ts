@@ -802,8 +802,9 @@ export class AssetEnrichmentPipeline {
 
     private toMediaKind(kind: AssetEnrichmentTrace["assetKind"]): "image" | "background" | "logo" | "icon" | "document" | "reference" {
         if (kind === "image_raster" || kind === "image_svg") return "image";
-        if (kind === "pdf" || kind === "docx" || kind === "txt" || kind === "md"
-            || kind === "html" || kind === "xlsx" || kind === "csv") return "document";
+        if (kind === "pdf" || kind === "docx" || kind === "rtf" || kind === "odt"
+            || kind === "txt" || kind === "md"
+            || kind === "html" || kind === "xlsx" || kind === "csv" || kind === "pptx") return "document";
         return "reference";
     }
 
