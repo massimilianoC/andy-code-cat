@@ -2,15 +2,22 @@ import { describe, it, expect } from "vitest";
 import { getParser } from "../DocumentParserFactory";
 import { detectEnrichmentKind, isDocumentKind } from "../../enrichment/EnrichmentKindDetector";
 
-// Anti-drift guard: a document mime type must be recognized consistently across
-// the parser factory and the kind detector (the two maps the enrichment pipeline
-// itself depends on to run at all).
+// UploadProjectAsset.ts imports config.ts, which validates required env vars at module
+// load time (process.exit(1) if missing). Same pattern as promptTraceParity.test.ts /
+// PublishExportMediaGuardrails.test.ts: stub the minimum required config here, then reach
+// the module through a dynamic import so these assignments run first.
+process.env.MONGODB_URI ??= "mongodb://localhost:27017/test";
+process.env.JWT_ACCESS_SECRET ??= "test-access-secret";
+process.env.JWT_REFRESH_SECRET ??= "test-refresh-secret";
+
+async function loadIsAllowedMime() {
+    const { isAllowedMime } = await import("../../../use-cases/UploadProjectAsset");
+    return isAllowedMime;
+}
+
+// Anti-drift guard: a document mime type must be recognized consistently across all three
+// server-side maps (parser factory, kind detector, upload allowlist).
 // See docs/specs/DOCUMENT_FORMAT_COVERAGE_EXTENSION_PLAN.md §2.4.
-//
-// Note: the upload allowlist (apps/api/src/application/use-cases/UploadProjectAsset.ts)
-// is deliberately NOT covered here — importing it pulls in config.ts, which calls
-// process.exit(1) when MONGODB_URI/JWT secrets are absent (the normal case for this
-// unit-test process). That allowlist entry is verified manually instead (see plan §8).
 const DOCUMENT_MIMES = [
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -32,5 +39,10 @@ describe("document mime coverage parity", () => {
         const kind = detectEnrichmentKind(mime);
         expect(kind).not.toBe("unknown");
         expect(isDocumentKind(kind)).toBe(true);
+    });
+
+    it.each(DOCUMENT_MIMES)("%s is accepted by the upload allowlist", async (mime) => {
+        const isAllowedMime = await loadIsAllowedMime();
+        expect(isAllowedMime(mime)).toBe(true);
     });
 });

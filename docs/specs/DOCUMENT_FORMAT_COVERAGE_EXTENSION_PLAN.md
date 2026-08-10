@@ -1,6 +1,6 @@
 # Document Format Coverage Extension — Implementation Plan
 
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Implemented
 **Date:** 2026-08-10
 **Scope:** extend the document-parsing coverage of the enrichment pipeline to legacy `.doc`,
@@ -660,11 +660,20 @@ function makeOdtBuffer(headings: string[], paragraphs: string[]): Buffer {
   "Unsupported Word file" message (**not** a zip stack trace)
 - `isOleCompoundFile` / `isZipPackage` magic-byte helpers unit-tested directly
 
-A real `.doc` binary fixture cannot be built in-memory. **As implemented:** the zip-delegation
-and rejection paths are covered with `vi.mock("../DocxParser")`; the `word-extractor` happy
-path (a genuine OLE `.doc` → real text) is left to manual verification (§8) rather than
-committing a binary fixture — no small representative `.doc` sample was available at
-implementation time. Revisit if a suitable fixture becomes available.
+**As implemented:** the zip-delegation test builds a genuine minimal OOXML `.docx` in-memory
+with `adm-zip` (`[Content_Types].xml` + `_rels/.rels` + `word/document.xml`), confirmed
+independently readable by `mammoth.extractRawText()` — no mock of `DocxParser`. The
+OLE-vs-neither branch is exercised with real magic-byte buffers.
+
+The `word-extractor` happy path (a genuine OLE `.doc` → real extracted text) could **not** be
+covered the same way: unlike the zip-based formats, Word's binary format encodes text through
+a FIB header + piece table, not a plain stream — a hand-built minimal OLE2 container would not
+be valid input for `word-extractor` and risks asserting against a fixture that doesn't
+represent a real file. An attempt was made to verify against a real local `.doc` already
+present in this environment's dev MinIO storage, but MinIO's on-disk layout stores each object
+as a directory of internal chunks rather than a plain file, and — more importantly — that file
+is another user's real uploaded content, not a build artifact, so it was left untouched rather
+than read or repurposed as a fixture. This path remains a manual-verification item (§8).
 
 ### 7.5 `__tests__/mimeCoverage.parity.test.ts` (new) — anti-drift guard
 
@@ -691,11 +700,14 @@ it.each(DOCUMENT_MIMES)("%s has a parser, a known kind, and is a document kind",
 });
 ```
 
-**As implemented:** the optional fourth assertion (importing `isAllowedMime` from
-`UploadProjectAsset.ts`) was dropped — that module imports `config.ts`, which calls
-`process.exit(1)` when `MONGODB_URI`/JWT secrets are absent, which is the default state of
-this unit-test process. Touching `config.ts`'s fail-fast behavior was out of scope. The upload
-allowlist entries (Step 9) are covered by manual verification (§8) instead.
+**As implemented:** the fourth assertion (importing `isAllowedMime` from
+`UploadProjectAsset.ts`) is included. That module imports `config.ts`, which calls
+`process.exit(1)` when `MONGODB_URI`/JWT secrets are absent — the default state of this
+unit-test process. Rather than dropping the assertion or mocking `config.ts`, the test follows
+the pattern already established elsewhere in this suite (`promptTraceParity.test.ts`,
+`PublishExportMediaGuardrails.test.ts`): stub the three required env vars with `??=` at module
+scope, then reach `UploadProjectAsset` through a dynamic `import()` so the stub runs first.
+`isAllowedMime` is exported for this purpose (previously module-private).
 
 ---
 
