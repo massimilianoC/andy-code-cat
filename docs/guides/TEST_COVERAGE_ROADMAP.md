@@ -39,26 +39,28 @@ byte-identical prompt that was sent to the provider for that specific generation
 reconstruction, not an approximation — including which model/provider produced it. This is
 what makes a generated page explainable after the fact.
 
-**Covered today:** the parity-check pure function (`assertPromptTraceParity`) is solid.
-
-**Gap:** nothing verifies the function is actually *wired into* the live generation route, or
-that a persisted `promptingTrace` survives round-trip through storage and is rendered correctly.
-A future change could stop calling `assertPromptTraceParity()` in `resolveContext()`
-(`llmRoutes.ts`) — every existing test would stay green because they test the function directly,
-not its enforcement.
+**Covered today:** the parity-check pure function (`assertPromptTraceParity`) is solid, AND
+(as of this delivery) its live enforcement in the real generation route —
+`tests/api/prompt-trace-generation.test.ts` — see §7.
 
 **Test targets, in build order:**
 
-1. **Route-level integration test** (`tests/api/` tier, real in-memory Mongo via
-   `mongodb-memory-server` — see `tests/api/vibecore-routes.test.ts` for the harness pattern):
-   drive a real generation call through `resolveContext()` and assert the persisted
-   `PreviewSnapshot.metadata.promptingTrace` (a) exists, (b) its `effectiveSystemPrompt` is
-   byte-identical to what was actually sent, (c) includes `layers` covering every
-   `PROMPT_LAYER_DESCRIPTORS` entry including empty ones. This is the test that would have
-   caught a silent unwiring of PP-021 enforcement.
-2. **Model/provider attribution test**: assert `promptingTrace`/`metadata` records which
-   provider and model produced the generation, and that this is what the Prompt Inspector reads
-   (not a value re-derived client-side).
+1. ~~Route-level integration test~~ — **Implemented, see §7.** One refinement versus the
+   original plan below: the test asserts against the `POST
+   /projects/:id/llm/chat-preview` HTTP response's `promptingTrace` field — where
+   `assertPromptTraceParity()` is actually invoked, synchronously, before the provider call —
+   rather than a persisted `PreviewSnapshot.metadata.promptingTrace`. Snapshot persistence is a
+   separate downstream step (the frontend calls a dedicated snapshot-create endpoint with the
+   route's response); the response-level trace is the authoritative enforcement point per
+   PP-021, so testing there is strictly closer to the invariant than testing after an extra
+   persistence hop. Original framing kept below for context, superseded by §7's entry.
+   Original plan: drive a real generation call through `resolveContext()` and assert the
+   persisted `PreviewSnapshot.metadata.promptingTrace` (a) exists, (b) its
+   `effectiveSystemPrompt` is byte-identical to what was actually sent, (c) includes `layers`
+   covering every `PROMPT_LAYER_DESCRIPTORS` entry including empty ones. This is the test that
+   would have caught a silent unwiring of PP-021 enforcement.
+2. **Model/provider attribution** — **Implemented as part of item 1**, see §7: assert
+   `promptingTrace`/response records which provider and model produced the generation.
 3. **Frontend render contract** (blocked on §6 — `apps/web` has no test runner yet): once
    Vitest+Testing Library exists for `apps/web`, add a test asserting
    `PromptLayersView.tsx` renders exclusively from persisted `promptingTrace.layers` or the
@@ -73,23 +75,21 @@ target and mutate. A snapshot with unresolved media placeholders must never beco
 stale-vs-published mismatch must be visible to the user (`workspace.ui.staleVersion` in the
 workspace page already renders this — the invariant it depends on has no test).
 
-**Covered today:** nothing. `apps/api/src/application/use-cases/ActivatePreviewSnapshot.ts` and
-`apps/api/src/infra/repositories/MongoPreviewSnapshotRepository.ts` have zero test files.
+**Covered today (as of this delivery):** use-case guard logic (`ActivatePreviewSnapshot.test.ts`)
+and real-Mongo exclusivity (`previewSnapshot-activation.test.ts`) — see §7. Item 3 below (Focus
+Patch / Inspector edit-target resolution) remains open.
 
 **Test targets, in build order:**
 
-1. **`ActivatePreviewSnapshot.test.ts`** (use-case level, fake in-memory repository — no Mongo
-   needed, matches the "not too complex" bar): 404 on missing snapshot, 404 on
-   conversation-mismatch, **400 and no repository mutation** when the target snapshot has
-   unresolved `asset://media/...` placeholders (`extractMediaPlaceholderKeys`), correct
-   dispatch to `activate()` vs `activateForProject()` depending on whether `conversationId` is
-   supplied. — **Implemented in this change, see §7.**
-2. **Repository exclusivity integration test** (`tests/api/` tier, real Mongo via
-   `mongodb-memory-server`): create three snapshots in the same project, activate each in turn,
-   assert after every activation exactly one document has `isActive: true` — this is the
-   invariant a use-case-level fake cannot prove, because the exclusivity is implemented as two
-   separate Mongo writes (`updateMany` then `updateOne`) with no transaction; a real database is
-   the only thing that can catch a race or a missed `projectId` filter.
+1. **`ActivatePreviewSnapshot.test.ts`** — **Implemented, see §7.** 404 on missing snapshot,
+   404 on conversation-mismatch, 400 and no repository mutation on unresolved media
+   placeholders, correct dispatch to `activate()` vs `activateForProject()`.
+2. **Repository exclusivity integration test** — **Implemented, see §7**
+   (`previewSnapshot-activation.test.ts`, real Mongo via `mongodb-memory-server`): create
+   multiple snapshots, activate each in turn, assert after every activation exactly one document
+   has `isActive: true` — this is the invariant a use-case-level fake cannot prove, because the
+   exclusivity is implemented as two separate Mongo writes (`updateMany` then `updateOne`) with
+   no transaction.
 3. **Focus Patch / Inspector edit target test**: whichever code path applies an in-place edit
    (Focus Patch, Inspector field edit, the editor's watch/sync mechanism — see
    `docs/specs/FOCUSED_EDIT_SPEC.md`) must always resolve its write target through
@@ -159,12 +159,27 @@ Keep this list current — check an item off with the PR that landed it, not bef
 
 - [x] `docs/guides/TEST_COVERAGE_ROADMAP.md` (this document)
 - [x] `ActivatePreviewSnapshot.test.ts` — §3.2 item 1
-- [ ] Repository exclusivity integration test — §3.2 item 2
-- [ ] Prompt-trace route-level integration test — §3.1 item 1
+- [x] Repository exclusivity integration test — §3.2 item 2 — `tests/api/previewSnapshot-activation.test.ts`, real Mongo via `mongodb-memory-server`. Covers conversation-scoped `activate()`, project-scoped `activateForProject()` (including cross-conversation exclusivity), and per-project isolation.
+- [x] Prompt-trace route-level integration test — §3.1 item 1 — `tests/api/prompt-trace-generation.test.ts`. Drives a real `POST /projects/:id/llm/chat-preview` call through the live `resolveContext()` → `assertPromptTraceParity()` → provider-fetch path, with only the outbound provider call replaced (a local mock HTTP server behind `LMSTUDIO_BASE_URL`, the `lmstudio` provider's own `authType:"none"` local-testing seam — no application code mocked). Independently re-runs the real `assertPromptTraceParity()` against the returned trace, and asserts every `PROMPT_LAYER_DESCRIPTORS` id is present plus provider/model attribution.
 - [ ] Double-sandbox cross-tenant integration test — §4
 - [ ] Architectural dependency-direction static check — §4
 - [ ] `apps/web` test infra bootstrap — §6
 - [ ] `PromptLayersView.tsx` render contract — §3.1 item 3 (needs §6 first)
+
+### 7.1 Unplanned findings from this delivery
+
+- **`tests/api/` was never wired into any npm script or CI.** The three pre-existing E2E files
+  in this tier (`artifact-safety-repair.test.ts`, `cost-routes.test.ts`,
+  `vibecore-routes.test.ts`) were documented as "run manually from repo root" and were not run
+  automatically anywhere. Fixed as part of this delivery: `npm run test:e2e` (root
+  `package.json`, explicit file list — deliberately not a shell glob, to stay identical across
+  bash/PowerShell/CI) and a new `test-e2e` job in `.github/workflows/ci.yml`.
+- **Running this tier for the first time surfaced a stale, silently-failing test**:
+  `vibecore-routes.test.ts` asserted a 3-item cap on `attachmentMeta` that the route's zod
+  schema had since raised to 100 (a deliberate, documented change — the 100 cap is a defensive
+  ceiling, not a product limit). Fixed in the same commit. This is exactly the failure mode this
+  whole roadmap exists to prevent — a real regression (well, a stale assertion left behind by an
+  intentional change) sat undetected because nothing forced the test to run.
 
 Each unchecked item is sized to land as its own `feat/*` or `test/*` PR — do not batch several
 Tier-1 items into one branch; a failing check should point at exactly one concern.
