@@ -643,7 +643,7 @@ export default function ProjectConfigPopup({
                                             ref={fileInputRef}
                                             type="file"
                                             className="hidden"
-                                            accept="image/*,application/pdf,text/*,application/json,.docx,.doc,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.pptx,.ppt,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+                                            accept="image/*,application/pdf,text/*,application/json,.docx,.doc,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.rtf,application/rtf,.odt,application/vnd.oasis.opendocument.text,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.pptx,.ppt,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
                                             onChange={handleFileUpload}
                                         />
                                     </div>

@@ -1341,7 +1341,7 @@ export default function ZeroEffortLaunchPage() {
                             type="file"
                             className="hidden"
                             multiple
-                            accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
+                            accept=".pdf,.docx,.doc,.rtf,.odt,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
                             onChange={(e) => { if (e.target.files) void handleFiles(e.target.files); e.target.value = ""; }}
                         />
                     </CardContent>

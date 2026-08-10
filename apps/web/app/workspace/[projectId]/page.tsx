@@ -3212,7 +3212,7 @@ function WorkspacePageContent() {
                         ref={chatFileInputRef}
                         type="file"
                         style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-                        accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
+                        accept=".pdf,.docx,.doc,.rtf,.odt,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
                         multiple
                         disabled={sending || attachingFile || optimizingPrompt}
                         onChange={(e) => {
