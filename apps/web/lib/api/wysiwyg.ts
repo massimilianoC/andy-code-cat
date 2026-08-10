@@ -54,7 +54,16 @@ export function commitWysiwygSession(
     token: string,
     projectId: string,
     sessionId: string,
-    input?: { description?: string }
+    input?: {
+        description?: string;
+        /**
+         * Optimistic concurrency precondition — the caller's belief about which snapshot
+         * is currently active project-wide. undefined = no precondition, null = "I believe
+         * none is active", "<id>" = "I believe this one is active". See
+         * docs/specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md.
+         */
+        expectedActiveSnapshotId?: string | null;
+    }
 ) {
     return call<{ snapshot: PreviewSnapshot; session: WysiwygEditSessionDto }>(
         "POST",

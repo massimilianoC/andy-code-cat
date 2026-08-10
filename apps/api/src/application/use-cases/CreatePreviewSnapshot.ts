@@ -3,6 +3,7 @@ import type { ConversationRepository } from "../../domain/repositories/Conversat
 import type { MediaResolutionTraceRepository } from "../../domain/repositories/MediaResolutionTraceRepository";
 import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
 import { extractMediaPlaceholderKeys } from "../media/replaceMediaPlaceholders";
+import { assertActiveSnapshotPrecondition } from "./assertActiveSnapshotPrecondition";
 
 export class CreatePreviewSnapshot {
     constructor(
@@ -21,6 +22,8 @@ export class CreatePreviewSnapshot {
         focusContext?: PreviewSnapshot["focusContext"];
         metadata?: PreviewSnapshot["metadata"];
         activate: boolean;
+        /** Optimistic concurrency precondition — see assertActiveSnapshotPrecondition.ts. */
+        expectedActiveSnapshotId?: string | null;
     }): Promise<PreviewSnapshot> {
         if (input.activate) {
             const unresolvedKeys = extractMediaPlaceholderKeys(input.artifacts);
@@ -29,6 +32,7 @@ export class CreatePreviewSnapshot {
                 (err as NodeJS.ErrnoException & { status: number }).status = 400;
                 throw err;
             }
+            await assertActiveSnapshotPrecondition(this.previewSnapshotRepository, input.projectId, input.expectedActiveSnapshotId);
         }
 
         if (input.sourceMessageId && this.conversationRepository) {

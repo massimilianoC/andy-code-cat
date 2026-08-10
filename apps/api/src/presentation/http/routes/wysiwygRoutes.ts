@@ -13,6 +13,7 @@ import { MongoWysiwygEditSessionRepository } from "../../../infra/repositories/M
 import { CreateWysiwygEditSession } from "../../../application/use-cases/CreateWysiwygEditSession";
 import { SaveWysiwygEditState } from "../../../application/use-cases/SaveWysiwygEditState";
 import { CommitWysiwygSession } from "../../../application/use-cases/CommitWysiwygSession";
+import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 
 export function createWysiwygRoutes(): Router {
     const router = Router();
@@ -129,6 +130,7 @@ export function createWysiwygRoutes(): Router {
                     sessionId,
                     projectId: req.sandbox!.projectId,
                     description: body.description,
+                    expectedActiveSnapshotId: body.expectedActiveSnapshotId,
                 });
                 if (!result) {
                     res.status(404).json({ error: "Session not found or already committed" });
@@ -138,8 +140,24 @@ export function createWysiwygRoutes(): Router {
                     snapshot: result.snapshot,
                     session: result.session,
                 });
-            } catch (err) {
-                next(err);
+            } catch (error) {
+                const code = (error as { code?: string } | undefined)?.code;
+                if (code === "PREVIEW_SNAPSHOT_ACTIVE_VERSION_CONFLICT") {
+                    const details = (error as { details?: { expectedActiveSnapshotId?: string | null; actualActiveSnapshotId?: string | null } }).details;
+                    ExecutionLogger.instance.emit({
+                        projectId: req.sandbox!.projectId,
+                        domain: "snapshot",
+                        eventType: "snapshot_conflict",
+                        level: "warn",
+                        status: "failure",
+                        metadata: {
+                            expectedActiveSnapshotId: details?.expectedActiveSnapshotId,
+                            actualActiveSnapshotId: details?.actualActiveSnapshotId,
+                            wysiwygSessionId: req.params.sessionId,
+                        },
+                    });
+                }
+                next(error);
             }
         }
     );

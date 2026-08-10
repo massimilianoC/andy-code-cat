@@ -193,6 +193,7 @@ export function createPreviewSnapshotRoutes(): Router {
                     focusContext: body.focusContext,
                     metadata: body.metadata ? { ...body.metadata, structuredParseValid } : undefined,
                     activate: body.activate,
+                    expectedActiveSnapshotId: body.expectedActiveSnapshotId,
                 });
 
                 // ── Execution log (fire-and-forget) ──────────────────────────
@@ -244,6 +245,23 @@ export function createPreviewSnapshotRoutes(): Router {
                     snapshot: { ...snapshot, artifacts: runtimeArtifacts, runtimePlan: compiledForms.runtimePlan },
                 });
             } catch (error) {
+                const code = (error as { code?: string } | undefined)?.code;
+                if (code === "PREVIEW_SNAPSHOT_ACTIVE_VERSION_CONFLICT") {
+                    const details = (error as { details?: { expectedActiveSnapshotId?: string | null; actualActiveSnapshotId?: string | null } }).details;
+                    ExecutionLogger.instance.emit({
+                        projectId: req.sandbox!.projectId,
+                        conversationId: req.body?.conversationId,
+                        domain: "snapshot",
+                        eventType: "snapshot_conflict",
+                        level: "warn",
+                        status: "failure",
+                        metadata: {
+                            expectedActiveSnapshotId: details?.expectedActiveSnapshotId,
+                            actualActiveSnapshotId: details?.actualActiveSnapshotId,
+                            parentSnapshotId: req.body?.parentSnapshotId,
+                        },
+                    });
+                }
                 next(error);
             }
         }

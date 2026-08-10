@@ -113,6 +113,13 @@ export function createPreviewSnapshot(
             };
         };
         activate?: boolean;
+        /**
+         * Optimistic concurrency precondition — the caller's belief about which snapshot
+         * is currently active project-wide. undefined = no precondition, null = "I believe
+         * none is active", "<id>" = "I believe this one is active". See
+         * docs/specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md.
+         */
+        expectedActiveSnapshotId?: string | null;
     }
 ) {
     return call<{ snapshot: PreviewSnapshot }>(
