@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  guard:
+    name: Gitflow guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        # actions/checkout on a pull_request event leaves HEAD detached (refs/pull/N/merge),
+        # so `git branch --show-current` returns empty — pass the real head branch explicitly.
+      - run: node scripts/gitflow-guard.mjs "${{ github.head_ref }}"
+      - run: node scripts/release-version.mjs validate
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/contracts
+      - run: npx tsc -p apps/api/tsconfig.json --noEmit
+      - run: npx tsc -p apps/web/tsconfig.json --noEmit
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/contracts
+      - run: npm run test -w apps/api
