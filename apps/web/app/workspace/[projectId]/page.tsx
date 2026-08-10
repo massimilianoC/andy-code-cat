@@ -1623,6 +1623,7 @@ function WorkspacePageContent() {
                 });
                 const res = await commitWysiwygSession(token, projectId, editSessionId, {
                     description: "EDIT Light",
+                    expectedActiveSnapshotId: activeSnapshotIdRef.current,
                 });
                 saveThumbnail(projectId, { html, css: editorCss, js: editorJs });
                 incrementSnapCount(projectId);

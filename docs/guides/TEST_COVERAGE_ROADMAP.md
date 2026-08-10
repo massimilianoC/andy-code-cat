@@ -173,9 +173,19 @@ Keep this list current — check an item off with the PR that landed it, not bef
 - [x] `ActivatePreviewSnapshot.test.ts` — §3.2 item 1
 - [x] Repository exclusivity integration test — §3.2 item 2 — `tests/api/previewSnapshot-activation.test.ts`, real Mongo via `mongodb-memory-server`. Covers conversation-scoped `activate()`, project-scoped `activateForProject()` (including cross-conversation exclusivity), and per-project isolation.
 - [x] Prompt-trace route-level integration test — §3.1 item 1 — `tests/api/prompt-trace-generation.test.ts`. Drives a real `POST /projects/:id/llm/chat-preview` call through the live `resolveContext()` → `assertPromptTraceParity()` → provider-fetch path, with only the outbound provider call replaced (a local mock HTTP server behind `LMSTUDIO_BASE_URL`, the `lmstudio` provider's own `authType:"none"` local-testing seam — no application code mocked). Independently re-runs the real `assertPromptTraceParity()` against the returned trace, and asserts every `PROMPT_LAYER_DESCRIPTORS` id is present plus provider/model attribution.
-- [ ] Preview-snapshot concurrency guard + regression tests — §3.2 item 3 — planned in
+- [x] Preview-snapshot concurrency guard + regression tests — §3.2 item 3 — implemented per
   [docs/specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md](../specs/PREVIEW_SNAPSHOT_CONCURRENCY_GUARD_PLAN.md)
-  (`Status: Proposed`, awaiting owner review — do not start implementation from the plan alone)
+  §7 Option B (explicit `expectedActiveSnapshotId` precondition, tri-state undefined/null/id).
+  Wave 1 (`CreatePreviewSnapshot.ts`, `previewSnapshotRoutes.ts`, call sites C1-C4 in
+  `page.tsx`) and Wave 2 (`CommitWysiwygSession.ts`, `wysiwygRoutes.ts`, call site C5 —
+  the WYSIWYG commit path, which bypasses `CreatePreviewSnapshot` entirely and was
+  previously fully unprotected) both land in the same PR. Shared guard module:
+  `assertActiveSnapshotPrecondition.ts`. Tests: `CreatePreviewSnapshot.concurrency.test.ts`
+  and `CommitWysiwygSession.concurrency.test.ts` (use-case level, fake repository, 9+6 cases
+  covering backward compatibility, first-generation `null`, stale-id 409, deliberate
+  branching, error precedence, `activate:false` bypass) and
+  `tests/api/previewSnapshot-concurrency.test.ts` (real Mongo, reproduces the two-tab
+  clobbering race end to end, plus cross-conversation clobbering and empty-project cases).
 - [ ] Double-sandbox cross-tenant integration test — §4
 - [ ] Architectural dependency-direction static check — §4
 - [ ] `apps/web` test infra bootstrap — §6
@@ -211,6 +221,20 @@ Keep this list current — check an item off with the PR that landed it, not bef
   `mongodb-memory-server` in CI with a MongoDB service container (`services:` in the workflow,
   pulling `mongo:7` the same way the E2E job's `MONGOMS_VERSION` already mirrors) — the latter
   avoids the ad-hoc binary download entirely and is likely the more robust long-term fix.
+- **Branch-divergence note (this delivery):** the `npm run test:e2e` script and `test-e2e` CI
+  job described above landed on the separate `chore/ci-and-testing-policy` branch (PR #54,
+  not yet merged into `develop`). This branch (`fix/preview-snapshot-concurrency-guard`) was
+  cut from `develop` before that merge, so **neither exists here yet** — `package.json` has no
+  `test:e2e` script on this branch, and the stale `attachmentMeta` assertion in
+  `vibecore-routes.test.ts` (3-item cap vs. the schema's actual 100) is still present and still
+  fails when run manually (`npx tsx --test tests/api/vibecore-routes.test.ts`). Confirmed via
+  `git log` that this delivery touches neither file — it is a pre-existing `develop` issue, not
+  a regression from the concurrency-guard work. The new
+  `tests/api/previewSnapshot-concurrency.test.ts` added by this delivery was verified standalone
+  (`npx tsx --test tests/api/previewSnapshot-concurrency.test.ts`, 4/4 passing) but is
+  **not yet registered in any script** for the same reason. Whichever of PR #53/#54's
+  successor merges into `develop` second should register it in `test:e2e` and re-audit the
+  `attachmentMeta` test rather than have this PR duplicate that infra ahead of time.
 
 Each unchecked item is sized to land as its own `feat/*` or `test/*` PR — do not batch several
 Tier-1 items into one branch; a failing check should point at exactly one concern.

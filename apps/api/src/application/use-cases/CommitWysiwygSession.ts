@@ -2,6 +2,7 @@ import type { WysiwygEditSession } from "../../domain/entities/WysiwygEditSessio
 import type { WysiwygEditSessionRepository } from "../../domain/repositories/WysiwygEditSessionRepository";
 import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
 import type { PreviewSnapshot } from "../../domain/entities/PreviewSnapshot";
+import { assertActiveSnapshotPrecondition } from "./assertActiveSnapshotPrecondition";
 
 export class CommitWysiwygSession {
     constructor(
@@ -22,9 +23,13 @@ export class CommitWysiwygSession {
         sessionId: string;
         projectId: string;
         description?: string;
+        /** Optimistic concurrency precondition — see assertActiveSnapshotPrecondition.ts. */
+        expectedActiveSnapshotId?: string | null;
     }): Promise<{ session: WysiwygEditSession; snapshot: PreviewSnapshot } | null> {
         const session = await this.wysiwygRepo.findById(input.sessionId, input.projectId);
         if (!session || session.status !== "active") return null;
+
+        await assertActiveSnapshotPrecondition(this.snapshotRepo, session.projectId, input.expectedActiveSnapshotId);
 
         const originSnapshot = await this.snapshotRepo.findById(session.projectId, session.originSnapshotId);
 

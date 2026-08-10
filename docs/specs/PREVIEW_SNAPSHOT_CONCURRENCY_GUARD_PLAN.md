@@ -1,6 +1,7 @@
 # Preview Snapshot — Concurrency Guard sulla versione attiva
 
-> Status: **Proposed — in attesa di revisione**
+> Status: **Implemented** — Wave 1 + Wave 2 su `fix/preview-snapshot-concurrency-guard`,
+> in attesa di code review/merge su `develop`
 > Data: 2026-08-10 · Release corrente: `2026.07.10.1` · Branch di partenza: `develop`
 > Chiude: [TEST_COVERAGE_ROADMAP.md](../guides/TEST_COVERAGE_ROADMAP.md) §3.2 item 3
 > Documenti collegati: [FOCUSED_EDIT_SPEC.md](FOCUSED_EDIT_SPEC.md) ·
