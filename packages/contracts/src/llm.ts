@@ -284,6 +284,13 @@ export interface LlmChatPreviewResult {
     focusPatchApplied?: boolean;
     /** true when focused-mode was active but the LLM response could not be parsed at all (malformed JSON). */
     focusPatchParseError?: boolean;
+    /**
+     * true when the LLM completion could not be parsed into the structured artifact
+     * contract on a NON-focused (initial/full) generation. When true, `structured.artifacts`
+     * is empty by design: the client MUST NOT create or activate a preview snapshot.
+     * Mirrors focusPatchParseError, which covers the focused-edit path.
+     */
+    generationParseError?: boolean;
     provider: string;
     model: string;
     finishReason?: string;
