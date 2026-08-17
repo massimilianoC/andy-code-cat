@@ -745,7 +745,9 @@
                 "doneMessage": "Response ready with {{provider}} · {{model}}",
                 "abortedLabel": "Generation stopped",
                 "aborted": "Processing cancelled by user.",
-                "abortedContent": "⏹ Processing stopped by user"
+                "abortedContent": "⏹ Processing stopped by user",
+                "parseErrorLabel": "Generation failed",
+                "parseError": "The model returned an unparseable response. Nothing was saved and the project is unchanged. Retry, or select a different model."
             },
             "focusPatch": {
                 "parseErrorLabel": "Response parse error",
