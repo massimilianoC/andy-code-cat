@@ -11,7 +11,6 @@ import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
-import { inferDeterministicVibeTemplate } from "../prompting/vibeTemplateIntent";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -34,6 +33,31 @@ const SITE_TYPE_COMPAT: Record<string, string> = {
     portfolio: "neutral",
     showcase: "neutral",
 };
+
+/** Presets that carry no format commitment — the classifier's specific pick wins over these. */
+const GENERIC_PRESET_IDS = new Set(["neutral"]);
+
+/**
+ * Resolve the final presetId.
+ *
+ * Precedence, LLM-first:
+ *   1. the prefill LLM's own presetId (validated, or mapped from a legacy siteType);
+ *   2. the upstream VibeClassify pick, when the LLM produced nothing usable OR
+ *      collapsed a specific classification into a generic preset;
+ *   3. "neutral".
+ *
+ * The prefill LLM receives the full annotated catalog, the selection procedure and the
+ * classifier's decision as a "Detected template" block, so its answer is at least as
+ * informed as the classifier's. The classifier is kept as an anchor, never as a veto.
+ */
+export function resolvePrefillPresetId(rawPreset: string, classifierPreset: string): string {
+    const llmPreset = VALID_PRESET_IDS.has(rawPreset)
+        ? rawPreset
+        : (SITE_TYPE_COMPAT[rawPreset] ?? "");
+    if (llmPreset && !(GENERIC_PRESET_IDS.has(llmPreset) && classifierPreset)) return llmPreset;
+    return classifierPreset || llmPreset || "neutral";
+}
+
 const VALID_STYLE_ATTRIBUTES = new Set([
     "minimal", "premium", "dark", "bright", "bold",
     "elegant", "corporate", "playful", "tech", "artisan", "luxury", "eco",
@@ -46,7 +70,7 @@ const VALID_VIS_STYLES = new Set(["executive", "operations", "exploratory", "mon
  * Normalize a BCP-47 language code to lowercase base language (e.g. "IT" → "it", "pt-BR" → "pt").
  * Returns "en" for any null/empty/invalid input.
  */
-function normalizeLang(raw?: string | null): string {
+export function normalizeLang(raw?: string | null): string {
     if (!raw || typeof raw !== "string") return "en";
     const base = raw.trim().toLowerCase().split("-")[0];
     return /^[a-z]{2,8}$/.test(base ?? "") ? (base ?? "en") : "en";
@@ -84,7 +108,7 @@ populates a structured project brief.
 Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 {
   "businessName": "brand or project name (string, required)",
-  "presetId": "one of: neutral|landing|website|form|manifesto|slideshow|keynote|a4poster|infographic|videogame|freerunner|seriousgame|game3d|vr-aframe|interactive-story (string, required)",
+  "presetId": "the preset id selected by applying the CANONICAL PRESET SELECTION CONTRACT appended below (string, required)",
   "outputLanguage": "BCP-47 language code of the content to generate, e.g. 'it', 'en', 'de', 'fr' (string, required)",
   "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
   "audience": "target audience description — 120 to 500 chars when possible (string, required)",
@@ -104,28 +128,18 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
   "styleAttributes": ["minimal"]
 }
 
-presetId guidance — choose the best match:
-  neutral         generic project with no specific template
-  landing         marketing landing page / single page site
-  website         multi-section business website
-  form            guided form, wizard, or survey
-  manifesto       editorial page, manifesto, or long-form statement
-  slideshow       slide deck / presentation / carousel narrative
-  keynote         pitch deck / keynote / investor presentation
-  a4poster        A4 print-ready poster or flyer
-  infographic     data infographic / visual storytelling
-  videogame       2D browser arcade or action game
-  freerunner      2D infinite/endless runner with continuous movement, obstacles, score and retry loop
-  seriousgame     educational or training serious game
-  game3d          3D WebGL browser game
-  vr-aframe       WebVR / A-Frame immersive experience
-  interactive-story  branching narrative / choose-your-own-adventure
+presetId — do NOT guess from this prompt alone. Apply the CANONICAL PRESET SELECTION
+CONTRACT appended below: it carries the full annotated catalog, the mandatory selection
+procedure, and the per-preset SELECT WHEN / DO NOT SELECT WHEN clauses.
 
 Rules:
 - businessName: extract from the prompt; fall back to "Project" if unclear.
-- presetId: infer from the user's intent — use the MOST SPECIFIC matching id.
-  A "slideshow" or "presentation" request MUST use "slideshow" or "keynote", NOT "landing".
-  A "game" request MUST use one of the game presets. Default to "landing" only when no better match.
+- presetId: apply the CANONICAL PRESET SELECTION CONTRACT below. Choose the MOST SPECIFIC
+  preset whose SELECT WHEN clause is satisfied and whose DO NOT SELECT WHEN clause is not.
+  A game or XR preset requires concrete mechanic evidence (procedure STEP 2) — animation,
+  interaction, micro-interactions, kinetic motion, immersion and Awwwards-level ambition
+  are website craft vocabulary, never gameplay evidence. When evidence is genuinely
+  ambiguous use "neutral"; never use "landing" as a generic fallback.
 - primaryGoal: do not summarize too aggressively. Produce a robust structured brief that can be injected
   into downstream generation prompts. Include:
   1. project intent and desired output,
@@ -140,7 +154,10 @@ Rules:
 - Fill every applicable expressive field. Prefer concrete ordered modules and behaviors over generic adjectives.
 - Preserve every explicit user fact, preference, requirement and prohibition. Enrichment is additive: never replace,
   weaken or contradict a specific request with a generic best practice. Leave unknown facts unspecified.
-- If a Detected template block is present, its id takes priority as the presetId.
+- If a "Detected template" block is present in the user message, it is the upstream
+  classifier's decision made with this same contract. Adopt its id as presetId unless the
+  request explicitly names a different deliverable (procedure STEP 1); if you override it,
+  say why in projectSummary.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
 - outputLanguage: detect the language the user wants the CONTENT in. If the user writes in Italian but asks "in tedesco" or "in German", outputLanguage must be "de". Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
@@ -220,15 +237,14 @@ function defaultDataDashboardDraft(prompt: string, attachmentMeta?: AttachmentMe
 
 // ── Response parser ───────────────────────────────────────────────────────────
 
-function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, detectedTemplateId?: string | null): { draft: ZeroEffortDraft; confidence: number } {
-    // The template detected by Layer Φ (VibeClassify) is authoritative: when it names a
-    // real preset, it becomes the prefilled presetId and takes priority over whatever the
-    // prefill LLM emits (which often collapses a specific template like "infographic" into a
-    // generic siteType → "neutral"). The user can still change it in the zero-effort form
-    // before launch. Without this anchor the identified template was silently lost.
-    const deterministicPreset = inferDeterministicVibeTemplate(prompt)?.templateId ?? "";
-    const detectedPreset = deterministicPreset
-        || (detectedTemplateId && VALID_PRESET_IDS.has(detectedTemplateId) ? detectedTemplateId : "");
+export function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, detectedTemplateId?: string | null): { draft: ZeroEffortDraft; confidence: number } {
+    // The template picked by Layer Phi (VibeClassify) is authoritative CONTEXT, injected
+    // into this call's user message by buildPresetContext(). It anchors the answer but does
+    // not veto it: the prefill LLM sees the same annotated catalog and the same selection
+    // procedure. There is no keyword matcher in this path.
+    const classifierPreset = detectedTemplateId && VALID_PRESET_IDS.has(detectedTemplateId)
+        ? detectedTemplateId
+        : "";
     let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
     const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
 
@@ -242,10 +258,7 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
         // Accept new presetId field or old siteType for backward compat with cached drafts
         const rawPreset = typeof parsed.presetId === "string" ? parsed.presetId.trim()
             : typeof parsed.siteType === "string" ? parsed.siteType.trim() : "";
-        const presetId: string = detectedPreset
-            || (VALID_PRESET_IDS.has(rawPreset)
-                ? rawPreset
-                : (SITE_TYPE_COMPAT[rawPreset] ?? "neutral"));
+        const presetId: string = resolvePrefillPresetId(rawPreset, classifierPreset);
 
         const primaryGoal = typeof parsed.primaryGoal === "string" && parsed.primaryGoal.trim().length >= 8
             ? parsed.primaryGoal.trim().slice(0, 3000)
@@ -327,10 +340,7 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
 
         const hasPartial = !!(partialPresetRaw || partialName || partialGoal);
         if (hasPartial) {
-            const partialPresetId = detectedPreset
-                || (VALID_PRESET_IDS.has(partialPresetRaw)
-                    ? partialPresetRaw
-                    : (SITE_TYPE_COMPAT[partialPresetRaw] ?? "neutral"));
+            const partialPresetId = resolvePrefillPresetId(partialPresetRaw, classifierPreset);
             const recoveredDraft: ZeroEffortDraft = {
                 businessName: partialName?.slice(0, 120) || prompt.trim().slice(0, 64) || "Project",
                 presetId: partialPresetId,
@@ -341,7 +351,7 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
             };
             return { draft: recoveredDraft, confidence: 0.4 };
         }
-        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage), detectedPreset || "neutral"), confidence: 0 };
+        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage), classifierPreset || "neutral"), confidence: 0 };
     }
 }
 
