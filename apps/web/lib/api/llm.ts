@@ -142,6 +142,8 @@ export interface LlmChatPreviewResult {
     simulated: boolean;
     focusPatchApplied?: boolean;
     focusPatchParseError?: boolean;
+    /** true when a NON-focused generation could not be parsed. structured.artifacts is empty; no snapshot must be created. */
+    generationParseError?: boolean;
 }
 
 export interface LlmChatDefaults {
