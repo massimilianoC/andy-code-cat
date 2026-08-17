@@ -542,6 +542,13 @@ export function tryParseStructuredJson(raw: string): { structured: LlmStructured
         // Stray-gt-repaired candidates (covers Hunyuan >\", pattern between fields)
         gtRepaired !== sourceForGtRepair ? gtRepaired : null,
         gtRepaired !== sourceForGtRepair ? extractFirstJsonObject(gtRepaired) : null,
+        // Last-resort: the raw fence-stripped text itself (unbalanced braces and all).
+        // extractFirstJsonObject requires balanced braces to return anything, so a
+        // completion truncated mid-way (max_tokens cutoff, no trailing markdown fence)
+        // never produces a non-null candidate above — repairTruncatedJson (in
+        // tryParseWithRepairs) then never gets a chance to run on it. Adding the raw
+        // text here, after the tighter extractions, lets the repair chain reach it.
+        stripped,
     ];
     const seen = new Set<string>();
     const candidates: string[] = [];
