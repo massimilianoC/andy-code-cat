@@ -30,30 +30,29 @@ const GOD_MODE_GENERATE_TASK_KEY = "god_mode_generate";
 // Override is honoured by the API only when non-empty.
 
 const CLASSIFY_DEFAULT_PROMPT =
-`You are a document-type and template classifier.
-Given a user prompt and optional file metadata, return a JSON object:
+`You are a deliverable-type and template classifier.
+Given a user prompt and optional attachment metadata, return a JSON object:
 {
-  "templateId": "<id from catalog or null>",
+  "templateId": "<preset id from the canonical catalog, or null>",
   "formatHint": "<one of: one_pager, a3_document, ratio_1_1, ratio_16_9, interactive_form, portfolio, brochure, analytics_dashboard or null>",
-  "confidence": <number 0.0–1.0>,
-  "reasoning": "<one sentence>"
+  "confidence": <number 0.0-1.0>,
+  "reasoning": "<one sentence naming the exact words that decided the choice>"
 }
 
 Rules:
-- Set templateId only if confidence >= 0.65 against the template catalog below.
+- Select templateId by applying the CANONICAL PRESET SELECTION CONTRACT below. It is the
+  only selection authority. Nothing corrects or overrides your answer afterwards.
+- Set templateId only if your confidence is >= 0.65. Below that, return null.
 - Set formatHint independently of templateId; it can be non-null even when templateId is null.
-- If neither signal is clear, return both as null.
-- Choose by intended output, not by surface wording. A request for something playable, game-like, arcade,
-  puzzle, challenge, score, controls, levels, HUD, character movement, or interaction loop MUST prefer
-  the most specific active game template. Use "videogame" for generic playable browser games; use
-  "seriousgame" only when learning/training is the main goal; use "game3d" for explicit 3D scenes/games;
-  use "vr-aframe" for explicit VR/immersive A-Frame requests; use "interactive-story" for branching stories.
-- Do not choose "landing" or "website" for a prompt that asks to build a playable experience, even if it
-  also mentions a title, brand, launch page, or presentation copy.
+- reasoning must quote or name the decisive words from the request. If the only decisive
+  words are atmosphere or craft words (interactive, animated, immersive, kinetic,
+  micro-interactions, Awwwards-level), you have no evidence: lower your confidence and
+  prefer the matching web preset or null.
+- Never infer a game, XR, or interactive-story preset from animation, interaction or
+  immersion language alone. See STEP 2 of the procedure.
 - Return valid JSON only — no markdown fences, no extra text.
 
-Available templates:
-{{TEMPLATE_LIST}}`;
+Available templates: {{TEMPLATE_LIST}}`;
 
 const PREFILL_DEFAULT_PROMPT =
 `You are a web project brief extractor.
@@ -63,7 +62,7 @@ populates a structured project brief.
 Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 {
   "businessName": "brand or project name (string, required)",
-  "presetId": "one of: neutral|landing|website|form|manifesto|slideshow|keynote|a4poster|infographic|videogame|freerunner|seriousgame|game3d|vr-aframe|interactive-story (string, required)",
+  "presetId": "the preset id selected by applying the CANONICAL PRESET SELECTION CONTRACT appended below (string, required)",
   "outputLanguage": "BCP-47 language code of the content to generate, e.g. 'it', 'en', 'de', 'fr' (string, required)",
   "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
   "audience": "target audience description — 120 to 500 chars when possible (string, required)",
@@ -74,28 +73,18 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
   "styleAttributes": ["minimal"]
 }
 
-presetId guidance — choose the best match:
-  neutral         generic project with no specific template
-  landing         marketing landing page / single page site
-  website         multi-section business website
-  form            guided form, wizard, or survey
-  manifesto       editorial page, manifesto, or long-form statement
-  slideshow       slide deck / presentation / carousel narrative
-  keynote         pitch deck / keynote / investor presentation
-  a4poster        A4 print-ready poster or flyer
-  infographic     data infographic / visual storytelling
-  videogame       2D browser arcade or action game
-  freerunner      2D infinite/endless runner with continuous movement, obstacles, score and retry loop
-  seriousgame     educational or training serious game
-  game3d          3D WebGL browser game
-  vr-aframe       WebVR / A-Frame immersive experience
-  interactive-story  branching narrative / choose-your-own-adventure
+presetId — do NOT guess from this prompt alone. Apply the CANONICAL PRESET SELECTION
+CONTRACT appended below: it carries the full annotated catalog, the mandatory selection
+procedure, and the per-preset SELECT WHEN / DO NOT SELECT WHEN clauses.
 
 Rules:
 - businessName: extract from the prompt; fall back to "Project" if unclear.
-- presetId: infer from the user's intent — use the MOST SPECIFIC matching id.
-  A "slideshow" or "presentation" request MUST use "slideshow" or "keynote", NOT "landing".
-  A "game" request MUST use one of the game presets. Default to "landing" only when no better match.
+- presetId: apply the CANONICAL PRESET SELECTION CONTRACT below. Choose the MOST SPECIFIC
+  preset whose SELECT WHEN clause is satisfied and whose DO NOT SELECT WHEN clause is not.
+  A game or XR preset requires concrete mechanic evidence (procedure STEP 2) — animation,
+  interaction, micro-interactions, kinetic motion, immersion and Awwwards-level ambition
+  are website craft vocabulary, never gameplay evidence. When evidence is genuinely
+  ambiguous use "neutral"; never use "landing" as a generic fallback.
 - outputLanguage: detect the language the user wants the CONTENT in. If the user writes in Italian but asks "in tedesco" or "in German", outputLanguage must be "de". Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
 - primaryGoal: produce a robust structured brief that can be injected into downstream generation prompts. Include: project intent, selected template interpretation, required sections/screens, key functionality, success criteria, assumptions needed.
 - audience: infer who uses or views the result; include needs, context, and expectations.
@@ -297,7 +286,7 @@ export default function ZeroEffortAdminPage() {
                     <PromptTaskSettingsCard
                         title="Layer Φ — Classificazione intento (vibe_intent_classify)"
                         description="Classifica il prompt per templateId e formatHint. Modello rapido, temperatura 0."
-                        helperText="Usa un modello fast/istruzione-following. Max token: 256."
+                        helperText="Usa un modello fast/istruzione-following. Max token: 256. Il contratto canonico di selezione preset (procedura + catalogo annotato) è sempre aggiunto dal backend dopo questo template e non può essere sovrascritto."
                         value={classifyTask}
                         providers={providers}
                         onFieldChange={(field, value) =>
@@ -307,7 +296,7 @@ export default function ZeroEffortAdminPage() {
                     <PromptTaskSettingsCard
                         title="Prefill Brief — Estrazione brief (vibe_intent_prefill)"
                         description="Seleziona presetId dallo stesso catalogo di Vibe e compila il brief Zero Effort completo: struttura, contenuti, funzioni, interazioni, visual, vincoli e criteri di successo."
-                        helperText="Il backend aggiunge sempre contratto e catalogo correnti: questo override può specializzare il comportamento, ma non rimuoverli. Consigliati almeno 2048 token."
+                        helperText="Il backend aggiunge sempre contratto e catalogo correnti: questo override può specializzare il comportamento, ma non rimuoverli. Consigliati almeno 2048 token. Il contratto canonico di selezione preset (procedura + catalogo annotato) è sempre aggiunto dal backend dopo questo template e non può essere sovrascritto."
                         value={prefillTask}
                         providers={providers}
                         onFieldChange={(field, value) =>
