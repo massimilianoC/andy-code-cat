@@ -682,6 +682,10 @@
                 "noActive": "Seleziona prima un'immagine o genera un nuovo asset.",
                 "noActiveLabel": "Nessuna media attiva"
             },
+            "modelFallback": {
+                "label": "Modello cambiato automaticamente",
+                "message": "\"{{requested}}\" richiesto non era disponibile — in uso \"{{actual}}\"."
+            },
             "style": {
                 "done": "Stile applicato",
                 "doneSaved": "Stile applicato e salvato",
