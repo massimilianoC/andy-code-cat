@@ -23,7 +23,7 @@ The current platform already includes the foundations needed for this vision:
 
 - authenticated multi-project usage with double sandbox isolation
 - preset-aware and layered prompt composition
-- VibeCore / Zero Effort intake with intent classification and guided handoff
+- VibeCore / Guided Mode intake with intent classification and guided handoff
 - document and media context through `enrichmentTrace` and Layer D
 - user style profile, moodboard, and global brand identity layers
 - WYSIWYG and code editing over generated HTML/CSS/JS artifacts
@@ -33,8 +33,8 @@ The current platform already includes the foundations needed for this vision:
 
 The product should now be understood as an artifact platform with multiple front doors:
 
-- **VibeCore / Zero Effort** for fast guided generation
-- **GodMode / Workspace** for expert iterative control
+- **VibeCore / Guided Mode** for fast guided generation
+- **Workspace / Workspace** for expert iterative control
 - **Didactic Mode** for understanding what the AI produced and why
 - **Admin / Governance** for templates, prompt layers, model routing, and platform policy
 

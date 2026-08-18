@@ -33,7 +33,7 @@ The recommended direction is:
 
 - preserve the current workspace UX as the high-control advanced mode
 - add a new optional frontend channel dedicated to Gamma-style guided creation
-- actively develop only two UX tracks in the MVP: Zero Effort and GodMode
+- actively develop only two UX tracks in the MVP: Guided Mode and Workspace
 - pause Curiosity and Nerdy as designed-but-not-yet-prioritized intermediate layers
 - move sequencing, branching rules, asset-finalization rules, and persistence decisions into the backend
 - introduce a pipeline runtime that can first power monolithic preset flows and later generic node-based workflows without rewriting the core generation logic
@@ -50,7 +50,7 @@ The key product rule is:
 - the current workspace remains valid and becomes the explicit advanced mode
 - the new Gamma-like UX is introduced as a parallel frontend channel, not as a destructive refactor
 - all modes operate on the same project entities, assets, snapshots, and publish model
-- for the current MVP cycle, only Zero Effort and GodMode are active development priorities
+- for the current MVP cycle, only Guided Mode and Workspace are active development priorities
 
 ### Active MVP personas
 
@@ -61,7 +61,7 @@ The architecture should explicitly support two immediate commercial user familie
 
 Both personas should land on the same shared project model, but through different interaction channels.
 
-### Mode 1 — Zero Effort
+### Mode 1 — Guided Mode
 
 This is the new Gamma-style creation flow and should be a dedicated frontend channel.
 
@@ -94,7 +94,7 @@ This mode also stays in the design backlog for now.
 
 It remains useful as a future semi-technical layer once real user behavior shows the right intermediate complexity band.
 
-### Mode 4 — GodMode
+### Mode 4 — Workspace
 
 This is the current workspace experience and should remain available without regressions.
 
@@ -117,19 +117,19 @@ This is the best mode for:
 
 The mode selector should behave like a game difficulty switch in the sidebar:
 
-- Zero Effort
+- Guided Mode
 - Curiosity
 - Nerdy
-- GodMode
+- Workspace
 
-Switching mode must change the UI shell and the amount of visible complexity, not the nature of the project itself. Any project created in Zero Effort must remain fully editable later in GodMode.
+Switching mode must change the UI shell and the amount of visible complexity, not the nature of the project itself. Any project created in Guided Mode must remain fully editable later in Workspace.
 
 ### MVP focus for the current cycle
 
 The roadmap should explicitly prioritize:
 
-1. Zero Effort as the aggregate pipeline UX
-2. GodMode as the granular editing UX
+1. Guided Mode as the aggregate pipeline UX
+2. Workspace as the granular editing UX
 3. shared backend services and orchestration between them
 4. deferred design work for Curiosity and Nerdy until after live usage feedback
 
@@ -180,7 +180,7 @@ The following backend capabilities should be treated as stage candidates, not re
 
 ### 4.2 Current frontend-heavy but valid areas
 
-The current workspace UI is valid and should remain the GodMode path. Some of its orchestration-adjacent logic should still be extracted into backend services, but this should happen without weakening or replacing the existing UX.
+The current workspace UI is valid and should remain the Workspace path. Some of its orchestration-adjacent logic should still be extracted into backend services, but this should happen without weakening or replacing the existing UX.
 
 High-value extraction targets:
 
@@ -235,7 +235,7 @@ The recommended implementation is not a single refactor of the existing workspac
 
 ### Channel A — Current workspace
 
-This remains the advanced editing environment and corresponds to GodMode.
+This remains the advanced editing environment and corresponds to Workspace.
 
 Recommended rule:
 
@@ -259,7 +259,7 @@ Recommended characteristics:
 
 Both channels must operate on the same project object so that:
 
-- a site created in Zero Effort is still a normal project
+- a site created in Guided Mode is still a normal project
 - assets and snapshots remain reusable in both directions
 - publish state remains consistent
 - switching UI mode never forks project data
@@ -269,7 +269,7 @@ Both channels must operate on the same project object so that:
 Recommended UI behavior:
 
 - global or per-project difficulty selector in the sidebar
-- state labels: Zero Effort, Curiosity, Nerdy, GodMode
+- state labels: Guided Mode, Curiosity, Nerdy, Workspace
 - switching difficulty changes shell complexity and available actions
 - the underlying project, snapshots, and publish state stay unchanged
 
@@ -512,7 +512,7 @@ Build the orchestration layer first and prepare a new frontend channel without d
 ### Deliverables
 
 - introduce a backend PipelineOrchestrator service in the application layer
-- create a shared intake DTO for Zero Effort and future templates
+- create a shared intake DTO for Guided Mode and future templates
 - create typed stage result interfaces
 - add a new optional guided frontend shell that talks to the orchestrator
 - keep the current workspace untouched except for optional reuse of newly extracted backend services
@@ -530,7 +530,7 @@ The backend becomes the only place where workflow decisions live, while the curr
 
 ---
 
-## Phase 1A — Zero Effort track
+## Phase 1A — Guided Mode track
 
 ### Objective
 
@@ -566,11 +566,11 @@ This phase does not require a full node runtime. A linear orchestrator is suffic
 - one backend endpoint to run the whole flow
 - one progress/status endpoint
 - one dedicated beginner UI channel in the web app
-- one mode switch that can later open the same project in GodMode
+- one mode switch that can later open the same project in Workspace
 
 ---
 
-## Phase 1B — GodMode track
+## Phase 1B — Workspace track
 
 ### Objective
 
@@ -587,7 +587,7 @@ Continue evolving the existing advanced workspace in parallel without regression
 
 - reuse shared backend orchestration and logging services where helpful
 - keep direct editing and manual review first-class
-- ensure every project created from Zero Effort can be opened and refined in GodMode immediately
+- ensure every project created from Guided Mode can be opened and refined in Workspace immediately
 
 ---
 
@@ -770,7 +770,7 @@ Create:
 - web/lib/api/pipelines.ts
 - a new guided route group or shell for the Gamma-style UX
 - a beginner-oriented intake component or page
-- a difficulty selector component for Zero Effort, Curiosity, Nerdy, and GodMode
+- a difficulty selector component for Guided Mode, Curiosity, Nerdy, and Workspace
 - a pipeline progress panel that only consumes the backend run state
 
 Refactor only where reusable backend extraction is clearly beneficial:
@@ -796,18 +796,18 @@ If the goal is to move fast without overbuilding, the best path is:
 
 - create normalized intake payload
 - create ExecutePipeline use-case
-- wire one Zero Effort endpoint
+- wire one Guided Mode endpoint
 - persist run logs and progress
 - scaffold the new optional guided frontend channel
-- expose shared services that GodMode can reuse without regressions
+- expose shared services that Workspace can reuse without regressions
 
-### Sprint 2 — Zero Effort MVP plus GodMode continuity
+### Sprint 2 — Guided Mode MVP plus Workspace continuity
 
-- add the Zero Effort guided form and progress flow
+- add the Guided Mode guided form and progress flow
 - add the difficulty toggle in the sidebar or shell
-- allow switching from the new channel into GodMode for the same project
+- allow switching from the new channel into Workspace for the same project
 - add auto-publish option and optional smoke test report
-- harden the existing GodMode workspace against any shared-backend changes
+- harden the existing Workspace workspace against any shared-backend changes
 
 ### Sprint 3 — post-MVP modularization
 
@@ -844,7 +844,7 @@ This sequence gives product value early while staying fully compatible with futu
 The first phase is successful when:
 
 - a new end user can submit one guided brief and receive a published website
-- a reseller can use the same flow for rapid delivery and then hand the same project into GodMode refinement
+- a reseller can use the same flow for rapid delivery and then hand the same project into Workspace refinement
 - the entire flow is triggered from one backend execution endpoint
 - progress and failures are visible through persisted run state
 - the same orchestration can later be called from dashboard, workspace, or admin UIs
@@ -860,8 +860,8 @@ The platform is already close enough to deliver a strong zero-effort workflow wi
 The recommended order is:
 
 1. shared backend orchestrator first
-2. Zero Effort frontend channel second
-3. GodMode reuse and hardening in parallel
+2. Guided Mode frontend channel second
+3. Workspace reuse and hardening in parallel
 4. pipeline run persistence and template abstraction next
 5. Curiosity and Nerdy later, only when validated by usage
 6. node editor last

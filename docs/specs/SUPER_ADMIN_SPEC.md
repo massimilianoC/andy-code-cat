@@ -1,4 +1,4 @@
-# Super Admin — God Mode Platform Management
+# Super Admin — Workspace Platform Management
 
 **Status:** Planned → Implementation  
 **Branch:** `feat/superadmin-dashboard`  

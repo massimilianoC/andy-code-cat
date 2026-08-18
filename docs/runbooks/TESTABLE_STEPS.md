@@ -221,7 +221,7 @@ large-surface features.
 - Expected: upload succeeds and the asset shows `enrichmentTrace` status (`pending`, `ready`, or `failed`) in project asset UI/API
 - Expected: VibeCore classification/prefill stays in the authenticated project sandbox
 - Complete handoff into `/launch/:projectId` or `/workspace/:projectId`
-- Expected: the same `projectId` remains editable in GodMode
+- Expected: the same `projectId` remains editable in Workspace
 - Generate or auto-send the first artifact
 - Expected: a snapshot is created and can be selected from snapshot history
 - Expected: if media placeholders are emitted, they are resolved or explicitly marked degraded
@@ -847,7 +847,7 @@ If provider fails: `4xx` error (no fallback in edit mode).
 7. Delete the disposable bot project.
 8. Permanent gate: run `npx playwright test tests/e2e/workspace-refactor.spec.ts --project=chromium` with `E2E_BASE_URL` pointing to the freshly built web app and `E2E_API_URL` pointing to the isolated API stack.
 9. When adding workspace behavior, place deterministic chat, focus/media, or preview transformation logic under the matching `app/workspace/features/*` directory; do not add a context unless state must be shared by independent render subtrees.
-10. From Vibe Mode, complete the Zero Effort handoff and launch God Mode with a configured preferred model that is also the active default.
+10. From Vibe Mode, complete the Guided Mode handoff and launch Workspace with a configured preferred model that is also the active default.
 11. Expected: the stored handoff prompt is consumed exactly once and content generation starts automatically; an unavailable preferred model must fall back to the active workspace model rather than blocking generation.
 12. Publish or republish a snapshot containing project media, then open the path link shown by the workspace.
 13. Expected locally: the link uses `http://<browser-host>/p/<publishId>/` through nginx, CSS/JS return 200, and generated media references use `/p/media/<assetId>` rather than a build-time `localhost:4000` origin.

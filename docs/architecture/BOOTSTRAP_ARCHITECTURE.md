@@ -167,13 +167,13 @@ Assets, media, snapshots, publish:
 - `UnpublishProject`
 - `GetSiteDeployment`
 
-Guided entry / Zero Effort / VibeCore:
+Guided entry / Guided Mode / VibeCore:
 
 - `LaunchZeroEffortProject`
 - `VibeClassify`
 - `VibePrefill`
 - `vibePresetCatalog` builds the single canonical preset context shared by classification and prefill; AI matching includes censused specialist presets independently from UI visibility
-- Zero Effort carries an expressive, additive brief contract through the form and normalized conversation brief; `[SOURCE_REQUEST]` remains authoritative before God Mode optimization
+- Guided Mode carries an expressive, additive brief contract through the form and normalized conversation brief; `[SOURCE_REQUEST]` remains authoritative before Workspace optimization
 
 Grounded data runtime:
 
@@ -309,8 +309,8 @@ Critical ordering rule:
 - **Dashboard / VibeCore entry**: single-prompt intake, automatic template/mode classification, guided project launch
 - **Grounded data dashboard**: additive analytics route for dataset assets with deterministic facts/query execution
 - **Grounded data dashboard**: additive analytics route for dataset assets with per-table inspection, deterministic row browsing, table-scoped insights/suggestions, and grounded queries with explicit filters/sort
-- **Zero Effort launch flow**: simplified guided project setup under `/launch/[projectId]`
-- **GodMode workspace**: split preview/chat/editor workflow under `/workspace/[projectId]`
+- **Guided Mode launch flow**: simplified guided project setup under `/launch/[projectId]`
+- **Workspace workspace**: split preview/chat/editor workflow under `/workspace/[projectId]`
   - layout-only state is owned by `app/workspace/contexts/WorkspaceLayoutContext.tsx`
   - publish, unpublish, export, capture, and slug actions are owned by the grouped, typed controller in `app/workspace/features/header/usePublish.ts`
   - public deployment links are resolved by `app/workspace/features/header/publishUrl.ts`; local compose links use the nginx front-door and published `/p/media/*` references remain same-origin
@@ -426,7 +426,7 @@ Important nuance:
 - persisted per-user runtime cache for normalized dataset rows reused across grounded dataset queries
 - deterministic dataset queries, grounded insights, and dashboard suggestions for runtime-loaded data assets
 - cost/logging/notification infrastructure
-- dashboard VibeCore entry and Zero Effort prefill API surface, with classifier-owned template routing and no manual `Auto/Website` selector in the initial chat
+- dashboard VibeCore entry and Guided Mode prefill API surface, with classifier-owned template routing and no manual `Auto/Website` selector in the initial chat
 
 ### Current open areas
 

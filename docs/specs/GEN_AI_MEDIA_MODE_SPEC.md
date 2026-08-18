@@ -2,7 +2,7 @@
 
 > Status: architectural specification — ready for implementation planning  
 > Date: 2026-06-10  
-> Scope: extension of the Vibe/Zero Effort/God Mode pipeline to support non-code Gen AI outputs (podcast, video, music) via external engine REST APIs, while preserving the existing HTML artifact container model  
+> Scope: extension of the Vibe/Guided Mode/Workspace pipeline to support non-code Gen AI outputs (podcast, video, music) via external engine REST APIs, while preserving the existing HTML artifact container model  
 > Audience: maintainers, implementation agents, operators  
 > Related specs: `docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md`, `docs/specs/PRESET_TYPED_SPECS.md`, `docs/specs/EXPORT_AND_PUBLISH_SPEC.md`, `docs/specs/COST_TRANSACTION_LEDGER_SPEC.md`, `docs/specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md`, `docs/specs/GEN_AI_MEDIA_MODE_INTERFACE_STANDARDS.md`  
 > Current media baseline report: `docs/reports/ARTIFACT_MEDIA_IMPLEMENTATION_STATUS_2026-05-29.md`
@@ -20,14 +20,14 @@ The LLM always generates an HTML artifact "container".
 The container includes semantic media placeholders (asset://media/<key>).
 External Gen AI engines produce the actual media asynchronously.
 The backend resolves placeholders into real assets via the existing ResolveArtifactMedia pipeline.
-The frontend presents the result in God Mode exactly like any other artifact.
+The frontend presents the result in Workspace exactly like any other artifact.
 ```
 
 This means:
 
 - **No new workspace UI** is required. The existing iframe-based preview, Monaco editor, snapshot history, WYSIWYG edit mode, export ZIP, and publish flows remain unchanged.
 - **No new snapshot model** is required. `PreviewSnapshot` continues to store `html`, `css`, `js`.
-- **No replacement of Zero Effort** is required. The new capability is delivered as additional presets (`podcast`, `video-show`, `music-track`) inside the existing preset catalog.
+- **No replacement of Guided Mode** is required. The new capability is delivered as additional presets (`podcast`, `video-show`, `music-track`) inside the existing preset catalog.
 - The user experience is **progressive**: the landing page HTML is visible in seconds; the audio/video asset populates the player when the external engine completes.
 
 ---
@@ -135,7 +135,7 @@ Reusing the artifact container gives the following capabilities **for free**:
 | Capability | Cost if we bypass HTML container |
 |---|---|
 | Snapshot history / versioning | New DB entity + UI panel |
-| God Mode inspect + edit | New DOM inspector for audio timeline |
+| Workspace inspect + edit | New DOM inspector for audio timeline |
 | Export ZIP | New ZIP builder for standalone audio players |
 | Publish to public URL | New deployment logic for non-HTML artifacts |
 | Focused edit (change title, CTA, bio) | New "patch" semantics for audio metadata |
@@ -378,7 +378,7 @@ GET /v1/projects/:projectId/assets/:assetId/generation-status
 - When `presetId === "podcast"`, the file upload area should accept audio attachments (voice samples, reference clips, script PDFs).
 - The model picker (`ProviderModelPicker`) should still allow override, but the preset may recommend a specific text model for the brief generation.
 
-### 7.2 Zero Effort Launch Page
+### 7.2 Guided Mode Launch Page
 
 **File:** `apps/web/app/launch/[projectId]/page.tsx`
 
@@ -387,7 +387,7 @@ GET /v1/projects/:projectId/assets/:assetId/generation-status
   - Target duration (slider: 5-60 min)
   - Speaker count and voice preference
   - Script attachment (optional PDF/TXT)
-- The "God Mode — Genera" button triggers the same flow, but the backend will additionally enqueue the external podcast generation.
+- The "Workspace — Genera" button triggers the same flow, but the backend will additionally enqueue the external podcast generation.
 
 ### 7.3 Workspace Polling
 
@@ -721,7 +721,7 @@ When downloading audio from the engine's temporary `audioUrl`, validate:
 | Update `VibeClassify` for podcast intent | `application/use-cases/VibeClassify.ts` | Prompts mentioning "podcast" classify to `presetId: "podcast"` with confidence >= 0.65 |
 | Update `VibePrefill` for podcast brief | `application/use-cases/VibePrefill.ts` | Extracts `durationHint`, `speakerCount`, `voiceTone` into draft |
 | Launch page podcast fields | `apps/web/app/launch/[projectId]/page.tsx` | Duration slider, speaker config visible when podcast preset selected |
-| God Mode auto-prompt wiring | `apps/web/components/dashboard/VibeCoreEntry.tsx` | Hard mode passes podcast brief correctly via sessionStorage |
+| Workspace auto-prompt wiring | `apps/web/components/dashboard/VibeCoreEntry.tsx` | Hard mode passes podcast brief correctly via sessionStorage |
 
 ### Phase 3 — Transcription & UX Polish (1 week)
 
