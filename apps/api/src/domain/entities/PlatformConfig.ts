@@ -13,6 +13,8 @@ export interface PromptTaskSetting {
     temperature: number;
     maxCompletionTokens: number;
     systemTemplate: string;
+    /** sha256:<16 hex chars> of the platform default text this override was saved against — used to detect a stale override when the platform default later changes. */
+    systemTemplateBaselineHash?: string;
 }
 
 export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {

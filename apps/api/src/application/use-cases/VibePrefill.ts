@@ -206,6 +206,12 @@ Rules:
 - respect grounded analytics: do not invent exact metric values.
 - Return ONLY the JSON object.`;
 
+// Stable, governance-registry-facing aliases. The registry (taskPromptRegistry.ts) imports
+// these instead of restating the prompt text, so the admin "default text" view can never
+// drift from what the pipeline actually sends.
+export const VIBE_PREFILL_SYSTEM_PROMPT = SYSTEM_PROMPT;
+export const VIBE_PREFILL_DATA_DASHBOARD_SYSTEM_PROMPT = DATA_DASHBOARD_SYSTEM_PROMPT;
+
 function buildPresetContext(templateId?: string | null): string {
     if (!templateId) return "";
     const preset = PRESET_MAP.get(templateId);
