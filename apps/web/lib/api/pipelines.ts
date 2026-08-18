@@ -1,7 +1,7 @@
 import { call } from "./call";
-import type { GenerationWorkspaceDto, ZeroEffortLaunchResultDto } from "@andy-code-cat/contracts";
+import type { GenerationWorkspaceDto, GuidedLaunchResultDto } from "@andy-code-cat/contracts";
 
-export interface ZeroEffortLaunchInput {
+export interface GuidedLaunchInput {
     businessName: string;
     /** PRESET_CATALOG id (e.g. "slideshow", "landing", "website", "videogame"). */
     presetId: string;
@@ -27,7 +27,7 @@ export interface ZeroEffortLaunchInput {
 }
 
 export interface ProjectPipelineRunSummary {
-    mode: "zero-effort";
+    mode: "guided";
     status: "prepared";
     projectId: string;
     conversationId: string;
@@ -37,7 +37,7 @@ export interface ProjectPipelineRunSummary {
     workspace: GenerationWorkspaceDto;
 }
 
-export interface ZeroEffortTaskConfig {
+export interface GuidedTaskConfig {
     enabled: boolean;
     provider: string;
     model: string;
@@ -46,11 +46,17 @@ export interface ZeroEffortTaskConfig {
     systemTemplate: string;
 }
 
-export interface ZeroEffortPipelineConfig {
-    optimize: ZeroEffortTaskConfig;
-    generate: ZeroEffortTaskConfig;
-    vibeGenerate: ZeroEffortTaskConfig;
-    godModeGenerate: ZeroEffortTaskConfig;
+export interface GuidedPipelineConfig {
+    optimize: GuidedTaskConfig;
+    generate: GuidedTaskConfig;
+    vibeGenerate: GuidedTaskConfig;
+    /**
+     * The API dual-emits this alongside the legacy `godModeGenerate` field for one release
+     * (see apps/api/src/presentation/http/routes/pipelineRoutes.ts) — prefer this field.
+     */
+    projectModeGenerate: GuidedTaskConfig;
+    /** @deprecated use projectModeGenerate — kept for one release for cached-bundle safety. */
+    godModeGenerate?: GuidedTaskConfig;
     attachmentPolicy?: {
         maxAttachmentsPerPrompt: number;
         maxFileSizeBytes: number;
@@ -63,14 +69,14 @@ export interface ZeroEffortPipelineConfig {
     };
 }
 
-export function launchZeroEffort(
+export function launchGuided(
     token: string,
     projectId: string,
-    input: ZeroEffortLaunchInput,
+    input: GuidedLaunchInput,
 ) {
-    return call<ZeroEffortLaunchResultDto>(
+    return call<GuidedLaunchResultDto>(
         "POST",
-        `/v1/projects/${projectId}/pipelines/zero-effort`,
+        `/v1/projects/${projectId}/pipelines/guided`,
         input,
         {
             Authorization: `Bearer ${token}`,
@@ -79,10 +85,10 @@ export function launchZeroEffort(
     );
 }
 
-export function getZeroEffortConfig(token: string, projectId: string) {
-    return call<ZeroEffortPipelineConfig>(
+export function getGuidedPipelineConfig(token: string, projectId: string) {
+    return call<GuidedPipelineConfig>(
         "GET",
-        `/v1/projects/${projectId}/pipelines/zero-effort/config`,
+        `/v1/projects/${projectId}/pipelines/guided/config`,
         undefined,
         {
             Authorization: `Bearer ${token}`,

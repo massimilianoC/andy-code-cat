@@ -1,5 +1,5 @@
-import type { DataDashboardDraft, VibeGenerationMode, VibePrefillResponse, AttachmentMeta, FormatHint, ZeroEffortDraft } from "@andy-code-cat/contracts";
-import { zeroEffortLaunchSchema } from "@andy-code-cat/contracts";
+import type { DataDashboardDraft, VibeGenerationMode, VibePrefillResponse, AttachmentMeta, FormatHint, GuidedDraft } from "@andy-code-cat/contracts";
+import { guidedLaunchSchema } from "@andy-code-cat/contracts";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
@@ -54,7 +54,7 @@ function normalizeLang(raw?: string | null): string {
 
 // ── Default draft ─────────────────────────────────────────────────────────────
 
-function defaultDraft(prompt: string, outputLanguage = "en", presetId = "neutral"): ZeroEffortDraft {
+function defaultDraft(prompt: string, outputLanguage = "en", presetId = "neutral"): GuidedDraft {
     const projectName = prompt.trim().slice(0, 64) || "Project";
     return {
         businessName: projectName,
@@ -220,11 +220,11 @@ function defaultDataDashboardDraft(prompt: string, attachmentMeta?: AttachmentMe
 
 // ── Response parser ───────────────────────────────────────────────────────────
 
-function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, detectedTemplateId?: string | null): { draft: ZeroEffortDraft; confidence: number } {
+function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, detectedTemplateId?: string | null): { draft: GuidedDraft; confidence: number } {
     // The template detected by Layer Φ (VibeClassify) is authoritative: when it names a
     // real preset, it becomes the prefilled presetId and takes priority over whatever the
     // prefill LLM emits (which often collapses a specific template like "infographic" into a
-    // generic siteType → "neutral"). The user can still change it in the zero-effort form
+    // generic siteType → "neutral"). The user can still change it in the Guided Mode form
     // before launch. Without this anchor the identified template was silently lost.
     const deterministicPreset = inferDeterministicVibeTemplate(prompt)?.templateId ?? "";
     const detectedPreset = deterministicPreset
@@ -303,13 +303,13 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
         );
 
         // Validate with zod to ensure the draft is safe to use downstream
-        const zodResult = zeroEffortLaunchSchema.safeParse({
+        const zodResult = guidedLaunchSchema.safeParse({
             businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, sourceRequest,
             projectSummary, contentStructure, contentRequirements, functionalRequirements, interactionModel,
             visualDirection, successCriteria, constraints, mustAvoid, contactInfo, styleAttributes, outputLanguage,
         });
 
-        const draft: ZeroEffortDraft = zodResult.success
+        const draft: GuidedDraft = zodResult.success
             ? { ...zodResult.data, outputLanguage }
             : { businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, sourceRequest,
                 projectSummary, contentStructure, contentRequirements, functionalRequirements, interactionModel,
@@ -331,7 +331,7 @@ function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, 
                 || (VALID_PRESET_IDS.has(partialPresetRaw)
                     ? partialPresetRaw
                     : (SITE_TYPE_COMPAT[partialPresetRaw] ?? "neutral"));
-            const recoveredDraft: ZeroEffortDraft = {
+            const recoveredDraft: GuidedDraft = {
                 businessName: partialName?.slice(0, 120) || prompt.trim().slice(0, 64) || "Project",
                 presetId: partialPresetId,
                 primaryGoal: partialGoal?.slice(0, 3000) || prompt.trim().slice(0, 500) || "Modern web project.",
@@ -520,7 +520,7 @@ export class VibePrefill {
         const basePrompt = resolvedMode === "data_dashboard"
             ? configuredPrompt
             : taskSettings.systemTemplate?.trim()
-                ? `${configuredPrompt}\n\nCURRENT ZERO EFFORT OUTPUT CONTRACT:\n${SYSTEM_PROMPT}\n\n${buildCanonicalPresetSelectionRules()}`
+                ? `${configuredPrompt}\n\nCURRENT GUIDED MODE OUTPUT CONTRACT:\n${SYSTEM_PROMPT}\n\n${buildCanonicalPresetSelectionRules()}`
                 : `${SYSTEM_PROMPT}\n\n${buildCanonicalPresetSelectionRules()}`;
         const contextLayers = [input.layerDContext, input.layerXDataContext].filter((value): value is string => Boolean(value && value.trim()));
         const systemPrompt = contextLayers.length > 0

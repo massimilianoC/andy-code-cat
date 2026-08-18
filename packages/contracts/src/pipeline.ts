@@ -19,15 +19,12 @@ const requiredTrimmedString = (max: number, min = 1) =>
         z.string().min(min).max(max),
     );
 
-export const uxModeSchema = z.enum(["zero-effort", "godmode"]);
-export type UxMode = z.infer<typeof uxModeSchema>;
-
-export const zeroEffortContactItemSchema = z.object({
+export const guidedContactItemSchema = z.object({
     key: requiredTrimmedString(60),
     value: requiredTrimmedString(200),
 });
 
-export const zeroEffortLaunchSchema = z.object({
+export const guidedLaunchSchema = z.object({
     businessName: requiredTrimmedString(120, 2),
     /** PRESET_CATALOG id (e.g. "slideshow", "landing", "website"). Defaults to "landing". */
     presetId: z.string().min(2).max(60).default("landing"),
@@ -49,22 +46,25 @@ export const zeroEffortLaunchSchema = z.object({
     constraints: optionalTrimmedString(1600),
     mustAvoid: optionalTrimmedString(1200),
     // New fields from guided 4-step flow (all optional for backward compat)
-    contactInfo: z.array(zeroEffortContactItemSchema).max(15).optional(),
+    contactInfo: z.array(guidedContactItemSchema).max(15).optional(),
     styleAttributes: z.array(z.string().trim().max(80)).max(20).optional(),
     // Output language: BCP-47 code (e.g. "it", "en", "fr"). Default "en".
     outputLanguage: z.string().min(2).max(10).toLowerCase().optional(),
 });
 
+// "zero-effort" accepted for one release for backward compatibility with cached
+// frontend bundles/clients still sending the legacy literal — see
+// docs/specs/GUIDED_MODE_PREFILL_SPEC.md for the removal ticket.
 export const executeProjectPipelineSchema = z.object({
-    mode: z.literal("zero-effort").default("zero-effort"),
-    input: zeroEffortLaunchSchema,
+    mode: z.enum(["guided", "zero-effort"]).default("guided"),
+    input: guidedLaunchSchema,
 });
 
-export type ZeroEffortLaunchInput = z.infer<typeof zeroEffortLaunchSchema>;
+export type GuidedLaunchInput = z.infer<typeof guidedLaunchSchema>;
 export type ExecuteProjectPipelineInput = z.infer<typeof executeProjectPipelineSchema>;
 
-export interface ZeroEffortLaunchResultDto {
-    mode: "zero-effort";
+export interface GuidedLaunchResultDto {
+    mode: "guided";
     status: "prepared";
     projectId: string;
     conversationId: string;

@@ -1,8 +1,8 @@
 import { Router, type Response, type NextFunction } from "express";
 import {
     executeProjectPipelineSchema,
-    type ZeroEffortLaunchResultDto,
-    zeroEffortLaunchSchema,
+    type GuidedLaunchResultDto,
+    guidedLaunchSchema,
     type GenerationWorkspaceDto,
 } from "@andy-code-cat/contracts";
 import { authMiddleware } from "../middlewares/authMiddleware";
@@ -16,7 +16,7 @@ import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/Mong
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { PrepareGenerationWorkspace } from "../../../application/use-cases/PrepareGenerationWorkspace";
-import { LaunchZeroEffortProject } from "../../../application/use-cases/LaunchZeroEffortProject";
+import { LaunchGuidedProject } from "../../../application/use-cases/LaunchGuidedProject";
 import type { GenerationWorkspace } from "../../../domain/entities/GenerationWorkspace";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import {
@@ -56,7 +56,7 @@ export function createPipelineRoutes(): Router {
         localFileStorage,
     );
 
-    const launchZeroEffortProject = new LaunchZeroEffortProject(
+    const launchGuidedProject = new LaunchGuidedProject(
         moodboardRepository,
         conversationRepository,
         prepareGenerationWorkspace,
@@ -64,9 +64,9 @@ export function createPipelineRoutes(): Router {
 
     router.use(authMiddleware);
 
-    const runZeroEffort = async (req: RequestWithContext, res: Response, next: NextFunction) => {
+    const runGuidedLaunch = async (req: RequestWithContext, res: Response, next: NextFunction) => {
         try {
-            const intake = zeroEffortLaunchSchema.parse(req.body);
+            const intake = guidedLaunchSchema.parse(req.body);
 
             // Propagate inferred presetId to the project so Layer T picks the right template,
             // and persist the resolved output language so Layer L (OUTPUT LANGUAGE) is injected
@@ -78,7 +78,7 @@ export function createPipelineRoutes(): Router {
                 }).catch(() => {});
             }
 
-            const result = await launchZeroEffortProject.execute({
+            const result = await launchGuidedProject.execute({
                 userId: req.auth!.userId,
                 projectId: req.sandbox!.projectId,
                 intake,
@@ -88,18 +88,18 @@ export function createPipelineRoutes(): Router {
                 projectId: req.sandbox!.projectId,
                 conversationId: result.conversationId,
                 domain: "system",
-                eventType: "zero_effort_pipeline_prepared",
+                eventType: "guided_pipeline_prepared",
                 level: "info",
                 status: "success",
                 metadata: {
-                    mode: "zero-effort",
+                    mode: "guided",
                     jobId: result.jobId,
                     workspaceRootPath: result.workspace.rootPath,
                 },
             });
 
-            const response: ZeroEffortLaunchResultDto = {
-                mode: "zero-effort",
+            const response: GuidedLaunchResultDto = {
+                mode: "guided",
                 status: "prepared",
                 projectId: req.sandbox!.projectId,
                 conversationId: result.conversationId,
@@ -116,9 +116,16 @@ export function createPipelineRoutes(): Router {
     };
 
     router.post(
+        "/projects/:projectId/pipelines/guided",
+        sandboxMiddleware,
+        runGuidedLaunch,
+    );
+    // Legacy alias — kept for one release so cached frontend bundles / external clients still
+    // posting to the old path keep working. See docs/specs/GUIDED_MODE_PREFILL_SPEC.md.
+    router.post(
         "/projects/:projectId/pipelines/zero-effort",
         sandboxMiddleware,
-        runZeroEffort,
+        runGuidedLaunch,
     );
 
     router.post(
@@ -128,34 +135,55 @@ export function createPipelineRoutes(): Router {
             try {
                 const body = executeProjectPipelineSchema.parse(req.body);
                 req.body = body.input;
-                await runZeroEffort(req, res, next);
+                await runGuidedLaunch(req, res, next);
             } catch (error) {
                 next(error);
             }
         },
     );
 
+    const getGuidedPipelineConfig = async (req: RequestWithContext, res: Response, next: NextFunction) => {
+        try {
+            const platformConfig = await platformConfigRepository.get();
+            const project = await projectRepository
+                .findByIdForUser(req.sandbox!.projectId, req.auth!.userId)
+                .catch(() => null);
+            const productKey = project?.presetId ?? "default";
+            const optimize = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "zero_effort_optimize");
+            const generate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "zero_effort_generate");
+            const vibeGenerate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "vibe_mode_generate");
+            // Storage key "god_mode_generate" is frozen (live PlatformConfig Mongo key) — see the
+            // freeze comment in apps/web/app/admin/guided-mode/page.tsx. Only the response field
+            // name is rebranded, and dual-emitted with the legacy name for one release so a stale
+            // cached frontend bundle doesn't lose its provider/model preference.
+            const projectModeGenerate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "god_mode_generate");
+            const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, productKey);
+            const documentContextPolicy = resolveDocumentContextPolicyFromConfig(platformConfig, productKey);
+            res.json({
+                optimize,
+                generate,
+                vibeGenerate,
+                projectModeGenerate,
+                /** @deprecated use projectModeGenerate — kept for one release for cached-bundle safety. */
+                godModeGenerate: projectModeGenerate,
+                attachmentPolicy,
+                documentContextPolicy,
+            });
+        } catch (error) {
+            next(error);
+        }
+    };
+
+    router.get(
+        "/projects/:projectId/pipelines/guided/config",
+        sandboxMiddleware,
+        getGuidedPipelineConfig,
+    );
+    // Legacy alias — see the note on the POST route above.
     router.get(
         "/projects/:projectId/pipelines/zero-effort/config",
         sandboxMiddleware,
-        async (req: RequestWithContext, res: Response, next: NextFunction) => {
-            try {
-                const platformConfig = await platformConfigRepository.get();
-                const project = await projectRepository
-                    .findByIdForUser(req.sandbox!.projectId, req.auth!.userId)
-                    .catch(() => null);
-                const productKey = project?.presetId ?? "default";
-                const optimize = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "zero_effort_optimize");
-                const generate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "zero_effort_generate");
-                const vibeGenerate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "vibe_mode_generate");
-                const godModeGenerate = resolvePromptTaskSettingFromConfig(platformConfig, productKey, "god_mode_generate");
-                const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, productKey);
-                const documentContextPolicy = resolveDocumentContextPolicyFromConfig(platformConfig, productKey);
-                res.json({ optimize, generate, vibeGenerate, godModeGenerate, attachmentPolicy, documentContextPolicy });
-            } catch (error) {
-                next(error);
-            }
-        },
+        getGuidedPipelineConfig,
     );
 
     return router;

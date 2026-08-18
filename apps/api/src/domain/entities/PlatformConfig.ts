@@ -48,6 +48,9 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 1800,
         systemTemplate: "",
     },
+    // Storage key FROZEN — live production Mongo key, renaming it orphans persisted operator
+    // overrides and silently swaps this budget for an unrelated smaller default (no error
+    // raised). Only the surrounding UI label ("Guided Mode") is rebranded, not this key.
     zero_effort_optimize: {
         enabled: true,
         provider: "siliconflow",
@@ -56,6 +59,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 32000,
         systemTemplate: "",
     },
+    // Storage key FROZEN — see the zero_effort_optimize comment above.
     zero_effort_generate: {
         enabled: true,
         provider: "siliconflow",
@@ -90,7 +94,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 256,
         systemTemplate: "",
     },
-    // VibeCore — Zero Effort LLM prefill (brief field extraction)
+    // VibeCore — Guided Mode LLM prefill (brief field extraction)
     vibe_intent_prefill: {
         enabled: true,
         provider: "siliconflow",
@@ -108,7 +112,8 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         maxCompletionTokens: 14000,
         systemTemplate: "",
     },
-    // God Mode — default model for standalone God Mode workspace generation
+    // Project Mode — default model for standalone Workspace generation.
+    // Storage key FROZEN ("god_mode_generate") — see the zero_effort_optimize comment above.
     god_mode_generate: {
         enabled: true,
         provider: "siliconflow",
