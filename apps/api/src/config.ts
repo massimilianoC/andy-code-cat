@@ -109,7 +109,6 @@ const envSchema = z.object({
     ENRICHMENT_LAYER_D_MAX_ASSETS: z.coerce.number().int().positive().default(5),
     // ── VibeCore pipeline flags ───────────────────────────────────────────────
     VIBE_CLASSIFIER_ENABLED: z.string().default("true"),
-    VIBE_OPTIMIZER_ENABLED: z.string().default("true"),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -176,5 +175,4 @@ export const env = {
     enrichmentImageAnalysis: parsed.data.ENRICHMENT_IMAGE_ANALYSIS === "true",
     enrichmentInjectLayerD: parsed.data.ENRICHMENT_INJECT_LAYER_D === "true",
     vibeClassifierEnabled: parsed.data.VIBE_CLASSIFIER_ENABLED === "true",
-    vibeOptimizerEnabled: parsed.data.VIBE_OPTIMIZER_ENABLED === "true",
 };

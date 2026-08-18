@@ -380,7 +380,7 @@ export function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: s
     const classifierPreset = detectedTemplateId && VALID_PRESET_IDS.has(detectedTemplateId)
         ? detectedTemplateId
         : "";
-    let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+    const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
     const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
 
     try {
@@ -431,7 +431,7 @@ function parseDataDashboardPrefillResponse(
     prompt: string,
     attachmentMeta?: AttachmentMeta[],
 ): { dataDashboardDraft: DataDashboardDraft; confidence: number } {
-    let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+    const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
     const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
 
     try {
