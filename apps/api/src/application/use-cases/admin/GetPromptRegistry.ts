@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { PROMPT_TASK_REGISTRY } from "../../prompting/taskPromptRegistry";
+import { PROMPT_TASK_REGISTRY, type PromptTaskRouting } from "../../prompting/taskPromptRegistry";
 import {
     DEFAULT_PRODUCT_ATTACHMENT_POLICY,
     DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY,
@@ -22,6 +22,7 @@ export interface PromptTaskDescriptorDto {
     defaultText: string;
     defaultTextHash: string;
     slots: PromptSlotDescriptorDto[];
+    routing: PromptTaskRouting;
 }
 
 export interface AdminPromptRegistryDto {
@@ -55,6 +56,7 @@ export class GetPromptRegistry {
                     editableBy: slot.editableBy,
                     store: slot.store,
                 })),
+                routing: task.routing,
             };
         });
 

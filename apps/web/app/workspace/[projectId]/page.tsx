@@ -32,6 +32,7 @@ import {
     type ConversationDetail,
     type ProjectPreset,
     type MessageDto,
+    type OptimizePromptResult,
     type PreviewSnapshot,
     type LlmProviderCatalogDto,
     type LlmFocusContext,
@@ -1673,7 +1674,7 @@ function WorkspacePageContent() {
         .reverse()
         .map((m) => m.metadata?.promptingTrace)
         .find((tr) => Boolean(tr && ((tr.messagesSentToLlm?.length ?? 0) > 0 || tr.effectiveSystemPrompt)));
-    const lastSentMessages: Array<{ role: "system" | "user"; content: string }> = lastSentTrace
+    const lastSentMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = lastSentTrace
         ? ((lastSentTrace.messagesSentToLlm?.length ?? 0) > 0
             ? lastSentTrace.messagesSentToLlm!
             : lastSentTrace.effectiveSystemPrompt
@@ -2488,28 +2489,7 @@ function WorkspacePageContent() {
                 prev ? { ...prev, messages: [...prev.messages, userSaved.message] } : prev
             );
 
-            let finalResult: {
-                optimizedPrompt: string;
-                provider: string;
-                model: string;
-                usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
-                costEstimate?: {
-                    currency: "EUR";
-                    amount: number;
-                    breakdown: { tokenCost: number; imageCost: number; videoCost: number };
-                    unitRates: { textEurPer1kTokens: number; imageEurPerAsset: number; videoEurPerAsset: number };
-                    providerCostUsd?: number;
-                };
-                durationMs: number;
-                skipped?: boolean;
-                rawResponse?: string;
-                finishReason?: string;
-                promptingTrace?: {
-                    originalUserMessage: string;
-                    effectiveSystemPrompt: string;
-                    messagesSentToLlm: Array<{ role: "system" | "user"; content: string }>;
-                };
-            } | null = null;
+            let finalResult: OptimizePromptResult | null = null;
 
             await streamOptimizePrompt(
                 token,

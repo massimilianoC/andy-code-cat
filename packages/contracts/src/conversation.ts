@@ -1,18 +1,7 @@
 import { z } from "zod";
-import { llmFocusContextSchema } from "./llm";
 import { mediaResolutionMetadataSchema } from "./mediaResolution";
-
-const promptingTraceLayerSchema = z.object({
-    id: z.string().min(1),
-    key: z.string().min(1),
-    label: z.string().min(1),
-    source: z.string().min(1),
-    chars: z.number().int().nonnegative(),
-    span: z.tuple([
-        z.number().int().nonnegative(),
-        z.number().int().nonnegative(),
-    ]),
-});
+import { llmPromptingTraceSchema } from "./promptExecution";
+import type { LlmPromptingTrace } from "./llm";
 
 // ── Request schemas ──────────────────────────────────────────────────────────
 
@@ -56,21 +45,7 @@ export const addMessageSchema = z.object({
         rawResponse: z.string().optional(),
         structuredParseValid: z.boolean().optional(),
         snapshotId: z.string().min(1).max(120).optional(),
-        promptingTrace: z.object({
-            originalUserMessage: z.string(),
-            /** MongoDB _id of the llm_prompt_configs document used to build the pipeline wrapper */
-            promptConfigId: z.string().optional(),
-            prePromptTemplate: z.string().optional(),
-            effectiveSystemPrompt: z.string(),
-            messagesSentToLlm: z.array(
-                z.object({
-                    role: z.enum(["system", "user", "assistant"]),
-                    content: z.string(),
-                })
-            ),
-            focusContext: llmFocusContextSchema.optional(),
-            layers: z.array(promptingTraceLayerSchema).optional(),
-        }).optional(),
+        promptingTrace: llmPromptingTraceSchema.optional(),
         generatedArtifacts: z.object({
             html: z.string(),
             css: z.string(),
@@ -221,15 +196,7 @@ export interface MessageDto {
         rawResponse?: string;
         structuredParseValid?: boolean;
         snapshotId?: string;
-        promptingTrace?: {
-            originalUserMessage: string;
-            prePromptTemplate?: string;
-            effectiveSystemPrompt: string;
-            messagesSentToLlm: Array<{
-                role: "system" | "user" | "assistant";
-                content: string;
-            }>;
-        };
+        promptingTrace?: LlmPromptingTrace;
         generatedArtifacts?: {
             html: string;
             css: string;

@@ -1,3 +1,4 @@
+import type { LlmPromptingTrace } from "@andy-code-cat/contracts";
 import { PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import type { ProjectRepository } from "../../domain/repositories/ProjectRepository";
 import type { ProjectMoodboardRepository } from "../../domain/repositories/ProjectMoodboardRepository";
@@ -62,14 +63,11 @@ type OptimizerUsage = {
     totalTokens: number;
 };
 
-type OptimizerTrace = {
-    originalUserMessage: string;
-    effectiveSystemPrompt: string;
-    messagesSentToLlm: Array<{
-        role: "system" | "user";
-        content: string;
-    }>;
-};
+// Structurally a subset of the canonical LlmPromptingTrace (packages/contracts/src/llm.ts) —
+// converged via Pick so the shape is authored once. The optimizer only ever sends
+// system/user messages (no assistant turn), which remains a valid subtype of
+// LlmPromptingTraceMessage's broader role union.
+type OptimizerTrace = Pick<LlmPromptingTrace, "originalUserMessage" | "effectiveSystemPrompt" | "messagesSentToLlm">;
 
 type OptimizePromptResponse = {
     taskKey: string;
