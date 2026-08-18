@@ -12,6 +12,7 @@
  * actually builds/owns that prompt. Never restate prompt text as a new string literal here —
  * a single violation of that rule defeats the entire purpose of this registry.
  */
+import type { PipelineStage } from "@andy-code-cat/contracts";
 import { DEFAULT_PROMPT_TASK_SETTINGS } from "../../domain/entities/PlatformConfig";
 import { buildClassifySystemPrompt } from "../use-cases/VibeClassify";
 import { VIBE_PREFILL_SYSTEM_PROMPT, VIBE_PREFILL_DATA_DASHBOARD_SYSTEM_PROMPT } from "../use-cases/VibePrefill";
@@ -49,6 +50,26 @@ export interface PromptSlotDescriptor {
     store: PromptSlotStore;
 }
 
+/**
+ * Describes how a task participates in model routing / the future `PipelineRun` model lock
+ * (see docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md).
+ * Purely descriptive metadata today: nothing resolves against this yet (that's later SSOT
+ * increments, U2 onward). `excludeProviders` mirrors what the real resolver call site already
+ * does — it is not itself a new enforcement point.
+ */
+export interface PromptTaskRouting {
+    /** true if a future PipelineRun model lock should govern this task's provider/model. */
+    honoursPipelineLock: boolean;
+    /** Matching PipelineStage (packages/contracts/src/pipelineRun.ts), when one exists today. */
+    stage?: PipelineStage;
+    requiredCapability?: "chat" | "vision" | "image_generation";
+    /** true when this task's `systemTemplate` slot is never read to build an actual LLM
+     *  prompt — the task key exists purely to carry provider/model routing settings. */
+    routingOnly: boolean;
+    /** Providers the real resolver call site excludes today, as observed in code. */
+    excludeProviders?: readonly string[];
+}
+
 export interface PromptTaskDescriptor {
     key: string;
     label: string;
@@ -57,6 +78,7 @@ export interface PromptTaskDescriptor {
     /** id of the slot in `slots` that maps to this task's `promptTaskSettings.systemTemplate`. Undefined when that field is never read by the backend for this task (routing-only task). */
     operatorSlotId?: string;
     defaultText: () => string;
+    routing: PromptTaskRouting;
 }
 
 const CANONICAL_CATALOG_SLOT_DESCRIPTION =
@@ -84,6 +106,9 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: "instruction",
         slots: [instructionSlot()],
         defaultText: () => DEFAULT_OPTIMIZE_USER_PROMPT_SYSTEM_TEMPLATE,
+        // OptimizeUserPrompt.ts resolves via resolveModelSelection's "optimizer-cascade"
+        // profile, which does not exclude lmstudio (unlike the vibe-cascade profile).
+        routing: { honoursPipelineLock: true, stage: "optimize", routingOnly: false },
     },
     {
         key: "optimize_image_prompt",
@@ -92,6 +117,10 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: "instruction",
         slots: [instructionSlot()],
         defaultText: () => DEFAULT_OPTIMIZE_IMAGE_PROMPT_SYSTEM_TEMPLATE,
+        // OptimizeImagePrompt.ts hand-rolls its own cascade (not resolveModelSelection) and
+        // bills against capability "chat" (text-only prompt rewriting, not real image
+        // generation/vision) — standalone, not part of the Vibe -> GodMode text chain.
+        routing: { honoursPipelineLock: false, routingOnly: false },
     },
     {
         key: "suggest_image_direction",
@@ -100,6 +129,9 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: "instruction",
         slots: [instructionSlot()],
         defaultText: () => DEFAULT_SUGGEST_IMAGE_IDEA_SYSTEM_TEMPLATE,
+        // SuggestProjectImageIdea.ts: same shape as optimize_image_prompt — standalone
+        // cascade, capability "chat", not part of the Vibe -> GodMode chain.
+        routing: { honoursPipelineLock: false, routingOnly: false },
     },
     {
         key: "draft_template_model",
@@ -108,6 +140,8 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: "instruction",
         slots: [instructionSlot()],
         defaultText: () => DEFAULT_DRAFT_TEMPLATE_MODEL_SYSTEM_TEMPLATE,
+        // DraftProjectTemplate.ts: standalone authoring tool, unrelated to Vibe -> GodMode.
+        routing: { honoursPipelineLock: false, routingOnly: false },
     },
     {
         key: "zero_effort_optimize",
@@ -119,6 +153,8 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         // resolved settings against; the default text is identical either way.
         slots: [instructionSlot()],
         defaultText: () => DEFAULT_OPTIMIZE_USER_PROMPT_SYSTEM_TEMPLATE,
+        // Same OptimizeUserPrompt.ts call site/cascade as optimize_user_prompt.
+        routing: { honoursPipelineLock: true, stage: "optimize", routingOnly: false },
     },
     {
         key: "zero_effort_generate",
@@ -130,6 +166,7 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: undefined,
         slots: [],
         defaultText: () => "",
+        routing: { honoursPipelineLock: true, stage: "generate", routingOnly: true },
     },
     {
         key: "enrich_document",
@@ -141,6 +178,10 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: undefined,
         slots: [],
         defaultText: () => "",
+        // Live enrichment call that a future pipeline lock would govern; no matching
+        // PipelineStage exists in the current contract union — left undefined rather than
+        // inventing one.
+        routing: { honoursPipelineLock: true, routingOnly: true },
     },
     {
         key: "enrich_image",
@@ -150,6 +191,7 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: undefined,
         slots: [],
         defaultText: () => "",
+        routing: { honoursPipelineLock: true, routingOnly: true },
     },
     {
         key: "vibe_intent_classify",
@@ -168,6 +210,14 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
             },
         ],
         defaultText: buildClassifySystemPrompt,
+        // VibeClassify.ts resolves via resolveModelSelection's "vibe-cascade" profile, which
+        // explicitly excludes lmstudio from its fallback chain (see modelSelection.ts).
+        routing: {
+            honoursPipelineLock: true,
+            stage: "vibe_classify",
+            routingOnly: false,
+            excludeProviders: ["lmstudio"],
+        },
     },
     {
         key: "vibe_intent_prefill",
@@ -185,6 +235,14 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
             },
         ],
         defaultText: () => VIBE_PREFILL_SYSTEM_PROMPT,
+        // VibePrefill.ts resolves via the same "vibe-cascade" profile as VibeClassify.ts
+        // (byte-identical logic per modelSelection.ts's module doc) — same lmstudio exclusion.
+        routing: {
+            honoursPipelineLock: true,
+            stage: "vibe_prefill",
+            routingOnly: false,
+            excludeProviders: ["lmstudio"],
+        },
     },
     {
         // Not a real DEFAULT_PROMPT_TASK_SETTINGS key — a read-only sibling entry so the
@@ -194,8 +252,28 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         label: "VibeCore — Prefill Brief (data dashboard variant)",
         group: "vibecore",
         operatorSlotId: undefined,
-        slots: [],
+        // No operator-editable slot exists (this variant has no matching
+        // promptTaskSettings key), but the text genuinely IS dispatched to the LLM — it is
+        // not routing-only. A platform/code-owned slot makes that explicit instead of
+        // leaving an empty `slots` array that would misrepresent it as routing-only.
+        slots: [
+            {
+                id: "shape",
+                key: "systemTemplate",
+                label: "Brief JSON shape & rules (data dashboard)",
+                description: "Platform-defined system prompt for the data-dashboard prefill variant. Not superadmin-editable — this variant has no matching promptTaskSettings key; the text is fixed in code (VIBE_PREFILL_DATA_DASHBOARD_SYSTEM_PROMPT).",
+                editableBy: "platform",
+                store: "code",
+            },
+        ],
         defaultText: () => VIBE_PREFILL_DATA_DASHBOARD_SYSTEM_PROMPT,
+        // Same VibePrefill.ts call site/cascade as vibe_intent_prefill.
+        routing: {
+            honoursPipelineLock: true,
+            stage: "vibe_prefill",
+            routingOnly: false,
+            excludeProviders: ["lmstudio"],
+        },
     },
     {
         key: "vibe_mode_generate",
@@ -205,6 +283,7 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: undefined,
         slots: [],
         defaultText: () => "",
+        routing: { honoursPipelineLock: true, stage: "generate", routingOnly: true },
     },
     {
         key: "god_mode_generate",
@@ -214,6 +293,7 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: undefined,
         slots: [],
         defaultText: () => "",
+        routing: { honoursPipelineLock: true, stage: "generate", routingOnly: true },
     },
     {
         key: "didactic_knowledge_generate",
@@ -223,6 +303,9 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: undefined,
         slots: [],
         defaultText: () => "",
+        // Not a live call site today (dead/unused) — no future pipeline lock has anything
+        // to govern yet.
+        routing: { honoursPipelineLock: false, routingOnly: true },
     },
     {
         key: "didactic_ask",
@@ -232,6 +315,7 @@ export const PROMPT_TASK_REGISTRY: readonly PromptTaskDescriptor[] = [
         operatorSlotId: undefined,
         slots: [],
         defaultText: () => "",
+        routing: { honoursPipelineLock: false, routingOnly: true },
     },
 ];
 
@@ -243,6 +327,27 @@ for (const taskKey of Object.keys(DEFAULT_PROMPT_TASK_SETTINGS)) {
         throw new Error(`taskPromptRegistry.ts is missing a PROMPT_TASK_REGISTRY entry for DEFAULT_PROMPT_TASK_SETTINGS key "${taskKey}"`);
     }
 }
+
+/**
+ * Fails loudly if a task's routing classification is internally inconsistent: a routingOnly
+ * task must never carry an operator slot (nothing superadmin-editable can exist for a
+ * settings field that is never read to build a prompt), and a non-routingOnly task must
+ * always declare at least one slot (otherwise its default text is unreachable / unexplained
+ * through the registry). Exported (not just run inline) so tests can exercise it against a
+ * deliberately-broken array without mutating the real registry.
+ */
+export function assertRoutingConsistency(registry: readonly PromptTaskDescriptor[]): void {
+    for (const task of registry) {
+        if (task.routing.routingOnly && task.operatorSlotId !== undefined) {
+            throw new Error(`taskPromptRegistry: "${task.key}" is routingOnly but declares operatorSlotId`);
+        }
+        if (!task.routing.routingOnly && task.slots.length === 0) {
+            throw new Error(`taskPromptRegistry: "${task.key}" is not routingOnly but has no slots`);
+        }
+    }
+}
+
+assertRoutingConsistency(PROMPT_TASK_REGISTRY);
 
 export function getTaskDescriptor(key: string): PromptTaskDescriptor | undefined {
     return PROMPT_TASK_REGISTRY.find((task) => task.key === key);

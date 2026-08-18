@@ -1,4 +1,5 @@
 import { call, ApiError, getValidAccessToken } from "./call";
+import type { LlmPromptingTrace, PromptLayerTraceEntryDto } from "@andy-code-cat/contracts";
 
 export interface ApiErrorPayload {
     error?: string;
@@ -68,33 +69,18 @@ export interface LlmChatInput {
  * One entry of the structured system-prompt breakdown — mirrors the backend
  * composer (composeSystemPromptWithLayers) and the persisted promptingTrace.layers.
  * `span` indexes into the corresponding `effectiveSystemPrompt` string.
+ *
+ * Aliased from the canonical contracts type (packages/contracts/src/promptExecution.ts) —
+ * kept under this name here since it's the established import used across apps/web.
  */
-export interface PromptLayerEntryDto {
-    id: string;
-    key: string;
-    label: string;
-    source: string;
-    chars: number;
-    span: [number, number];
-}
+export type PromptLayerEntryDto = PromptLayerTraceEntryDto;
 
 export interface LlmChatPreviewResult {
     reply: string;
     rawResponse?: string;
     structuredParseValid?: boolean;
-    promptingTrace?: {
-        originalUserMessage: string;
-        /** MongoDB _id of the llm_prompt_configs document used to build the pipeline wrapper */
-        promptConfigId?: string;
-        prePromptTemplate?: string;
-        effectiveSystemPrompt: string;
-        messagesSentToLlm: Array<{
-            role: "system" | "user";
-            content: string;
-        }>;
-        /** Structured system-prompt layer breakdown, in composition order. Absent only for legacy traces. */
-        layers?: PromptLayerEntryDto[];
-    };
+    /** Canonical shape from packages/contracts/src/llm.ts — see LlmPromptingTrace. */
+    promptingTrace?: LlmPromptingTrace;
     structured?: {
         chat: {
             summary: string;
@@ -209,14 +195,8 @@ export interface OptimizePromptResult {
     skipped?: boolean;
     rawResponse?: string;
     finishReason?: string;
-    promptingTrace?: {
-        originalUserMessage: string;
-        effectiveSystemPrompt: string;
-        messagesSentToLlm: Array<{
-            role: "system" | "user";
-            content: string;
-        }>;
-    };
+    /** Subset of the canonical LlmPromptingTrace — the optimizer never sends an assistant turn. */
+    promptingTrace?: Pick<LlmPromptingTrace, "originalUserMessage" | "effectiveSystemPrompt" | "messagesSentToLlm">;
 }
 
 export interface PromptUsageSummaryResult {
