@@ -8,6 +8,10 @@
 >
 > **Note:** the authoritative English implementation plan for the reusable internal prompting platform is in `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md`.
 >
+> **Superseded integration rule (2026-08-18):** optimization is an explicit user action. It MUST
+> NOT be invoked implicitly for a pipeline run whose persisted policy is skip; see
+> [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md).
+>
 > **Decision lock — 2026-04-15:**
 >
 > - project type must be resolved from the active project preset/catalog

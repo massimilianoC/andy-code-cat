@@ -1,14 +1,13 @@
 # Prompt Layer SSOT — Execution Plan (agent-executable)
 
-Status: **ready for execution** — Steps 1–6 below are NOT yet implemented.
+Status: **historical execution record — do not execute as-is**
 Parent spec: [PROMPT_LAYER_SSOT_SPEC.md](PROMPT_LAYER_SSOT_SPEC.md) (rationale, invariants).
-Branch: continue on `feat/brand-reusable-context` (or a `feat/prompt-layer-ssot` branch from `develop` if instructed).
-Baseline commit: `5d10f14` — "feat(prompt): SSOT groundwork".
+Superseded for future implementation by: [PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md).
+Historical baseline commit: `5d10f14` — "feat(prompt): SSOT groundwork".
 
-This document is written to be executed by a code agent WITHOUT further design decisions.
-Follow the steps in order. Every step has exact file paths, search anchors, code to write,
-and acceptance checks. Do not deviate. Do not invent new files, registries, collections,
-or endpoints beyond what is written here.
+This file documents the earlier implementation sequence and its original anchors. Its status
+and some instructions predate the live implementation; preserve it for audit context, but do
+not use it as an agent-executable plan. New work must follow the active remediation plan above.
 
 ---
 

@@ -133,6 +133,10 @@ The superadmin must be able to:
 
 ### 3.5 Fallback provider/model
 
+> **Superseded constraint (2026-08-18):** this fallback may be used only while creating a new
+> run without a user model override. It MUST NOT replace an existing user-locked model. Follow
+> [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md).
+
 Default fallback for this feature:
 
 - provider: SiliconFlow
