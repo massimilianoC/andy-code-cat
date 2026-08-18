@@ -14,7 +14,8 @@ import { assertPromptTraceParity } from "../../../application/llm/promptTracePar
 import { buildChatCompletionRequestBody } from "../../../application/llm/chatRequestAdapter";
 import {
     buildOutputBudgetPolicy,
-    buildFallbackStructured,
+    buildParseFailureStructured,
+    isGenerationParseFailure,
     tryBuildSectionContextOpts,
     resolveUsageWithFallback,
     buildMessagesWithHistory,
@@ -949,7 +950,12 @@ export function createLlmRoutes(): Router {
             }
 
             const parsed = tryParseStructuredJson(rawReply);
-            let structured = parsed.structured ?? buildFallbackStructured(body.message);
+            const generationParseError = isGenerationParseFailure({
+                parseValid: parsed.parseValid,
+                isFocusedMode,
+                hasCurrentArtifacts: Boolean(body.currentArtifacts?.html),
+            });
+            let structured = parsed.structured ?? buildParseFailureStructured();
             let mediaResolutionMetadata: MediaResolutionMetadata | undefined;
             let focusPatchApplied: boolean | undefined;
             let focusPatchParseError: boolean | undefined;
@@ -1041,7 +1047,7 @@ export function createLlmRoutes(): Router {
             // Post-process media placeholders and legacy provider URLs into stable ProjectAsset URLs.
             // Wrapped in try/catch: media resolution must never abort the artifact delivery.
             // If resolution fails entirely the user gets the raw artifacts and a logged warning.
-            if (structured.artifacts?.html || structured.artifacts?.css) {
+            if (!generationParseError && (structured.artifacts?.html || structured.artifacts?.css)) {
                 try {
                     const mediaResolution = await resolveArtifactMedia.execute({
                         projectId: req.sandbox!.projectId,
@@ -1072,7 +1078,7 @@ export function createLlmRoutes(): Router {
                     });
                 }
             }
-            const reply = (parsed.parseValid || focusPatchParseError) ? buildFormattedReply(structured) : rawReply;
+            const reply = (parsed.parseValid || focusPatchParseError || generationParseError) ? buildFormattedReply(structured) : rawReply;
             const resolvedUsage = resolveUsageWithFallback({
                 usage: sfJson?.usage
                     ? {
@@ -1119,6 +1125,7 @@ export function createLlmRoutes(): Router {
                 mediaResolution: mediaResolutionMetadata,
                 focusPatchApplied,
                 focusPatchParseError,
+                generationParseError: generationParseError || undefined,
                 provider: context.providerCatalog.provider,
                 model: context.modelId,
                 finishReason: sfJson?.choices?.[0]?.finish_reason,
@@ -1147,8 +1154,8 @@ export function createLlmRoutes(): Router {
                 projectId: req.sandbox!.projectId,
                 domain: "llm",
                 eventType: "llm_generation_complete",
-                level: "info",
-                status: "success",
+                level: parsed.parseValid ? "info" : "warn",
+                status: parsed.parseValid ? "success" : "partial",
                 durationMs: result.durationMs,
                 metadata: {
                     provider: result.provider,
@@ -1163,6 +1170,29 @@ export function createLlmRoutes(): Router {
                     focusPatchPresent: Boolean(focusPatchApplied !== undefined),
                 },
             });
+            if (generationParseError) {
+                const rawLen = rawReply.length;
+                ExecutionLogger.instance.emit({
+                    projectId: req.sandbox!.projectId,
+                    conversationId: body.conversationId,
+                    domain: "llm",
+                    eventType: "llm_generation_parse_failed",
+                    level: "error",
+                    status: "failure",
+                    durationMs: result.durationMs,
+                    metadata: {
+                        provider: result.provider,
+                        model: result.model,
+                        finishReason: result.finishReason,
+                        completionTokens: result.usage?.completionTokens,
+                        isFocusedMode,
+                        streaming: false,
+                        rawLength: rawLen,
+                        rawPrefix: rawReply.slice(0, 1200),
+                        rawSuffix: rawLen > 1800 ? rawReply.slice(-600) : "",
+                    },
+                });
+            }
             if (isFocusedMode && focusPatchApplied !== undefined) {
                 ExecutionLogger.instance.emit({
                     projectId: req.sandbox!.projectId,
@@ -1517,7 +1547,12 @@ export function createLlmRoutes(): Router {
 
             const trimmedRaw = rawReply.trim();
             const parsed = tryParseStructuredJson(trimmedRaw);
-            let structured = parsed.structured ?? buildFallbackStructured(body.message);
+            const generationParseErrorStream = isGenerationParseFailure({
+                parseValid: parsed.parseValid,
+                isFocusedMode,
+                hasCurrentArtifacts: Boolean(body.currentArtifacts?.html),
+            });
+            let structured = parsed.structured ?? buildParseFailureStructured();
             let mediaResolutionMetadata: MediaResolutionMetadata | undefined;
             let focusPatchAppliedStream: boolean | undefined;
             let focusPatchParseErrorStream: boolean | undefined;
@@ -1592,7 +1627,7 @@ export function createLlmRoutes(): Router {
                 }
             }
             // Post-process media placeholders and legacy provider URLs into stable ProjectAsset URLs.
-            if (structured.artifacts?.html || structured.artifacts?.css) {
+            if (!generationParseErrorStream && (structured.artifacts?.html || structured.artifacts?.css)) {
                 try {
                     const mediaResolution = await resolveArtifactMedia.execute({
                         projectId: req.sandbox!.projectId,
@@ -1629,7 +1664,7 @@ export function createLlmRoutes(): Router {
                     });
                 }
             }
-            const reply = (parsed.parseValid || focusPatchParseErrorStream) ? buildFormattedReply(structured) : trimmedRaw;
+            const reply = (parsed.parseValid || focusPatchParseErrorStream || generationParseErrorStream) ? buildFormattedReply(structured) : trimmedRaw;
             const resolvedUsage = resolveUsageWithFallback({
                 usage,
                 messages,
@@ -1674,6 +1709,7 @@ export function createLlmRoutes(): Router {
                 simulated: false,
                 focusPatchApplied: focusPatchAppliedStream,
                 focusPatchParseError: focusPatchParseErrorStream,
+                generationParseError: generationParseErrorStream || undefined,
             };
             const mediaResolutionSummary = buildPromptExecutionMediaResolutionSummary(result.mediaResolution);
 
@@ -1682,8 +1718,8 @@ export function createLlmRoutes(): Router {
                 projectId: req.sandbox!.projectId,
                 domain: "llm",
                 eventType: "llm_generation_complete",
-                level: "info",
-                status: "success",
+                level: parsed.parseValid ? "info" : "warn",
+                status: parsed.parseValid ? "success" : "partial",
                 durationMs: result.durationMs,
                 metadata: {
                     provider: result.provider,
@@ -1699,6 +1735,29 @@ export function createLlmRoutes(): Router {
                     streaming: true,
                 },
             });
+            if (generationParseErrorStream) {
+                const rawLenStream = trimmedRaw.length;
+                ExecutionLogger.instance.emit({
+                    projectId: req.sandbox!.projectId,
+                    conversationId: body.conversationId,
+                    domain: "llm",
+                    eventType: "llm_generation_parse_failed",
+                    level: "error",
+                    status: "failure",
+                    durationMs: result.durationMs,
+                    metadata: {
+                        provider: result.provider,
+                        model: result.model,
+                        finishReason: result.finishReason,
+                        completionTokens: result.usage?.completionTokens,
+                        isFocusedMode,
+                        streaming: true,
+                        rawLength: rawLenStream,
+                        rawPrefix: trimmedRaw.slice(0, 1200),
+                        rawSuffix: rawLenStream > 1800 ? trimmedRaw.slice(-600) : "",
+                    },
+                });
+            }
             if (isFocusedMode && focusPatchAppliedStream !== undefined) {
                 ExecutionLogger.instance.emit({
                     projectId: req.sandbox!.projectId,

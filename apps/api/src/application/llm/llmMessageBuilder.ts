@@ -7,7 +7,8 @@
  *
  * Exported surface:
  *   buildOutputBudgetPolicy()      — system-prompt budget policy string
- *   buildFallbackStructured()      — fallback LlmStructuredResponse when no LLM key
+ *   buildParseFailureStructured()  — empty-artifact response when the completion can't be parsed
+ *   isGenerationParseFailure()     — whether a parse failure must be surfaced as a generation failure
  *   tryBuildSectionContextOpts()   — extract section-aware focused-edit context
  *   resolveUsageWithFallback()     — normalise token usage from provider or estimate
  *   buildMessagesWithHistory()     — assemble final message array for the provider
@@ -99,25 +100,41 @@ export function buildOutputBudgetPolicy(): string {
     ].join("\n");
 }
 
-export function buildFallbackStructured(message: string): LlmStructuredResponse {
+/**
+ * Structured response used when the model's completion cannot be parsed into the
+ * artifact contract. It carries EMPTY artifacts on purpose: a parse failure must never
+ * be persisted as content. The previous implementation echoed the user's raw brief back
+ * as literal HTML, which produced non-empty-but-garbage artifacts that defeated the
+ * client's non-empty-html guard and were activated as the project's live snapshot.
+ */
+export function buildParseFailureStructured(): LlmStructuredResponse {
     return {
         chat: {
-            summary: "Preview simulata: provider key non configurata o parsing non valido.",
+            summary: "Il modello ha prodotto una risposta non interpretabile (JSON malformato). Nessuna versione è stata salvata.",
             bullets: [
-                "La richiesta e stata ricevuta dal backend.",
-                "Il formato strutturato e disponibile per la UI.",
+                "Il progetto non è stato modificato.",
+                "I token della richiesta sono stati comunque consumati dal provider.",
             ],
             nextActions: [
-                "Configura SILICONFLOW_API_KEY per risposta live.",
-                "Raffina il prompt per ottenere codice piu specifico.",
+                "Riprova la stessa richiesta.",
+                "Se l'errore si ripete, seleziona un modello diverso.",
             ],
         },
-        artifacts: {
-            html: `<main class=\"page\"><h1>Preview progetto</h1><p>${message.replace(/</g, "&lt;")}</p></main>`,
-            css: ".page{font-family:system-ui;padding:24px} h1{margin-bottom:8px}",
-            js: "console.log('preview generated')",
-        },
+        artifacts: { html: "", css: "", js: "" },
     };
+}
+
+/**
+ * True when a failed structured parse must be surfaced as a generation failure rather
+ * than absorbed. Focused edits that already have current artifacts are excluded: that
+ * case is handled by the focusPatchParseError branch, which preserves the live artifact.
+ */
+export function isGenerationParseFailure(input: {
+    parseValid: boolean;
+    isFocusedMode: boolean;
+    hasCurrentArtifacts: boolean;
+}): boolean {
+    return !input.parseValid && !(input.isFocusedMode && input.hasCurrentArtifacts);
 }
 
 /**

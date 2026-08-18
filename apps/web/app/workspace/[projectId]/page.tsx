@@ -2178,14 +2178,19 @@ function WorkspacePageContent() {
 
             let previewVersionSaved = false;
 
-            // Persist preview snapshot to DB — only when html is non-empty.
+            // Persist preview snapshot to DB — only when html is non-empty AND the
+            // structured parse succeeded. A parse failure now returns empty artifacts
+            // (buildParseFailureStructured) and generationParseError=true; persisting it
+            // would activate a snapshot with no usable HTML and break every later
+            // focused edit (see FOCUSED_EDIT_SPEC isActive invariant).
             // In focused-patch mode the LLM returns artifacts:{html:"",…}; the server
             // merges the patch and returns the full HTML. If html is still empty after
             // the merge (anchor not found AND base was empty) we skip snapshot creation
             // to avoid versioning an empty artifact and corrupting the active baseline.
             // Also skip when the server explicitly reports focusPatchApplied === false
             // (anchor not found, fallback returned) to avoid creating no-op versions.
-            if (llm.structured?.artifacts && llm.structured.artifacts.html && convId && llm.focusPatchApplied !== false) {
+            if (llm.structured?.artifacts && llm.structured.artifacts.html && convId
+                && llm.focusPatchApplied !== false && llm.generationParseError !== true) {
                 try {
                     const snap = await createPreviewSnapshot(token, projectId, {
                         conversationId: convId,
@@ -2306,6 +2311,15 @@ function WorkspacePageContent() {
                 });
             }
 
+            // Initial/full generation whose JSON could not be parsed: nothing was saved.
+            if (llm.generationParseError) {
+                addNotification({
+                    label: t("workspace.notifications.llm.parseErrorLabel"),
+                    status: "error",
+                    message: t("workspace.notifications.llm.parseError"),
+                });
+            }
+
             if (userMessageId) {
                 await logBackgroundTask(token, projectId, convId, userMessageId, {
                     type: "llm_chat_preview",
@@ -2326,15 +2340,15 @@ function WorkspacePageContent() {
             }
 
             updateNotification(notifId, {
-                label: llm.focusPatchParseError
+                label: (llm.focusPatchParseError || llm.generationParseError)
                     ? t("workspace.notifications.focusPatch.parseResponseLabel")
                     : llm.focusPatchApplied
                         ? t("workspace.notifications.focusPatch.appliedLabel")
                         : previewVersionSaved
                             ? t("workspace.notifications.snapshot.newVersionLabel")
                             : t("workspace.notifications.llm.doneLabel"),
-                status: llm.focusPatchParseError ? "error" : "done",
-                message: llm.focusPatchParseError
+                status: (llm.focusPatchParseError || llm.generationParseError) ? "error" : "done",
+                message: (llm.focusPatchParseError || llm.generationParseError)
                     ? t("workspace.notifications.focusPatch.parseResponseMessage")
                     : llm.focusPatchApplied
                         ? t("workspace.notifications.focusPatch.appliedMessage")
