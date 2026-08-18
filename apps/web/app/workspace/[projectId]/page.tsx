@@ -230,6 +230,16 @@ function WorkspacePageContent() {
         const model = searchParams?.get("preferredModel") ?? "";
         return provider || model ? { provider, model, applied: false } : null;
     });
+    // Set when a requested/preferred provider or model (from a Zero Effort / Vibe pipeline
+    // handoff) could not be resolved against the hydrated catalog and the workspace silently
+    // fell through to a different model. Surfaced via a notification only — it never changes
+    // which model actually gets used.
+    const [modelFallbackNotice, setModelFallbackNotice] = useState<{
+        requestedProvider: string;
+        requestedModel: string;
+        actualProvider: string;
+        actualModel: string;
+    } | null>(null);
     const imageModelOptions = React.useMemo(() => {
         const imageProviders = providersCatalog.filter((provider) =>
             provider.models.some((model) => model.isActive && model.capabilities.includes("image_generation")),
@@ -670,8 +680,20 @@ function WorkspacePageContent() {
             ? providersCatalog.find((p) => p.provider === prefProvider)
             : providersCatalog.find((p) => p.models.some((m) => m.isActive && m.id === prefModel));
         if (!provider) {
+            // The requested provider isn't active in the hydrated catalog — silently falls
+            // through to whatever provider/model the earlier catalog-default / preset-
+            // recommendation effects already selected. Behavior is unchanged; surface it.
             setPipelineModelOverride(null);
             setPreferredModelResolutionComplete(true);
+            setModelFallbackNotice({ requestedProvider: prefProvider, requestedModel: prefModel, actualProvider: selectedProvider, actualModel: selectedModel });
+            addNotification({
+                label: t("workspace.notifications.modelFallback.label"),
+                status: "done",
+                message: t("workspace.notifications.modelFallback.message", {
+                    requested: prefProvider || prefModel || "—",
+                    actual: selectedModel || selectedProvider || "—",
+                }),
+            });
             return;
         }
 
@@ -679,8 +701,19 @@ function WorkspacePageContent() {
             ? provider.models.find((m) => m.isActive && m.id === prefModel)
             : provider.models.find((m) => m.isActive && m.isDefault) ?? provider.models.find((m) => m.isActive);
         if (!model) {
+            // The requested model isn't active on the resolved provider — same silent
+            // fallthrough as above, scoped to the model within an otherwise-valid provider.
             setPipelineModelOverride(null);
             setPreferredModelResolutionComplete(true);
+            setModelFallbackNotice({ requestedProvider: prefProvider, requestedModel: prefModel, actualProvider: selectedProvider, actualModel: selectedModel });
+            addNotification({
+                label: t("workspace.notifications.modelFallback.label"),
+                status: "done",
+                message: t("workspace.notifications.modelFallback.message", {
+                    requested: prefModel || prefProvider || "—",
+                    actual: selectedModel || selectedProvider || "—",
+                }),
+            });
             return;
         }
 
