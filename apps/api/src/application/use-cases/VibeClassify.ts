@@ -27,9 +27,9 @@ function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" 
     return (authType ?? "bearer") === "api-key" ? key : `Bearer ${key}`;
 }
 
-const TEMPLATE_LIST_POINTER = "(see the COMPLETE ANNOTATED PRESET CATALOG in the CANONICAL PRESET SELECTION CONTRACT appended below)";
+export const TEMPLATE_LIST_POINTER = "(see the COMPLETE ANNOTATED PRESET CATALOG in the CANONICAL PRESET SELECTION CONTRACT appended below)";
 
-function buildSystemPrompt(): string {
+export function buildClassifySystemPrompt(): string {
     return `You are a deliverable-type and template classifier.
 Given a user prompt and optional attachment metadata, return a JSON object:
 {
@@ -179,7 +179,7 @@ export class VibeClassify {
         // appended below, so the catalog is never embedded twice in one prompt.
         const configuredPrompt = taskSettings.systemTemplate?.trim()
             ? taskSettings.systemTemplate.replace("{{TEMPLATE_LIST}}", TEMPLATE_LIST_POINTER)
-            : buildSystemPrompt();
+            : buildClassifySystemPrompt();
         // Persisted overrides may customize the task but cannot remove the live catalog
         // or its current selection semantics.
         const systemPrompt = `${configuredPrompt}\n\n${buildCanonicalPresetSelectionRules()}`;
