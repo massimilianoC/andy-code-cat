@@ -23,6 +23,7 @@ import {
 } from "../../domain/entities/PlatformConfig";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
+import { resolveModelSelection } from "../llm/modelSelection";
 
 const TASK_KEY = "optimize_user_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -411,30 +412,29 @@ export class OptimizeUserPrompt {
         const activeProviders = catalog.providers.filter((provider) => provider.isActive);
         const requestedModel = input.model?.trim();
 
-        const selectedProviderCatalog =
-            activeProviders.find((provider) => provider.provider === input.provider)
-            ?? (requestedModel
-                ? activeProviders.find((provider) => provider.models.some((model) => model.isActive && model.id === requestedModel))
-                : undefined)
-            ?? activeProviders.find((provider) => provider.provider === taskSettings.provider)
-            ?? activeProviders.find((provider) => provider.provider === env.LLM_DEFAULT_PROVIDER)
-            ?? activeProviders.find((provider) => provider.provider === FALLBACK_PROVIDER)
-            ?? activeProviders[0];
+        const decision = resolveModelSelection({
+            profile: "optimizer-cascade",
+            activeProviders,
+            requestedProvider: input.provider,
+            requestedModel,
+            taskSettingProvider: taskSettings.provider,
+            taskSettingModel: taskSettings.model,
+            envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
+            fallbackProvider: FALLBACK_PROVIDER,
+            hardcodedFallbackModel: FALLBACK_MODEL,
+            requireOverrideInCatalog: false,
+            // Preserved exactly as-is (out of scope to "fix" here): an override is only honored
+            // when the resolved provider's apiType === "openai-compatible".
+            gateOverrideOnOpenAiCompatible: true,
+            policy: "legacy",
+        });
 
-        if (!selectedProviderCatalog) {
+        if (!decision.providerCatalog) {
             throw new Error("No active LLM provider configured for prompt optimization");
         }
 
-        const providerCatalog = selectedProviderCatalog;
-
-        const activeModels = providerCatalog.models.filter((model) => model.isActive);
-        const modelId =
-            (requestedModel && providerCatalog.apiType === "openai-compatible" ? requestedModel : undefined)
-            || (taskSettings.model && activeModels.some((model) => model.id === taskSettings.model) ? taskSettings.model : undefined)
-            || activeModels.find((model) => model.role === "dialogue" && model.isDefault)?.id
-            || activeModels.find((model) => model.isDefault)?.id
-            || activeModels[0]?.id
-            || FALLBACK_MODEL;
+        const providerCatalog = decision.providerCatalog;
+        const modelId = decision.effective.model;
 
         if (!taskSettings.enabled) {
             return {

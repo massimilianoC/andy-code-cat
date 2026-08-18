@@ -186,6 +186,84 @@ describe("VibeClassify", () => {
         expect(userMessage).toContain("text/csv");
     });
 
+    // ── resolveModelSelection pin: byte-identical (provider, model) vs. pre-refactor inline cascade ──
+
+    it("model resolution: honors a request-override provider+model present in the catalog", async () => {
+        const fetchMock = stubLlm({ templateId: null, formatHint: null, confidence: 0, reasoning: "n/a" });
+        const catalog = {
+            source: "env",
+            providers: [
+                ...defaultCatalog().providers,
+                {
+                    provider: "openrouter",
+                    baseUrl: "https://llm.test/openrouter/v1",
+                    apiType: "openai-compatible",
+                    authType: "none",
+                    isActive: true,
+                    models: [{
+                        id: "Qwen/Qwen3-32B",
+                        provider: "openrouter",
+                        role: "dialogue",
+                        capabilities: ["chat"],
+                        isDefault: true,
+                        isFallback: false,
+                        isActive: true,
+                    }],
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                },
+            ],
+        };
+        const { useCase } = createUseCase({ catalog });
+
+        await useCase.execute({ prompt: "any prompt", provider: "openrouter", model: "Qwen/Qwen3-32B" });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("Qwen/Qwen3-32B");
+        expect(String(fetchMock.mock.calls[0]?.[0])).toContain("openrouter");
+    });
+
+    it("model resolution: an override model not in the catalog silently falls through to the catalog default model", async () => {
+        const fetchMock = stubLlm({ templateId: null, formatHint: null, confidence: 0, reasoning: "n/a" });
+        const { useCase } = createUseCase();
+
+        await useCase.execute({ prompt: "any prompt", model: "not-a-real-model" });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M3");
+    });
+
+    it("model resolution: no override falls through to the first active model when no task setting or isDefault model matches", async () => {
+        const fetchMock = stubLlm({ templateId: null, formatHint: null, confidence: 0, reasoning: "n/a" });
+        const catalog = {
+            source: "env",
+            providers: [{
+                provider: "siliconflow",
+                baseUrl: "https://llm.test/v1",
+                apiType: "openai-compatible",
+                authType: "none",
+                isActive: true,
+                models: [{
+                    id: "some-other-model",
+                    provider: "siliconflow",
+                    role: "dialogue",
+                    capabilities: ["chat"],
+                    isDefault: false,
+                    isFallback: false,
+                    isActive: true,
+                }],
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            }],
+        };
+        const { useCase } = createUseCase({ catalog });
+
+        await useCase.execute({ prompt: "any prompt" });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("some-other-model");
+    });
+
     it("a legacy operator systemTemplate cannot remove the canonical contract", async () => {
         const fetchMock = stubLlm({ templateId: null, formatHint: null, confidence: 0, reasoning: "n/a" });
         const { useCase } = createUseCase({

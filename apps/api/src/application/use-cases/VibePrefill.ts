@@ -11,6 +11,7 @@ import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
+import { resolveModelSelection } from "../llm/modelSelection";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -541,20 +542,24 @@ export class VibePrefill {
 
         const catalog = await this.getLlmCatalog.execute();
         const activeProviders = catalog.providers.filter((p) => p.isActive);
-        const overrideProviderCatalog = input.provider
-            ? activeProviders.find((p) => p.provider === input.provider)
-            : undefined;
-        const selectedProviderCatalog =
-            overrideProviderCatalog ??
-            activeProviders.find((p) => p.provider === taskSettings.provider) ??
-            activeProviders.find((p) => p.provider === FALLBACK_PROVIDER) ??
-            // Never silently fall back to local LM Studio for this background task —
-            // prefer any reliable cloud provider; LM Studio is used only when explicitly
-            // configured (override or superadmin task settings) above.
-            activeProviders.find((p) => p.provider !== "lmstudio") ??
-            activeProviders[0];
+        // Never silently fall back to local LM Studio for this background task — prefer any
+        // reliable cloud provider; LM Studio is used only when explicitly configured (override
+        // or superadmin task settings). See resolveModelSelection's vibe-cascade fallback chain.
+        const decision = resolveModelSelection({
+            profile: "vibe-cascade",
+            activeProviders,
+            requestedProvider: input.provider,
+            requestedModel: input.model,
+            taskSettingProvider: taskSettings.provider,
+            taskSettingModel: taskSettings.model,
+            fallbackProvider: FALLBACK_PROVIDER,
+            hardcodedFallbackModel: FALLBACK_MODEL,
+            requireOverrideInCatalog: true,
+            gateOverrideOnOpenAiCompatible: false,
+            policy: "legacy",
+        });
 
-        if (!selectedProviderCatalog) {
+        if (!decision.providerCatalog) {
             return {
                 draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
@@ -565,18 +570,8 @@ export class VibePrefill {
             };
         }
 
-        const providerCatalog = selectedProviderCatalog;
-
-        const overrideModelId = input.model
-            ? providerCatalog.models.find((m) => m.isActive && m.id === input.model)?.id
-            : undefined;
-
-        const modelId =
-            overrideModelId ??
-            providerCatalog.models.find((m) => m.isActive && m.id === taskSettings.model)?.id ??
-            providerCatalog.models.find((m) => m.isActive && m.isDefault)?.id ??
-            providerCatalog.models.find((m) => m.isActive)?.id ??
-            FALLBACK_MODEL;
+        const providerCatalog = decision.providerCatalog;
+        const modelId = decision.effective.model;
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
