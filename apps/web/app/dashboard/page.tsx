@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { VibeCoreEntry } from "@/components/dashboard/VibeCoreEntry";
-import type { VibeMode } from "@/components/dashboard/ModeSelector";
+import type { EntryMode } from "@/components/dashboard/ModeSelector";
 import {
     Dialog,
     DialogContent,
@@ -39,18 +39,18 @@ import { BrandAssetsManager } from "@/components/brand/BrandAssetsManager";
 const RECENT_KEY = "pf_recent_projects";
 const MAX_RECENTS = 3;
 const ACCORDION_KEY = "pf_preset_accordion";
-const VIBE_MODE_KEY = "vibe_mode";
+const ENTRY_MODE_KEY = "vibe_mode";
 
-function loadMode(): VibeMode {
+function loadMode(): EntryMode {
     try {
-        const saved = localStorage.getItem(VIBE_MODE_KEY);
-        if (saved === "easy" || saved === "medium" || saved === "hard") return saved;
+        const saved = localStorage.getItem(ENTRY_MODE_KEY);
+        if (saved === "vibe" || saved === "guided" || saved === "project") return saved;
     } catch { /* ignore */ }
-    return "easy";
+    return "vibe";
 }
 
-function saveMode(mode: VibeMode) {
-    try { localStorage.setItem(VIBE_MODE_KEY, mode); } catch { /* ignore */ }
+function saveMode(mode: EntryMode) {
+    try { localStorage.setItem(ENTRY_MODE_KEY, mode); } catch { /* ignore */ }
 }
 
 function loadAccordionState(): Record<string, boolean> {
@@ -108,8 +108,8 @@ export default function DashboardPage() {
     const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
     const [canAccessSuperadmin, setCanAccessSuperadmin] = useState(false);
     const [brandOpen, setBrandOpen] = useState(false);
-    // VibeCore mode: lifted here so MEDIUM opens dialog overlay, HARD resets on return
-    const [vibeMode, setVibeMode] = useState<VibeMode>("easy");
+    // VibeCore mode: lifted here so Guided opens dialog overlay, Project resets on return
+    const [entryMode, setEntryMode] = useState<EntryMode>("vibe");
     const createInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -122,7 +122,7 @@ export default function DashboardPage() {
         setToken(tok);
         setRecentIds(getRecentIds());
         setAccordionOpen(loadAccordionState());
-        setVibeMode(loadMode());
+        setEntryMode(loadMode());
         const roles = getRoles();
         setCanAccessSuperadmin(roles.includes("admin") || roles.includes("superadmin"));
         setPasswordChangeRequiredState(isPasswordChangeRequired());
@@ -230,18 +230,18 @@ export default function DashboardPage() {
         router.replace("/login");
     }
 
-    function handleVibeModeChange(next: VibeMode) {
-        if (next === "medium") {
-            // MEDIUM: open Zero Effort dialog as overlay — VibeCore stays visible behind
-            setVibeMode("medium");
+    function handleEntryModeChange(next: EntryMode) {
+        if (next === "guided") {
+            // Guided: open the Guided Mode dialog as an overlay — VibeCore stays visible behind
+            setEntryMode("guided");
             setCreateDestination("launch");
             setCreateOpen(true);
             return;
         }
-        // EASY: save to storage
-        setVibeMode(next);
+        // Vibe: save to storage
+        setEntryMode(next);
         saveMode(next);
-        // HARD mode is handled internally by VibeCoreEntry (navigates to workspace)
+        // Project Mode is handled internally by VibeCoreEntry (navigates to workspace)
     }
 
     if (checkingAuth) {
@@ -331,7 +331,7 @@ export default function DashboardPage() {
                         }}
                     >
                         <Rocket className="h-3.5 w-3.5" />
-                        {t("dashboard.zeroEffort")}
+                        {t("dashboard.guidedMode")}
                     </Button>
                     <Button
                         size="sm"
@@ -360,8 +360,8 @@ export default function DashboardPage() {
                     >
                         <VibeCoreEntry
                             token={token}
-                            mode={vibeMode}
-                            onModeChange={handleVibeModeChange}
+                            mode={entryMode}
+                            onModeChange={handleEntryModeChange}
                         />
                     </div>
                 ) : null}
@@ -530,10 +530,10 @@ export default function DashboardPage() {
             <Dialog open={createOpen} onOpenChange={(open) => {
                 setCreateOpen(open);
                 if (!open) {
-                    // If MEDIUM mode (Zero Effort dialog) was dismissed, return to EASY
+                    // If Guided mode dialog was dismissed, return to Vibe
                     if (createDestination === "launch") {
-                        setVibeMode("easy");
-                        saveMode("easy");
+                        setEntryMode("vibe");
+                        saveMode("vibe");
                     }
                     setSelectedPresetId(undefined);
                     setCreateDestination("workspace");
@@ -564,7 +564,7 @@ export default function DashboardPage() {
                                 {t("dashboard.modal.cancel")}
                             </Button>
                             <Button type="submit" variant="outline" disabled={creating} onClick={() => setCreateDestination("launch")}>
-                                {creating ? t("dashboard.modal.creating") : t("dashboard.modal.startZeroEffort")}
+                                {creating ? t("dashboard.modal.creating") : t("dashboard.modal.startGuided")}
                             </Button>
                             <Button type="submit" disabled={creating} onClick={() => setCreateDestination("workspace")}>
                                 {creating ? t("dashboard.modal.creating") : t("dashboard.modal.create")}

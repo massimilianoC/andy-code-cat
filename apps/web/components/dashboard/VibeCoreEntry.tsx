@@ -9,11 +9,11 @@ import { useSpeechDictation } from "@/hooks/useSpeechDictation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
-import { ModeSelector, type VibeMode } from "./ModeSelector";
+import { ModeSelector, type EntryMode } from "./ModeSelector";
 import { VibeCoreBackground } from "./VibeCoreBackground";
 import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
-import { classifyVibeIntent, getVibeConfig, prefillZeroEffort } from "@/lib/api/vibecore";
-import { getZeroEffortConfig } from "@/lib/api/pipelines";
+import { classifyVibeIntent, getVibeConfig, prefillGuidedDraft } from "@/lib/api/vibecore";
+import { getGuidedPipelineConfig } from "@/lib/api/pipelines";
 import { createProject, deleteProject, getProjectAsset, uploadProjectAsset, updateProject } from "@/lib/api";
 import { ApiError } from "@/lib/api/call";
 import { getLlmProviders, type LlmProviderCatalogDto } from "@/lib/api/llm";
@@ -173,10 +173,10 @@ function savePipelineModelOverride(value: PipelineModelOverride | null) {
     }
 }
 
-const MODE_GLOW: Record<VibeMode, string> = {
-    easy:   "#8b5cf6",
-    medium: "#3b82f6",
-    hard:   "#10b981",
+const MODE_GLOW: Record<EntryMode, string> = {
+    vibe:    "#8b5cf6",
+    guided:  "#3b82f6",
+    project: "#10b981",
 };
 
 const STRUCTURED_DATA_MIME_TYPES = new Set([
@@ -222,9 +222,9 @@ async function waitForStructuredAssetReadiness(
 interface VibeCoreEntryProps {
     token: string;
     /** Controlled mode — owned by the parent (dashboard page). */
-    mode: VibeMode;
-    /** Called for EASY ↔ MEDIUM changes. HARD is handled internally by this component. */
-    onModeChange: (mode: VibeMode) => void;
+    mode: EntryMode;
+    /** Called for Vibe ↔ Guided changes. Project Mode is handled internally by this component. */
+    onModeChange: (mode: EntryMode) => void;
 }
 
 export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps) {
@@ -330,24 +330,25 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
         return () => window.removeEventListener("keydown", onKeyDown);
     }, []);
 
-    function handleModeChange(next: VibeMode) {
-        if (next === "hard") {
-            // HARD: create blank project + enter Guided Mode (God Mode workspace) with auto-templating engine.
-            // The parent resets the mode to "easy" so returning to dashboard shows EASY.
-            void handleHardMode();
+    function handleEntryModeChange(next: EntryMode) {
+        if (next === "project") {
+            // Project Mode: create a blank project + go straight to the Workspace.
+            // The parent resets the mode to "vibe" so returning to dashboard shows Vibe.
+            void handleProjectMode();
             return;
         }
-        // EASY / MEDIUM: delegate to parent.
+        // Vibe / Guided: delegate to parent.
         onModeChange(next);
     }
 
     /**
-     * HARD mode: creates a blank project (carrying current prompt + files if any),
-     * then navigates to Guided Mode (God Mode workspace) with autoTemplating=true so the workspace's
-     * auto-templating engine can classify the intent on first generation.
-    * The UI model override wins; otherwise god_mode_generate determines which provider/model is used.
+     * Project Mode: creates a blank project (carrying current prompt + files if any),
+     * then navigates straight to the Workspace so its auto-templating engine can classify
+     * the intent on first generation.
+    * The UI model override wins; otherwise the Project Mode generation task determines which
+    * provider/model is used.
      */
-    async function handleHardMode() {
+    async function handleProjectMode() {
         setEntryPhase("creating");
         setErrorDetails(null);
         let createdProjectId: string | null = null;
@@ -395,18 +396,18 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             }
 
             setEntryPhase("redirecting");
-            const query = new URLSearchParams({ autoTemplating: "true" });
+            const query = new URLSearchParams();
             if (prompt.trim()) query.set("autoPrompt", prompt.trim().slice(0, 2000));
             applyPipelineModelParams(query);
 
-            // Apply god_mode_generate only when no UI override is active.
+            // Apply the Project Mode generation task's provider/model only when no UI override is active.
             try {
-                const pipelineConfig = await getZeroEffortConfig(token, projectId);
-                if (!pipelineOverride && pipelineConfig?.godModeGenerate?.provider) {
-                    query.set("preferredProvider", pipelineConfig.godModeGenerate.provider);
+                const pipelineConfig = await getGuidedPipelineConfig(token, projectId);
+                if (!pipelineOverride && pipelineConfig?.projectModeGenerate?.provider) {
+                    query.set("preferredProvider", pipelineConfig.projectModeGenerate.provider);
                 }
-                if (!pipelineOverride && pipelineConfig?.godModeGenerate?.model) {
-                    query.set("preferredModel", pipelineConfig.godModeGenerate.model);
+                if (!pipelineOverride && pipelineConfig?.projectModeGenerate?.model) {
+                    query.set("preferredModel", pipelineConfig.projectModeGenerate.model);
                 }
             } catch {
                 // Non-blocking: proceed without preferred model if config fetch fails
@@ -605,7 +606,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
 
             // LLM prefill pass — now includes Layer D document context from uploaded assets
             setEntryPhase("prefilling");
-            const prefillResult = await prefillZeroEffort(token, {
+            const prefillResult = await prefillGuidedDraft(token, {
                 prompt: prompt.trim(),
                 projectId,
                 generationMode,
@@ -649,7 +650,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 };
                 try {
                     sessionStorage.setItem(
-                        `ze_prefill_${projectId}`,
+                        `guided_prefill_${projectId}`,
                         JSON.stringify(draftForLaunch),
                     );
                 } catch {
@@ -657,7 +658,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 }
             }
 
-            // Always navigate to launch page (zero-effort flow)
+            // Always navigate to launch page (Guided Mode flow)
             setEntryPhase("redirecting");
             const query = new URLSearchParams({
                 autoPrompt: prompt.trim().slice(0, 2000),

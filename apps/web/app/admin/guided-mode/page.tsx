@@ -20,10 +20,16 @@ import { resolvePromptTaskSettingAgainstCatalog } from "@/lib/adminLlmCatalog";
 const DEFAULT_PRODUCT_KEY = "default";
 const CLASSIFY_TASK_KEY       = "vibe_intent_classify";
 const PREFILL_TASK_KEY        = "vibe_intent_prefill";
+// These three storage keys are FROZEN — they are live MongoDB keys under
+// PlatformConfig.governanceByProduct.<product>.promptTaskSettings in production.
+// resolvePromptTaskSettingFromConfig silently falls back to unrelated defaults (much smaller
+// token budgets) on an unknown key, with no error raised — renaming these would silently
+// truncate every optimized brief/generation in production. Only the local constant NAMES may
+// change; the string VALUES must not. See docs/specs/GUIDED_MODE_PREFILL_SPEC.md.
 const OPTIMIZE_TASK_KEY       = "zero_effort_optimize";
 const GENERATE_TASK_KEY       = "zero_effort_generate";
 const VIBE_GENERATE_TASK_KEY  = "vibe_mode_generate";
-const GOD_MODE_GENERATE_TASK_KEY = "god_mode_generate";
+const PROJECT_MODE_GENERATE_TASK_KEY = "god_mode_generate";
 
 // ── Default system prompts (mirrors API hardcoded prompts) ─────────────────
 // These are shown in the "System template override" textarea.
@@ -169,7 +175,7 @@ const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
         maxCompletionTokens: 14000,
         systemTemplate: "",
     },
-    [GOD_MODE_GENERATE_TASK_KEY]: {
+    [PROJECT_MODE_GENERATE_TASK_KEY]: {
         enabled: true,
         provider: "",
         model: "",
@@ -181,7 +187,7 @@ const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function ZeroEffortAdminPage() {
+export default function GuidedModeAdminPage() {
     const router = useRouter();
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -213,7 +219,7 @@ export default function ZeroEffortAdminPage() {
     const [optimizeTask,      setOptimizeTask]       = useState<PromptTaskSettingDto>(TASK_DEFAULTS[OPTIMIZE_TASK_KEY]);
     const [generateTask,      setGenerateTask]       = useState<PromptTaskSettingDto>(TASK_DEFAULTS[GENERATE_TASK_KEY]);
     const [vibeGenerateTask,  setVibeGenerateTask]   = useState<PromptTaskSettingDto>(TASK_DEFAULTS[VIBE_GENERATE_TASK_KEY]);
-    const [godModeGenerateTask, setGodModeGenerateTask] = useState<PromptTaskSettingDto>(TASK_DEFAULTS[GOD_MODE_GENERATE_TASK_KEY]);
+    const [projectModeGenerateTask, setProjectModeGenerateTask] = useState<PromptTaskSettingDto>(TASK_DEFAULTS[PROJECT_MODE_GENERATE_TASK_KEY]);
 
     useEffect(() => {
         const t = getToken();
@@ -230,7 +236,7 @@ export default function ZeroEffortAdminPage() {
             setOptimizeTask(mergeTask(OPTIMIZE_TASK_KEY, productSettings[OPTIMIZE_TASK_KEY], nextProviders, registry.activeProvider));
             setGenerateTask(mergeTask(GENERATE_TASK_KEY, productSettings[GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
             setVibeGenerateTask(mergeTask(VIBE_GENERATE_TASK_KEY, productSettings[VIBE_GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
-            setGodModeGenerateTask(mergeTask(GOD_MODE_GENERATE_TASK_KEY, productSettings[GOD_MODE_GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
+            setProjectModeGenerateTask(mergeTask(PROJECT_MODE_GENERATE_TASK_KEY, productSettings[PROJECT_MODE_GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
             setProviders(nextProviders);
         })
         .catch(() => setError("Unable to load config."))
@@ -238,7 +244,7 @@ export default function ZeroEffortAdminPage() {
     }, [router]);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const hasChanges = useMemo(() => true, [classifyTask, prefillTask, optimizeTask, generateTask, vibeGenerateTask, godModeGenerateTask]);
+    const hasChanges = useMemo(() => true, [classifyTask, prefillTask, optimizeTask, generateTask, vibeGenerateTask, projectModeGenerateTask]);
 
     async function handleSave() {
         if (!token) return;
@@ -253,7 +259,7 @@ export default function ZeroEffortAdminPage() {
                     [OPTIMIZE_TASK_KEY]:          optimizeTask,
                     [GENERATE_TASK_KEY]:          generateTask,
                     [VIBE_GENERATE_TASK_KEY]:     vibeGenerateTask,
-                    [GOD_MODE_GENERATE_TASK_KEY]: godModeGenerateTask,
+                    [PROJECT_MODE_GENERATE_TASK_KEY]: projectModeGenerateTask,
                 },
             });
             setSuccess(true);
@@ -306,7 +312,7 @@ export default function ZeroEffortAdminPage() {
                     />
                     <PromptTaskSettingsCard
                         title="Prefill Brief — Estrazione brief (vibe_intent_prefill)"
-                        description="Seleziona presetId dallo stesso catalogo di Vibe e compila il brief Zero Effort completo: struttura, contenuti, funzioni, interazioni, visual, vincoli e criteri di successo."
+                        description="Seleziona presetId dallo stesso catalogo di Vibe e compila il brief Guided Mode completo: struttura, contenuti, funzioni, interazioni, visual, vincoli e criteri di successo."
                         helperText="Il backend aggiunge sempre contratto e catalogo correnti: questo override può specializzare il comportamento, ma non rimuoverli. Consigliati almeno 2048 token."
                         value={prefillTask}
                         providers={providers}
@@ -348,7 +354,7 @@ export default function ZeroEffortAdminPage() {
                     />
                     <PromptTaskSettingsCard
                         title="Vibe Mode — Generazione finale (vibe_mode_generate)"
-                        description="Modello usato per la generazione HTML quando si arriva da Vibe Mode (flusso easy/medium via launch page)."
+                        description="Modello usato per la generazione HTML quando si arriva da Vibe Mode (flusso Vibe/Guidata via launch page)."
                         helperText="Usa un modello con finestra di contesto estesa. Temperature bassa. Token limite consigliato: 10000–16000."
                         value={vibeGenerateTask}
                         providers={providers}
@@ -357,13 +363,13 @@ export default function ZeroEffortAdminPage() {
                         }
                     />
                     <PromptTaskSettingsCard
-                        title="Guided Mode — Generazione finale (god_mode_generate)"
-                        description="Modello usato per la generazione HTML quando si arriva da Vibe Mode Expert o dal workspace in modalità autoTemplating."
+                        title="Project Mode — Generazione finale (god_mode_generate)"
+                        description="Modello usato per la generazione HTML quando si arriva da Project Mode o dal workspace in modalità auto-templating."
                         helperText="Usa un modello con finestra di contesto estesa. Temperature bassa. Token limite consigliato: 10000–16000."
-                        value={godModeGenerateTask}
+                        value={projectModeGenerateTask}
                         providers={providers}
                         onFieldChange={(field, value) =>
-                            setGodModeGenerateTask((prev) => ({ ...prev, [field]: value }))
+                            setProjectModeGenerateTask((prev) => ({ ...prev, [field]: value }))
                         }
                     />
                 </CardContent>

@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { launchZeroEffort, getZeroEffortConfig, type ZeroEffortLaunchInput, type ZeroEffortPipelineConfig } from "../../../lib/api/pipelines";
+import { launchGuided, getGuidedPipelineConfig, type GuidedLaunchInput, type GuidedPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
 import { optimizePrompt } from "../../../lib/api/llm";
@@ -631,7 +631,7 @@ function templateLabel(templateId: string | null | undefined, t: ReturnType<type
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function ZeroEffortLaunchPage() {
+export default function GuidedLaunchPage() {
     const { t, i18n } = useTranslation();
     const params = useParams<{ projectId: string }>();
     const router = useRouter();
@@ -649,8 +649,8 @@ export default function ZeroEffortLaunchPage() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [result, setResult] = useState<Awaited<ReturnType<typeof launchZeroEffort>> | null>(null);
-    const [pipelineConfig, setPipelineConfig] = useState<ZeroEffortPipelineConfig | null>(null);
+    const [result, setResult] = useState<Awaited<ReturnType<typeof launchGuided>> | null>(null);
+    const [pipelineConfig, setPipelineConfig] = useState<GuidedPipelineConfig | null>(null);
     const [currentStep, setCurrentStep] = useState(1);
     const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
 
@@ -727,9 +727,9 @@ export default function ZeroEffortLaunchPage() {
     useEffect(() => {
         if (searchParams?.get("prefilled") !== "1" || !projectId) return;
         try {
-            const raw = sessionStorage.getItem(`ze_prefill_${projectId}`);
+            const raw = sessionStorage.getItem(`guided_prefill_${projectId}`);
             if (!raw) return;
-            sessionStorage.removeItem(`ze_prefill_${projectId}`);
+            sessionStorage.removeItem(`guided_prefill_${projectId}`);
             const draft = JSON.parse(raw) as Record<string, unknown>;
             if (typeof draft.templateId === "string" && draft.templateId.trim()) {
                 setPrefillTemplateId(draft.templateId);
@@ -859,7 +859,7 @@ export default function ZeroEffortLaunchPage() {
         if (!token || !step1Valid || !step2Valid) return;
         setSubmitting(true);
         setError(null);
-        const payload: ZeroEffortLaunchInput = {
+        const payload: GuidedLaunchInput = {
             businessName: form.businessName,
             presetId: form.presetId,
             primaryGoal: form.primaryGoal,
@@ -885,8 +885,8 @@ export default function ZeroEffortLaunchPage() {
         };
         try {
             const [briefResult, configResult] = await Promise.all([
-                launchZeroEffort(token, projectId, payload),
-                getZeroEffortConfig(token, projectId).catch(() => null),
+                launchGuided(token, projectId, payload),
+                getGuidedPipelineConfig(token, projectId).catch(() => null),
             ]);
             setResult(briefResult);
             // Build the structured brief client-side from the full form data
@@ -924,7 +924,7 @@ export default function ZeroEffortLaunchPage() {
         }
     }
 
-    function handleGoToGodMode() {
+    function handleGoToWorkspace() {
         if (!result) return;
         const finalPrompt = editedOptimizedPrompt || optimizedPrompt;
         const convId = result.conversationId;
@@ -945,15 +945,15 @@ export default function ZeroEffortLaunchPage() {
 
     /**
      * Guided Mode one-click flow (from AI prefill card):
-     * 1. launchZeroEffort → get brief + conversationId
-     * 2. optimizePrompt   → get optimized prompt
-     * 3. navigate         → /workspace with autoPrompt
+     * 1. launchGuided    → get brief + conversationId
+     * 2. optimizePrompt  → get optimized prompt
+     * 3. navigate        → /workspace with autoPrompt
      */
-    async function handleGodModeGenerate() {
+    async function handleProcessProject() {
         if (!token) return;
         setSubmitting(true);
         setError(null);
-        const payload: ZeroEffortLaunchInput = {
+        const payload: GuidedLaunchInput = {
             businessName:   form.businessName,
             presetId:       form.presetId,
             primaryGoal:    form.primaryGoal,
@@ -979,8 +979,8 @@ export default function ZeroEffortLaunchPage() {
         };
         try {
             const [briefResult, configResult] = await Promise.all([
-                launchZeroEffort(token, projectId, payload),
-                getZeroEffortConfig(token, projectId).catch(() => null),
+                launchGuided(token, projectId, payload),
+                getGuidedPipelineConfig(token, projectId).catch(() => null),
             ]);
             const localConfig = configResult;
             const brief = buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles);
@@ -1047,7 +1047,7 @@ export default function ZeroEffortLaunchPage() {
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => router.push(
                             result ? `/workspace/${projectId}?conv=${result.conversationId}` : `/workspace/${projectId}`
-                        )}>{t("launch.openGodMode")}</Button>
+                        )}>{t("launch.openWorkspace")}</Button>
                     </div>
                 </div>
 
@@ -1137,7 +1137,7 @@ export default function ZeroEffortLaunchPage() {
                                     {t("vibecore.prefillEdit")}
                                 </button>
                                 <Button
-                                    onClick={() => void handleGodModeGenerate()}
+                                    onClick={() => void handleProcessProject()}
                                     disabled={submitting}
                                     className="gap-2"
                                 >
@@ -1487,7 +1487,7 @@ export default function ZeroEffortLaunchPage() {
                                             <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")}>
                                                 {t("launch.step4.dashboard")}
                                             </Button>
-                                            <Button size="sm" onClick={handleGoToGodMode} className="gap-2">
+                                            <Button size="sm" onClick={handleGoToWorkspace} className="gap-2">
                                                 <Rocket className="h-3.5 w-3.5" />
                                                 {t("launch.step4.continueInGuided")}
                                             </Button>

@@ -245,17 +245,17 @@ function WorkspacePageContent() {
             })));
     }, [providersCatalog]);
     const presetRecommendationAppliedRef = useRef<string | null>(null);
-    // Preferred provider/model passed as URL params from Zero Effort / Vibe pipeline redirects.
+    // Preferred provider/model passed as URL params from Guided Mode / Vibe pipeline redirects.
     // Read once on mount so they survive the router.replace that clears autoPrompt.
     const preferredProviderRef = useRef(searchParams?.get("preferredProvider") ?? "");
     const preferredModelRef = useRef(searchParams?.get("preferredModel") ?? "");
     const [preferredModelResolutionComplete, setPreferredModelResolutionComplete] = useState(
         () => !preferredProviderRef.current && !preferredModelRef.current,
     );
-    // Track whether we arrived from the Zero Effort / Vibe pipeline.
+    // Track whether we arrived from the Guided Mode / Vibe pipeline.
     // True when a sessionStorage handoff key exists for the conv param (new path)
     // or when an autoPrompt URL param is present (legacy/fallback path).
-    const fromZeroEffortRef = useRef(!!(searchParams?.get("conv") && (
+    const fromGuidedRef = useRef(!!(searchParams?.get("conv") && (
         typeof sessionStorage !== "undefined"
             ? !!sessionStorage.getItem(`pipeline_handoff_${searchParams.get("conv")}`)
             : false
@@ -267,7 +267,7 @@ function WorkspacePageContent() {
     const chatFileInputRef = useRef<HTMLInputElement>(null);
     const [pendingEnrichmentPolling, setPendingEnrichmentPolling] = useState<string[]>([]);
     const [imageSuggestions, setImageSuggestions] = useState<{ assetId: string; name: string; suggestion: "logo" | "background" | "icon"; dismissed: boolean }[]>([]);
-    // When coming from the Zero Effort flow the brief is already structured — skip auto-optimize
+    // When coming from the Guided Mode flow the brief is already structured — skip auto-optimize
     // for that one automated handoff only. After the first generated artifact is saved, restore
     // the workspace default so future prompts are optimized unless the user turns it off.
     const autoOptimizeSuppressedByHandoffRef = useRef(searchParams?.get("skipAutoOptimize") === "1");
@@ -371,8 +371,8 @@ function WorkspacePageContent() {
 
     // ── WYSIWYG EDIT mode state ──────────────────────────────────────────────
     const [editMode, setEditMode] = useState(false);
-    // ── Zero Effort auto-send ─────────────────────────────────────────────────
-    // When redirected from the Zero Effort launch page, autoPrompt is passed as a
+    // ── Guided Mode auto-send ─────────────────────────────────────────────────
+    // When redirected from the Guided Mode launch page, autoPrompt is passed as a
     // search param. We pre-fill the prompt and auto-trigger generation once the
     // conversation and providers are both ready.
     const autoPromptFiredRef = useRef(false);
@@ -566,7 +566,7 @@ function WorkspacePageContent() {
             .catch(() => undefined);
     }, [token, loadProjectConversation, projectId]);
 
-    // ── Zero Effort auto-send: read prompt from sessionStorage (primary) or URL param (fallback) ──
+    // ── Guided Mode auto-send: read prompt from sessionStorage (primary) or URL param (fallback) ──
     useEffect(() => {
         const convId = searchParams?.get("conv");
         // Primary path: sessionStorage handoff (avoids URI-length limits and encoding errors).
@@ -594,7 +594,7 @@ function WorkspacePageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // run once on mount — searchParams is stable
 
-    // ── Zero Effort auto-send: fire when conversation + providers are ready ───
+    // ── Guided Mode auto-send: fire when conversation + providers are ready ───
     useEffect(() => {
         if (!autoPromptPending) return;
         if (autoPromptFiredRef.current) return;
@@ -653,7 +653,7 @@ function WorkspacePageContent() {
         presetRecommendationAppliedRef.current = projectPresetId;
     }, [projectPresetId, presetCatalog, providersCatalog]);
 
-    // ── Zero Effort / Vibe pipeline: apply preferred model from URL params ────
+    // ── Guided Mode / Vibe pipeline: apply preferred model from URL params ────
     // Runs after the catalog and preset recommendation have been applied so that
     // the pipeline-configured model always wins over the preset default.
     useEffect(() => {
@@ -828,11 +828,11 @@ function WorkspacePageContent() {
         void refreshProjectDbCost();
     }, [token, loadProjectAssets, loadProjectAiUsage, refreshProjectDbCost]);
 
-    // Bridge Zero Effort project assets into the chat attachment strip on first load.
-    // Runs once after projectAssets settles so that files uploaded during the Vibe/ZE
+    // Bridge Guided Mode project assets into the chat attachment strip on first load.
+    // Runs once after projectAssets settles so that files uploaded during the Vibe/Guided
     // pipeline appear as active chat attachments without the user having to re-attach them.
     useEffect(() => {
-        if (!fromZeroEffortRef.current) return;
+        if (!fromGuidedRef.current) return;
         if (projectAssetsBootstrappedRef.current) return;
         if (projectAssets.length === 0) return;
         projectAssetsBootstrappedRef.current = true;
