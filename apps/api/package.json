@@ -16,7 +16,7 @@
         "sf:billing": "tsx src/scripts/sf-billing-import.ts",
         "storage:probe": "npm run build && node dist/scripts/storage-probe.js",
         "storage:migrate": "npm run build && node dist/scripts/migrate-assets-to-storage.js",
-        "lint": "echo 'lint not configured yet'",
+        "lint": "eslint src",
         "test": "vitest run",
         "test:watch": "vitest"
     },
@@ -48,6 +48,8 @@
         "sharp": "^0.33.0"
     },
     "devDependencies": {
+        "eslint": "^10.8.1",
+        "typescript-eslint": "^8.67.0",
         "@types/adm-zip": "^0.5.8",
         "@types/archiver": "^7.0.0",
         "@types/bcryptjs": "^2.4.6",
