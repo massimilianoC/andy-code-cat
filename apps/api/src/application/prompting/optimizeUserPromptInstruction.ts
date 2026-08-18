@@ -78,7 +78,7 @@ export function buildOptimizeUserPromptRequest(input: {
 
     const configuredSystemPrompt = (input.taskSettings?.systemTemplate || DEFAULT_OPTIMIZE_USER_PROMPT_SYSTEM_TEMPLATE).trim();
     // Operator overrides customize tone/depth but cannot remove the non-destructive
-    // handoff contract protecting the user's Zero Effort brief.
+    // handoff contract protecting the user's Guided Mode brief.
     const systemPrompt = `${configuredSystemPrompt}\n\n${AUTHORITATIVE_BRIEF_PRESERVATION_CONTRACT}`;
 
     const userPrompt = [

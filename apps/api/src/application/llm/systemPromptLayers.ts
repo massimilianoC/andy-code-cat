@@ -17,7 +17,7 @@ const ASSET_FRAGMENT_DEFAULT_BUDGET = 8_000;
  * Layer D text. It is deterministic — same trace in → same fragment out — and
  * intentionally has no global state. The output is cached on the trace itself
  * (`AssetEnrichmentTrace.renderedFragment`) by `buildEnrichmentTrace()` so that
- * every consumer (VibePrefill brief pass, OptimizePrompt, God Mode generation)
+ * every consumer (VibePrefill brief pass, OptimizePrompt, Project Mode generation)
  * uses the exact same text without recomputing.
  *
  * Output format:
@@ -173,7 +173,7 @@ export interface TemplateResolution {
     formatHint?: import("@andy-code-cat/contracts").FormatHint | null;
     confidence: number;
     reasoning: string;
-    source: "layer_phi" | "user_explicit" | "zero_effort_form";
+    source: "layer_phi" | "user_explicit" | "guided_form";
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -208,7 +208,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 /**
  * Layer L — Output language directive.
  * Injected immediately after Layer A (base constraints) and before Layer B (preset).
- * Only present when an explicit output language is resolved (never injected in God Mode).
+ * Only present when an explicit output language is resolved (never injected in Project Mode).
  */
 export function buildLanguageLayer(bcp47: string): string {
     const code = bcp47.toLowerCase().split("-")[0]!;

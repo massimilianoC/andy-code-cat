@@ -1,16 +1,16 @@
 import { test, expect } from "@playwright/test";
 import { API_URL, createTestProject, deleteTestProject, getAccessToken, loginTestUser } from "./helpers/test-user";
 
-test.describe("Zero Effort pipeline launch", () => {
-    test("POST /v1/projects/:projectId/pipelines/zero-effort prepares a reusable workspace", async ({ page }) => {
+test.describe("Guided Mode pipeline launch", () => {
+    test("POST /v1/projects/:projectId/pipelines/guided prepares a reusable workspace", async ({ page }) => {
         await loginTestUser(page);
-        const projectId = await createTestProject(page, `Zero Effort ${Date.now()}`);
+        const projectId = await createTestProject(page, `Guided Mode ${Date.now()}`);
 
         try {
             const token = await getAccessToken(page);
             const result = await page.evaluate(
                 async ({ apiUrl, token, projectId }) => {
-                    const res = await fetch(`${apiUrl}/v1/projects/${projectId}/pipelines/zero-effort`, {
+                    const res = await fetch(`${apiUrl}/v1/projects/${projectId}/pipelines/guided`, {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json",
@@ -37,7 +37,7 @@ test.describe("Zero Effort pipeline launch", () => {
             );
 
             expect(result.status).toBe(201);
-            expect(result.body.mode).toBe("zero-effort");
+            expect(result.body.mode).toBe("guided");
             expect(result.body.status).toBe("prepared");
             expect(result.body.projectId).toBe(projectId);
             expect(typeof result.body.conversationId).toBe("string");

@@ -486,7 +486,7 @@ export function createLlmRoutes(): Router {
         const brandContextLayer = buildGlobalBrandLayer(brandContext, { maxChars: 4000 });
 
         // Layer L (OUTPUT LANGUAGE) resolution chain: explicit persisted project language
-        // (from zero-effort/Vibe intake) → client UI language sent with the request → none
+        // (from Guided Mode/Vibe intake) → client UI language sent with the request → none
         // (model default = English). See OUTPUT_LANGUAGE_CONTROL_SPEC.md.
         const resolvedOutputLanguage = project?.outputLanguage || input.outputLanguage || null;
         const outputLanguageSource = project?.outputLanguage

@@ -1,7 +1,7 @@
 import { PRESET_CATALOG, type ProjectPreset } from "../../domain/entities/ProjectPreset";
 
 /**
- * Canonical preset context shared by intent classification and Zero Effort prefill.
+ * Canonical preset context shared by intent classification and Guided Mode prefill.
  * Visibility in a UI catalog is deliberately not used as an AI-selection filter:
  * hidden specialist presets (for example freerunner) must remain matchable.
  */
@@ -37,6 +37,6 @@ export function buildCanonicalPresetSelectionRules(): string {
 - data-dashboard is selected only for an explicit analytical/data-dashboard request or explicit data-dashboard mode.
 - When evidence is ambiguous, choose neutral. Do not use landing as a generic fallback.
 
-COMPLETE PRESET CATALOG — shared with Zero Effort prefill:
+COMPLETE PRESET CATALOG — shared with Guided Mode prefill:
 ${buildVibePresetCatalogContext()}`;
 }

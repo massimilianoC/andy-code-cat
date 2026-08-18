@@ -9,7 +9,7 @@ export interface ProjectTemplateResolution {
     formatHint?: string | null;
     confidence: number;
     reasoning: string;
-    source: "layer_phi" | "user_explicit" | "zero_effort_form";
+    source: "layer_phi" | "user_explicit" | "guided_form";
 }
 
 /**
@@ -42,7 +42,7 @@ export interface Project {
     /** Layer T resolution when no preset matched — see ProjectTemplateResolution. */
     templateResolution?: ProjectTemplateResolution;
     /**
-     * Resolved BCP-47 output language (e.g. "it", "en") persisted at zero-effort launch /
+     * Resolved BCP-47 output language (e.g. "it", "en") persisted at Guided Mode launch /
      * Vibe intake. This is the explicit, highest-priority source for Layer L (OUTPUT LANGUAGE)
      * at generation time; when absent, the composer falls back to the client UI language sent
      * with the request, and finally to English. See OUTPUT_LANGUAGE_CONTROL_SPEC.md.
