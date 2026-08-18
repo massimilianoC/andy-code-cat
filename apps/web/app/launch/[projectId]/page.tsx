@@ -931,7 +931,12 @@ export default function ZeroEffortLaunchPage() {
         // Store the prompt in sessionStorage to avoid URI-length limits.
         // The workspace page reads and deletes this key on mount.
         sessionStorage.setItem(`pipeline_handoff_${convId}`, finalPrompt);
-        let url = `/workspace/${projectId}?conv=${convId}`;
+        // This handler only runs after handleOptimize() already ran once on this page (the
+        // manual "review then go to GodMode" path) — the brief has already been through one
+        // optimization pass. Skip the workspace's own auto-optimize-before-first-send so we
+        // don't pay for a second, redundant LLM call, exactly like the automatic AI-prefilled
+        // path in handleGodModeGenerate() already does below.
+        let url = `/workspace/${projectId}?conv=${convId}&skipAutoOptimize=1`;
         const effectiveProvider = pipelineOverride?.provider ?? pipelineConfig?.vibeGenerate?.provider ?? pipelineConfig?.generate?.provider;
         const effectiveModel = pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model;
         if (effectiveProvider) {
