@@ -2,7 +2,7 @@
 
 Andy Code Cat is developed in iterative releases. Each release is a shippable, testable increment.
 
-_Last review: 2026-07-08_
+_Last review: 2026-08-18_
 
 > **Cross-cutting features delivered outside the R-numbered milestones** (recorded here so they
 > are no longer mistaken for unbuilt work):
@@ -16,8 +16,9 @@ _Last review: 2026-07-08_
 > - **Didactic Mode** — ✅ live (read-only artifact interrogation: knowledge, Q&A, quizzes).
 >   Spec: [DIDACTIC_MODE_SPEC.md](../specs/DIDACTIC_MODE_SPEC.md); progress:
 >   [DIDACTIC_MODE_PROGRESS.md](../DIDACTIC_MODE_PROGRESS.md).
-> - **Template Skills research seed** — documentation-only seed catalog created for the
->   future Layer S (`template-skills`) implementation. Runtime injection is not wired yet.
+> - **Template Skills / Layer S** — filesystem resolver is implemented and injects selected
+>   manuals into the canonical prompt pipeline. Selection/content-governance hardening remains
+>   deferred until the R2/R3 verification gate.
 >   Research: [AGENT_SKILLS_TREND_REPORT_2026-07-08.md](../research/template-skills/AGENT_SKILLS_TREND_REPORT_2026-07-08.md);
 >   seed catalog: [docs/skills/template-skills/](../skills/template-skills/README.md).
 
@@ -123,6 +124,23 @@ See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.m
 
 **Status: 🟡 Cost data foundation complete; verification gate and dashboard UI still pending.**
 
+### Immediate implementation program — SSOT prompting and model routing
+
+**Status: 🔴 P0 first implementation/review gate.** Before expanding prompting, guided entry, or
+Template Skills, implement the unified [SSOT Prompting and Model Routing Program](../specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md): user model lock, canonical
+brief, no silent fallback, no implicit optimizer for skip runs, immutable prompt execution, and
+explicit model feedback in Workshop.
+
+1. P0-A: contracts, PipelineRun model lock, single resolver, fail-closed dispatch.
+2. P0-B: server canonical brief and direct Vibe/Zero Effort → GodMode handoff.
+3. P1-A: immutable execution/snapshot/cost trace and Workshop read model.
+4. P1-B: browser-state migration, notification UX and Docker E2E regression gate.
+
+**Resume point:** implementation is not yet started. Next session begins with U0 → U1/U2:
+define PipelineRun/PipelineExecution boundaries and contracts, then implement the single
+server-side resolver with user override precedence and fail-closed tests. See
+[SSOT_REFACTOR_PROGRESS.md](../SSOT_REFACTOR_PROGRESS.md).
+
 - [x] execution_logs collection (MongoDB TTL 90d)
 - [x] Admin/owner log query endpoint
 - [x] Prompt execution logging and usage summary endpoints
@@ -131,6 +149,13 @@ See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.m
 - [ ] Dedicated cost dashboard UI per project (data is now fully available from the API)
 - [ ] Verification gate: generate -> media resolution -> snapshot -> export -> publish emits enough execution/cost/notification data to debug failures without reading raw container logs
 - [ ] Verification gate: VibeCore and Zero Effort flows expose prompt/model/cost lineage consistently with GodMode generation
+- [ ] Prompt Execution SSOT remediation: server-owned immutable trace of the complete provider
+  payload; snapshot/execution linkage; Workshop projection of the selected execution. See
+  [PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](../specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md).
+- [ ] **P0 regression gate — Vibe → Zero Effort → GodMode model SSOT:** a user-selected
+  provider/model is a server-owned strict lock for every text stage; the canonical server brief
+  reaches GodMode without implicit optimization or browser-owned fallback. See
+  [VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md](../specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md).
 
 **Notes**
 
@@ -161,7 +186,7 @@ See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.m
 
 ## Layer S — Template Skills Quality Layer
 
-**Status: 🔲 Planned next implementation track after R2/R3 verification gate.**
+**Status: 🟡 Filesystem runtime baseline implemented; governance/content hardening follows the R2/R3 verification gate.**
 
 Template Skills are Markdown manuals selected by preset, viewport model, and tags, then injected
 beside Layer B to improve artifact-specific craft. This is the preferred next quality lever before
@@ -174,7 +199,7 @@ Already in place:
 - [x] online research report: [AGENT_SKILLS_TREND_REPORT_2026-07-08.md](../research/template-skills/AGENT_SKILLS_TREND_REPORT_2026-07-08.md)
 - [x] first seed manuals under [docs/skills/template-skills/](../skills/template-skills/README.md)
 
-Planned implementation:
+Deferred hardening:
 
 - [ ] `TemplateSkill` entity, contract, Mongo repository, and static seed catalog
 - [ ] resolver by `presetId`, `viewportModel`, and tags
@@ -333,5 +358,5 @@ Targeted robustness pass on existing implementations (no new features):
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.
-Detailed specs for each feature are in [docs/specs/](docs/specs/).
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) to get involved.
+Detailed specs for each feature are in [docs/specs/](../specs/).

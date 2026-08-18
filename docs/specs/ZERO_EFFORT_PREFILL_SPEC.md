@@ -1,9 +1,11 @@
 # Zero-Effort LLM Prefill — Specification
 
 **Version:** 1.1
-**Status:** Implemented  
+**Status:** Implemented baseline; browser storage/query handoff, fallback behavior and any second brief construction are superseded by the 2026-08-18 SSOT implementation program.
 **Date:** 2026-07-13
 **Branch:** `feat/dashboard-lovable-chat`
+
+> Active Vibe → Zero Effort → GodMode work must follow [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md). This document remains the reference for the implemented prefill domain and fields.
 
 ---
 

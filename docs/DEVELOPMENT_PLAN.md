@@ -12,7 +12,7 @@ and the relevant specs under `docs/specs/`.
 
 ## Current Status
 
-Last aligned review: 2026-07-08
+Last aligned review: 2026-08-18
 
 Andy Code Cat is beyond the original bootstrap phase.
 
@@ -68,12 +68,34 @@ that converge on the same project, asset, snapshot, and publish model.
 - dynamic backend behavior should be added later through a declarative BaaS layer, not through
   arbitrary generated backend code per artifact
 
-### July 2026 operating order
+### Prompt Execution SSOT remediation
 
-1. Verify and harden R2/R3 end to end.
-2. Implement Template Skills / Layer S as the next artifact-quality track.
-3. Complete domain/publish automation.
-4. Re-open BaaS only after observability and publish are solid.
+Status: active architecture/remediation track within the R2/R3 verification gate.
+
+The layer registry, marker-based composition, backend dry-run and Prompt-tab renderer are
+implemented foundations. The next concern is stronger: make the whole provider request
+server-persisted, immutable, snapshot-linked and exactly visible in Workshop, including history,
+focused context and runtime artifact context. This is not a new generation product or a broad
+async-pipeline initiative; it hardens the existing Layer 1 path before scope expansion.
+
+Primary implementation authority: `docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md`.
+It orders the Prompt Execution and Vibe-to-GodMode Model SSOT analyses into the immediate
+P0/P1 refactor sequence.
+
+### Current operating order
+
+1. Implement and review P0 model-lock, canonical-brief and no-implicit-optimization remediation.
+2. Implement the server-owned Prompt Execution trace and Workshop projection.
+3. Verify VibeCore → Zero Effort → GodMode → snapshot/costs/export/publish end to end.
+4. Continue Template Skills / Layer S governance and quality work only after that verification gate.
+5. Complete domain/publish automation, then re-open BaaS only after observability and publish are solid.
+
+### Resume point for the next implementation session
+
+Implementation has not started. Resume with **U0 → U1/U2** from
+`docs/SSOT_REFACTOR_PROGRESS.md`: establish the aggregate boundary and shared contracts, then
+centralize model resolution with a strict user override and fail-closed dispatch. Do not start UI
+migration or downstream feature work before the focused model-lock tests pass.
 
 ---
 
@@ -193,6 +215,8 @@ Already in place or partially implemented:
 
 Current priorities:
 
+- treat Vibe → Zero Effort → GodMode model coherence as a P0 regression: a user-selected model must become a server-owned lock across all text stages, with no silent fallback
+- make the server-built canonical brief the only handoff input to GodMode and support the direct no-optimizer path requested from Vibe
 - keep guided entry, Zero Effort, and GodMode on one shared backend orchestration path
 - preserve zero regression on the current workspace UX
 - improve intake classification, prefill quality, and launch ergonomics
@@ -200,14 +224,15 @@ Current priorities:
 
 Primary references:
 
-- `docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md`
-- `docs/specs/DASHBOARD_LOVABLE_CHAT_SPEC.md`
-- `docs/specs/ZERO_EFFORT_PREFILL_SPEC.md`
-- `docs/project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md`
+- `docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md` — current implementation authority and required reading
+- `docs/specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md` — active authority for model lock, canonical brief, and no-optimizer handoff; it prevails over older guided-entry details in conflict
+- `docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md` — active authority for execution proof and Workshop transparency
+- `docs/specs/ZERO_EFFORT_PREFILL_SPEC.md` — implemented baseline only
+- `docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md` and `docs/specs/DASHBOARD_LOVABLE_CHAT_SPEC.md` — historical UX references, not implementation checklists
 
 ### Template Skills / Layer S
 
-Status: planned next quality track, documentation seed complete
+Status: runtime resolver implemented; content/governance hardening is deferred until the R2/R3 verification gate.
 
 This track improves output quality for games, slides, SVG/vector artifacts, dataviz, 3D/WebXR,
 and other template families through selected Markdown manuals injected beside Layer B.
@@ -221,8 +246,8 @@ Already in place:
 
 Current priorities:
 
-- keep Layer S empty until the runtime implementation is approved
-- implement entity/contract/repository/static catalog first
+- retain the implemented filesystem-first resolver and validate its trace/budget behaviour
+- govern skill selection and content only after prompt-execution traceability and R2/R3 verification
 - select skills by preset, viewport model, and tags
 - add budget caps and prompt-preview trace visibility
 - validate on artifact families where failures are visible: games, slide decks, dataviz, 3D/WebXR
