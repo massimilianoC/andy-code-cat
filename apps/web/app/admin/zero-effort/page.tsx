@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import {
@@ -54,8 +54,14 @@ Rules:
 
 Available templates: {{TEMPLATE_LIST}}`;
 
+// Keep this byte-identical to VibePrefill.ts's SYSTEM_PROMPT (apps/api/src/application/use-cases/VibePrefill.ts).
+// A prior drift here (this block was missing the nine expressive fields) caused the prefill LLM
+// to see two contradictory "Required JSON shape" blocks once an operator saved this page even
+// without editing it — models follow the FIRST shape they see, so the brief silently collapsed
+// to ~2 filled sections. The backend now also demotes this override to an advisory suffix placed
+// AFTER the authoritative contract, but keep this mirror in sync regardless — do not let it drift again.
 const PREFILL_DEFAULT_PROMPT =
-`You are a web project brief extractor.
+`You are a multi-format project brief architect.
 Given a user's free-form description of a project, return a JSON object that
 populates a structured project brief.
 
@@ -69,6 +75,15 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
   "tone": "communication tone, e.g. professional, playful (string or null)",
   "primaryCta": "main call-to-action button text (string or null)",
   "styleHint": "visual, UX, interaction, and production notes — 180 to 900 chars when useful (string or null)",
+  "projectSummary": "concise product/output concept and value proposition (string or null)",
+  "contentStructure": "ordered sections, screens, slides, scenes, steps, states or levels with purpose (string or null)",
+  "contentRequirements": "copy, data, entities, messages, assets and information that must appear (string or null)",
+  "functionalRequirements": "behaviors, mechanics, validation, calculations and user capabilities (string or null)",
+  "interactionModel": "navigation, controls, input methods, feedback, state transitions and edge cases (string or null)",
+  "visualDirection": "composition, hierarchy, palette, typography, imagery, motion and atmosphere (string or null)",
+  "successCriteria": "observable criteria for a complete and successful first generation (string or null)",
+  "constraints": "explicit limits, compatibility, accessibility, responsive, legal or content constraints (string or null)",
+  "mustAvoid": "things the result must not do, inferred only from explicit negative instructions (string or null)",
   "contactInfo": [{"key": "Email", "value": "..."}],
   "styleAttributes": ["minimal"]
 }
@@ -88,6 +103,12 @@ Rules:
 - outputLanguage: detect the language the user wants the CONTENT in. If the user writes in Italian but asks "in tedesco" or "in German", outputLanguage must be "de". Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
 - primaryGoal: produce a robust structured brief that can be injected into downstream generation prompts. Include: project intent, selected template interpretation, required sections/screens, key functionality, success criteria, assumptions needed.
 - audience: infer who uses or views the result; include needs, context, and expectations.
+- COMPLETENESS CONTRACT (mandatory): every one of the nine expressive fields — projectSummary,
+  contentStructure, contentRequirements, functionalRequirements, interactionModel, visualDirection,
+  successCriteria, constraints, mustAvoid — MUST be a non-empty string of 250 to 900 characters.
+  Use null ONLY when the request and the attached documents give literally zero signal for that
+  field. Absence of an explicit user statement is not a reason to emit null — infer a concrete,
+  defensible default consistent with the selected preset.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
 - IMPORTANT: write fields in order shown — businessName, presetId, outputLanguage first.
@@ -131,7 +152,7 @@ const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
         provider: "",
         model: "",
         temperature: 0.3,
-        maxCompletionTokens: 2048,
+        maxCompletionTokens: 6000,
         systemTemplate: PREFILL_DEFAULT_PROMPT,
     },
     [OPTIMIZE_TASK_KEY]: {
@@ -226,8 +247,18 @@ export default function ZeroEffortAdminPage() {
         .finally(() => setLoading(false));
     }, [router]);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const hasChanges = useMemo(() => true, [classifyTask, prefillTask, optimizeTask, generateTask, vibeGenerateTask, godModeGenerateTask]);
+    // Never persist a systemTemplate that is byte-identical to the shipped default: the
+    // textarea is pre-filled with the default whenever nothing is stored (see mergeTask
+    // above), so saving unrelated fields (provider, temperature...) used to silently write
+    // the current default text into PlatformConfig as if it were an intentional override.
+    // That override then front-ran the live backend contract on every future prompt change,
+    // which is exactly how a prior drift (missing 9 brief fields) went unnoticed. Persisting
+    // "" instead means the API always falls back to its own current default.
+    function stripDefaultTemplate(key: string, task: PromptTaskSettingDto): PromptTaskSettingDto {
+        return task.systemTemplate?.trim() === TASK_DEFAULTS[key].systemTemplate.trim()
+            ? { ...task, systemTemplate: "" }
+            : task;
+    }
 
     async function handleSave() {
         if (!token) return;
@@ -237,9 +268,9 @@ export default function ZeroEffortAdminPage() {
         try {
             await updateProductGovernance(token, DEFAULT_PRODUCT_KEY, {
                 promptTaskSettings: {
-                    [CLASSIFY_TASK_KEY]:          classifyTask,
-                    [PREFILL_TASK_KEY]:           prefillTask,
-                    [OPTIMIZE_TASK_KEY]:          optimizeTask,
+                    [CLASSIFY_TASK_KEY]:          stripDefaultTemplate(CLASSIFY_TASK_KEY, classifyTask),
+                    [PREFILL_TASK_KEY]:           stripDefaultTemplate(PREFILL_TASK_KEY, prefillTask),
+                    [OPTIMIZE_TASK_KEY]:          stripDefaultTemplate(OPTIMIZE_TASK_KEY, optimizeTask),
                     [GENERATE_TASK_KEY]:          generateTask,
                     [VIBE_GENERATE_TASK_KEY]:     vibeGenerateTask,
                     [GOD_MODE_GENERATE_TASK_KEY]: godModeGenerateTask,
@@ -296,7 +327,7 @@ export default function ZeroEffortAdminPage() {
                     <PromptTaskSettingsCard
                         title="Prefill Brief — Estrazione brief (vibe_intent_prefill)"
                         description="Seleziona presetId dallo stesso catalogo di Vibe e compila il brief Zero Effort completo: struttura, contenuti, funzioni, interazioni, visual, vincoli e criteri di successo."
-                        helperText="Il backend aggiunge sempre contratto e catalogo correnti: questo override può specializzare il comportamento, ma non rimuoverli. Consigliati almeno 2048 token. Il contratto canonico di selezione preset (procedura + catalogo annotato) è sempre aggiunto dal backend dopo questo template e non può essere sovrascritto."
+                        helperText="Il backend antepone sempre il contratto e il catalogo correnti: questo override è ora consultivo e non può restringere lo schema. Consigliati almeno 6000 token (il brief completo a 19 campi richiede ~2.100–5.800 token di output; sotto questa soglia i campi espressivi vengono troncati silenziosamente)."
                         value={prefillTask}
                         providers={providers}
                         onFieldChange={(field, value) =>

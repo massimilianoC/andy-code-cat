@@ -87,7 +87,65 @@ describe("parsePrefillResponse — presetId, no regex override", () => {
         const raw = '{"businessName":"X","presetId":"website","primaryGoal":"aaaa';
         const result = parsePrefillResponse(raw, "p", "en", "videogame");
         expect(result.draft.presetId).toBe("website");
+        // repairTruncatedJson recovers the complete businessName/presetId pair (the
+        // half-written primaryGoal value is dropped, but nothing before it is lost) —
+        // confidence 0.6, a step above the 0.4 last-resort regex-only path.
+        expect(result.confidence).toBe(0.6);
+    });
+
+    it("falls all the way back to regex recovery when even repair can't produce valid JSON", () => {
+        // The only value is fully written (closed quote) but there is no top-level comma
+        // anywhere, so repairTruncatedJson has nothing safe to cut before and returns null —
+        // the regex last-resort path runs instead.
+        const raw = '{"businessName":"X, Y and Z Inc"';
+        const result = parsePrefillResponse(raw, "fallback prompt", "en", null);
+        expect(result.draft.businessName).toBe("X, Y and Z Inc");
         expect(result.confidence).toBe(0.4);
+    });
+
+    it("recovers every complete expressive field when truncated mid-way through a later field", () => {
+        const full = {
+            businessName: "Unicycle Co", presetId: "website", outputLanguage: "en",
+            primaryGoal: "a".repeat(300), audience: "design-conscious riders",
+            tone: "confident", primaryCta: "Explore the Machine",
+            styleHint: "premium, dark, minimal",
+            projectSummary: "a".repeat(300),
+            contentStructure: "a".repeat(300),
+            contentRequirements: "a".repeat(300),
+        };
+        const raw = JSON.stringify(full).slice(0, -1) + ',"functionalRequirements":"cut off mid-str';
+        const result = parsePrefillResponse(raw, "unicycle prompt", "en", null);
+        expect(result.confidence).toBe(0.6);
+        expect(result.draft.presetId).toBe("website");
+        expect(result.draft.tone).toBe("confident");
+        expect(result.draft.primaryCta).toBe("Explore the Machine");
+        expect(result.draft.styleHint).toBe("premium, dark, minimal");
+        expect(result.draft.projectSummary).toBe(full.projectSummary);
+        expect(result.draft.contentStructure).toBe(full.contentStructure);
+        expect(result.draft.contentRequirements).toBe(full.contentRequirements);
+        // The half-written field itself is correctly dropped, not corrupted into the draft.
+        expect(result.draft.functionalRequirements).toBeUndefined();
+    });
+
+    it("passes through all nine expressive fields on a clean, complete response (regression for the empty-brief bug)", () => {
+        const raw = JSON.stringify({
+            businessName: "Unicycle Co", presetId: "website", outputLanguage: "en",
+            primaryGoal: "a".repeat(50), audience: "design-conscious riders",
+            tone: "confident", primaryCta: "Explore the Machine", styleHint: "premium, dark, minimal",
+            projectSummary: "b".repeat(50), contentStructure: "c".repeat(50),
+            contentRequirements: "d".repeat(50), functionalRequirements: "e".repeat(50),
+            interactionModel: "f".repeat(50), visualDirection: "g".repeat(50),
+            successCriteria: "h".repeat(50), constraints: "i".repeat(50), mustAvoid: "j".repeat(50),
+        });
+        const result = parsePrefillResponse(raw, BUG_PROMPT, "en", null);
+        const expressiveFields = [
+            "projectSummary", "contentStructure", "contentRequirements", "functionalRequirements",
+            "interactionModel", "visualDirection", "successCriteria", "constraints", "mustAvoid",
+        ] as const;
+        for (const key of expressiveFields) {
+            expect(result.draft[key]?.trim().length ?? 0).toBeGreaterThan(0);
+        }
+        expect(result.confidence).toBe(0.85);
     });
 
     it("passes through a valid preset ID", () => {
