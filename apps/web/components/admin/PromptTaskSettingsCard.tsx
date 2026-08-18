@@ -17,6 +17,16 @@ interface PromptTaskSettingsCardProps {
     /** When provided, renders provider + model as catalog-driven dropdowns. */
     providers?: AdminLlmProviderDto[];
     requiredCapability?: "chat" | "vision" | "image_generation" | "video_generation" | "tools" | "embeddings";
+    /**
+     * When true, this task's `systemTemplate` is never read by any backend pipeline for
+     * this task (routing-only: provider/model/temperature only). The override editor is
+     * hidden entirely and a short note is shown instead.
+     */
+    routingOnly?: boolean;
+    /** Platform default text for this task's system-template slot, from the prompt registry endpoint. */
+    registryDefaultText?: string;
+    /** sha256:<16 hex> hash of `registryDefaultText`, from the prompt registry endpoint. */
+    registryDefaultTextHash?: string;
 }
 
 export function PromptTaskSettingsCard({
@@ -27,7 +37,13 @@ export function PromptTaskSettingsCard({
     onFieldChange,
     providers,
     requiredCapability = "chat",
+    routingOnly = false,
+    registryDefaultText,
+    registryDefaultTextHash,
 }: PromptTaskSettingsCardProps) {
+    const isOverride = value.systemTemplate.trim().length > 0;
+    const isStale = isOverride && Boolean(registryDefaultTextHash) &&
+        (!value.systemTemplateBaselineHash || value.systemTemplateBaselineHash !== registryDefaultTextHash);
     const activeProviders = providers
         ? providers
             .filter((provider) => provider.isActive)
@@ -112,14 +128,63 @@ export function PromptTaskSettingsCard({
                 </div>
             </div>
 
-            <div className="space-y-1">
-                <Label>System template override</Label>
-                <MonacoCodeEditor
-                    language="markdown"
-                    value={value.systemTemplate}
-                    onChange={(v) => onFieldChange("systemTemplate", v)}
-                />
-            </div>
+            {routingOnly ? (
+                <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    This task is routing-only: the backend never reads a system-template override for it —
+                    only provider, model, and token settings above apply. There is nothing to edit here.
+                </p>
+            ) : (
+                <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Label>System template override</Label>
+                        <div className="flex items-center gap-2">
+                            {isStale && (
+                                <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[0.68rem] text-amber-400">
+                                    Platform default has changed since this override was saved
+                                </span>
+                            )}
+                            {isOverride && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        onFieldChange("systemTemplate", "");
+                                        onFieldChange("systemTemplateBaselineHash", undefined);
+                                    }}
+                                >
+                                    Reset to default
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        {isOverride
+                            ? "Overriding the platform default below."
+                            : "Empty: the platform default (shown below, read-only) is used verbatim."}
+                    </p>
+                    <MonacoCodeEditor
+                        language="markdown"
+                        value={value.systemTemplate}
+                        onChange={(v) => onFieldChange("systemTemplate", v)}
+                    />
+                    {registryDefaultText !== undefined && (
+                        <details className="rounded-md border border-border">
+                            <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+                                Platform default text (read-only)
+                            </summary>
+                            <div className="px-3 pb-3">
+                                <MonacoCodeEditor
+                                    language="markdown"
+                                    value={registryDefaultText}
+                                    readOnly
+                                    height="200px"
+                                />
+                            </div>
+                        </details>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
