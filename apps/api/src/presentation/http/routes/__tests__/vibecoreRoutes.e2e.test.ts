@@ -2,13 +2,11 @@
  * E2E tests for POST /v1/vibecore/classify
  *
  * Runs against MongoMemoryServer — no Docker required.
- * Run from repo root:
- *   npx tsx --test tests/api/vibecore-routes.test.ts
  *
  * Strategy:
  *   1. Set ALL required env vars before any app module is loaded.
  *   2. Start MongoMemoryServer, override MONGODB_URI.
- *   3. Dynamically import `createApp` inside before() so config.ts evaluates
+ *   3. Dynamically import `createApp` inside beforeAll() so config.ts evaluates
  *      with the correct env values.
  *   4. Seed a user + project directly in MongoDB.
  *   5. Sign JWTs locally using the test secret.
@@ -16,8 +14,7 @@
  *      the use-case returns a fast skipped:true response.
  */
 
-import { describe, before, after, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import request from "supertest";
 import jwt from "jsonwebtoken";
@@ -38,7 +35,6 @@ process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/placeholder";
 
 // Disable real LLM calls — classifier returns skipped:true immediately
 process.env.VIBE_CLASSIFIER_ENABLED = "false";
-process.env.VIBE_OPTIMIZER_ENABLED = "false";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -58,12 +54,12 @@ let userId: string;
 // Suite
 // ─────────────────────────────────────────────────────────────────────────────
 describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
-    before(async () => {
+    beforeAll(async () => {
         mongod = await MongoMemoryServer.create();
         process.env.MONGODB_URI = mongod.getUri();
 
-        const { createApp } = await import("../../apps/api/src/app");
-        const { getDb } = await import("../../apps/api/src/infra/db/mongo");
+        const { createApp } = await import("../../../../app");
+        const { getDb } = await import("../../../../infra/db/mongo");
 
         app = createApp();
         const db = await getDb();
@@ -82,8 +78,8 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
         userId = userOid.toHexString();
     });
 
-    after(async () => {
-        const { getDb } = await import("../../apps/api/src/infra/db/mongo");
+    afterAll(async () => {
+        const { getDb } = await import("../../../../infra/db/mongo");
         const db = await getDb();
         await db.client.close(true);
         await mongod.stop();
@@ -95,7 +91,7 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
         const res = await request(app)
             .post("/v1/vibecore/classify")
             .send({ prompt: "una landing page" });
-        assert.equal(res.status, 401);
+        expect(res.status).toBe(401);
     });
 
     it("401 with malformed Bearer token", async () => {
@@ -103,7 +99,7 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .post("/v1/vibecore/classify")
             .set("Authorization", "Bearer not-a-valid-jwt")
             .send({ prompt: "una landing page" });
-        assert.equal(res.status, 401);
+        expect(res.status).toBe(401);
     });
 
     // ─── Request validation ───────────────────────────────────────────────────
@@ -114,8 +110,8 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
             .send({});
-        assert.equal(res.status, 400);
-        assert.ok(Array.isArray(res.body.details), "should include zod issues");
+        expect(res.status).toBe(400);
+        expect(Array.isArray(res.body.details)).toBe(true);
     });
 
     it("400 when prompt is empty string", async () => {
@@ -124,7 +120,7 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
             .send({ prompt: "" });
-        assert.equal(res.status, 400);
+        expect(res.status).toBe(400);
     });
 
     it("200 when prompt exceeds the old 2000-char cap (verbosity is welcome)", async () => {
@@ -133,7 +129,7 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
             .send({ prompt: "x".repeat(2001) });
-        assert.equal(res.status, 200);
+        expect(res.status).toBe(200);
     });
 
     it("400 when prompt exceeds the 12000-char ceiling", async () => {
@@ -142,12 +138,12 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
             .send({ prompt: "x".repeat(12001) });
-        assert.equal(res.status, 400);
+        expect(res.status).toBe(400);
     });
 
-    it("400 when attachmentMeta exceeds 3 items", async () => {
+    it("422 when attachmentMeta exceeds the default max-attachments-per-prompt policy (12)", async () => {
         const token = signToken(userId);
-        const meta = Array.from({ length: 4 }, (_, i) => ({
+        const meta = Array.from({ length: 13 }, (_, i) => ({
             filename: `file${i}.pdf`,
             mimeType: "application/pdf",
             sizeBytes: 1024,
@@ -156,7 +152,8 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
             .send({ prompt: "qualcosa", attachmentMeta: meta });
-        assert.equal(res.status, 400);
+        expect(res.status).toBe(422);
+        expect(res.body.code).toBe("ATTACHMENT_LIMIT_EXCEEDED");
     });
 
     // ─── Happy path — classifier disabled (skipped:true fast-path) ────────────
@@ -168,13 +165,13 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .set("Authorization", `Bearer ${token}`)
             .send({ prompt: "una landing page per un salone di bellezza" });
 
-        assert.equal(res.status, 200);
-        assert.equal(typeof res.body.skipped, "boolean");
-        assert.equal(res.body.skipped, true, "classifier disabled → should skip");
-        assert.equal(res.body.templateId, null);
-        assert.equal(res.body.formatHint, null);
-        assert.equal(typeof res.body.confidence, "number");
-        assert.equal(typeof res.body.reasoning, "string");
+        expect(res.status).toBe(200);
+        expect(typeof res.body.skipped).toBe("boolean");
+        expect(res.body.skipped).toBe(true);
+        expect(res.body.templateId).toBe(null);
+        expect(res.body.formatHint).toBe(null);
+        expect(typeof res.body.confidence).toBe("number");
+        expect(typeof res.body.reasoning).toBe("string");
     });
 
     it("200 with prompt at the 12000-char ceiling", async () => {
@@ -183,8 +180,8 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
             .send({ prompt: "a".repeat(12000) });
-        assert.equal(res.status, 200);
-        assert.ok(typeof res.body.skipped === "boolean");
+        expect(res.status).toBe(200);
+        expect(typeof res.body.skipped).toBe("boolean");
     });
 
     it("200 with prompt + valid attachmentMeta (1 item)", async () => {
@@ -198,24 +195,25 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
                     { filename: "foto.jpg", mimeType: "image/jpeg", sizeBytes: 204800 },
                 ],
             });
-        assert.equal(res.status, 200);
-        assert.equal(typeof res.body.skipped, "boolean");
+        expect(res.status).toBe(200);
+        expect(typeof res.body.skipped).toBe("boolean");
     });
 
-    it("200 with prompt + valid attachmentMeta (3 items, at limit)", async () => {
+    it("200 with prompt + valid attachmentMeta (12 items, at the default policy limit)", async () => {
         const token = signToken(userId);
+        const meta = Array.from({ length: 12 }, (_, i) => ({
+            filename: `doc${i}.pdf`,
+            mimeType: "application/pdf",
+            sizeBytes: 32000,
+        }));
         const res = await request(app)
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
             .send({
-                prompt: "sito aziendale con tre documenti",
-                attachmentMeta: [
-                    { filename: "brief.pdf", mimeType: "application/pdf", sizeBytes: 512000 },
-                    { filename: "logo.png", mimeType: "image/png", sizeBytes: 48000 },
-                    { filename: "spec.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", sizeBytes: 32000 },
-                ],
+                prompt: "sito aziendale con dodici documenti",
+                attachmentMeta: meta,
             });
-        assert.equal(res.status, 200);
+        expect(res.status).toBe(200);
     });
 
     // ─── Response shape contract ──────────────────────────────────────────────
@@ -227,25 +225,16 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .set("Authorization", `Bearer ${token}`)
             .send({ prompt: "brochure per agenzia immobiliare" });
 
-        assert.equal(res.status, 200);
+        expect(res.status).toBe(200);
         const body = res.body;
-        assert.ok("templateId" in body, "must have templateId");
-        assert.ok("formatHint" in body, "must have formatHint");
-        assert.ok("confidence" in body, "must have confidence");
-        assert.ok("reasoning" in body, "must have reasoning");
-        assert.ok("skipped" in body, "must have skipped");
-        assert.ok(
-            body.templateId === null || typeof body.templateId === "string",
-            "templateId must be null or string",
-        );
-        assert.ok(
-            body.formatHint === null || typeof body.formatHint === "string",
-            "formatHint must be null or string",
-        );
-        assert.ok(
-            body.confidence >= 0 && body.confidence <= 1,
-            "confidence must be 0–1",
-        );
+        expect("templateId" in body).toBe(true);
+        expect("formatHint" in body).toBe(true);
+        expect("confidence" in body).toBe(true);
+        expect("reasoning" in body).toBe(true);
+        expect("skipped" in body).toBe(true);
+        expect(body.templateId === null || typeof body.templateId === "string").toBe(true);
+        expect(body.formatHint === null || typeof body.formatHint === "string").toBe(true);
+        expect(body.confidence >= 0 && body.confidence <= 1).toBe(true);
     });
 
     // ─── Route does NOT require x-project-id (pre-project endpoint) ───────────
@@ -257,13 +246,13 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .set("Authorization", `Bearer ${token}`)
             // Deliberately NOT setting x-project-id
             .send({ prompt: "form di prenotazione ristorante" });
-        assert.equal(res.status, 200, "classify must work without x-project-id");
+        expect(res.status).toBe(200);
     });
 
     // ─── Blocked user ─────────────────────────────────────────────────────────
 
     it("403 when user is blocked", async () => {
-        const { getDb } = await import("../../apps/api/src/infra/db/mongo");
+        const { getDb } = await import("../../../../infra/db/mongo");
         const db = await getDb();
         const blockedOid = new ObjectId();
         await db.collection("users").insertOne({
@@ -281,6 +270,6 @@ describe("VibeCore Routes — POST /v1/vibecore/classify", () => {
             .post("/v1/vibecore/classify")
             .set("Authorization", `Bearer ${token}`)
             .send({ prompt: "qualcosa" });
-        assert.equal(res.status, 403);
+        expect(res.status).toBe(403);
     });
 });

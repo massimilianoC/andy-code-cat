@@ -2,19 +2,17 @@
  * E2E tests for cost API routes.
  *
  * Runs against MongoMemoryServer — no Docker required.
- * Run from repo root:  npx tsx --test tests/api/cost-routes.test.ts
  *
  * Strategy:
  *   1. Set ALL required env vars before any app module is loaded.
  *   2. Start MongoMemoryServer, override MONGODB_URI.
- *   3. Dynamically import `createApp` inside before() so config.ts evaluates
+ *   3. Dynamically import `createApp` inside beforeAll() so config.ts evaluates
  *      with the correct env values.
  *   4. Seed users + project directly in MongoDB (bypasses business-logic layers).
  *   5. Sign JWTs locally using the test secret.
  */
 
-import { describe, before, after, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import request from "supertest";
 import jwt from "jsonwebtoken";
@@ -23,7 +21,7 @@ import type { Express } from "express";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test secrets — MUST be set before any `import` of app code is evaluated
-// (dynamic imports in before() run after these top-level assignments).
+// (dynamic imports in beforeAll() run after these top-level assignments).
 // ─────────────────────────────────────────────────────────────────────────────
 const TEST_JWT_ACCESS_SECRET = "test-access-secret-min-32-chars-!!xyz";
 const TEST_JWT_REFRESH_SECRET = "test-refresh-secret-min-32-chars-!!xy";
@@ -32,7 +30,7 @@ process.env.NODE_ENV = "test";
 process.env.JWT_ACCESS_SECRET = TEST_JWT_ACCESS_SECRET;
 process.env.JWT_REFRESH_SECRET = TEST_JWT_REFRESH_SECRET;
 process.env.EXPORT_JWT_SECRET = "test-export-secret-min-32-chars-!!xyz";
-// MONGODB_URI is set inside before() once MongoMemoryServer is ready.
+// MONGODB_URI is set inside beforeAll() once MongoMemoryServer is ready.
 // dotenv (called in config.ts) only sets vars NOT already in process.env,
 // so any value we put here before config.ts loads wins.
 process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/placeholder";
@@ -57,7 +55,7 @@ let projectId: string;
 // Suite
 // ─────────────────────────────────────────────────────────────────────────────
 describe("Cost Routes E2E", () => {
-    before(async () => {
+    beforeAll(async () => {
         // 1. Start in-memory MongoDB and override the URI env var so that when
         //    config.ts is evaluated (on first dynamic import below) it reads the
         //    correct URI from process.env (dotenv skips already-set vars).
@@ -65,8 +63,8 @@ describe("Cost Routes E2E", () => {
         process.env.MONGODB_URI = mongod.getUri();
 
         // 2. Dynamically import app AFTER env is fully configured.
-        const { createApp } = await import("../../apps/api/src/app");
-        const { getDb } = await import("../../apps/api/src/infra/db/mongo");
+        const { createApp } = await import("../../../../app");
+        const { getDb } = await import("../../../../infra/db/mongo");
 
         app = createApp();
         const db = await getDb();
@@ -112,9 +110,9 @@ describe("Cost Routes E2E", () => {
         projectId = projectOid.toHexString();
     });
 
-    after(async () => {
+    afterAll(async () => {
         // Close the MongoDB client connection before stopping the server.
-        const { getDb } = await import("../../apps/api/src/infra/db/mongo");
+        const { getDb } = await import("../../../../infra/db/mongo");
         const db = await getDb();
         await db.client.close(true);
         await mongod.stop();
@@ -124,12 +122,12 @@ describe("Cost Routes E2E", () => {
 
     it("GET /v1/users/me/cost — 401 without token", async () => {
         const res = await request(app).get("/v1/users/me/cost");
-        assert.equal(res.status, 401);
+        expect(res.status).toBe(401);
     });
 
     it("GET /v1/projects/:id/cost — 401 without token", async () => {
         const res = await request(app).get(`/v1/projects/${projectId}/cost`);
-        assert.equal(res.status, 401);
+        expect(res.status).toBe(401);
     });
 
     it("GET /v1/projects/:id/cost — 400 when x-project-id header is missing", async () => {
@@ -137,7 +135,7 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get(`/v1/projects/${projectId}/cost`)
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 400);
+        expect(res.status).toBe(400);
     });
 
     it("GET /v1/projects/:id/cost — 403 for project not owned by the requesting user", async () => {
@@ -147,7 +145,7 @@ describe("Cost Routes E2E", () => {
             .get(`/v1/projects/${foreignProjectId}/cost`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", foreignProjectId);
-        assert.equal(res.status, 403);
+        expect(res.status).toBe(403);
     });
 
     // ─── Happy paths — empty database ────────────────────────────────────────
@@ -157,11 +155,11 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get("/v1/users/me/cost")
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 200);
-        assert.ok(res.body.summary !== undefined, "body.summary present");
-        assert.ok(Array.isArray(res.body.breakdown), "body.breakdown is array");
-        assert.ok(Array.isArray(res.body.trend), "body.trend is array");
-        assert.ok(Array.isArray(res.body.topProjects), "body.topProjects is array");
+        expect(res.status).toBe(200);
+        expect(res.body.summary).not.toBeUndefined();
+        expect(Array.isArray(res.body.breakdown)).toBe(true);
+        expect(Array.isArray(res.body.trend)).toBe(true);
+        expect(Array.isArray(res.body.topProjects)).toBe(true);
     });
 
     it("GET /v1/projects/:id/cost — 200 with valid token + correct project (empty summary)", async () => {
@@ -170,10 +168,10 @@ describe("Cost Routes E2E", () => {
             .get(`/v1/projects/${projectId}/cost`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId);
-        assert.equal(res.status, 200);
-        assert.ok(res.body.summary !== undefined, "body.summary present");
-        assert.ok(Array.isArray(res.body.breakdown), "body.breakdown is array");
-        assert.ok(Array.isArray(res.body.trend), "body.trend is array");
+        expect(res.status).toBe(200);
+        expect(res.body.summary).not.toBeUndefined();
+        expect(Array.isArray(res.body.breakdown)).toBe(true);
+        expect(Array.isArray(res.body.trend)).toBe(true);
     });
 
     it("GET /v1/projects/:id/cost/transactions — 200 returns empty paginated list", async () => {
@@ -182,10 +180,10 @@ describe("Cost Routes E2E", () => {
             .get(`/v1/projects/${projectId}/cost/transactions`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId);
-        assert.equal(res.status, 200);
-        assert.ok(Array.isArray(res.body.items), "body.items is array");
-        assert.equal(res.body.items.length, 0);
-        assert.equal(res.body.total, 0);
+        expect(res.status).toBe(200);
+        expect(Array.isArray(res.body.items)).toBe(true);
+        expect(res.body.items.length).toBe(0);
+        expect(res.body.total).toBe(0);
     });
 
     // ─── Admin role guards ────────────────────────────────────────────────────
@@ -195,7 +193,7 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get("/v1/admin/cost/dashboard")
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 403);
+        expect(res.status).toBe(403);
     });
 
     it("GET /v1/admin/cost/dashboard — 200 for superadmin", async () => {
@@ -203,11 +201,11 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get("/v1/admin/cost/dashboard")
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 200);
-        assert.ok(res.body.summary !== undefined, "body.summary present");
-        assert.ok(Array.isArray(res.body.breakdown), "body.breakdown is array");
-        assert.ok(Array.isArray(res.body.trend), "body.trend is array");
-        assert.ok(Array.isArray(res.body.topProjects), "body.topProjects is array");
+        expect(res.status).toBe(200);
+        expect(res.body.summary).not.toBeUndefined();
+        expect(Array.isArray(res.body.breakdown)).toBe(true);
+        expect(Array.isArray(res.body.trend)).toBe(true);
+        expect(Array.isArray(res.body.topProjects)).toBe(true);
     });
 
     it("GET /v1/admin/cost/transactions — 200 for superadmin", async () => {
@@ -215,8 +213,8 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get("/v1/admin/cost/transactions")
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 200);
-        assert.ok(Array.isArray(res.body.items), "body.items is array");
+        expect(res.status).toBe(200);
+        expect(Array.isArray(res.body.items)).toBe(true);
     });
 
     // ─── PATCH /v1/admin/cost/rates ───────────────────────────────────────────
@@ -227,7 +225,7 @@ describe("Cost Routes E2E", () => {
             .patch("/v1/admin/cost/rates")
             .set("Authorization", `Bearer ${token}`)
             .send({ usdToEurRate: 0.9 });
-        assert.equal(res.status, 403);
+        expect(res.status).toBe(403);
     });
 
     it("PATCH /v1/admin/cost/rates — 400 when body is empty", async () => {
@@ -236,8 +234,8 @@ describe("Cost Routes E2E", () => {
             .patch("/v1/admin/cost/rates")
             .set("Authorization", `Bearer ${token}`)
             .send({});
-        assert.equal(res.status, 400);
-        assert.ok(res.body.error, "error message present");
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBeTruthy();
     });
 
     it("PATCH /v1/admin/cost/rates — 400 when all provided fields are non-numeric", async () => {
@@ -246,7 +244,7 @@ describe("Cost Routes E2E", () => {
             .patch("/v1/admin/cost/rates")
             .set("Authorization", `Bearer ${token}`)
             .send({ usdToEurRate: "not-a-number", textEurPer1kTokens: null });
-        assert.equal(res.status, 400);
+        expect(res.status).toBe(400);
     });
 
     it("PATCH /v1/admin/cost/rates — 200 with valid numeric rates", async () => {
@@ -255,12 +253,12 @@ describe("Cost Routes E2E", () => {
             .patch("/v1/admin/cost/rates")
             .set("Authorization", `Bearer ${token}`)
             .send({ usdToEurRate: 0.95, textEurPer1kTokens: 0.006 });
-        assert.equal(res.status, 200);
-        assert.ok(res.body.costRates, "body.costRates present");
-        assert.equal(res.body.costRates.usdToEurRate, 0.95);
-        assert.equal(res.body.costRates.textEurPer1kTokens, 0.006);
-        assert.ok(res.body.costRates.updatedByUserId, "updatedByUserId set in costRates");
-        assert.equal(res.body.costRates.updatedByUserId, adminUserId);
+        expect(res.status).toBe(200);
+        expect(res.body.costRates).toBeTruthy();
+        expect(res.body.costRates.usdToEurRate).toBe(0.95);
+        expect(res.body.costRates.textEurPer1kTokens).toBe(0.006);
+        expect(res.body.costRates.updatedByUserId).toBeTruthy();
+        expect(res.body.costRates.updatedByUserId).toBe(adminUserId);
     });
 
     it("GET /v1/admin/cost/dashboard — currentRates reflects PATCH'd values", async () => {
@@ -268,15 +266,15 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get("/v1/admin/cost/dashboard")
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 200);
-        assert.equal(res.body.currentRates?.usdToEurRate, 0.95, "dashboard reflects updated rate");
+        expect(res.status).toBe(200);
+        expect(res.body.currentRates?.usdToEurRate).toBe(0.95);
     });
 
     // ─── Write + read back ────────────────────────────────────────────────────
 
     it("After CostTransactionService.recordAsync(), project cost summary is non-zero", async () => {
-        const { CostTransactionService } = await import("../../apps/api/src/application/cost/CostTransactionService");
-        const { ResourceType } = await import("../../apps/api/src/domain/entities/CostTransaction");
+        const { CostTransactionService } = await import("../../../../application/cost/CostTransactionService");
+        const { ResourceType } = await import("../../../../domain/entities/CostTransaction");
 
         await CostTransactionService.instance.recordAsync({
             userId: normalUserId,
@@ -293,9 +291,9 @@ describe("Cost Routes E2E", () => {
             .get(`/v1/projects/${projectId}/cost`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId);
-        assert.equal(res.status, 200);
-        assert.ok(res.body.summary.totalEur > 0, `totalEur should be > 0, got ${res.body.summary.totalEur}`);
-        assert.equal(res.body.summary.txCount, 1);
+        expect(res.status).toBe(200);
+        expect(res.body.summary.totalEur).toBeGreaterThan(0);
+        expect(res.body.summary.txCount).toBe(1);
     });
 
     it("Project transactions list returns the recorded transaction", async () => {
@@ -304,11 +302,11 @@ describe("Cost Routes E2E", () => {
             .get(`/v1/projects/${projectId}/cost/transactions`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId);
-        assert.equal(res.status, 200);
-        assert.equal(res.body.items.length, 1);
-        assert.equal(res.body.items[0].resourceType, "llm.chat");
-        assert.ok(res.body.items[0].totalEur > 0, "transaction totalEur > 0");
-        assert.equal(res.body.items[0].units?.totalTokens, 150);
+        expect(res.status).toBe(200);
+        expect(res.body.items.length).toBe(1);
+        expect(res.body.items[0].resourceType).toBe("llm.chat");
+        expect(res.body.items[0].totalEur).toBeGreaterThan(0);
+        expect(res.body.items[0].units?.totalTokens).toBe(150);
     });
 
     it("User cost summary reflects the recorded transaction", async () => {
@@ -316,11 +314,11 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get("/v1/users/me/cost")
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 200);
-        assert.ok(res.body.summary.totalEur > 0, `user totalEur should be > 0, got ${res.body.summary.totalEur}`);
-        assert.equal(res.body.summary.txCount, 1);
-        assert.equal(res.body.breakdown.length, 1);
-        assert.equal(res.body.breakdown[0].resourceType, "llm.chat");
+        expect(res.status).toBe(200);
+        expect(res.body.summary.totalEur).toBeGreaterThan(0);
+        expect(res.body.summary.txCount).toBe(1);
+        expect(res.body.breakdown.length).toBe(1);
+        expect(res.body.breakdown[0].resourceType).toBe("llm.chat");
     });
 
     it("Admin cost dashboard reflects the recorded transaction", async () => {
@@ -328,9 +326,9 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get("/v1/admin/cost/dashboard")
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 200);
-        assert.ok(res.body.summary.totalEur > 0, "platform totalEur > 0");
-        assert.equal(res.body.summary.txCount, 1);
+        expect(res.status).toBe(200);
+        expect(res.body.summary.totalEur).toBeGreaterThan(0);
+        expect(res.body.summary.txCount).toBe(1);
     });
 
     // ─── Pagination parameters ────────────────────────────────────────────────
@@ -341,9 +339,9 @@ describe("Cost Routes E2E", () => {
             .get(`/v1/projects/${projectId}/cost/transactions?page=1&limit=10`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId);
-        assert.equal(res.status, 200);
-        assert.ok(res.body.page !== undefined, "body.page present");
-        assert.ok(res.body.limit !== undefined, "body.limit present");
+        expect(res.status).toBe(200);
+        expect(res.body.page).not.toBeUndefined();
+        expect(res.body.limit).not.toBeUndefined();
     });
 
     it("GET /v1/admin/cost/transactions — filterable by userId", async () => {
@@ -351,8 +349,8 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get(`/v1/admin/cost/transactions?userId=${normalUserId}`)
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 200);
-        assert.equal(res.body.items.length, 1);
+        expect(res.status).toBe(200);
+        expect(res.body.items.length).toBe(1);
     });
 
     it("GET /v1/admin/cost/transactions — returns empty when filtering by unknown userId", async () => {
@@ -361,7 +359,7 @@ describe("Cost Routes E2E", () => {
         const res = await request(app)
             .get(`/v1/admin/cost/transactions?userId=${unknownId}`)
             .set("Authorization", `Bearer ${token}`);
-        assert.equal(res.status, 200);
-        assert.equal(res.body.items.length, 0);
+        expect(res.status).toBe(200);
+        expect(res.body.items.length).toBe(0);
     });
 });
