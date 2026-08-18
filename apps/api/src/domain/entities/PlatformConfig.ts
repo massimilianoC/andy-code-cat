@@ -91,12 +91,15 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         systemTemplate: "",
     },
     // VibeCore — Zero Effort LLM prefill (brief field extraction)
+    // 2048 was below the ~2,100-5,800 token range a complete 19-field brief actually needs
+    // (see VibePrefill.ts MIN_TOKENS/MAX_TOKENS comment for the char-budget arithmetic) —
+    // the nine expressive fields, written last by design, were silently truncated away.
     vibe_intent_prefill: {
         enabled: true,
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.3,
-        maxCompletionTokens: 2048,
+        maxCompletionTokens: 6000,
         systemTemplate: "",
     },
     // Vibe Mode — final generation step (workspace model when arriving from Vibe Mode expert path)

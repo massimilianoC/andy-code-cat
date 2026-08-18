@@ -78,6 +78,21 @@ export interface PresetRecommendedModel {
     label?: string;
 }
 
+/**
+ * LLM selection guidance for this preset.
+ * Rendered verbatim into the canonical preset-selection contract shared by
+ * VibeClassify and VibePrefill. This is the ONLY template-selection authority:
+ * there is no regex/deterministic override anywhere in the pipeline.
+ */
+export interface PresetSelectionSignals {
+    /** Concrete evidence that SELECTS this preset. Written as short evidence clauses. */
+    positive: string[];
+    /** Evidence that FORBIDS this preset even when positive signals are present. */
+    negative: string[];
+    /** Presets this one is commonly confused with, plus the deciding discriminator. */
+    confusedWith?: Array<{ presetId: string; discriminator: string }>;
+}
+
 export interface ProjectPreset {
     id: string;
     label: string;
@@ -109,6 +124,9 @@ export interface ProjectPreset {
 
     /** Up to 5 guiding questions shown in the brief discovery section of the config popup. */
     briefGuideQuestions: string[];
+
+    /** LLM selection guidance — see PresetSelectionSignals. */
+    selectionSignals?: PresetSelectionSignals;
 }
 
 const PRESET_META_BY_ID: Record<string, Partial<ProjectPreset>> = {
@@ -283,6 +301,19 @@ const RAW_PRESET_CATALOG: ProjectPreset[] = [
             "Chi è il pubblico target?",
             "Qual è il messaggio principale da comunicare?",
         ],
+        selectionSignals: {
+            positive: [
+                "the request names no recognisable deliverable and no output format",
+                "exploratory or open-ended request (\"something for X\", \"an idea about Y\")",
+                "evidence is genuinely ambiguous after applying the whole procedure",
+            ],
+            negative: [
+                "the request explicitly names any deliverable (site, page, deck, poster, form, game, dashboard)",
+            ],
+            confusedWith: [
+                { presetId: "landing", discriminator: "neutral is the ambiguity fallback; landing requires an explicitly stated single conversion goal. Never use landing as a generic fallback." },
+            ],
+        },
     },
 
     // ── LANDING PAGE ──
@@ -323,6 +354,20 @@ CRITERIO DI RIUSCITA:
             "Hai testimonianze o dati di prova da includere?",
             "Hai un'offerta o incentivo per la conversione (prova gratuita, sconto, ecc.)?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: landing page, squeeze page, waitlist page, promo page, launch page",
+                "one single conversion goal drives the whole page (sign-up, demo, pre-order, lead)",
+                "the request talks about a campaign, an offer, or a single CTA",
+            ],
+            negative: [
+                "the request asks to present a company, its identity, its services and its team (that is website)",
+                "the request describes gameplay mechanics",
+            ],
+            confusedWith: [
+                { presetId: "website", discriminator: "landing = one conversion, one CTA, one offer. website = institutional orientation across several sections (about, services, method, proof, contacts)." },
+            ],
+        },
     },
 
     // ── WEBSITE ──
@@ -363,6 +408,23 @@ CRITERIO DI RIUSCITA:
             "Hai un portfolio o casi studio da includere?",
             "Come vuoi che i visitatori ti contattino?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: company website, product website, corporate site, brand site, agency site, business site, sito aziendale, sito prodotto",
+                "the request asks to present a company, a product line, or a service catalogue to visitors",
+                "several distinct informational sections are implied or listed (hero, about, services, process, portfolio, team, FAQ, contacts)",
+                "modern web-production stack is named: React, Next.js, Tailwind CSS, Framer Motion, GSAP, Lenis, ScrollTrigger, shadcn",
+                "web-craft ambition is named: Awwwards, FWA, award-winning, micro-interactions, scroll storytelling, parallax, kinetic typography",
+            ],
+            negative: [
+                "the request describes concrete gameplay mechanics (score, lives, HUD, win/lose, controls, retry)",
+                "the request asks for slides, a printable page, or a dataset dashboard",
+            ],
+            confusedWith: [
+                { presetId: "videogame", discriminator: "Animation, motion, interaction, micro-interaction, kinetic, immersive, engaging and Awwwards-level are ordinary marketing-website craft vocabulary. They are NEVER gameplay evidence. Selecting a game preset requires the mechanic vocabulary listed in STEP 2." },
+                { presetId: "landing", discriminator: "website = multi-section orientation and trust-building. landing = one conversion goal." },
+            ],
+        },
     },
 
     // ── FORM ──
@@ -402,6 +464,19 @@ REGOLE UX:
             "Cosa succede dopo l'invio del form (conferma, reindirizzamento)?",
             "Hai requisiti di validazione particolari?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: form, wizard, survey, questionnaire, booking flow, registration flow, onboarding flow, modulo, questionario, prenotazione",
+                "the deliverable's purpose is collecting structured data across steps",
+                "fields, validation, steps, progress, or a submit confirmation are described",
+            ],
+            negative: [
+                "an informational page that merely includes a contact section (that is landing or website)",
+            ],
+            confusedWith: [
+                { presetId: "landing", discriminator: "form = the data collection IS the deliverable. landing = the form is one section serving a conversion page." },
+            ],
+        },
     },
 
     // ── MANIFESTO ──
@@ -442,6 +517,18 @@ CRITERIO DI RIUSCITA:
             "Quali sono i 3-5 valori irrinunciabili?",
             "Qual è l'azione che chiedi al lettore?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: manifesto, declaration, statement of values, editorial position piece",
+                "the deliverable's purpose is asserting a position, principles, or a vision — not selling or informing",
+            ],
+            negative: [
+                "a commercial page with an offer and a CTA",
+            ],
+            confusedWith: [
+                { presetId: "landing", discriminator: "manifesto persuades by conviction and has no commercial CTA. landing persuades toward one commercial action." },
+            ],
+        },
     },
 
     // ── SLIDESHOW ──
@@ -481,6 +568,20 @@ VINCOLI:
             "Quali filtri e segmentazioni servono agli utenti?",
             "Quali domande analitiche devono trovare risposta nella dashboard?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: dashboard, analytics dashboard, BI dashboard, cruscotto, KPI board",
+                "the request asks to ANALYSE a dataset: KPI, filters, segments, trends, drill-down, exploration table",
+                "a dataset is attached (.csv, .xlsx, .json, .sql, .parquet) AND analytical intent is stated in the text",
+            ],
+            negative: [
+                "a marketing page that merely displays a few statistics or counters",
+                "a dataset is attached but no analytical intent is stated",
+            ],
+            confusedWith: [
+                { presetId: "infographic", discriminator: "data-dashboard is an interactive analysis tool with filters and live data. infographic is a fixed visual narrative about data." },
+            ],
+        },
     },
 
     {
@@ -545,6 +646,19 @@ CRITERIO DI RIUSCITA:
             "Chi è l'audience e qual è il contesto (riunione interna, cliente, conferenza)?",
             "Hai contenuti/dati specifici da includere?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: presentation, slide deck, deck, pitch deck, slides, presentazione, carousel narrative",
+                "the deliverable is consumed one screen at a time in a meeting, review, or investor pitch",
+                "a slide count, an agenda, or a slide-by-slide outline is described",
+            ],
+            negative: [
+                "a scrolling page that merely has full-height sections",
+            ],
+            confusedWith: [
+                { presetId: "keynote", discriminator: "slideshow = argumentative working deck for a meeting/review/pitch (text, data, plan). keynote = high-impact stage or launch deck driven by visual impact." },
+            ],
+        },
     },
 
     // ── KEYNOTE ──
@@ -602,6 +716,18 @@ CRITERIO DI RIUSCITA:
             "Hai immagini emotive o icone di brand da usare?",
             "Qual è il tono: ispirazionale, tecnico, visionario?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: keynote, stage presentation, conference talk, launch keynote",
+                "the deck's purpose is visual impact in front of an audience rather than dense argument",
+            ],
+            negative: [
+                "an internal review or working deck with tables and detailed plans (that is slideshow)",
+            ],
+            confusedWith: [
+                { presetId: "slideshow", discriminator: "keynote optimises for spectacle and a single message per slide. slideshow optimises for argument and decision support." },
+            ],
+        },
     },
 
     // ── A4 POSTER ──
@@ -669,6 +795,18 @@ CRITERIO DI RIUSCITA:
             "Quali informazioni essenziali devono stare nel foglio (data, luogo, contatti)?",
             "Hai un logo o immagine da includere?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: poster, flyer, leaflet, A4, locandina, volantino, printable page, PDF to print",
+                "print output, print margins, paper format, or PDF export is requested",
+            ],
+            negative: [
+                "any request for scrolling, navigation, or interactivity",
+            ],
+            confusedWith: [
+                { presetId: "infographic", discriminator: "a4poster = a printable page whose job is announcing or promoting. infographic = explaining data or a process visually, print or screen." },
+            ],
+        },
     },
 
     // ── INFOGRAPHIC ──
@@ -761,6 +899,18 @@ Pensa come un art director: impatto visivo → chiarezza → completezza.`,
             "È una sequenza narrativa (processo/timeline) o una panoramica comparativa?",
             "Hai icone o visual di brand da incorporare?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: infographic, infografica, visual explainer, data storytelling, process or timeline visual",
+                "the deliverable explains numbers, steps, comparisons, or a timeline through visual composition",
+            ],
+            negative: [
+                "an interactive dashboard with filters over a real dataset (that is data-dashboard)",
+            ],
+            confusedWith: [
+                { presetId: "data-dashboard", discriminator: "infographic is a fixed authored narrative. data-dashboard is an interactive analysis tool." },
+            ],
+        },
     },
 
     // ── VIDEOGAME EXPERIENCE ──
@@ -801,6 +951,24 @@ REGOLE DI DESIGN:
             "Qual è la condizione di vittoria o il punteggio massimo desiderato?",
             "Il gioco è pensato per desktop, mobile o entrambi?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: game, videogame, arcade game, platformer, puzzle game, shooter, gioco, videogioco, giocabile",
+                "concrete mechanics are described: score, points, lives, HUD, player character, enemies, obstacles, power-ups, collisions, win and lose states, game over, retry, levels as playable stages",
+                "a control scheme is described: WASD, arrow keys, tap to jump, drag to aim, gamepad",
+            ],
+            negative: [
+                "the only 'interactive' evidence is animation, motion, micro-interactions, kinetic type, parallax, scroll effects, hover effects, immersion, or an Awwwards-level ambition",
+                "the request names a website, landing page, deck, poster, or form as the deliverable",
+                "the word 'level', 'play', 'score' or 'controls' appears only inside a compound or an unrelated sense (\"Awwwards-level\", \"enterprise-level\", \"next-level design\", \"play the video\", \"score of clients\", \"controls the narrative\")",
+            ],
+            confusedWith: [
+                { presetId: "website", discriminator: "A marketing site with heavy animation is still a website. Require STEP 2 mechanic evidence before choosing any game preset." },
+                { presetId: "freerunner", discriminator: "videogame is the generic playable browser game. freerunner requires an explicit endless/infinite auto-running loop." },
+                { presetId: "seriousgame", discriminator: "videogame plays for entertainment. seriousgame's PRIMARY declared goal is learning, training, or assessment." },
+                { presetId: "game3d", discriminator: "videogame is 2D. game3d requires an explicit 3D world, WebGL, three.js, or 3D camera movement." },
+            ],
+        },
     },
 
     // ── FREE RUNNER ──
@@ -840,6 +1008,18 @@ CRITERIO DI RIUSCITA:
             "Quali azioni può fare il personaggio oltre al salto?",
             "Vuoi missioni, monete o puro high-score?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: infinite runner, endless runner, runner infinito, corsa infinita, auto-runner",
+                "continuous automatic forward movement with jump/slide, lanes, incoming obstacles, distance or coin score, and immediate retry",
+            ],
+            negative: [
+                "a game with discrete authored levels, exploration, or a non-running core loop (that is videogame)",
+            ],
+            confusedWith: [
+                { presetId: "videogame", discriminator: "freerunner requires the endless auto-running loop specifically. Any other playable request is videogame." },
+            ],
+        },
     },
 
     // ── SERIOUS GAME ──
@@ -879,6 +1059,20 @@ CRITERIO DI RIUSCITA:
             "Come misuriamo progresso o completamento?",
             "Serve una simulazione, un quiz o una missione interattiva?",
         ],
+        selectionSignals: {
+            positive: [
+                "a playable experience whose PRIMARY declared purpose is learning, training, assessment, onboarding, or awareness",
+                "explicitly named: serious game, educational game, training simulation, gioco educativo, gioco formativo",
+                "learning objectives, feedback on mistakes, or a score tied to competence are described",
+            ],
+            negative: [
+                "an entertainment game that merely happens to be about an educational subject",
+                "a course, a lesson page, or a slide deck with no gameplay (that is website, slideshow, or interactive-story)",
+            ],
+            confusedWith: [
+                { presetId: "videogame", discriminator: "seriousgame requires learning/training as the stated primary goal, not a theme." },
+            ],
+        },
     },
 
     // ── 3D GAME ──
@@ -918,6 +1112,20 @@ REGOLE:
             "Vuoi esplorazione, corsa, raccolta oggetti o shooting leggero?",
             "Quanto deve essere realistico vs stilizzato?",
         ],
+        selectionSignals: {
+            positive: [
+                "an explicit 3D playable scene or world: WebGL, three.js, 3D, first-person or third-person movement, orbit/fly camera, spaceship or vehicle piloting, planets and space navigation",
+                "STEP 2 mechanic evidence is present AND the world is explicitly three-dimensional",
+            ],
+            negative: [
+                "3D-looking CSS effects, 3D transforms, or depth/parallax on a marketing page",
+                "no mechanic evidence at all",
+            ],
+            confusedWith: [
+                { presetId: "vr-aframe", discriminator: "game3d runs on a normal screen. vr-aframe requires an explicit headset/WebXR/A-Frame request." },
+                { presetId: "website", discriminator: "A 3D hero or a WebGL background on a marketing site is a website, not game3d." },
+            ],
+        },
     },
 
     // ── VR A-FRAME ──
@@ -956,6 +1164,19 @@ CRITERIO DI RIUSCITA:
             "Quali hotspot o interazioni devono essere presenti?",
             "Qual è il device target principale: desktop, mobile VR o visore?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: VR, virtual reality, WebXR, A-Frame, headset, Quest, room-scale, 6DoF, stereoscopic",
+                "the deliverable is meant to be viewed through a headset",
+            ],
+            negative: [
+                "the word \"immersive\" used as an adjective for a scrolling website, a video, or a brand experience — this is marketing vocabulary and never selects vr-aframe on its own",
+            ],
+            confusedWith: [
+                { presetId: "website", discriminator: "\"immersive experience\" without an explicit headset/WebXR/A-Frame mention is a website." },
+                { presetId: "game3d", discriminator: "vr-aframe requires the headset target. A 3D scene on a flat screen is game3d." },
+            ],
+        },
     },
 
     // ── INTERACTIVE STORY ──
@@ -994,6 +1215,19 @@ CRITERIO DI RIUSCITA:
             "Quali scelte cambiano davvero l'esito?",
             "Vuoi un finale unico o multipli finali?",
         ],
+        selectionSignals: {
+            positive: [
+                "explicitly named: interactive story, branching narrative, choose-your-own-adventure, visual novel, storia interattiva, narrativa a bivi",
+                "reader choices change the path, the state, or the ending; multiple endings are described",
+            ],
+            negative: [
+                "linear storytelling, scrollytelling, or a narrative marketing page with no real choices",
+            ],
+            confusedWith: [
+                { presetId: "website", discriminator: "\"Scroll storytelling\" and \"narrative experience\" on a marketing page are website. interactive-story requires real branching choices with consequences." },
+                { presetId: "seriousgame", discriminator: "interactive-story's core is narrative branching. seriousgame's core is a learning objective with feedback." },
+            ],
+        },
     },
 ];
 
