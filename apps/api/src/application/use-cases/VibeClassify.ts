@@ -11,6 +11,7 @@ import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { ResourceType } from "../../domain/entities/CostTransaction";
+import { resolveModelSelection } from "../llm/modelSelection";
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -187,33 +188,28 @@ export class VibeClassify {
 
         const catalog = await this.getLlmCatalog.execute();
         const activeProviders = catalog.providers.filter((p) => p.isActive);
-        const overrideProviderCatalog = input.provider
-            ? activeProviders.find((p) => p.provider === input.provider)
-            : undefined;
-        const selectedProviderCatalog =
-            overrideProviderCatalog ??
-            activeProviders.find((p) => p.provider === taskSettings.provider) ??
-            activeProviders.find((p) => p.provider === FALLBACK_PROVIDER) ??
-            // Never silently fall back to local LM Studio for this background task.
-            activeProviders.find((p) => p.provider !== "lmstudio") ??
-            activeProviders[0];
+        // Never silently fall back to local LM Studio for this background task — see the
+        // "lmstudio" exclusion inside resolveModelSelection's vibe-cascade fallback chain.
+        const decision = resolveModelSelection({
+            profile: "vibe-cascade",
+            activeProviders,
+            requestedProvider: input.provider,
+            requestedModel: input.model,
+            taskSettingProvider: taskSettings.provider,
+            taskSettingModel: taskSettings.model,
+            fallbackProvider: FALLBACK_PROVIDER,
+            hardcodedFallbackModel: FALLBACK_MODEL,
+            requireOverrideInCatalog: true,
+            gateOverrideOnOpenAiCompatible: false,
+            policy: "legacy",
+        });
 
-        if (!selectedProviderCatalog) {
+        if (!decision.providerCatalog) {
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "no active provider", skipped: true, ...echoProject };
         }
 
-        const providerCatalog = selectedProviderCatalog;
-
-        const overrideModelId = input.model
-            ? providerCatalog.models.find((m) => m.isActive && m.id === input.model)?.id
-            : undefined;
-
-        const modelId =
-            overrideModelId ??
-            providerCatalog.models.find((m) => m.isActive && m.id === taskSettings.model)?.id ??
-            providerCatalog.models.find((m) => m.isActive && m.isDefault)?.id ??
-            providerCatalog.models.find((m) => m.isActive)?.id ??
-            FALLBACK_MODEL;
+        const providerCatalog = decision.providerCatalog;
+        const modelId = decision.effective.model;
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {

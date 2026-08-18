@@ -76,6 +76,7 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
     assets?: any[];
     assetRepository?: { listByProject: ReturnType<typeof vi.fn> };
     storageText?: string;
+    catalog?: unknown;
 }) {
     const projectRepository = {
         findByIdForUser: vi.fn(async () => ({
@@ -94,7 +95,7 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
     const userRepository = { incrementTokensConsumed: vi.fn(async () => undefined) };
     const promptExecutionLogRepository = { create: vi.fn(async () => undefined) };
     const getLlmCatalog = {
-        execute: vi.fn(async () => ({
+        execute: vi.fn(async () => overrides?.catalog ?? {
             source: "env",
             providers: [{
                 provider: "siliconflow",
@@ -114,7 +115,7 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
                 createdAt: new Date(),
                 updatedAt: new Date(),
             }],
-        })),
+        }),
     };
     const storage = {
         uploadFilePath: vi.fn((_userId: string, _projectId: string, storedFilename: string) => storedFilename),
@@ -270,5 +271,112 @@ describe("OptimizeUserPrompt", () => {
         const messages = requestBody.messages as Array<{ role: string; content: string }>;
         expect(messages.map((message) => message.content).join("\n")).toContain("LAYER D");
         expect(messages.map((message) => message.content).join("\n")).toContain("catalogo Jazz Milano");
+    });
+
+    // ── resolveModelSelection pin: byte-identical (provider, model) vs. pre-refactor inline cascade ──
+
+    it("model resolution: honors a request-override model because the resolved provider is openai-compatible", async () => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { useCase } = createUseCase();
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            provider: "siliconflow",
+            model: "some-other-model-not-in-catalog",
+        });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        // KNOWN-DIVERGENCE (future work): the override model is honored WITHOUT verifying it is
+        // active in the catalog, because the resolved provider's apiType is openai-compatible.
+        expect(requestBody.model).toBe("some-other-model-not-in-catalog");
+    });
+
+    it("model resolution: no override falls through to the active dialogue-role default model", async () => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { useCase } = createUseCase();
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+        });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M2.5");
+    });
+
+    it("model resolution: task-setting model wins over the catalog default when active in the catalog", async () => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const catalog = {
+            source: "env",
+            providers: [{
+                provider: "siliconflow",
+                baseUrl: "https://llm.test/v1",
+                apiType: "openai-compatible",
+                authType: "none",
+                isActive: true,
+                models: [
+                    {
+                        id: "MiniMaxAI/MiniMax-M2.5",
+                        provider: "siliconflow",
+                        role: "dialogue",
+                        capabilities: ["chat"],
+                        isDefault: true,
+                        isFallback: false,
+                        isActive: true,
+                    },
+                    {
+                        id: "deepseek-ai/DeepSeek-V3",
+                        provider: "siliconflow",
+                        role: "dialogue",
+                        capabilities: ["chat"],
+                        isDefault: false,
+                        isFallback: false,
+                        isActive: true,
+                    },
+                ],
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            }],
+        };
+        const { useCase } = createUseCase({
+            governanceByProduct: {
+                default: {
+                    promptTaskSettings: {
+                        optimize_user_prompt: {
+                            provider: "siliconflow",
+                            model: "deepseek-ai/DeepSeek-V3",
+                        },
+                    },
+                },
+            },
+        }, { catalog });
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            taskKey: "optimize_user_prompt",
+        });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("deepseek-ai/DeepSeek-V3");
     });
 });
