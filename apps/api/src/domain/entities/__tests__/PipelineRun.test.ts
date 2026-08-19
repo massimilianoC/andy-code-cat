@@ -88,6 +88,10 @@ describe("PipelineRun — assertStatusTransition", () => {
         ["draft", "blocked", blockedDetail],
         ["ready_for_generation", "blocked", blockedDetail],
         ["blocked", "ready_for_generation", undefined],
+        // I14.1 hardening: a retry against an already-blocked run must re-confirm the block
+        // (409), not throw an illegal-transition error (which surfaced as a 500 and hid the
+        // real MODEL_LOCK_UNAVAILABLE code from the caller).
+        ["blocked", "blocked", blockedDetail],
         ["draft", "cancelled", undefined],
         ["ready_for_generation", "cancelled", undefined],
         ["running", "cancelled", undefined],

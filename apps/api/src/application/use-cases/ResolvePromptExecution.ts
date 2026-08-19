@@ -225,15 +225,20 @@ export class ResolvePromptExecution {
         let roleModel: ReturnType<typeof dedupeModelsById>[number] | undefined;
         let pipelineRunLocked = false;
 
-        if (input.pipelineRunId) {
+        if (input.pipelineRunId && env.pipelineRunEnabled) {
             // I14 strict cutover wave 2: a PipelineRun's frozen modelLock governs dispatch
             // instead of the legacy cascade. dispatch() re-validates the lock against the live
             // catalog and never substitutes a different model — a stale/deactivated lock blocks
-            // (409) rather than silently falling back to the cascade below.
+            // (409) rather than silently falling back to the cascade below. Gated on
+            // PIPELINE_RUN_ENABLED too, not just the presence of pipelineRunId: this is the
+            // master rollback lever's whole point — flipping the flag off must revert EVERY call
+            // site to legacy behavior, even one that (incorrectly, or from a stale client) still
+            // sends a pipelineRunId.
             const stage = input.focusedMode ? "focused_edit" : "generate";
             const { run, blocked } = await this.resolvePipelineModelLock.dispatch({
                 runId: input.pipelineRunId,
                 ownerUserId: input.userId,
+                projectId: input.projectId,
                 stage,
             });
 

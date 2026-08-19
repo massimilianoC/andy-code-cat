@@ -5,6 +5,7 @@ import type { PipelineRun, PipelineRunBlockedDetail } from "../../domain/entitie
 import type { NewPipelineRun, PipelineRunRepository } from "../../domain/repositories/PipelineRunRepository";
 import { resolveModelSelection } from "../llm/modelSelection";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
+import { HttpError } from "../../presentation/http/errors/httpError";
 
 const FALLBACK_PROVIDER = "siliconflow";
 const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
@@ -37,6 +38,12 @@ export interface CreatePipelineRunInput {
 export interface DispatchStageInput {
     runId: string;
     ownerUserId: string;
+    /**
+     * Double-sandbox scoping (matches this repo's other project-scoped resolvers): a run must
+     * belong to THIS project, not just this user, or dispatch refuses it — otherwise a request
+     * against project A could drive generation off a run created under project B.
+     */
+    projectId: string;
     stage: PipelineStage;
 }
 
@@ -108,8 +115,14 @@ export class ResolvePipelineModelLock {
 
     async dispatch(input: DispatchStageInput): Promise<DispatchStageResult> {
         const run = await this.repository.findByIdForUser(input.runId, input.ownerUserId);
-        if (!run) {
-            throw new Error(`PipelineRun not found: ${input.runId}`);
+        // Not-found and wrong-project are reported identically (404, same message shape) —
+        // mirrors PipelineRunRepository.findByIdForUser's own doc comment: callers must not be
+        // able to distinguish "doesn't exist" from "exists but isn't yours to use here".
+        if (!run || run.projectId !== input.projectId) {
+            throw new HttpError(`PipelineRun not found: ${input.runId}`, {
+                statusCode: 404,
+                code: "PIPELINE_RUN_NOT_FOUND",
+            });
         }
 
         const catalog = await this.getLlmCatalog.execute();
@@ -125,6 +138,10 @@ export class ResolvePipelineModelLock {
                 stage: input.stage,
                 at: new Date(),
             };
+            // Idempotent re-block: a retry against an already-blocked run re-confirms the block
+            // (PipelineRun.ts now allows "blocked" -> "blocked") rather than throwing on what
+            // used to be an illegal self-transition, which surfaced as a 500 and hid the real
+            // MODEL_LOCK_UNAVAILABLE code from the caller.
             const blockedRun = await this.repository.setStatus(run.id, "blocked", {
                 code: blocked.code,
                 stage: blocked.stage,

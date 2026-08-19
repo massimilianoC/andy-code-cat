@@ -1,8 +1,14 @@
 # SSOT Refactor — Progress and Resume Point
 
-**Status:** planning complete; implementation has not started  
-**Last updated:** 2026-08-18  
+**Status:** I0–I14 implemented and merged to `develop`; I15–I20 remain  
+**Last updated:** 2026-08-19  
 **Resume authority:** [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md)
+
+**2026-08-19 scope note:** the "deferred past the demo" framing below (2026-08-18) was explicitly
+overridden the next day — no increment in this program is gated on the September 2026 demo
+calendar. The only legitimate gate on any remaining increment (I15–I20) is technical readiness.
+The `PipelineRun` aggregate this section originally called "not started" has since been built and
+is live (behind `PIPELINE_RUN_ENABLED`, default off) with real dispatch call sites wired in I12–I14.
 
 ## Progress update — 2026-08-18
 
@@ -30,47 +36,64 @@ small, staged, zero/low-risk PRs were implemented instead:
    preferred model can't be resolved against the hydrated catalog, and removal of a redundant
    second optimizer call on the manual GodMode review handoff.
 
-The `PipelineRun` / `ModelSelectionDecision` aggregate and durable execution journal (U1 onward in
-the sequencing below) remain **not started** and are intentionally deferred past the demo.
+**2026-08-19 update — I0–I14 landed.** The `PipelineRun` / `ModelSelectionDecision` aggregate and
+durable execution journal (U1 onward in the sequencing below) are no longer "not started". The
+increments and their `develop` merge commits are:
+
+- **I0–I3** (`develop@b884ee2`): docs baseline, pure `resolveModelSelection()`, optimizer
+  token-budget fix, fallback visibility — these are the "three small PRs" the 2026-08-18 note
+  above describes.
+- **I4–I6** (`develop@4e100b6`): `packages/contracts` additions (`modelRouting.ts`,
+  `promptExecution.ts`, `pipelineRun.ts`), `taskPromptRegistry` routing extension.
+- **I7–I8** (`develop@db6294d`): `PipelineRun` domain entity + Mongo persistence,
+  `ResolvePipelineModelLock` (`createRun()`/`dispatch()`), shadow-mode observation (compute-only,
+  zero behavior change).
+- **I9** (`develop@5a4f614`): `buildCanonicalGenerationBrief()`, kills the two-brief-builder
+  divergence.
+- **I10** (`develop@e04cd87`): `ResolvePromptExecution` extracted as the sole composer for
+  `/llm/prompt-preview`, `/llm/chat-preview`, `/llm/chat-preview/stream`.
+- **I11** (`develop@047d452`): durable `PromptExecutionLog` journal + idempotency keys.
+- **I12–I13** (`develop@a6b4d54`, renamed GodMode→Workspace in `develop@9e716e8`): server-owned
+  `LaunchWorkspacePipeline` + `POST /pipeline/launch-workspace`; strict cutover wave 1
+  (`OptimizeUserPrompt`, gated on an optional `pipelineRunId`).
+- **I14** (`develop@af772ab`): strict cutover wave 2 — `ResolvePromptExecution` (chat-preview,
+  chat-preview/stream, focused-edit) gated the same way. This is the call site that serves 100%
+  of real generation traffic, so a locked/blocked model now genuinely cannot dispatch — a strict
+  Kimi K3 lock cannot silently fall back to MiniMax or DeepSeek, and an unavailable locked model
+  fails (409) before any provider call, in every strict-dispatch call site that exists.
+- **I14.1 hardening** (this PR): fixed 4 issues an independent review found in I7–I14 — a
+  blocked→blocked dispatch retry throwing 500 instead of 409, a fabricated fallback model being
+  written into the audit journal when strict dispatch blocked, missing project-scoping on
+  `dispatch()`, and `PIPELINE_RUN_ENABLED` not gating the dispatch call sites themselves (only the
+  routes that create/list runs) — the last of which meant the flag's "15-second full rollback"
+  guarantee wasn't actually airtight at the backend.
 
 ## Current state
 
 - [x] Prompt Execution SSOT analysis completed.
-- [x] Vibe → Zero Effort → GodMode model-routing regression reproduced and documented.
-- [x] Unified SSOT implementation program approved as the immediate R2/R3 gate.
-- [x] Historical/future documents reclassified so they cannot override the active SSOT direction.
-- [ ] No runtime refactor has been implemented yet.
+- [x] Vibe → Zero Effort → Workspace model-routing regression reproduced, documented, and fixed.
+- [x] `PipelineRun` aggregate built, persisted, and wired into real dispatch call sites (I7–I14).
+- [x] Strict-dispatch invariant (never silently substitute a locked model) holds at every call
+  site that currently exists — verified by an independent coherence review, hardened in I14.1.
+- [ ] Frontend still does not create or send `pipelineRunId` anywhere (I15) — the whole strict
+  path above is live but dormant until the frontend cutover lands, gated behind
+  `PIPELINE_RUN_ENABLED` (default off) in the meantime.
+- [ ] I16–I20 (Workshop projection, persisted notifications, typed preflight, Kimi K3 E2E
+  acceptance test, legacy removal) not started.
 
 ## Resume here next session
 
-Start with **U0 then U1/U2**, in this exact order:
-
-1. Write the ADR/implementation slice for the aggregate boundary:
-   PipelineRun owns model decision, canonical brief and optimizer policy; PromptExecution owns
-   the immutable proof of each LLM dispatch.
-2. Add shared contracts in packages/contracts for ModelSelectionDecision, PipelineRun,
-   BriefRevision, PromptExecution references and the server-derived ModelDecisionView.
-3. Implement the single application resolver ResolveModelSelectionDecision for run creation and
-   dispatch. Enforce the precedence: user override → explicit capability exception → admin
-   default for a new run → catalog proposal.
-4. Add focused tests that prove a strict Kimi K3 lock cannot dispatch MiniMax or DeepSeek, and
-   that an unavailable locked model fails before any provider call.
-
-**Scope of this freeze (narrowed 2026-08-18):** do not rewire live model resolution or remove
-client-side model authority — i.e. do not begin the docs' "U2" step (the `PipelineRun` /
-`ModelSelectionDecision` aggregate) or anything past it — before these tests pass. This freeze
-does **not** block unrelated product or demo-prep work: UI migration, generic workflow
-orchestration, Layer S expansion, and new capability work that does not touch model-resolution
-call sites may proceed. The three small PRs described in the progress update above (pinning
-today's routing behavior, fixing the optimizer token budget, and surfacing the silent fallback)
-are explicitly compatible with this freeze and were completed under it.
+Continue with **I15**: frontend run-based handoff (replace `sessionStorage` with a server-owned
+`PipelineRun` reference), behind a build-time flag until I20 removes the legacy path. See the
+full increment list and test plan in the implementation program linked above.
 
 ## Subsequent slices
 
-- **U3:** BuildCanonicalGenerationBrief, BriefRevision persistence, direct server-owned GodMode
-  handoff, and optimizationPolicy skip.
-- **U4:** server-persisted PromptExecution journal and links to message/snapshot/cost.
-- **U5:** Workshop read model, persistent notifications and Docker E2E.
+- **I16–I17:** Workshop pure server projection (fixes "shows latest trace not selected snapshot's"
+  and "only renders role:user" bugs) + persisted run notifications.
+- **I18–I19:** typed POST preflight, Layer-E nested segments, Kimi K3 E2E acceptance test.
+- **I20:** legacy call-site removal — gated on I12–I19 being landed, tested, and confirmed stable,
+  not on calendar/demo timing.
 
 ## Definition of ready to continue
 

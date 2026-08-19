@@ -109,6 +109,24 @@ function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" 
     return (authType ?? "bearer") === "api-key" ? key : `Bearer ${key}`;
 }
 
+/**
+ * When strict dispatch (I13/I14) throws before a `PreparedExecutionContext` exists (blocked or
+ * catalog-mismatch), `persistFailureLog` would otherwise fall back to the hardcoded
+ * FALLBACK_PROVIDER/FALLBACK_MODEL constants — recording a model that was never actually
+ * targeted, which corrupts the audit/cost journal this program exists to make trustworthy. The
+ * strict-dispatch throw sites attach `lockedProviderId`/`lockedModelId` (the run's locked target
+ * that failed to dispatch); this extracts them so the failure log can record the truth instead.
+ */
+function extractLockedModelFields(error: unknown): { provider?: string; model?: string } {
+    if (!error || typeof error !== "object") return {};
+    const provider = "lockedProviderId" in error ? (error as { lockedProviderId?: unknown }).lockedProviderId : undefined;
+    const model = "lockedModelId" in error ? (error as { lockedModelId?: unknown }).lockedModelId : undefined;
+    return {
+        provider: typeof provider === "string" ? provider : undefined,
+        model: typeof model === "string" ? model : undefined,
+    };
+}
+
 function estimateTokens(input: { messages: Array<{ content: string }>; outputText: string }): OptimizerUsage {
     const promptChars = input.messages.reduce((acc, msg) => acc + msg.content.length, 0);
     const promptTokens = Math.max(1, Math.round(promptChars / 4));
@@ -417,33 +435,44 @@ export class OptimizeUserPrompt {
         let providerCatalog: (typeof activeProviders)[number] | undefined;
         let modelId: string | undefined;
 
-        if (input.pipelineRunId) {
+        if (input.pipelineRunId && env.pipelineRunEnabled) {
             // I13 strict cutover wave 1: a PipelineRun's frozen modelLock governs dispatch
             // instead of the legacy cascade. dispatch() re-validates the lock against the live
             // catalog and never substitutes a different model — a stale/deactivated lock blocks
-            // (409) rather than silently falling back.
+            // (409) rather than silently falling back. Gated on PIPELINE_RUN_ENABLED too, not
+            // just the presence of pipelineRunId: this is the master rollback lever's whole
+            // point — flipping the flag off must revert EVERY call site to legacy behavior, even
+            // one that (incorrectly, or from a stale client) still sends a pipelineRunId.
             const { run, blocked } = await this.resolvePipelineModelLock.dispatch({
                 runId: input.pipelineRunId,
                 ownerUserId: input.userId,
+                projectId: input.projectId,
                 stage: "optimize",
             });
 
             if (blocked) {
                 throw Object.assign(
                     new Error(`Pipeline model lock unavailable for optimize stage: ${blocked.code}`),
-                    { statusCode: 409, code: blocked.code },
+                    {
+                        statusCode: 409,
+                        code: blocked.code,
+                        lockedProviderId: run.modelLock.effective.providerId,
+                        lockedModelId: run.modelLock.effective.modelId,
+                    },
                 );
             }
 
             const lockedProviderId = run.modelLock.effective.providerId;
+            const lockedModelId = run.modelLock.effective.modelId;
             providerCatalog = activeProviders.find((provider) => provider.provider === lockedProviderId);
-            if (!providerCatalog) {
+            const lockedModel = providerCatalog?.models.find((model) => model.isActive && model.id === lockedModelId);
+            if (!providerCatalog || !lockedModel) {
                 throw Object.assign(
-                    new Error(`Locked provider is no longer in the active catalog: ${lockedProviderId}`),
-                    { statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE" },
+                    new Error(`Locked provider/model is no longer in the active catalog: ${lockedProviderId}/${lockedModelId}`),
+                    { statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE", lockedProviderId, lockedModelId },
                 );
             }
-            modelId = run.modelLock.effective.modelId;
+            modelId = lockedModelId;
         } else {
             const selectionInput: ResolveModelSelectionInput = {
                 profile: "optimizer-cascade",
@@ -605,7 +634,12 @@ export class OptimizeUserPrompt {
             await this.persistSuccessLog({ request: input, context: preparedContext, result });
             return result;
         } catch (error) {
-            await this.persistFailureLog({ request: input, context: preparedContext, error, startedAt });
+            await this.persistFailureLog({
+                request: { ...input, ...extractLockedModelFields(error) },
+                context: preparedContext,
+                error,
+                startedAt,
+            });
             throw error;
         }
     }
@@ -758,7 +792,12 @@ export class OptimizeUserPrompt {
             await this.persistSuccessLog({ request: input, context: preparedContext, result });
             return result;
         } catch (error) {
-            await this.persistFailureLog({ request: input, context: preparedContext, error, startedAt });
+            await this.persistFailureLog({
+                request: { ...input, ...extractLockedModelFields(error) },
+                context: preparedContext,
+                error,
+                startedAt,
+            });
             throw error;
         }
     }
