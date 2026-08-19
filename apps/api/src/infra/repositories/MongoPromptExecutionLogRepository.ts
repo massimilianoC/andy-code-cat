@@ -1,7 +1,13 @@
 import { randomUUID } from "crypto";
 import type { Collection } from "mongodb";
 import { getDb } from "../db/mongo";
-import type { PromptExecutionLog, PromptExecutionUsageSummary, PromptExecutionModelSummary } from "../../domain/entities/PromptExecutionLog";
+import type {
+    NewPendingPromptExecution,
+    PromptExecutionCompletion,
+    PromptExecutionLog,
+    PromptExecutionUsageSummary,
+    PromptExecutionModelSummary,
+} from "../../domain/entities/PromptExecutionLog";
 import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
 
 const COLLECTION = "prompt_execution_logs";
@@ -24,6 +30,8 @@ export class MongoPromptExecutionLogRepository implements PromptExecutionLogRepo
         const col = db.collection<PromptExecutionLogDocument>(COLLECTION);
         await col.createIndex({ projectId: 1, userId: 1, createdAt: -1 });
         await col.createIndex({ taskKey: 1, createdAt: -1 });
+        // Sparse: most records have no idempotencyKey (existing create() callers don't set one).
+        await col.createIndex({ projectId: 1, userId: 1, idempotencyKey: 1 }, { sparse: true });
         return col;
     }
 
@@ -98,6 +106,55 @@ export class MongoPromptExecutionLogRepository implements PromptExecutionLogRepo
         };
         await col.insertOne(doc);
         return toEntity(doc);
+    }
+
+    async createPending(input: NewPendingPromptExecution): Promise<PromptExecutionLog> {
+        const col = await this.col();
+        const doc: PromptExecutionLogDocument = {
+            _id: randomUUID(),
+            ...input,
+            status: "pending",
+            durationMs: 0,
+            createdAt: new Date(),
+        };
+        await col.insertOne(doc);
+        return toEntity(doc);
+    }
+
+    async complete(id: string, completion: PromptExecutionCompletion): Promise<PromptExecutionLog> {
+        const col = await this.col();
+        const updated = await col.findOneAndUpdate(
+            { _id: id },
+            { $set: completion },
+            { returnDocument: "after" },
+        );
+        if (!updated) {
+            throw new Error(`PromptExecutionLog not found: ${id}`);
+        }
+        return toEntity(updated);
+    }
+
+    async findActiveByIdempotencyKey(
+        projectId: string,
+        userId: string,
+        idempotencyKey: string,
+        staleAfterMs: number,
+    ): Promise<PromptExecutionLog | null> {
+        const col = await this.col();
+        const staleThreshold = new Date(Date.now() - staleAfterMs);
+        const doc = await col.findOne(
+            {
+                projectId,
+                userId,
+                idempotencyKey,
+                $or: [
+                    { status: "succeeded" },
+                    { status: "pending", createdAt: { $gte: staleThreshold } },
+                ],
+            },
+            { sort: { createdAt: -1 } },
+        );
+        return doc ? toEntity(doc) : null;
     }
 
     async summarizeByProject(projectId: string, userId: string): Promise<PromptExecutionUsageSummary> {
