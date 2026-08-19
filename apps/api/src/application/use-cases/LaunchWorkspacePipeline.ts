@@ -1,4 +1,4 @@
-import type { LaunchGodModePipelineInput, PipelineModelLock } from "@andy-code-cat/contracts";
+import type { LaunchWorkspacePipelineInput, PipelineModelLock } from "@andy-code-cat/contracts";
 import type { LaunchZeroEffortProject } from "./LaunchZeroEffortProject";
 import type { ResolvePipelineModelLock } from "./ResolvePipelineModelLock";
 import type { PipelineRunRepository } from "../../domain/repositories/PipelineRunRepository";
@@ -12,15 +12,19 @@ import { buildCanonicalGenerationBrief } from "../prompting/buildCanonicalGenera
  *
  * Deliberately COMPOSES rather than reimplements: `LaunchZeroEffortProject` (unchanged) still
  * owns conversation creation, moodboard upsert and workspace preparation. This use case only adds
- * the two things GodMode entry needs on top — a frozen `PipelineModelLock`
+ * the two things Workspace entry needs on top — a frozen `PipelineModelLock`
  * (`ResolvePipelineModelLock.createRun()`) and the same canonical brief envelope attached to that
  * run for later stages (optimize/generate) to read back via `pipelineRunId`.
  *
- * `LaunchGodModePipelineInput` is a structural superset of `ZeroEffortLaunchInput` (same intake
+ * Named "Workspace" (not "GodMode") since 2026-08-19, matching the product-owner-approved rename
+ * in PR #58 ("God Mode" -> "Workspace"); see `pipelineEntryModeSchema`'s doc comment in
+ * `packages/contracts/src/pipelineRun.ts` for the full rationale.
+ *
+ * `LaunchWorkspacePipelineInput` is a structural superset of `ZeroEffortLaunchInput` (same intake
  * fields plus requestedProviderId/requestedModelId/optimizationPolicy), so it can be passed
  * directly wherever a `ZeroEffortLaunchInput` is expected.
  */
-export class LaunchGodModePipeline {
+export class LaunchWorkspacePipeline {
     constructor(
         private readonly launchZeroEffortProject: LaunchZeroEffortProject,
         private readonly resolvePipelineModelLock: ResolvePipelineModelLock,
@@ -30,7 +34,7 @@ export class LaunchGodModePipeline {
     async execute(input: {
         userId: string;
         projectId: string;
-        intake: LaunchGodModePipelineInput;
+        intake: LaunchWorkspacePipelineInput;
     }): Promise<{
         pipelineRunId: string;
         conversationId: string;
@@ -50,7 +54,7 @@ export class LaunchGodModePipeline {
             projectId: input.projectId,
             ownerUserId: input.userId,
             conversationId: launched.conversationId,
-            entryMode: "godmode",
+            entryMode: "workspace",
             requestedProviderId: input.intake.requestedProviderId,
             requestedModelId: input.intake.requestedModelId,
             optimizationPolicy: input.intake.optimizationPolicy,

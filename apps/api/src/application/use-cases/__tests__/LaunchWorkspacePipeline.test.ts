@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { LaunchGodModePipeline } from "../LaunchGodModePipeline";
+import { LaunchWorkspacePipeline } from "../LaunchWorkspacePipeline";
 
 function makeIntake(overrides?: Partial<Record<string, unknown>>) {
     return {
@@ -14,7 +14,7 @@ function makeIntake(overrides?: Partial<Record<string, unknown>>) {
     };
 }
 
-describe("LaunchGodModePipeline", () => {
+describe("LaunchWorkspacePipeline", () => {
     it("composes LaunchZeroEffortProject + ResolvePipelineModelLock.createRun and attaches the canonical brief", async () => {
         const workspace = { jobId: "job-1", rootPath: "/tmp/job-1" };
         const launchZeroEffortProject = {
@@ -44,7 +44,7 @@ describe("LaunchGodModePipeline", () => {
             attachCanonicalBrief: vi.fn(async () => finalRun),
         };
 
-        const useCase = new LaunchGodModePipeline(
+        const useCase = new LaunchWorkspacePipeline(
             launchZeroEffortProject as any,
             resolvePipelineModelLock as any,
             pipelineRunRepository as any,
@@ -62,7 +62,7 @@ describe("LaunchGodModePipeline", () => {
             projectId: "project-1",
             ownerUserId: "user-1",
             conversationId: "conv-1",
-            entryMode: "godmode",
+            entryMode: "workspace",
             requestedProviderId: "siliconflow",
             requestedModelId: "MiniMaxAI/MiniMax-M2.5",
             optimizationPolicy: "skip",

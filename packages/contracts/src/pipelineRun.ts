@@ -24,7 +24,13 @@ import {
  * restructure it. No exported name below collides with `pipeline.ts`'s exports.
  */
 
-export const pipelineEntryModeSchema = z.enum(["vibe", "zero-effort", "godmode"]);
+/**
+ * "workspace" was previously named "godmode" — renamed 2026-08-19 to align with the
+ * product-owner-approved terminology in PR #58 ("God Mode" -> "Workspace"). Safe to rename the
+ * literal outright (no data migration): PipelineRun persistence is entirely gated behind
+ * PIPELINE_RUN_ENABLED (default false) and has zero production consumers or stored documents.
+ */
+export const pipelineEntryModeSchema = z.enum(["vibe", "zero-effort", "workspace"]);
 export type PipelineEntryMode = z.infer<typeof pipelineEntryModeSchema>;
 
 export const pipelineRunStatusSchema = z.enum([
@@ -187,7 +193,7 @@ export const createPipelineRunSchema = z.object({
 });
 export type CreatePipelineRunInput = z.infer<typeof createPipelineRunSchema>;
 
-export const launchGodModeSchema = z.object({
+export const launchWorkspaceSchema = z.object({
     projectId: z.string().min(1).max(120),
     conversationId: z.string().min(1).max(120).optional(),
     pipelineRunId: z.string().min(1).max(120).optional(),
@@ -195,20 +201,23 @@ export const launchGodModeSchema = z.object({
     requestedModelId: z.string().min(1).max(200).optional(),
     optimizationPolicy: optimizationPolicySchema.default("skip"),
 });
-export type LaunchGodModeInput = z.infer<typeof launchGodModeSchema>;
+export type LaunchWorkspaceInput = z.infer<typeof launchWorkspaceSchema>;
 
 /**
  * I12 of the SSOT program — the request shape for
- * POST /projects/:projectId/pipeline/launch-godmode (apps/api/src/presentation/http/routes/
- * pipelineRoutes.ts). Distinct from `launchGodModeSchema` above (which assumes a conversation/run
- * already exists and was defined in I5 as forward-looking, still unconsumed by any route):
- * this one launches from RAW intake, same shape as `zeroEffortLaunchSchema` in `pipeline.ts` plus
- * the model-lock/optimization-policy fields a server-owned launch needs to freeze up front. Kept
- * as its own schema (not extending zeroEffortLaunchSchema directly) to avoid a cross-file schema
- * dependency between pipeline.ts and pipelineRun.ts; apps/api validates field-for-field parity in
- * its own test.
+ * POST /projects/:projectId/pipeline/launch-workspace (apps/api/src/presentation/http/routes/
+ * pipelineRoutes.ts). Distinct from `launchWorkspaceSchema` above (which assumes a
+ * conversation/run already exists and was defined in I5 as forward-looking, still unconsumed by
+ * any route): this one launches from RAW intake, same shape as `zeroEffortLaunchSchema` in
+ * `pipeline.ts` plus the model-lock/optimization-policy fields a server-owned launch needs to
+ * freeze up front. Kept as its own schema (not extending zeroEffortLaunchSchema directly) to
+ * avoid a cross-file schema dependency between pipeline.ts and pipelineRun.ts; apps/api validates
+ * field-for-field parity in its own test.
+ *
+ * Named "Workspace" (not "GodMode") since 2026-08-19 — see pipelineEntryModeSchema's doc comment
+ * above for the rename rationale.
  */
-export const launchGodModePipelineSchema = z.object({
+export const launchWorkspacePipelineSchema = z.object({
     businessName: z.string().trim().min(2).max(120),
     presetId: z.string().min(2).max(60).default("landing"),
     primaryGoal: z.string().trim().min(8).max(3000),
@@ -234,10 +243,10 @@ export const launchGodModePipelineSchema = z.object({
     requestedModelId: z.string().min(1).max(200).optional(),
     optimizationPolicy: optimizationPolicySchema.default("skip"),
 });
-export type LaunchGodModePipelineInput = z.infer<typeof launchGodModePipelineSchema>;
+export type LaunchWorkspacePipelineInput = z.infer<typeof launchWorkspacePipelineSchema>;
 
-export interface LaunchGodModePipelineResultDto {
-    mode: "godmode";
+export interface LaunchWorkspacePipelineResultDto {
+    mode: "workspace";
     status: "prepared";
     projectId: string;
     pipelineRunId: string;

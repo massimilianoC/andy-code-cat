@@ -4,8 +4,8 @@ import {
     type ZeroEffortLaunchResultDto,
     zeroEffortLaunchSchema,
     type GenerationWorkspaceDto,
-    launchGodModePipelineSchema,
-    type LaunchGodModePipelineResultDto,
+    launchWorkspacePipelineSchema,
+    type LaunchWorkspacePipelineResultDto,
 } from "@andy-code-cat/contracts";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
@@ -22,7 +22,7 @@ import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmC
 import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { PrepareGenerationWorkspace } from "../../../application/use-cases/PrepareGenerationWorkspace";
 import { LaunchZeroEffortProject } from "../../../application/use-cases/LaunchZeroEffortProject";
-import { LaunchGodModePipeline } from "../../../application/use-cases/LaunchGodModePipeline";
+import { LaunchWorkspacePipeline } from "../../../application/use-cases/LaunchWorkspacePipeline";
 import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import type { GenerationWorkspace } from "../../../domain/entities/GenerationWorkspace";
@@ -83,7 +83,7 @@ export function createPipelineRoutes(): Router {
         env.LLM_DEFAULT_PROVIDER,
     );
     const resolvePipelineModelLock = new ResolvePipelineModelLock(pipelineRunRepository, getLlmCatalog);
-    const launchGodModePipeline = new LaunchGodModePipeline(
+    const launchWorkspacePipeline = new LaunchWorkspacePipeline(
         launchZeroEffortProject,
         resolvePipelineModelLock,
         pipelineRunRepository,
@@ -163,14 +163,18 @@ export function createPipelineRoutes(): Router {
     );
 
     /**
-     * I12 of the SSOT program — server-owned GodMode launch that freezes a `PipelineModelLock`
+     * I12 of the SSOT program — server-owned Workspace launch that freezes a `PipelineModelLock`
      * and attaches the canonical brief to a real `PipelineRun` up front (see
-     * `LaunchGodModePipeline`). Gated behind the same `PIPELINE_RUN_ENABLED` master rollback
+     * `LaunchWorkspacePipeline`). Gated behind the same `PIPELINE_RUN_ENABLED` master rollback
      * lever as `pipelineRunRoutes.ts` since it persists a `PipelineRun`; the pre-existing
      * `/pipelines/zero-effort` route above is completely untouched by this addition.
+     *
+     * Named "Workspace" (not "GodMode") since 2026-08-19, matching the product-owner-approved
+     * rename in PR #58; see `pipelineEntryModeSchema`'s doc comment in
+     * `packages/contracts/src/pipelineRun.ts` for the full rationale.
      */
     router.post(
-        "/projects/:projectId/pipeline/launch-godmode",
+        "/projects/:projectId/pipeline/launch-workspace",
         sandboxMiddleware,
         async (req: RequestWithContext, res: Response, next: NextFunction) => {
             try {
@@ -179,7 +183,7 @@ export function createPipelineRoutes(): Router {
                     return;
                 }
 
-                const intake = launchGodModePipelineSchema.parse(req.body);
+                const intake = launchWorkspacePipelineSchema.parse(req.body);
 
                 if (intake.presetId || intake.outputLanguage) {
                     await projectRepository.update(req.sandbox!.projectId, req.auth!.userId, {
@@ -188,7 +192,7 @@ export function createPipelineRoutes(): Router {
                     }).catch(() => {});
                 }
 
-                const result = await launchGodModePipeline.execute({
+                const result = await launchWorkspacePipeline.execute({
                     userId: req.auth!.userId,
                     projectId: req.sandbox!.projectId,
                     intake,
@@ -198,19 +202,19 @@ export function createPipelineRoutes(): Router {
                     projectId: req.sandbox!.projectId,
                     conversationId: result.conversationId,
                     domain: "system",
-                    eventType: "godmode_pipeline_prepared",
+                    eventType: "workspace_pipeline_prepared",
                     level: "info",
                     status: "success",
                     metadata: {
-                        mode: "godmode",
+                        mode: "workspace",
                         jobId: result.jobId,
                         pipelineRunId: result.pipelineRunId,
                         workspaceRootPath: result.workspace.rootPath,
                     },
                 });
 
-                const response: LaunchGodModePipelineResultDto = {
-                    mode: "godmode",
+                const response: LaunchWorkspacePipelineResultDto = {
+                    mode: "workspace",
                     status: "prepared",
                     projectId: req.sandbox!.projectId,
                     pipelineRunId: result.pipelineRunId,
