@@ -64,6 +64,13 @@ const PROVIDER_KEY_ENV_HINTS: Record<string, string> = {
     openrouter: "OPENROUTER_API_KEY",
 };
 
+/**
+ * I11 (SSOT program): a "pending" PromptExecutionLog older than this is treated as abandoned
+ * (e.g. the API process crashed mid-call) and no longer blocks a retry using the same
+ * idempotencyKey. Matches the generous end of this route's own generation timeouts.
+ */
+const PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS = 5 * 60_000;
+
 function resolveChatPreviewMaxTokens(requestedMaxTokens?: number): number {
     const previewCeiling = 64_000;
     const defaultPreviewBudget = Math.min(env.LLM_DEFAULT_MAX_COMPLETION_TOKENS, previewCeiling);
@@ -547,6 +554,9 @@ export function createLlmRoutes(): Router {
 
     router.post("/projects/:projectId/llm/chat-preview", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         const startedAt = Date.now();
+        // I11 (SSOT program): set once the durable pending record is written, read in the catch
+        // block to mark that same record failed. Declared outside the try so both see it.
+        let promptExecutionLogId: string | undefined;
 
         try {
             const body = parseLlmChatPreviewBody(req.body);
@@ -593,6 +603,43 @@ export function createLlmRoutes(): Router {
             if (!authHeader && context.providerCatalog.authType !== "none") {
                 throw buildProviderApiKeyMissingError(context);
             }
+
+            // ── I11: durable pending journal write, AWAITED before the provider call ──────
+            if (body.idempotencyKey) {
+                const activeDuplicate = await promptExecutionLogRepository.findActiveByIdempotencyKey(
+                    req.sandbox!.projectId,
+                    req.auth!.userId,
+                    body.idempotencyKey,
+                    PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS,
+                );
+                if (activeDuplicate) {
+                    throw new HttpError("A request with this idempotency key is already in flight or has already completed", {
+                        statusCode: 409,
+                        code: "DUPLICATE_REQUEST",
+                        userMessage: "Questa richiesta è già stata inviata. Attendi il completamento prima di ripetere.",
+                        details: { promptExecutionId: activeDuplicate.id, status: activeDuplicate.status },
+                    });
+                }
+            }
+            const pendingLog = await promptExecutionLogRepository.createPending({
+                taskKey: "chat",
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                conversationId: body.conversationId,
+                provider: context.providerCatalog.provider,
+                model: context.modelId,
+                inputPrompt: body.message.slice(0, 2000),
+                renderedSystemPrompt: effectiveSystemPrompt,
+                renderedUserPrompt: messages[messages.length - 1]?.content,
+                contextMeta: {
+                    projectPresetId: context.projectPresetId,
+                    usedMoodboard: false,
+                    usedUserProfile: false,
+                },
+                idempotencyKey: body.idempotencyKey,
+            });
+            promptExecutionLogId = pendingLog.id;
+            // ── end I11 pending write ───────────────────────────────────────────────────
 
             const sfRes = await fetch(`${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
                 method: "POST",
@@ -852,6 +899,7 @@ export function createLlmRoutes(): Router {
                 ),
                 durationMs: Date.now() - startedAt,
                 simulated: false,
+                promptExecutionId: promptExecutionLogId,
             };
             const mediaResolutionSummary = buildPromptExecutionMediaResolutionSummary(result.mediaResolution);
 
@@ -915,31 +963,20 @@ export function createLlmRoutes(): Router {
             }
             // ── end execution log ─────────────────────────────────────────────
 
-            // ── Cost accounting: write chat call to PromptExecutionLog ─────────
+            // ── I11: durable journal completion, AWAITED before the response is sent ──
             // This ensures chat costs are included in project cost totals alongside
-            // optimize/suggest costs. Fire-and-forget — never block the response.
-            promptExecutionLogRepository.create({
-                taskKey: "chat",
-                projectId: req.sandbox!.projectId,
-                userId: req.auth!.userId,
-                conversationId: body.conversationId,
-                provider: result.provider,
-                model: result.model,
-                inputPrompt: body.message.slice(0, 2000),
-                renderedSystemPrompt: effectiveSystemPrompt,
-                renderedUserPrompt: messages[messages.length - 1]?.content,
-                contextMeta: {
-                    projectPresetId: context.projectPresetId,
-                    usedMoodboard: false,
-                    usedUserProfile: false,
-                },
-                usage: result.usage,
-                mediaResolutionSummary,
-                costEstimate: result.costEstimate,
-                status: "succeeded",
-                durationMs: result.durationMs,
-            }).catch(() => { });
-            // ── end cost accounting ───────────────────────────────────────────
+            // optimize/suggest costs, and that the record a retry's idempotencyKey check
+            // would find is guaranteed to reflect the final outcome before the client sees it.
+            if (promptExecutionLogId) {
+                await promptExecutionLogRepository.complete(promptExecutionLogId, {
+                    status: "succeeded",
+                    usage: result.usage,
+                    mediaResolutionSummary,
+                    costEstimate: result.costEstimate,
+                    durationMs: result.durationMs,
+                });
+            }
+            // ── end I11 journal completion ──────────────────────────────────────
 
             // ── Cost ledger: append-only transaction record ───────────────────
             CostTransactionService.instance.record({
@@ -976,12 +1013,23 @@ export function createLlmRoutes(): Router {
                 message: normalized.userMessage,
                 details: normalized.details,
             });
+            // I11: best-effort — never let a failed journal write mask the real error.
+            if (promptExecutionLogId) {
+                promptExecutionLogRepository.complete(promptExecutionLogId, {
+                    status: "failed",
+                    errorMessage: normalized.userMessage,
+                    durationMs: Date.now() - startedAt,
+                }).catch(() => { });
+            }
             next(error);
         }
     });
 
     router.post("/projects/:projectId/llm/chat-preview/stream", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         const startedAt = Date.now();
+        // I11 (SSOT program): set once the durable pending record is written, read wherever
+        // this handler exits (success, interrupted, or the outer catch) to complete that record.
+        let promptExecutionLogId: string | undefined;
 
         try {
             const body = parseLlmChatPreviewBody(req.body);
@@ -1029,6 +1077,43 @@ export function createLlmRoutes(): Router {
             if (!authHeader && context.providerCatalog.authType !== "none") {
                 throw buildProviderApiKeyMissingError(context);
             }
+
+            // ── I11: durable pending journal write, AWAITED before the provider call ──────
+            if (body.idempotencyKey) {
+                const activeDuplicate = await promptExecutionLogRepository.findActiveByIdempotencyKey(
+                    req.sandbox!.projectId,
+                    req.auth!.userId,
+                    body.idempotencyKey,
+                    PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS,
+                );
+                if (activeDuplicate) {
+                    throw new HttpError("A request with this idempotency key is already in flight or has already completed", {
+                        statusCode: 409,
+                        code: "DUPLICATE_REQUEST",
+                        userMessage: "Questa richiesta è già stata inviata. Attendi il completamento prima di ripetere.",
+                        details: { promptExecutionId: activeDuplicate.id, status: activeDuplicate.status },
+                    });
+                }
+            }
+            const pendingLog = await promptExecutionLogRepository.createPending({
+                taskKey: "chat",
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                conversationId: body.conversationId,
+                provider: context.providerCatalog.provider,
+                model: context.modelId,
+                inputPrompt: body.message.slice(0, 2000),
+                renderedSystemPrompt: effectiveSystemPrompt,
+                renderedUserPrompt: messages[messages.length - 1]?.content,
+                contextMeta: {
+                    projectPresetId: context.projectPresetId,
+                    usedMoodboard: false,
+                    usedUserProfile: false,
+                },
+                idempotencyKey: body.idempotencyKey,
+            });
+            promptExecutionLogId = pendingLog.id;
+            // ── end I11 pending write ───────────────────────────────────────────────────
 
             // Abort provider fetch on client disconnect or after 5-minute hard timeout.
             // IMPORTANT: use res.on("close"), NOT req.on("close").
@@ -1203,6 +1288,13 @@ export function createLlmRoutes(): Router {
                     // Headers already flushed — send SSE error instead of next(error).
                     res.off("close", onClientClose);
                     console.log(`[stream-debug] stream read error at ${Date.now() - startedAt}ms:`, streamReadErr);
+                    if (promptExecutionLogId) {
+                        await promptExecutionLogRepository.complete(promptExecutionLogId, {
+                            status: "failed",
+                            errorMessage: streamReadErr instanceof Error ? streamReadErr.message : "Stream read error",
+                            durationMs: Date.now() - startedAt,
+                        }).catch(() => { });
+                    }
                     sendSse(res, { type: "error", message: streamReadErr instanceof Error ? streamReadErr.message : "Stream read error", durationMs: Date.now() - startedAt });
                     res.end();
                     return;
@@ -1236,6 +1328,15 @@ export function createLlmRoutes(): Router {
                         providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
                     }
                 );
+                // I11: the journal never got a success write for this run — mark it failed
+                // (interrupted) rather than leaving it "pending" forever.
+                if (promptExecutionLogId) {
+                    await promptExecutionLogRepository.complete(promptExecutionLogId, {
+                        status: "failed",
+                        errorMessage: "Generation interrupted (client disconnect or timeout)",
+                        durationMs: Date.now() - startedAt,
+                    }).catch(() => { });
+                }
                 if (!res.writableEnded && !res.destroyed) {
                     sendSse(res, {
                         type: "interrupted",
@@ -1416,6 +1517,7 @@ export function createLlmRoutes(): Router {
                 focusPatchApplied: focusPatchAppliedStream,
                 focusPatchParseError: focusPatchParseErrorStream,
                 generationParseError: generationParseErrorStream || undefined,
+                promptExecutionId: promptExecutionLogId,
             };
             const mediaResolutionSummary = buildPromptExecutionMediaResolutionSummary(result.mediaResolution);
 
@@ -1481,29 +1583,17 @@ export function createLlmRoutes(): Router {
             }
             // ── end execution log ─────────────────────────────────────────────
 
-            // ── Cost accounting: write chat-stream call to PromptExecutionLog ──
-            promptExecutionLogRepository.create({
-                taskKey: "chat",
-                projectId: req.sandbox!.projectId,
-                userId: req.auth!.userId,
-                conversationId: body.conversationId,
-                provider: result.provider,
-                model: result.model,
-                inputPrompt: body.message.slice(0, 2000),
-                renderedSystemPrompt: effectiveSystemPrompt,
-                renderedUserPrompt: messages[messages.length - 1]?.content,
-                contextMeta: {
-                    projectPresetId: context.projectPresetId,
-                    usedMoodboard: false,
-                    usedUserProfile: false,
-                },
-                usage: result.usage,
-                mediaResolutionSummary,
-                costEstimate: result.costEstimate,
-                status: "succeeded",
-                durationMs: result.durationMs,
-            }).catch(() => { });
-            // ── end cost accounting ───────────────────────────────────────────
+            // ── I11: durable journal completion, AWAITED before the SSE "done" event ──
+            if (promptExecutionLogId) {
+                await promptExecutionLogRepository.complete(promptExecutionLogId, {
+                    status: "succeeded",
+                    usage: result.usage,
+                    mediaResolutionSummary,
+                    costEstimate: result.costEstimate,
+                    durationMs: result.durationMs,
+                }).catch(() => { });
+            }
+            // ── end I11 journal completion ──────────────────────────────────────
 
             // ── Cost ledger: append-only transaction record ───────────────────
             CostTransactionService.instance.record({
@@ -1542,6 +1632,14 @@ export function createLlmRoutes(): Router {
                 message: normalized.userMessage,
                 details: normalized.details,
             });
+            // I11: best-effort — never let a failed journal write mask the real error.
+            if (promptExecutionLogId) {
+                promptExecutionLogRepository.complete(promptExecutionLogId, {
+                    status: "failed",
+                    errorMessage: normalized.userMessage,
+                    durationMs: Date.now() - startedAt,
+                }).catch(() => { });
+            }
             // If headers have already been flushed (SSE started), we cannot use
             // next(error) which would try res.status().json() and crash. Instead
             // send an SSE error event so the client can handle it gracefully.

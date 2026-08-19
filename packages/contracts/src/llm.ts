@@ -97,6 +97,14 @@ export const llmChatPreviewSchema = z.object({
     conversationId: z.string().min(1).max(120).optional(),
     /** BCP-47 UI language from the client (e.g. "it", "en"). When provided, injects Layer L into the system prompt. */
     uiLanguage: z.string().min(2).max(10).optional(),
+    /**
+     * I11 (SSOT program) — a client-generated key stable across retries of the SAME logical
+     * send (e.g. re-tap after a network timeout). When a "succeeded" PromptExecutionLog already
+     * exists for this key, the server replays that stored result instead of dispatching a
+     * second provider call. Optional: omitting it means no idempotency protection, matching
+     * pre-I11 behavior exactly.
+     */
+    idempotencyKey: z.string().min(1).max(120).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({
@@ -291,6 +299,12 @@ export interface LlmChatPreviewResult {
      * Mirrors focusPatchParseError, which covers the focused-edit path.
      */
     generationParseError?: boolean;
+    /**
+     * I11 (SSOT program) — id of the durable PromptExecutionLog record this response was
+     * persisted under. Callers that later create a PreviewSnapshot should store this as a FK
+     * reference instead of duplicating the full promptingTrace blob.
+     */
+    promptExecutionId?: string;
     provider: string;
     model: string;
     finishReason?: string;
