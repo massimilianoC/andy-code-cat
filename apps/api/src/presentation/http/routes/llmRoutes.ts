@@ -52,6 +52,8 @@ import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBran
 import { ResolveBrandContext } from "../../../application/use-cases/ResolveBrandContext";
 import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
 import { ResolvePromptExecution, type LlmRuntimeContext } from "../../../application/use-cases/ResolvePromptExecution";
+import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
+import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
 
 type LlmProviderStatus = {
     requiresKey: boolean;
@@ -252,6 +254,8 @@ export function createLlmRoutes(): Router {
         env.LLM_DEFAULT_PROVIDER,
     );
     const getEffectiveLlmCatalog = new GetEffectiveLlmCatalog(getLlmCatalog);
+    const pipelineRunRepository = new MongoPipelineRunRepository();
+    const resolvePipelineModelLock = new ResolvePipelineModelLock(pipelineRunRepository, getLlmCatalog);
 
     const optimizeUserPrompt = new OptimizeUserPrompt(
         projectRepository,
@@ -262,6 +266,7 @@ export function createLlmRoutes(): Router {
         userRepo,
         promptExecutionLogRepository,
         getLlmCatalog,
+        resolvePipelineModelLock,
         getFileStorage(),
     );
 
@@ -372,6 +377,7 @@ export function createLlmRoutes(): Router {
                 provider: body.provider,
                 model: body.model,
                 taskKey: body.taskKey,
+                pipelineRunId: body.pipelineRunId,
             });
 
             ExecutionLogger.instance.emit({
@@ -434,6 +440,7 @@ export function createLlmRoutes(): Router {
                 provider: body.provider,
                 model: body.model,
                 taskKey: body.taskKey,
+                pipelineRunId: body.pipelineRunId,
             }, {
                 onThinking: (chunk) => sendSse(res, { type: "thinking", content: String(chunk) }),
                 onAnswer: (chunk) => sendSse(res, { type: "answer", content: String(chunk) }),
