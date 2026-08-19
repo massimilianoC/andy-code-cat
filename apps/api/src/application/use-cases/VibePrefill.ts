@@ -11,7 +11,8 @@ import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
-import { resolveModelSelection } from "../llm/modelSelection";
+import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
+import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -545,7 +546,7 @@ export class VibePrefill {
         // Never silently fall back to local LM Studio for this background task — prefer any
         // reliable cloud provider; LM Studio is used only when explicitly configured (override
         // or superadmin task settings). See resolveModelSelection's vibe-cascade fallback chain.
-        const decision = resolveModelSelection({
+        const selectionInput: ResolveModelSelectionInput = {
             profile: "vibe-cascade",
             activeProviders,
             requestedProvider: input.provider,
@@ -557,7 +558,11 @@ export class VibePrefill {
             requireOverrideInCatalog: true,
             gateOverrideOnOpenAiCompatible: false,
             policy: "legacy",
-        });
+        };
+        const decision = resolveModelSelection(selectionInput);
+        if (input.projectId) {
+            observeModelSelectionShadow(selectionInput, decision, { projectId: input.projectId, taskKey: TASK_KEY });
+        }
 
         if (!decision.providerCatalog) {
             return {

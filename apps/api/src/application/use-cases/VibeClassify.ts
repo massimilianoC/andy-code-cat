@@ -11,7 +11,8 @@ import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { ResourceType } from "../../domain/entities/CostTransaction";
-import { resolveModelSelection } from "../llm/modelSelection";
+import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
+import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -190,7 +191,7 @@ export class VibeClassify {
         const activeProviders = catalog.providers.filter((p) => p.isActive);
         // Never silently fall back to local LM Studio for this background task — see the
         // "lmstudio" exclusion inside resolveModelSelection's vibe-cascade fallback chain.
-        const decision = resolveModelSelection({
+        const selectionInput: ResolveModelSelectionInput = {
             profile: "vibe-cascade",
             activeProviders,
             requestedProvider: input.provider,
@@ -202,7 +203,11 @@ export class VibeClassify {
             requireOverrideInCatalog: true,
             gateOverrideOnOpenAiCompatible: false,
             policy: "legacy",
-        });
+        };
+        const decision = resolveModelSelection(selectionInput);
+        if (input.projectId) {
+            observeModelSelectionShadow(selectionInput, decision, { projectId: input.projectId, taskKey: TASK_KEY });
+        }
 
         if (!decision.providerCatalog) {
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "no active provider", skipped: true, ...echoProject };

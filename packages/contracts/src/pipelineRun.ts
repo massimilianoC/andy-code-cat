@@ -176,6 +176,14 @@ export const createPipelineRunSchema = z.object({
     conversationId: z.string().min(1).max(120).optional(),
     requestedProviderId: z.string().min(1).max(80).optional(),
     requestedModelId: z.string().min(1).max(200).optional(),
+    /**
+     * Added in I7 (apps/api/src/presentation/http/routes/pipelineRunRoutes.ts) — the catalog
+     * revision the client observed when the user picked requestedProviderId/requestedModelId.
+     * I7's route persists this as-is into PipelineModelLock.requested.catalogRevision without
+     * validating it against the live catalog (that validation is I8's ResolvePipelineModelLock
+     * use case). Optional: a caller that omits it gets an "unvalidated" sentinel.
+     */
+    catalogRevision: z.string().min(1).max(200).optional(),
 });
 export type CreatePipelineRunInput = z.infer<typeof createPipelineRunSchema>;
 

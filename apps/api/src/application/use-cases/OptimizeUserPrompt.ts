@@ -24,7 +24,8 @@ import {
 } from "../../domain/entities/PlatformConfig";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
-import { resolveModelSelection } from "../llm/modelSelection";
+import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
+import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
 
 const TASK_KEY = "optimize_user_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -410,7 +411,7 @@ export class OptimizeUserPrompt {
         const activeProviders = catalog.providers.filter((provider) => provider.isActive);
         const requestedModel = input.model?.trim();
 
-        const decision = resolveModelSelection({
+        const selectionInput: ResolveModelSelectionInput = {
             profile: "optimizer-cascade",
             activeProviders,
             requestedProvider: input.provider,
@@ -425,6 +426,11 @@ export class OptimizeUserPrompt {
             // when the resolved provider's apiType === "openai-compatible".
             gateOverrideOnOpenAiCompatible: true,
             policy: "legacy",
+        };
+        const decision = resolveModelSelection(selectionInput);
+        observeModelSelectionShadow(selectionInput, decision, {
+            projectId: input.projectId,
+            taskKey: input.taskKey ?? TASK_KEY,
         });
 
         if (!decision.providerCatalog) {
