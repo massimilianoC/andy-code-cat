@@ -197,6 +197,58 @@ export const launchGodModeSchema = z.object({
 });
 export type LaunchGodModeInput = z.infer<typeof launchGodModeSchema>;
 
+/**
+ * I12 of the SSOT program — the request shape for
+ * POST /projects/:projectId/pipeline/launch-godmode (apps/api/src/presentation/http/routes/
+ * pipelineRoutes.ts). Distinct from `launchGodModeSchema` above (which assumes a conversation/run
+ * already exists and was defined in I5 as forward-looking, still unconsumed by any route):
+ * this one launches from RAW intake, same shape as `zeroEffortLaunchSchema` in `pipeline.ts` plus
+ * the model-lock/optimization-policy fields a server-owned launch needs to freeze up front. Kept
+ * as its own schema (not extending zeroEffortLaunchSchema directly) to avoid a cross-file schema
+ * dependency between pipeline.ts and pipelineRun.ts; apps/api validates field-for-field parity in
+ * its own test.
+ */
+export const launchGodModePipelineSchema = z.object({
+    businessName: z.string().trim().min(2).max(120),
+    presetId: z.string().min(2).max(60).default("landing"),
+    primaryGoal: z.string().trim().min(8).max(3000),
+    audience: z.string().trim().min(3).max(1000),
+    tone: z.string().trim().max(80).optional(),
+    primaryCta: z.string().trim().max(120).optional(),
+    styleHint: z.string().trim().max(1000).optional(),
+    sourceRequest: z.string().trim().max(4000).optional(),
+    projectSummary: z.string().trim().max(1600).optional(),
+    contentStructure: z.string().trim().max(2400).optional(),
+    contentRequirements: z.string().trim().max(2400).optional(),
+    functionalRequirements: z.string().trim().max(2400).optional(),
+    interactionModel: z.string().trim().max(1800).optional(),
+    visualDirection: z.string().trim().max(1800).optional(),
+    successCriteria: z.string().trim().max(1600).optional(),
+    constraints: z.string().trim().max(1600).optional(),
+    mustAvoid: z.string().trim().max(1200).optional(),
+    contactInfo: z.array(z.object({ key: z.string().trim().min(1).max(60), value: z.string().trim().min(1).max(200) })).max(15).optional(),
+    styleAttributes: z.array(z.string().trim().max(80)).max(20).optional(),
+    outputLanguage: z.string().min(2).max(10).toLowerCase().optional(),
+    attachmentNames: z.array(z.string().trim().max(200)).max(30).optional(),
+    requestedProviderId: z.string().min(1).max(80).optional(),
+    requestedModelId: z.string().min(1).max(200).optional(),
+    optimizationPolicy: optimizationPolicySchema.default("skip"),
+});
+export type LaunchGodModePipelineInput = z.infer<typeof launchGodModePipelineSchema>;
+
+export interface LaunchGodModePipelineResultDto {
+    mode: "godmode";
+    status: "prepared";
+    projectId: string;
+    pipelineRunId: string;
+    conversationId: string;
+    jobId: string;
+    normalizedBrief: string;
+    modelLock: PipelineModelLock;
+    suggestedNextActions: string[];
+    workspace: import("./assets").GenerationWorkspaceDto;
+}
+
 // ── Server-derived model decision read model ────────────────────────────────
 
 export const modelDecisionViewStateSchema = z.enum([
