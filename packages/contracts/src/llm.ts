@@ -105,6 +105,11 @@ export const llmChatPreviewSchema = z.object({
      * pre-I11 behavior exactly.
      */
     idempotencyKey: z.string().min(1).max(120).optional(),
+    /**
+     * I14 of the SSOT program — when present, dispatch is governed by this PipelineRun's frozen
+     * modelLock instead of the legacy cascade (see ResolvePromptExecution.execute).
+     */
+    pipelineRunId: z.string().min(1).max(120).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({
