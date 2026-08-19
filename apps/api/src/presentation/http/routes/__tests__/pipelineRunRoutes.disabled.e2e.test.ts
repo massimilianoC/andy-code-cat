@@ -1,0 +1,102 @@
+/**
+ * E2E test proving the PIPELINE_RUN_ENABLED master rollback lever actually gates the
+ * pipeline-run surface when left at its shipped default (false/unset). Runs against
+ * MongoMemoryServer — no Docker required.
+ */
+
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { MongoMemoryServer } from "mongodb-memory-server";
+import request from "supertest";
+import jwt from "jsonwebtoken";
+import { ObjectId } from "mongodb";
+import type { Express } from "express";
+
+const TEST_JWT_ACCESS_SECRET = "test-access-secret-min-32-chars-!!xyz";
+const TEST_JWT_REFRESH_SECRET = "test-refresh-secret-min-32-chars-!!xy";
+
+process.env.NODE_ENV = "test";
+process.env.JWT_ACCESS_SECRET = TEST_JWT_ACCESS_SECRET;
+process.env.JWT_REFRESH_SECRET = TEST_JWT_REFRESH_SECRET;
+process.env.EXPORT_JWT_SECRET = "test-export-secret-min-32-chars-!!xyz";
+process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/placeholder";
+process.env.PIPELINE_RUN_ENABLED = "false";
+
+function signToken(userId: string, roles: string[] = ["user"]): string {
+    return jwt.sign({ sub: userId, roles }, TEST_JWT_ACCESS_SECRET, { expiresIn: "1h" });
+}
+
+let mongod: MongoMemoryServer;
+let app: Express;
+let ownerUserId: string;
+let projectId: string;
+
+describe("Pipeline Run Routes E2E — PIPELINE_RUN_ENABLED=false (shipped default)", () => {
+    beforeAll(async () => {
+        mongod = await MongoMemoryServer.create();
+        process.env.MONGODB_URI = mongod.getUri();
+
+        const { createApp } = await import("../../../../app");
+        const { getDb } = await import("../../../../infra/db/mongo");
+
+        app = createApp();
+        const db = await getDb();
+
+        const ownerOid = new ObjectId();
+        const projectOid = new ObjectId();
+
+        await db.collection("users").insertOne({
+            _id: ownerOid,
+            email: "pipelinerun-disabled@example.com",
+            passwordHash: "$bcrypt-placeholder",
+            emailVerified: true,
+            isBlocked: false,
+            roles: ["user"],
+            createdAt: new Date(),
+        });
+
+        await db.collection("projects").insertOne({
+            _id: projectOid,
+            ownerUserId: ownerOid,
+            name: "Pipeline Run Disabled Test Project",
+            createdAt: new Date(),
+        });
+
+        ownerUserId = ownerOid.toHexString();
+        projectId = projectOid.toHexString();
+    });
+
+    afterAll(async () => {
+        const { getDb } = await import("../../../../infra/db/mongo");
+        const db = await getDb();
+        await db.client.close(true);
+        await mongod.stop();
+    });
+
+    it("404s on create when the flag is disabled", async () => {
+        const token = signToken(ownerUserId);
+        const res = await request(app)
+            .post(`/v1/projects/${projectId}/pipeline-runs`)
+            .set("Authorization", `Bearer ${token}`)
+            .set("x-project-id", projectId)
+            .send({ entryMode: "vibe" });
+        expect(res.status).toBe(404);
+    });
+
+    it("404s on list when the flag is disabled", async () => {
+        const token = signToken(ownerUserId);
+        const res = await request(app)
+            .get(`/v1/projects/${projectId}/pipeline-runs`)
+            .set("Authorization", `Bearer ${token}`)
+            .set("x-project-id", projectId);
+        expect(res.status).toBe(404);
+    });
+
+    it("404s on get-by-id when the flag is disabled", async () => {
+        const token = signToken(ownerUserId);
+        const res = await request(app)
+            .get(`/v1/projects/${projectId}/pipeline-runs/some-run-id`)
+            .set("Authorization", `Bearer ${token}`)
+            .set("x-project-id", projectId);
+        expect(res.status).toBe(404);
+    });
+});
