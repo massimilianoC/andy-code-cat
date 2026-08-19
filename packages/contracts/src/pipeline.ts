@@ -53,6 +53,14 @@ export const zeroEffortLaunchSchema = z.object({
     styleAttributes: z.array(z.string().trim().max(80)).max(20).optional(),
     // Output language: BCP-47 code (e.g. "it", "en", "fr"). Default "en".
     outputLanguage: z.string().min(2).max(10).toLowerCase().optional(),
+    /**
+     * Filenames of documents attached during intake (I9 — SSOT program). Previously the client
+     * listed these in its own client-rebuilt brief text and never sent them to the server; the
+     * server-built brief silently omitted them. Sending them here lets the single canonical
+     * brief builder include an Attachments section, so the persisted/optimized/reviewed brief
+     * text is always identical.
+     */
+    attachmentNames: z.array(z.string().trim().max(200)).max(30).optional(),
 });
 
 export const executeProjectPipelineSchema = z.object({
