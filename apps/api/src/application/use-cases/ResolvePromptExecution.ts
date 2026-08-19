@@ -15,6 +15,7 @@ import type { ProjectPresetRepository } from "../../domain/repositories/ProjectP
 import type { IFileStorage } from "../../infra/storage/IFileStorage";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
 import type { GetLlmPromptConfig } from "./GetLlmPromptConfig";
+import type { ResolvePipelineModelLock } from "./ResolvePipelineModelLock";
 import type { ResolveBrandContext } from "./ResolveBrandContext";
 import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "./ResolveBrandDocumentContext";
 import { buildStyleContextBlock } from "../llm/styleContextBuilder";
@@ -89,6 +90,13 @@ export interface ResolvePromptExecutionInput {
         focusContext: LlmFocusContext;
         pageMap?: Parameters<typeof buildFocusedModeSystemAddendum>[1];
     };
+    /**
+     * I14 of the SSOT program (strict cutover wave 2) — when present, provider/model selection
+     * is governed by this PipelineRun's frozen modelLock via `ResolvePipelineModelLock.dispatch()`
+     * instead of the legacy inline cascade below, and blocks (409) rather than substituting when
+     * the lock is unavailable. Omitted: 100% unchanged legacy path.
+     */
+    pipelineRunId?: string;
 }
 
 function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]) {
@@ -122,6 +130,7 @@ export class ResolvePromptExecution {
         private readonly presetRepository: ProjectPresetRepository,
         private readonly resolveBrandDocumentContext: ResolveBrandDocumentContext,
         private readonly resolveBrandContext: ResolveBrandContext,
+        private readonly resolvePipelineModelLock: ResolvePipelineModelLock,
         private readonly storage: IFileStorage,
     ) { }
 
@@ -211,30 +220,76 @@ export class ResolvePromptExecution {
             ? buildGroundedDataContextLayer(projectLayerD.assets)
             : "";
 
-        const providerCatalog =
-            (input.provider
-                ? catalog.providers.find((p) => p.provider === input.provider && p.isActive)
-                : undefined) ??
-            catalog.providers.find((p) => p.provider === env.LLM_DEFAULT_PROVIDER) ??
-            catalog.providers[0];
+        let providerCatalog: (typeof catalog.providers)[number] | undefined;
+        let providerModels: ReturnType<typeof dedupeModelsById> = [];
+        let roleModel: ReturnType<typeof dedupeModelsById>[number] | undefined;
+        let pipelineRunLocked = false;
 
-        if (!providerCatalog) {
-            throw new Error("No active LLM provider catalog found");
+        if (input.pipelineRunId) {
+            // I14 strict cutover wave 2: a PipelineRun's frozen modelLock governs dispatch
+            // instead of the legacy cascade. dispatch() re-validates the lock against the live
+            // catalog and never substitutes a different model — a stale/deactivated lock blocks
+            // (409) rather than silently falling back to the cascade below.
+            const stage = input.focusedMode ? "focused_edit" : "generate";
+            const { run, blocked } = await this.resolvePipelineModelLock.dispatch({
+                runId: input.pipelineRunId,
+                ownerUserId: input.userId,
+                stage,
+            });
+
+            if (blocked) {
+                throw new HttpError(`Pipeline model lock unavailable for ${stage} stage: ${blocked.code}`, {
+                    statusCode: 409,
+                    code: blocked.code,
+                });
+            }
+
+            const lockedProviderId = run.modelLock.effective.providerId;
+            const lockedModelId = run.modelLock.effective.modelId;
+            providerCatalog = catalog.providers.find((p) => p.provider === lockedProviderId);
+            if (!providerCatalog) {
+                throw new HttpError(`Locked provider is no longer in the active catalog: ${lockedProviderId}`, {
+                    statusCode: 409,
+                    code: "MODEL_LOCK_UNAVAILABLE",
+                });
+            }
+
+            providerModels = dedupeModelsById(providerCatalog.models);
+            roleModel = providerModels.find((m) => m.id === lockedModelId);
+            if (!roleModel) {
+                throw new HttpError(`Locked model is no longer in the active catalog: ${lockedModelId}`, {
+                    statusCode: 409,
+                    code: "MODEL_LOCK_UNAVAILABLE",
+                });
+            }
+
+            pipelineRunLocked = true;
+        } else {
+            providerCatalog =
+                (input.provider
+                    ? catalog.providers.find((p) => p.provider === input.provider && p.isActive)
+                    : undefined) ??
+                catalog.providers.find((p) => p.provider === env.LLM_DEFAULT_PROVIDER) ??
+                catalog.providers[0];
+
+            if (!providerCatalog) {
+                throw new Error("No active LLM provider catalog found");
+            }
+
+            providerModels = dedupeModelsById(providerCatalog.models);
+            const explicitModel = input.model
+                ? providerModels.find((model) => model.id === input.model)
+                : undefined;
+
+            roleModel = explicitModel ??
+                (input.capability
+                    ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
+                    : undefined) ??
+                providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
+                providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
+                providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
+                providerModels.find((m) => m.isActive);
         }
-
-        const providerModels = dedupeModelsById(providerCatalog.models);
-        const explicitModel = input.model
-            ? providerModels.find((model) => model.id === input.model)
-            : undefined;
-
-        const roleModel = explicitModel ??
-            (input.capability
-                ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
-                : undefined) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
-            providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.isActive);
 
         const effectivePrePromptTemplate = [
             promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
@@ -335,7 +390,10 @@ export class ResolvePromptExecution {
         // requested id directly. The catalog is already live-hydrated (GetLlmCatalog →
         // hydrateProviderCatalog), but this keeps the call safe even if a freshly
         // discovered id has not yet propagated into this provider's hydrated list.
-        if (input.model && providerCatalog.apiType === "openai-compatible") {
+        // Skipped when a PipelineRun lock governed dispatch above: that path already resolved
+        // and validated `roleModel` against the live catalog, so trusting an unvalidated
+        // override here would defeat the whole point of the lock.
+        if (!pipelineRunLocked && input.model && providerCatalog.apiType === "openai-compatible") {
             return {
                 providerCatalog: { ...providerCatalog, models: providerModels },
                 modelId: input.model,

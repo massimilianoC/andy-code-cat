@@ -298,6 +298,7 @@ export function createLlmRoutes(): Router {
         presetRepository,
         resolveBrandDocumentContext,
         resolveBrandContext,
+        resolvePipelineModelLock,
         getFileStorage(),
     );
 
@@ -588,6 +589,7 @@ export function createLlmRoutes(): Router {
                     focusContext: body.focusContext!,
                     pageMap: sectionOpts?.pageMap,
                 } : undefined,
+                pipelineRunId: body.pipelineRunId,
             });
             const effectiveSystemPrompt = context.systemPrompt;
 
@@ -1061,6 +1063,7 @@ export function createLlmRoutes(): Router {
                     focusContext: body.focusContext!,
                     pageMap: sectionOpts?.pageMap,
                 } : undefined,
+                pipelineRunId: body.pipelineRunId,
             });
             const effectiveSystemPrompt = context.systemPrompt;
 
