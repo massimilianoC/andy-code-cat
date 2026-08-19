@@ -77,6 +77,7 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
     assetRepository?: { listByProject: ReturnType<typeof vi.fn> };
     storageText?: string;
     catalog?: unknown;
+    resolvePipelineModelLock?: { dispatch: ReturnType<typeof vi.fn>; createRun: ReturnType<typeof vi.fn> };
 }) {
     const projectRepository = {
         findByIdForUser: vi.fn(async () => ({
@@ -121,6 +122,12 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
         uploadFilePath: vi.fn((_userId: string, _projectId: string, storedFilename: string) => storedFilename),
         createReadStream: vi.fn(async () => Readable.from([overrides?.storageText ?? ""])),
     };
+    const resolvePipelineModelLock = overrides?.resolvePipelineModelLock ?? {
+        dispatch: vi.fn(async () => {
+            throw new Error("resolvePipelineModelLock.dispatch should not be called on the legacy path");
+        }),
+        createRun: vi.fn(),
+    };
 
     return {
         useCase: new OptimizeUserPrompt(
@@ -132,9 +139,11 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
             userRepository as any,
             promptExecutionLogRepository as any,
             getLlmCatalog as any,
+            resolvePipelineModelLock as any,
             storage as any,
         ),
         promptExecutionLogRepository,
+        resolvePipelineModelLock,
     };
 }
 
@@ -378,5 +387,100 @@ describe("OptimizeUserPrompt", () => {
 
         const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
         expect(requestBody.model).toBe("deepseek-ai/DeepSeek-V3");
+    });
+
+    // ── I13 strict cutover wave 1: pipelineRunId governs dispatch instead of the legacy cascade ──
+
+    it("strict dispatch: uses the PipelineRun's locked provider/model and never calls the legacy cascade", async () => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const dispatch = vi.fn(async () => ({
+            run: {
+                id: "run-1",
+                modelLock: {
+                    policy: "strict",
+                    requested: { providerId: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", catalogRevision: "rev-1" },
+                    effective: { providerId: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5" },
+                    selectedAt: new Date().toISOString(),
+                    selectedBy: "catalog-proposal",
+                },
+            },
+            blocked: null,
+        }));
+        const resolvePipelineModelLock = { dispatch, createRun: vi.fn() };
+
+        const { useCase } = createUseCase(null, { resolvePipelineModelLock });
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            pipelineRunId: "run-1",
+        });
+
+        expect(dispatch).toHaveBeenCalledWith({ runId: "run-1", ownerUserId: "user-1", stage: "optimize" });
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M2.5");
+    });
+
+    it("strict dispatch: throws a 409 and never calls the provider when the lock is blocked", async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+
+        const resolvePipelineModelLock = {
+            dispatch: vi.fn(async () => ({
+                run: { id: "run-1" },
+                blocked: { code: "MODEL_LOCK_UNAVAILABLE", stage: "optimize", at: new Date() },
+            })),
+            createRun: vi.fn(),
+        };
+
+        const { useCase } = createUseCase(null, { resolvePipelineModelLock });
+
+        await expect(useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            pipelineRunId: "run-1",
+        })).rejects.toMatchObject({ statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE" });
+
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("strict dispatch: throws a 409 when the locked provider is no longer in the active catalog", async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+
+        const resolvePipelineModelLock = {
+            dispatch: vi.fn(async () => ({
+                run: {
+                    id: "run-1",
+                    modelLock: {
+                        policy: "strict",
+                        requested: { providerId: "openrouter", modelId: "some/model", catalogRevision: "rev-1" },
+                        effective: { providerId: "openrouter", modelId: "some/model" },
+                        selectedAt: new Date().toISOString(),
+                        selectedBy: "catalog-proposal",
+                    },
+                },
+                blocked: null,
+            })),
+            createRun: vi.fn(),
+        };
+
+        const { useCase } = createUseCase(null, { resolvePipelineModelLock });
+
+        await expect(useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            pipelineRunId: "run-1",
+        })).rejects.toMatchObject({ statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE" });
+
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 });

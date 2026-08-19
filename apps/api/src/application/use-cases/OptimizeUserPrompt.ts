@@ -26,6 +26,7 @@ import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
 import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
 import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
+import type { ResolvePipelineModelLock } from "./ResolvePipelineModelLock";
 
 const TASK_KEY = "optimize_user_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -130,6 +131,7 @@ export class OptimizeUserPrompt {
         private readonly userRepository: UserRepository,
         private readonly promptExecutionLogRepository: PromptExecutionLogRepository,
         private readonly getLlmCatalog: GetLlmCatalog,
+        private readonly resolvePipelineModelLock: ResolvePipelineModelLock,
         private readonly storage?: IFileStorage,
     ) { }
 
@@ -324,6 +326,7 @@ export class OptimizeUserPrompt {
         provider?: string;
         model?: string;
         taskKey?: string;
+        pipelineRunId?: string;
     }): Promise<{ context: PreparedExecutionContext } | { skippedResult: OptimizePromptResponse }> {
         const project = await this.projectRepository.findByIdForUser(input.projectId, input.userId);
         if (!project) {
@@ -411,34 +414,66 @@ export class OptimizeUserPrompt {
         const activeProviders = catalog.providers.filter((provider) => provider.isActive);
         const requestedModel = input.model?.trim();
 
-        const selectionInput: ResolveModelSelectionInput = {
-            profile: "optimizer-cascade",
-            activeProviders,
-            requestedProvider: input.provider,
-            requestedModel,
-            taskSettingProvider: taskSettings.provider,
-            taskSettingModel: taskSettings.model,
-            envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
-            fallbackProvider: FALLBACK_PROVIDER,
-            hardcodedFallbackModel: FALLBACK_MODEL,
-            requireOverrideInCatalog: false,
-            // Preserved exactly as-is (out of scope to "fix" here): an override is only honored
-            // when the resolved provider's apiType === "openai-compatible".
-            gateOverrideOnOpenAiCompatible: true,
-            policy: "legacy",
-        };
-        const decision = resolveModelSelection(selectionInput);
-        observeModelSelectionShadow(selectionInput, decision, {
-            projectId: input.projectId,
-            taskKey: input.taskKey ?? TASK_KEY,
-        });
+        let providerCatalog: (typeof activeProviders)[number] | undefined;
+        let modelId: string | undefined;
 
-        if (!decision.providerCatalog) {
-            throw new Error("No active LLM provider configured for prompt optimization");
+        if (input.pipelineRunId) {
+            // I13 strict cutover wave 1: a PipelineRun's frozen modelLock governs dispatch
+            // instead of the legacy cascade. dispatch() re-validates the lock against the live
+            // catalog and never substitutes a different model — a stale/deactivated lock blocks
+            // (409) rather than silently falling back.
+            const { run, blocked } = await this.resolvePipelineModelLock.dispatch({
+                runId: input.pipelineRunId,
+                ownerUserId: input.userId,
+                stage: "optimize",
+            });
+
+            if (blocked) {
+                throw Object.assign(
+                    new Error(`Pipeline model lock unavailable for optimize stage: ${blocked.code}`),
+                    { statusCode: 409, code: blocked.code },
+                );
+            }
+
+            const lockedProviderId = run.modelLock.effective.providerId;
+            providerCatalog = activeProviders.find((provider) => provider.provider === lockedProviderId);
+            if (!providerCatalog) {
+                throw Object.assign(
+                    new Error(`Locked provider is no longer in the active catalog: ${lockedProviderId}`),
+                    { statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE" },
+                );
+            }
+            modelId = run.modelLock.effective.modelId;
+        } else {
+            const selectionInput: ResolveModelSelectionInput = {
+                profile: "optimizer-cascade",
+                activeProviders,
+                requestedProvider: input.provider,
+                requestedModel,
+                taskSettingProvider: taskSettings.provider,
+                taskSettingModel: taskSettings.model,
+                envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
+                fallbackProvider: FALLBACK_PROVIDER,
+                hardcodedFallbackModel: FALLBACK_MODEL,
+                requireOverrideInCatalog: false,
+                // Preserved exactly as-is (out of scope to "fix" here): an override is only honored
+                // when the resolved provider's apiType === "openai-compatible".
+                gateOverrideOnOpenAiCompatible: true,
+                policy: "legacy",
+            };
+            const decision = resolveModelSelection(selectionInput);
+            observeModelSelectionShadow(selectionInput, decision, {
+                projectId: input.projectId,
+                taskKey: input.taskKey ?? TASK_KEY,
+            });
+
+            if (!decision.providerCatalog) {
+                throw new Error("No active LLM provider configured for prompt optimization");
+            }
+
+            providerCatalog = decision.providerCatalog;
+            modelId = decision.effective.model;
         }
-
-        const providerCatalog = decision.providerCatalog;
-        const modelId = decision.effective.model;
 
         if (!taskSettings.enabled) {
             return {
@@ -496,6 +531,7 @@ export class OptimizeUserPrompt {
         provider?: string;
         model?: string;
         taskKey?: string;
+        pipelineRunId?: string;
     }): Promise<OptimizePromptResponse> {
         const startedAt = Date.now();
         let preparedContext: PreparedExecutionContext | undefined;
@@ -584,6 +620,7 @@ export class OptimizeUserPrompt {
         provider?: string;
         model?: string;
         taskKey?: string;
+        pipelineRunId?: string;
     }, handlers?: {
         onThinking?: (chunk: string) => void;
         onAnswer?: (chunk: string) => void;

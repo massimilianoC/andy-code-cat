@@ -122,6 +122,12 @@ export const optimizePromptSchema = z.object({
     model: z.string().min(1).max(200).optional(),
     /** Override the task key used to resolve platform task settings (e.g. "zero_effort_optimize"). */
     taskKey: z.string().min(1).max(80).optional(),
+    /**
+     * I13 of the SSOT program — when present, dispatch is governed by this PipelineRun's frozen
+     * modelLock instead of the legacy cascade (see OptimizeUserPrompt.prepareExecutionContext).
+     * Omitted: 100% unchanged legacy behavior.
+     */
+    pipelineRunId: z.string().min(1).max(120).optional(),
 });
 
 export type LlmChatPreviewInput = z.infer<typeof llmChatPreviewSchema>;
