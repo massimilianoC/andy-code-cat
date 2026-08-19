@@ -1,10 +1,10 @@
 /**
- * E2E tests for POST /v1/projects/:projectId/pipeline/launch-godmode with
+ * E2E tests for POST /v1/projects/:projectId/pipeline/launch-workspace with
  * PIPELINE_RUN_ENABLED=true (I12 of the SSOT program). Runs against MongoMemoryServer — no
  * Docker required, same strategy as pipelineRunRoutes.e2e.test.ts.
  *
  * The disabled-flag (default) behavior is covered separately in
- * pipelineRoutes.launchGodmode.disabled.e2e.test.ts — a single test file cannot flip
+ * pipelineRoutes.launchWorkspace.disabled.e2e.test.ts — a single test file cannot flip
  * PIPELINE_RUN_ENABLED mid-run because config.ts reads process.env once at import time.
  */
 
@@ -29,7 +29,7 @@ function signToken(userId: string, roles: string[] = ["user"]): string {
     return jwt.sign({ sub: userId, roles }, TEST_JWT_ACCESS_SECRET, { expiresIn: "1h" });
 }
 
-function godmodePayload(overrides?: Record<string, unknown>) {
+function workspacePayload(overrides?: Record<string, unknown>) {
     return {
         businessName: "Runner Lab",
         primaryGoal: "Un runner arcade completo per studenti.",
@@ -44,7 +44,7 @@ let ownerUserId: string;
 let otherUserId: string;
 let projectId: string;
 
-describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=true", () => {
+describe("Pipeline launch-workspace E2E — PIPELINE_RUN_ENABLED=true", () => {
     beforeAll(async () => {
         mongod = await MongoMemoryServer.create();
         process.env.MONGODB_URI = mongod.getUri();
@@ -62,7 +62,7 @@ describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=true", () => {
         await db.collection("users").insertMany([
             {
                 _id: ownerOid,
-                email: "godmode-owner@example.com",
+                email: "workspace-owner@example.com",
                 passwordHash: "$bcrypt-placeholder",
                 emailVerified: true,
                 isBlocked: false,
@@ -71,7 +71,7 @@ describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=true", () => {
             },
             {
                 _id: otherOid,
-                email: "godmode-other@example.com",
+                email: "workspace-other@example.com",
                 passwordHash: "$bcrypt-placeholder",
                 emailVerified: true,
                 isBlocked: false,
@@ -83,7 +83,7 @@ describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=true", () => {
         await db.collection("projects").insertOne({
             _id: projectOid,
             ownerUserId: ownerOid,
-            name: "Godmode Launch Test Project",
+            name: "Workspace Launch Test Project",
             createdAt: new Date(),
         });
 
@@ -101,41 +101,41 @@ describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=true", () => {
 
     it("401 without a token", async () => {
         const res = await request(app)
-            .post(`/v1/projects/${projectId}/pipeline/launch-godmode`)
-            .send(godmodePayload());
+            .post(`/v1/projects/${projectId}/pipeline/launch-workspace`)
+            .send(workspacePayload());
         expect(res.status).toBe(401);
     });
 
     it("403 when x-project-id does not belong to the caller", async () => {
         const token = signToken(otherUserId);
         const res = await request(app)
-            .post(`/v1/projects/${projectId}/pipeline/launch-godmode`)
+            .post(`/v1/projects/${projectId}/pipeline/launch-workspace`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId)
-            .send(godmodePayload());
+            .send(workspacePayload());
         expect(res.status).toBe(403);
     });
 
     it("400 on a missing required field", async () => {
         const token = signToken(ownerUserId);
         const res = await request(app)
-            .post(`/v1/projects/${projectId}/pipeline/launch-godmode`)
+            .post(`/v1/projects/${projectId}/pipeline/launch-workspace`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId)
             .send({ businessName: "Runner Lab" });
         expect(res.status).toBe(400);
     });
 
-    it("201 launches a godmode pipeline: conversation, workspace, and a frozen modelLock with an attached canonical brief", async () => {
+    it("201 launches a workspace pipeline: conversation, workspace, and a frozen modelLock with an attached canonical brief", async () => {
         const token = signToken(ownerUserId);
         const res = await request(app)
-            .post(`/v1/projects/${projectId}/pipeline/launch-godmode`)
+            .post(`/v1/projects/${projectId}/pipeline/launch-workspace`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId)
-            .send(godmodePayload({ sourceRequest: "Crea un runner senza acquisti in-app." }));
+            .send(workspacePayload({ sourceRequest: "Crea un runner senza acquisti in-app." }));
 
         expect(res.status).toBe(201);
-        expect(res.body.mode).toBe("godmode");
+        expect(res.body.mode).toBe("workspace");
         expect(res.body.status).toBe("prepared");
         expect(res.body.projectId).toBe(projectId);
         expect(res.body.pipelineRunId).toBeTruthy();
@@ -154,7 +154,7 @@ describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=true", () => {
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId);
         expect(getRes.status).toBe(200);
-        expect(getRes.body.run.entryMode).toBe("godmode");
+        expect(getRes.body.run.entryMode).toBe("workspace");
         expect(getRes.body.run.conversationId).toBe(res.body.conversationId);
         expect(getRes.body.run.canonicalBrief.content).toContain("Runner Lab");
         expect(getRes.body.run.canonicalBrief.contentHash).toBeTruthy();

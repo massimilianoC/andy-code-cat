@@ -221,7 +221,7 @@ describe("pipelineRunDtoSchema / pipelineStageExecutionRefSchema", () => {
                 id: "run-1",
                 projectId: "proj-1",
                 ownerUserId: "user-1",
-                entryMode: "godmode",
+                entryMode: "workspace",
                 modelLock: {
                     policy: "strict",
                     requested: { providerId: "siliconflow", modelId: "moonshotai/Kimi-K3", catalogRevision: "rev-1" },

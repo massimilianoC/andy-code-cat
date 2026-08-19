@@ -1,5 +1,5 @@
 /**
- * E2E test proving launch-godmode is also gated by the PIPELINE_RUN_ENABLED master rollback
+ * E2E test proving launch-workspace is also gated by the PIPELINE_RUN_ENABLED master rollback
  * lever when left at its shipped default (false/unset) — it persists a PipelineRun, so it
  * shares the same rollback lever as pipelineRunRoutes.ts (see pipelineRoutes.ts's I12 comment).
  * Runs against MongoMemoryServer — no Docker required.
@@ -31,7 +31,7 @@ let app: Express;
 let ownerUserId: string;
 let projectId: string;
 
-describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=false (shipped default)", () => {
+describe("Pipeline launch-workspace E2E — PIPELINE_RUN_ENABLED=false (shipped default)", () => {
     beforeAll(async () => {
         mongod = await MongoMemoryServer.create();
         process.env.MONGODB_URI = mongod.getUri();
@@ -47,7 +47,7 @@ describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=false (shipped de
 
         await db.collection("users").insertOne({
             _id: ownerOid,
-            email: "godmode-disabled@example.com",
+            email: "workspace-disabled@example.com",
             passwordHash: "$bcrypt-placeholder",
             emailVerified: true,
             isBlocked: false,
@@ -58,7 +58,7 @@ describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=false (shipped de
         await db.collection("projects").insertOne({
             _id: projectOid,
             ownerUserId: ownerOid,
-            name: "Godmode Launch Disabled Test Project",
+            name: "Workspace Launch Disabled Test Project",
             createdAt: new Date(),
         });
 
@@ -76,8 +76,8 @@ describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=false (shipped de
     it("404s when the flag is disabled — and, crucially, the pre-existing /pipelines/zero-effort route is unaffected", async () => {
         const token = signToken(ownerUserId);
 
-        const godmodeRes = await request(app)
-            .post(`/v1/projects/${projectId}/pipeline/launch-godmode`)
+        const workspaceRes = await request(app)
+            .post(`/v1/projects/${projectId}/pipeline/launch-workspace`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId)
             .send({
@@ -85,7 +85,7 @@ describe("Pipeline launch-godmode E2E — PIPELINE_RUN_ENABLED=false (shipped de
                 primaryGoal: "Un runner arcade completo per studenti.",
                 audience: "Studenti e giocatori casual.",
             });
-        expect(godmodeRes.status).toBe(404);
+        expect(workspaceRes.status).toBe(404);
 
         const zeroEffortRes = await request(app)
             .post(`/v1/projects/${projectId}/pipelines/zero-effort`)
