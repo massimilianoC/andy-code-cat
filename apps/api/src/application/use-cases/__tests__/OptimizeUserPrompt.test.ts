@@ -13,9 +13,11 @@ vi.mock("../../../config", () => ({
         COST_POLICY_VIDEO_EUR_PER_ASSET: 0.2,
         COST_POLICY_USD_TO_EUR_RATE: 0.92,
         COST_POLICY_PROVIDER_MARKUP_FACTOR: 1.2,
+        pipelineRunEnabled: true,
     },
 }));
 
+import { env } from "../../../config";
 import { OptimizeUserPrompt } from "../OptimizeUserPrompt";
 
 function streamResponse(lines: string[]) {
@@ -151,6 +153,7 @@ describe("OptimizeUserPrompt", () => {
     afterEach(() => {
         vi.unstubAllGlobals();
         vi.useRealTimers();
+        env.pipelineRunEnabled = true;
     });
 
     it("uses streamed reasoning text as the optimized prompt when content chunks are empty", async () => {
@@ -422,7 +425,7 @@ describe("OptimizeUserPrompt", () => {
             pipelineRunId: "run-1",
         });
 
-        expect(dispatch).toHaveBeenCalledWith({ runId: "run-1", ownerUserId: "user-1", stage: "optimize" });
+        expect(dispatch).toHaveBeenCalledWith({ runId: "run-1", ownerUserId: "user-1", projectId: "project-1", stage: "optimize" });
         const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
         expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M2.5");
     });
@@ -433,13 +436,18 @@ describe("OptimizeUserPrompt", () => {
 
         const resolvePipelineModelLock = {
             dispatch: vi.fn(async () => ({
-                run: { id: "run-1" },
+                run: {
+                    id: "run-1",
+                    modelLock: {
+                        effective: { providerId: "openrouter", modelId: "moonshotai/Kimi-K3" },
+                    },
+                },
                 blocked: { code: "MODEL_LOCK_UNAVAILABLE", stage: "optimize", at: new Date() },
             })),
             createRun: vi.fn(),
         };
 
-        const { useCase } = createUseCase(null, { resolvePipelineModelLock });
+        const { useCase, promptExecutionLogRepository } = createUseCase(null, { resolvePipelineModelLock });
 
         await expect(useCase.execute({
             projectId: "project-1",
@@ -449,6 +457,15 @@ describe("OptimizeUserPrompt", () => {
         })).rejects.toMatchObject({ statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE" });
 
         expect(fetchMock).not.toHaveBeenCalled();
+        // I14.1 hardening: the audit journal must record the LOCKED model that failed to
+        // dispatch, not the hardcoded FALLBACK_PROVIDER/FALLBACK_MODEL — a blocked strict
+        // dispatch never even resolved a PreparedExecutionContext, so before this fix
+        // persistFailureLog silently fabricated a model that was never actually targeted.
+        expect(promptExecutionLogRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+            provider: "openrouter",
+            model: "moonshotai/Kimi-K3",
+            status: "failed",
+        }));
     });
 
     it("strict dispatch: throws a 409 when the locked provider is no longer in the active catalog", async () => {
@@ -482,5 +499,28 @@ describe("OptimizeUserPrompt", () => {
         })).rejects.toMatchObject({ statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE" });
 
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("PIPELINE_RUN_ENABLED=false: falls back to the legacy cascade even when pipelineRunId is set (master rollback lever)", async () => {
+        env.pipelineRunEnabled = false;
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const resolvePipelineModelLock = { dispatch: vi.fn(), createRun: vi.fn() };
+        const { useCase } = createUseCase(null, { resolvePipelineModelLock });
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            pipelineRunId: "run-1",
+        });
+
+        expect(resolvePipelineModelLock.dispatch).not.toHaveBeenCalled();
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M2.5");
     });
 });

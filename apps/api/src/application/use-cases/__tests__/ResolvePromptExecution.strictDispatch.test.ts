@@ -7,9 +7,11 @@ vi.mock("../../../config", () => ({
         ENRICHMENT_LAYER_D_MAX_CHARS: 6000,
         LLM_DEFAULT_PROVIDER: "siliconflow",
         LLM_DEFAULT_MAX_COMPLETION_TOKENS: 32000,
+        pipelineRunEnabled: true,
     },
 }));
 
+import { env } from "../../../config";
 import { ResolvePromptExecution } from "../ResolvePromptExecution";
 
 const ACTIVE_CATALOG = {
@@ -98,6 +100,24 @@ function createResolver(overrides?: {
 describe("ResolvePromptExecution — I14 strict cutover wave 2 (pipelineRunId dispatch)", () => {
     afterEach(() => {
         vi.restoreAllMocks();
+        env.pipelineRunEnabled = true;
+    });
+
+    it("PIPELINE_RUN_ENABLED=false: falls back to the legacy cascade even when pipelineRunId is set (master rollback lever)", async () => {
+        env.pipelineRunEnabled = false;
+        const dispatch = vi.fn();
+        const { resolver } = createResolver({ resolvePipelineModelLock: { dispatch } });
+
+        const context = await resolver.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            pipelineRole: "dialogue",
+            pipelineRunId: "run-1",
+        });
+
+        expect(dispatch).not.toHaveBeenCalled();
+        expect(context.providerCatalog.provider).toBe("siliconflow");
+        expect(context.modelId).toBe("MiniMaxAI/MiniMax-M2.5");
     });
 
     it("legacy path (no pipelineRunId): resolves via the cascade, never calls dispatch", async () => {
@@ -133,7 +153,7 @@ describe("ResolvePromptExecution — I14 strict cutover wave 2 (pipelineRunId di
             pipelineRunId: "run-1",
         });
 
-        expect(dispatch).toHaveBeenCalledWith({ runId: "run-1", ownerUserId: "user-1", stage: "generate" });
+        expect(dispatch).toHaveBeenCalledWith({ runId: "run-1", ownerUserId: "user-1", projectId: "project-1", stage: "generate" });
         expect(context.providerCatalog.provider).toBe("openrouter");
         expect(context.modelId).toBe("moonshotai/Kimi-K3");
     });
@@ -160,7 +180,7 @@ describe("ResolvePromptExecution — I14 strict cutover wave 2 (pipelineRunId di
             },
         });
 
-        expect(dispatch).toHaveBeenCalledWith({ runId: "run-1", ownerUserId: "user-1", stage: "focused_edit" });
+        expect(dispatch).toHaveBeenCalledWith({ runId: "run-1", ownerUserId: "user-1", projectId: "project-1", stage: "focused_edit" });
     });
 
     it("strict dispatch: an explicit unvalidated model override is IGNORED (unlike the legacy openai-compatible trust path)", async () => {

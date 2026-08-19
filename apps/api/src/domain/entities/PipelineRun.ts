@@ -90,6 +90,10 @@ const ALLOWED_TRANSITIONS: ReadonlyArray<readonly [PipelineRunStatus, PipelineRu
     ["draft", "blocked"],
     ["ready_for_generation", "blocked"],
     ["blocked", "ready_for_generation"],
+    // Idempotent re-block: retrying a dispatch against an already-blocked run (e.g. a client
+    // retry after seeing the 409) must re-confirm the block, not throw an "illegal transition"
+    // error that would surface as a 500 and hide the real MODEL_LOCK_UNAVAILABLE code.
+    ["blocked", "blocked"],
 ];
 
 /**
@@ -103,6 +107,7 @@ const ALLOWED_TRANSITIONS: ReadonlyArray<readonly [PipelineRunStatus, PipelineRu
  *   draft -> blocked
  *   ready_for_generation -> blocked
  *   blocked -> ready_for_generation   (user supplies a new model; run retries)
+ *   blocked -> blocked                (idempotent re-block on retry, refreshes the reason)
  *   <any non-terminal> -> cancelled   (cancellation is always allowed except from a terminal state)
  *
  * `detail` is required whenever `to === "blocked"` — a run can never enter `blocked` without a
