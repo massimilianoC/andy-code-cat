@@ -24,6 +24,8 @@ export interface ZeroEffortLaunchInput {
     styleAttributes?: string[];
     /** BCP-47 output language directive (e.g. "it", "en", "fr"). */
     outputLanguage?: string;
+    /** Filenames of documents attached during intake, included in the server-built canonical brief. */
+    attachmentNames?: string[];
 }
 
 export interface ProjectPipelineRunSummary {

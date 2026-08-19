@@ -4,98 +4,15 @@ import type { ProjectMoodboardRepository } from "../../domain/repositories/Proje
 import type { ConversationRepository } from "../../domain/repositories/ConversationRepository";
 import { PrepareGenerationWorkspace } from "./PrepareGenerationWorkspace";
 import type { GenerationWorkspace } from "../../domain/entities/GenerationWorkspace";
-import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
+import { buildCanonicalGenerationBrief } from "../prompting/buildCanonicalGenerationBrief";
 
-function presetLabel(presetId: string): string {
-    const preset = PRESET_MAP.get(presetId);
-    return preset?.labelEn ?? preset?.label ?? presetId;
-}
-
+/**
+ * Thin string accessor kept for existing callers/tests that only need the brief text.
+ * The actual brief-building logic lives in `buildCanonicalGenerationBrief` (I9 of the SSOT
+ * program) — see that module's doc comment for why this used to be duplicated client-side.
+ */
 export function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
-    const siteLabel = presetLabel(input.presetId);
-    const outputLanguage = (input as { outputLanguage?: string }).outputLanguage ?? "en";
-    const sections: string[] = [];
-
-    // ── [IDENTITY] ──────────────────────────────────────────────────────────
-    sections.push(
-        `# PROJECT BRIEF — ${input.businessName}\n\n` +
-        `## [IDENTITY] Brand and template\n` +
-        `- **Brand:** ${input.businessName}\n` +
-        `- **Template:** ${siteLabel} (${input.presetId})\n` +
-        `- **Output language:** ${outputLanguage}`,
-    );
-
-    // The original request is the authority boundary. All inferred sections below
-    // enrich it and must never be interpreted as permission to remove or weaken it.
-    const sourceRequest = input.sourceRequest?.trim() || input.primaryGoal?.trim();
-    if (sourceRequest) {
-        sections.push(
-            `## [SOURCE_REQUEST] Original user request — authoritative\n\n` +
-            `${sourceRequest}\n\n` +
-            `> Preserve every explicit fact, preference, requirement and prohibition above. ` +
-            `Later sections are additive clarification only; on conflict, this source request wins.`,
-        );
-    }
-
-    // ── [GOAL] ──────────────────────────────────────────────────────────────
-    if (input.primaryGoal?.trim()) {
-        sections.push(
-            `## [GOAL] Description and primary objective\n\n` +
-            input.primaryGoal.trim(),
-        );
-    }
-
-    // ── [AUDIENCE] ──────────────────────────────────────────────────────────
-    if (input.audience?.trim()) {
-        sections.push(
-            `## [AUDIENCE] Target audience\n\n` +
-            input.audience.trim(),
-        );
-    }
-
-    const expressiveSections: Array<[string, string, string | undefined]> = [
-        ["CONCEPT", "Project concept and value proposition", input.projectSummary],
-        ["STRUCTURE", "Required content structure, screens and states", input.contentStructure],
-        ["CONTENT", "Content, data, entities and asset requirements", input.contentRequirements],
-        ["FUNCTIONS", "Functional requirements and behavior", input.functionalRequirements],
-        ["INTERACTIONS", "Interaction model, controls and feedback", input.interactionModel],
-        ["VISUAL_DIRECTION", "Visual and experiential direction", input.visualDirection],
-        ["SUCCESS", "Completion and success criteria", input.successCriteria],
-        ["CONSTRAINTS", "Constraints and compatibility requirements", input.constraints],
-        ["MUST_AVOID", "Explicit exclusions and negative requirements", input.mustAvoid],
-    ];
-    for (const [key, title, value] of expressiveSections) {
-        if (value?.trim()) sections.push(`## [${key}] ${title}\n\n${value.trim()}`);
-    }
-
-    // ── [STYLE] ─────────────────────────────────────────────────────────────
-    const styleLines: string[] = [];
-    if (input.styleAttributes && input.styleAttributes.length > 0) {
-        styleLines.push(`- **Visual attributes:** ${input.styleAttributes.join(", ")}`);
-    }
-    if (input.tone?.trim()) {
-        styleLines.push(`- **Tone of voice:** ${input.tone.trim()}`);
-    }
-    if (input.primaryCta?.trim()) {
-        styleLines.push(`- **Primary CTA:** ${input.primaryCta.trim()}`);
-    }
-    if (input.styleHint?.trim()) {
-        styleLines.push(`- **Additional style notes:** ${input.styleHint.trim()}`);
-    }
-    if (styleLines.length > 0) {
-        sections.push(`## [STYLE] Visual attributes, tone and CTA\n\n${styleLines.join("\n")}`);
-    }
-
-    // ── [CONTACTS] ──────────────────────────────────────────────────────────
-    if (input.contactInfo && input.contactInfo.length > 0) {
-        const contactLines = input.contactInfo
-            .map((c) => `- **${c.key}:** ${c.value}`)
-            .join("\n");
-        sections.push(`## [CONTACTS] Contact information\n\n${contactLines}`);
-    }
-
-    const footer = `\n---\n*Structured brief — Guided Mode · ${siteLabel} · Sections: ${sections.length - 1}*`;
-    return sections.join("\n\n") + footer;
+    return buildCanonicalGenerationBrief(input).content;
 }
 
 function buildStyleNotes(input: ZeroEffortLaunchInput): string | undefined {

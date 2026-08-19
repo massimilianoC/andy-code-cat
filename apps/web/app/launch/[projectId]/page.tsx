@@ -505,104 +505,11 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
     );
 }
 
-// ─── Structured brief builder ─────────────────────────────────────────────────
-
-function buildStructuredBrief(
-    form: ExtendedForm,
-    projectName: string,
-    t: ReturnType<typeof useTranslation>["t"],
-    templateLabel?: string | null,
-    docNames?: string[],
-): string {
-    const siteLabel = t(`launch.templates.${form.presetId}`, { defaultValue: form.presetId });
-    const brandName = form.businessName.trim() || projectName;
-
-    const sections: string[] = [];
-
-    sections.push(
-        `# ${t("launch.brief.title", { brand: brandName })}\n\n` +
-        `## ${t("launch.brief.identity")}\n` +
-        `- **${t("launch.brief.brand")}:** ${brandName}\n` +
-        (templateLabel ? `- **${t("launch.brief.template")}:** ${templateLabel}\n` : "") +
-        `- **${t("launch.brief.siteType")}:** ${siteLabel}`,
-    );
-
-    const sourceRequest = form.sourceRequest?.trim() || form.primaryGoal.trim();
-    if (sourceRequest) {
-        sections.push(
-            `## [SOURCE_REQUEST] Original user request — authoritative\n\n${sourceRequest}\n\n` +
-            `> Preserve every explicit fact, preference, requirement and prohibition. ` +
-            `The enriched sections below are additive; if they conflict, this source request wins.`,
-        );
-    }
-
-    if (form.primaryGoal.trim()) {
-        sections.push(
-            `## ${t("launch.brief.goal")}\n\n` +
-            form.primaryGoal.trim(),
-        );
-    }
-
-    if (form.audience.trim()) {
-        sections.push(
-            `## ${t("launch.brief.audience")}\n\n` +
-            form.audience.trim(),
-        );
-    }
-
-    const expressiveSections: Array<[string, string, string | undefined]> = [
-        ["CONCEPT", "Project concept and value proposition", form.projectSummary],
-        ["STRUCTURE", "Required content structure, screens and states", form.contentStructure],
-        ["CONTENT", "Content, data, entities and asset requirements", form.contentRequirements],
-        ["FUNCTIONS", "Functional requirements and behavior", form.functionalRequirements],
-        ["INTERACTIONS", "Interaction model, controls and feedback", form.interactionModel],
-        ["VISUAL_DIRECTION", "Detailed visual and experiential direction", form.visualDirection],
-        ["SUCCESS", "Completion and success criteria", form.successCriteria],
-        ["CONSTRAINTS", "Constraints and compatibility requirements", form.constraints],
-        ["MUST_AVOID", "Explicit exclusions and negative requirements", form.mustAvoid],
-    ];
-    for (const [key, title, value] of expressiveSections) {
-        if (value?.trim()) sections.push(`## [${key}] ${title}\n\n${value.trim()}`);
-    }
-
-    const styleLines: string[] = [];
-    const selectedStyles = STYLE_ATTRIBUTES
-        .filter((a) => form.styleAttributes.includes(a.id))
-        .map((a) => t(`launch.styleAttributes.${a.id}`));
-    if (selectedStyles.length > 0) {
-        styleLines.push(`- **${t("launch.brief.visualAttributes")}:** ${selectedStyles.join(", ")}`);
-    }
-    if (form.tone?.trim()) {
-        styleLines.push(`- **${t("launch.brief.tone")}:** ${form.tone.trim()}`);
-    }
-    if (form.primaryCta?.trim()) {
-        styleLines.push(`- **${t("launch.brief.cta")}:** ${form.primaryCta.trim()}`);
-    }
-    if (form.styleHint?.trim()) {
-        styleLines.push(`- **${t("launch.brief.styleNotes")}:** ${form.styleHint.trim()}`);
-    }
-    if (styleLines.length > 0) {
-        sections.push(`## ${t("launch.brief.style")}\n\n${styleLines.join("\n")}`);
-    }
-
-    const validContacts = form.contactFields.filter((cf) => cf.key.trim() && cf.value.trim());
-    if (validContacts.length > 0) {
-        const contactLines = validContacts
-            .map((cf) => `- **${cf.key.trim()}:** ${cf.value.trim()}`)
-            .join("\n");
-        sections.push(`## ${t("launch.brief.contacts")}\n\n${contactLines}`);
-    }
-
-    if (docNames && docNames.length > 0) {
-        const docList = docNames.map((d) => `- ${d}`).join("\n");
-        sections.push(`## ${t("launch.brief.attachments")}\n\n${docList}`);
-    }
-
-    const footer = `\n---\n*${t("launch.brief.footer", { presetId: form.presetId, siteType: siteLabel, sections: sections.length - 1 })}*`;
-    return sections.join("\n\n") + footer;
-}
-
 // ─── Step config ──────────────────────────────────────────────────────────────
+// Structured brief text is no longer built client-side (see I9 of the SSOT program,
+// docs/SSOT_REFACTOR_PROGRESS.md): the server's buildCanonicalGenerationBrief is now the single
+// source of truth, and this page uses `briefResult.normalizedBrief` verbatim instead of
+// reconstructing a second, differently-formatted copy from raw form state.
 
 const STEPS = [
     { number: 1, titleKey: "launch.steps.1.title", subtitleKey: "launch.steps.1.subtitle", icon: FileText },
@@ -882,6 +789,7 @@ export default function ZeroEffortLaunchPage() {
                 .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
             styleAttributes: form.styleAttributes,
             outputLanguage: form.outputLanguage,
+            attachmentNames: attachedFiles,
         };
         try {
             const [briefResult, configResult] = await Promise.all([
@@ -889,9 +797,9 @@ export default function ZeroEffortLaunchPage() {
                 getZeroEffortConfig(token, projectId).catch(() => null),
             ]);
             setResult(briefResult);
-            // Build the structured brief client-side from the full form data
-            // so every section and long-text field is included verbatim.
-            setEditedBrief(buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles));
+            // Use the server's canonical brief verbatim (I9 — see the SSOT program docs) instead
+            // of reconstructing a second, differently-formatted copy client-side.
+            setEditedBrief(briefResult.normalizedBrief);
             setPipelineConfig(configResult);
             setCompletedSteps(new Set([1, 2, 3]));
             setPhase("review");
@@ -981,6 +889,7 @@ export default function ZeroEffortLaunchPage() {
                 .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
             styleAttributes: form.styleAttributes,
             outputLanguage: form.outputLanguage,
+            attachmentNames: attachedFiles,
         };
         try {
             const [briefResult, configResult] = await Promise.all([
@@ -988,7 +897,8 @@ export default function ZeroEffortLaunchPage() {
                 getZeroEffortConfig(token, projectId).catch(() => null),
             ]);
             const localConfig = configResult;
-            const brief = buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles);
+            // Use the server's canonical brief verbatim (I9 — see the SSOT program docs).
+            const brief = briefResult.normalizedBrief;
 
             // Always run one optimization pass — the structured brief (AI-prefilled or manual)
             // needs to be rewritten with system-layer context before entering Guided Mode.
