@@ -4,28 +4,21 @@ import {
     llmPromptConfigSchema,
     optimizePromptSchema,
     type LlmChatPreviewResult,
-    type LlmFocusContext,
     type MediaResolutionMetadata,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson, buildFormattedReply } from "../../../application/llm/llmParser";
 import { applyFocusPatch } from "../../../application/llm/llmPatchMerger";
-import { buildFocusedModeSystemAddendum } from "../../../application/llm/focusedPrompt";
 import { assertPromptTraceParity } from "../../../application/llm/promptTraceParity";
 import { buildChatCompletionRequestBody } from "../../../application/llm/chatRequestAdapter";
 import {
-    buildOutputBudgetPolicy,
     buildParseFailureStructured,
     isGenerationParseFailure,
     tryBuildSectionContextOpts,
     resolveUsageWithFallback,
     buildMessagesWithHistory,
 } from "../../../application/llm/llmMessageBuilder";
-import { buildStyleContextBlock } from "../../../application/llm/styleContextBuilder";
 import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
-import { composeSystemPromptWithLayers, type PromptLayerTraceEntry, type TemplateResolution } from "../../../application/llm/systemPromptComposer";
-import { buildGroundedDataContextLayer, buildGlobalBrandLayer, buildBrandDocumentLayerD, buildPresetLayerFromPreset } from "../../../application/llm/systemPromptLayers";
-import { resolveFilesystemTemplateSkills } from "../../../application/llm/templateSkillsLayer";
 import { estimateCost } from "../../../application/llm/costPolicy";
 import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
 import { env } from "../../../config";
@@ -51,47 +44,14 @@ import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptC
 import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
-import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../../../application/documents/projectLayerDContext";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
-import { PRESET_MAP, withStaticViewportFallback } from "../../../domain/entities/ProjectPreset";
-import { resolveAttachmentPolicyFromConfig, resolveDocumentContextPolicyFromConfig, resolveGovernanceSystemPromptFromConfig } from "../../../domain/entities/PlatformConfig";
+import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { ResolveBrandContext } from "../../../application/use-cases/ResolveBrandContext";
-import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../../../application/use-cases/ResolveBrandDocumentContext";
-
-type LlmRuntimeContext = {
-    providerCatalog: {
-        provider: string;
-        baseUrl: string;
-        apiType?: "openai-compatible" | "anthropic-compatible" | "custom";
-        authType?: "api-key" | "bearer" | "none";
-        models: Array<{
-            id: string;
-            role: string;
-            capabilities: string[];
-            isDefault: boolean;
-            isFallback: boolean;
-            isActive: boolean;
-            displayName?: string;
-            description?: string;
-            promptTemplate?: string;
-            focusPromptTemplate?: string;
-            supportedParameters?: string[];
-            priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
-            priceInputUsdPerM?: number;
-            priceOutputUsdPerM?: number;
-        }>;
-    };
-    modelId: string;
-    projectPresetId?: string;
-    promptConfigId?: string;
-    prePromptTemplate?: string;
-    systemPrompt: string;
-    /** Structured breakdown of systemPrompt — same spans, persisted in promptingTrace.layers. */
-    promptLayers: PromptLayerTraceEntry[];
-};
+import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
+import { ResolvePromptExecution, type LlmRuntimeContext } from "../../../application/use-cases/ResolvePromptExecution";
 
 type LlmProviderStatus = {
     requiresKey: boolean;
@@ -103,25 +63,6 @@ const PROVIDER_KEY_ENV_HINTS: Record<string, string> = {
     siliconflow: "SILICONFLOW_API_KEY",
     openrouter: "OPENROUTER_API_KEY",
 };
-
-function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]) {
-    const byId = new Map<string, LlmRuntimeContext["providerCatalog"]["models"][number]>();
-
-    for (const model of models) {
-        if (!model.isActive || !model.id) continue;
-        if (!byId.has(model.id)) {
-            byId.set(model.id, model);
-            continue;
-        }
-
-        const prev = byId.get(model.id)!;
-        if (model.isDefault && !prev.isDefault) {
-            byId.set(model.id, model);
-        }
-    }
-
-    return [...byId.values()];
-}
 
 function resolveChatPreviewMaxTokens(requestedMaxTokens?: number): number {
     const previewCeiling = 64_000;
@@ -331,257 +272,22 @@ export function createLlmRoutes(): Router {
         return kind === "api-key" ? key : `Bearer ${key}`;
     }
 
-    async function resolveContext(input: {
-        projectId: string;
-        userId: string;
-        pipelineRole: string;
-        provider?: string;
-        model?: string;
-        capability?: string;
-        assetIds?: string[];
-        systemPrompt?: string;
-        /** BCP-47 output language for Layer L injection (e.g. "it", "en"). When absent, Layer L is omitted. */
-        outputLanguage?: string;
-        focusedMode?: {
-            focusContext: LlmFocusContext;
-            pageMap?: Parameters<typeof buildFocusedModeSystemAddendum>[1];
-        };
-    }): Promise<LlmRuntimeContext> {
-        const catalog = await getLlmCatalog.execute();
-        const promptConfig = await getLlmPromptConfig.execute(input.projectId);
-        const [moodboard, userProfile, project, platformConfig, projectAssets] = await Promise.all([
-            moodboardRepository.findByProjectId(input.projectId),
-            userStyleProfileRepository.findByUserId(input.userId),
-            projectRepository.findByIdForUser(input.projectId, input.userId),
-            platformConfigRepo.get().catch(() => null),
-            assetRepository.listByProject(input.projectId, input.userId).catch(() => [] as Awaited<ReturnType<typeof assetRepository.listByProject>>),
-        ]);
-        const presetRaw = project?.presetId
-            ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
-            : null;
-        // PP-018 pre-reseed safety: Mongo presets stored before viewportModel existed inherit
-        // the static catalog's viewport framing instead of degrading to document_scroll.
-        const preset = presetRaw && project?.presetId ? withStaticViewportFallback(presetRaw, project.presetId) : presetRaw;
-
-        const productKey = project?.presetId ?? "default";
-        const governanceResolved = resolveGovernanceSystemPromptFromConfig(platformConfig, productKey, "generationSystem");
-        const governanceSystemPrompt = governanceResolved.value || undefined;
-        const governanceFocusedBasePrompt = resolveGovernanceSystemPromptFromConfig(platformConfig, productKey, "focusedEditSystem").value || undefined;
-        const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, productKey);
-        const documentContextPolicy = resolveDocumentContextPolicyFromConfig(platformConfig, productKey);
-
-        const styleBlock = buildStyleContextBlock(userProfile, moodboard);
-        const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
-        const selectedAssetIds = new Set(input.assetIds ?? []);
-        const contextAssets = selectedAssetIds.size > 0
-            ? projectAssets.filter((asset) => selectedAssetIds.has(asset.id))
-            : projectAssets;
-
-        if (selectedAssetIds.size > 0) {
-            if (contextAssets.length > attachmentPolicy.maxAttachmentsPerPrompt) {
-                throw new HttpError(
-                    `Too many attachments selected (max ${attachmentPolicy.maxAttachmentsPerPrompt})`,
-                    { statusCode: 422, code: "ATTACHMENT_LIMIT_EXCEEDED" },
-                );
-            }
-
-            const oversizedAsset = contextAssets.find((asset) => asset.fileSize > attachmentPolicy.maxFileSizeBytes);
-            if (oversizedAsset) {
-                throw new HttpError(
-                    `Attachment exceeds per-file size limit (${oversizedAsset.originalName})`,
-                    { statusCode: 413, code: "ATTACHMENT_FILE_TOO_LARGE" },
-                );
-            }
-
-            const selectedTotalBytes = contextAssets.reduce((acc, asset) => acc + asset.fileSize, 0);
-            if (selectedTotalBytes > attachmentPolicy.maxTotalBytes) {
-                throw new HttpError(
-                    "Selected attachments exceed total size limit",
-                    { statusCode: 422, code: "ATTACHMENT_TOTAL_SIZE_EXCEEDED" },
-                );
-            }
-        }
-
-        // Reusable brand documents (analysed once, cached) claim the Layer D budget first;
-        // project attachments fill the remainder. Failure never blocks generation.
-        // The enrichment content is functional to this generation, so in-flight (pending)
-        // analyses are AWAITED (bounded) — never treated as fire-and-forget.
-        const brandDocuments = await resolveBrandDocumentContext
-            .execute({ userId: input.userId, projectId: input.projectId, waitForPendingMs: BRAND_DOC_WAIT_FOR_PENDING_MS })
-            .catch(() => []);
-        const brandDocumentLayer = buildBrandDocumentLayerD(brandDocuments);
-        const remainingLayerDBudget = Math.max(0, env.ENRICHMENT_LAYER_D_MAX_CHARS - brandDocumentLayer.length);
-        const projectLayerD = remainingLayerDBudget > 0 && env.enrichmentInjectLayerD
-            ? await buildProjectLayerDContext({
-                assetRepository,
-                storage: getFileStorage(),
-                projectId: input.projectId,
-                userId: input.userId,
-                assets: contextAssets,
-                includeUnenrichedAssets: selectedAssetIds.size > 0,
-                maxChars: remainingLayerDBudget,
-                maxAssets: documentContextPolicy.maxAssetsPerPrompt,
-                fallbackInlineExtractionMaxAssets: documentContextPolicy.fallbackInlineExtractionMaxAssets,
-                waitForPendingMs: env.enrichmentEnabled ? PROJECT_LAYER_D_WAIT_FOR_PENDING_MS : 0,
-            })
-            : { layer: "", assets: contextAssets, documentNames: [] };
-        const documentContextLayer = [brandDocumentLayer, projectLayerD.layer].filter(Boolean).join("\n\n");
-        // Alpha guardrail: grounded dataset Layer X is restricted to explicit
-        // data-dashboard projects and is not injected into the standard website flow.
-        const dataContextLayer = project?.presetId === "data-dashboard"
-            ? buildGroundedDataContextLayer(projectLayerD.assets)
-            : "";
-
-        const providerCatalog =
-            (input.provider
-                ? catalog.providers.find((p) => p.provider === input.provider && p.isActive)
-                : undefined) ??
-            catalog.providers.find((p) => p.provider === env.LLM_DEFAULT_PROVIDER) ??
-            catalog.providers[0];
-
-        if (!providerCatalog) {
-            throw new Error("No active LLM provider catalog found");
-        }
-
-        const providerModels = dedupeModelsById(providerCatalog.models);
-        const explicitModel = input.model
-            ? providerModels.find((model) => model.id === input.model)
-            : undefined;
-
-        const roleModel = explicitModel ??
-            (input.capability
-                ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
-                : undefined) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
-            providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.isActive);
-
-        const effectivePrePromptTemplate = [
-            promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-            roleModel?.promptTemplate,
-        ]
-            .filter((value): value is string => Boolean(value && value.trim()))
-            .join("\n\n---\n\n");
-
-        // Layer T: re-inject the Layer Φ format signal persisted at classify time.
-        // buildLayerT self-suppresses when presetId is set — but ONLY a preset that actually
-        // carries a systemPromptModule "covers" the format in Layer B. A module-less generic
-        // preset (e.g. "neutral", 0 chars) must NOT suppress the formatHint fallback, or the
-        // format directives vanish from the prompt entirely (B thin AND T empty).
-        const presetCoversFormat = Boolean(preset?.outputSpec.systemPromptModule?.trim());
-        const templateResolution: TemplateResolution | null = project?.templateResolution
-            ? {
-                presetId: presetCoversFormat ? (project.presetId ?? null) : null,
-                userTemplateId: null,
-                formatHint: (project.templateResolution.formatHint ?? null) as TemplateResolution["formatHint"],
-                confidence: project.templateResolution.confidence,
-                reasoning: project.templateResolution.reasoning,
-                source: project.templateResolution.source,
-            }
-            : null;
-
-        const brandContext = await resolveBrandContext.execute(
-            { userId: input.userId, projectId: input.projectId },
-        ).catch(() => ({ entries: [], hasMustUse: false }));
-        const brandContextLayer = buildGlobalBrandLayer(brandContext, { maxChars: 4000 });
-
-        // Layer L (OUTPUT LANGUAGE) resolution chain: explicit persisted project language
-        // (from zero-effort/Vibe intake) → client UI language sent with the request → none
-        // (model default = English). See OUTPUT_LANGUAGE_CONTROL_SPEC.md.
-        const resolvedOutputLanguage = project?.outputLanguage || input.outputLanguage || null;
-        const outputLanguageSource = project?.outputLanguage
-            ? "project-config"
-            : input.outputLanguage ? "request-ui-language" : "empty";
-        const templateSkills = resolveFilesystemTemplateSkills({
-            presetId: project?.presetId,
-        });
-        const governanceFocusedSystemPrompt = [
-            roleModel?.focusPromptTemplate,
-            governanceFocusedBasePrompt,
-        ]
-            .filter((value): value is string => Boolean(value && value.trim()))
-            .join("\n\n");
-        const focusedModeLayer = input.focusedMode
-            ? [
-                buildFocusedModeSystemAddendum(
-                    input.focusedMode.focusContext,
-                    input.focusedMode.pageMap,
-                ),
-                governanceFocusedSystemPrompt,
-            ].filter(Boolean).join("\n\n")
-            : "";
-
-        const layerSources: Partial<Record<import("../../../application/llm/systemPromptComposer").PromptLayerId, string>> = {
-            L: outputLanguageSource,
-            B: project?.presetId ? "preset-catalog" : "code-default",
-            V: project?.serviceConfig?.forms?.enabled
-                ? "project-service-config"
-                : project?.presetId === "form" ? "preset-capability" : "empty",
-            S: templateSkills
-                ? `filesystem-template-skills:${templateSkills.presetId}:${templateSkills.documents.map((doc) => doc.id).join(",")}`
-                : "empty",
-            T: templateResolution?.formatHint ? "project-config" : "empty",
-            E: promptConfig.enabled && promptConfig.prePromptTemplate && roleModel?.promptTemplate
-                ? "project-config+model-template"
-                : roleModel?.promptTemplate ? "model-template"
-                    : promptConfig.enabled && promptConfig.prePromptTemplate ? "project-config" : "empty",
-            F: governanceResolved.source,
-            R: input.systemPrompt ? "request" : "empty",
-            Q: input.focusedMode
-                ? governanceFocusedSystemPrompt ? "focused-mode+governance" : "focused-mode"
-                : "empty",
-        };
-        const composedLayers = composeSystemPromptWithLayers({
-            presetId: project?.presetId,
-            presetLayer,
-            enabledServiceCapabilities: project?.serviceConfig?.forms?.enabled ? ["forms"] : [],
-            skillsLayer: templateSkills?.layer,
-            templateResolution,
-            styleBlock,
-            brandContextLayer: brandContextLayer || undefined,
-            documentContextLayer: documentContextLayer || undefined,
-            dataContextLayer: dataContextLayer || undefined,
-            prePromptTemplate: effectivePrePromptTemplate || undefined,
-            outputBudgetPolicy: buildOutputBudgetPolicy(),
-            requestSystemPrompt: input.systemPrompt,
-            governanceSystemPrompt,
-            focusedModeLayer,
-            outputLanguage: resolvedOutputLanguage,
-            sources: layerSources,
-        });
-        const systemPrompt = composedLayers.composed;
-
-        // For openai-compatible providers with an explicit model request, trust the
-        // requested id directly. The catalog is already live-hydrated (GetLlmCatalog →
-        // hydrateProviderCatalog), but this keeps the call safe even if a freshly
-        // discovered id has not yet propagated into this provider's hydrated list.
-        if (input.model && providerCatalog.apiType === "openai-compatible") {
-            return {
-                providerCatalog: { ...providerCatalog, models: providerModels },
-                modelId: input.model,
-                projectPresetId: project?.presetId,
-                promptConfigId: promptConfig.id,
-                prePromptTemplate: effectivePrePromptTemplate || undefined,
-                systemPrompt,
-                promptLayers: composedLayers.layers,
-            };
-        }
-
-        if (!roleModel) {
-            throw new Error("No active model available for requested role");
-        }
-
-        return {
-            providerCatalog: { ...providerCatalog, models: providerModels },
-            modelId: roleModel.id,
-            projectPresetId: project?.presetId,
-            promptConfigId: promptConfig.id,
-            prePromptTemplate: effectivePrePromptTemplate || undefined,
-            systemPrompt,
-            promptLayers: composedLayers.layers,
-        };
-    }
+    // I10 of the SSOT program: the composer previously nested here as `resolveContext()` is now
+    // ResolvePromptExecution — a pure move (see that file's doc comment), constructed once here
+    // with the same dependency instances the closure used to capture.
+    const resolvePromptExecution = new ResolvePromptExecution(
+        getLlmCatalog,
+        getLlmPromptConfig,
+        moodboardRepository,
+        userStyleProfileRepository,
+        projectRepository,
+        platformConfigRepo,
+        assetRepository,
+        presetRepository,
+        resolveBrandDocumentContext,
+        resolveBrandContext,
+        getFileStorage(),
+    );
 
     router.get("/llm/providers", async (_req, res, next) => {
         try {
@@ -794,7 +500,7 @@ export function createLlmRoutes(): Router {
             // next real generation will use. Never hardcode a role here (PROMPT_LAYER_SSOT_SPEC §7).
             const pipelineRole = typeof req.query.pipelineRole === "string" ? req.query.pipelineRole : "dialogue";
             // Dry-run of the EXACT generation path: same resolver, same composer, no provider call.
-            const context = await resolveContext({
+            const context = await resolvePromptExecution.execute({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 pipelineRole,
@@ -851,7 +557,7 @@ export function createLlmRoutes(): Router {
                 && (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
             );
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
-            const context = await resolveContext({
+            const context = await resolvePromptExecution.execute({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 pipelineRole: body.pipelineRole,
@@ -1286,7 +992,7 @@ export function createLlmRoutes(): Router {
                 && (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
             );
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
-            const context = await resolveContext({
+            const context = await resolvePromptExecution.execute({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 pipelineRole: body.pipelineRole,
