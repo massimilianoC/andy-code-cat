@@ -1,5 +1,11 @@
 import { call } from "./call";
-import type { GenerationWorkspaceDto, ZeroEffortLaunchResultDto } from "@andy-code-cat/contracts";
+import type {
+    GenerationWorkspaceDto,
+    ZeroEffortLaunchResultDto,
+    LaunchWorkspacePipelineInput,
+    LaunchWorkspacePipelineResultDto,
+    PipelineRunDto,
+} from "@andy-code-cat/contracts";
 
 export interface ZeroEffortLaunchInput {
     businessName: string;
@@ -85,6 +91,40 @@ export function getZeroEffortConfig(token: string, projectId: string) {
     return call<ZeroEffortPipelineConfig>(
         "GET",
         `/v1/projects/${projectId}/pipelines/zero-effort/config`,
+        undefined,
+        {
+            Authorization: `Bearer ${token}`,
+            "x-project-id": projectId,
+        },
+    );
+}
+
+/**
+ * I15 of the SSOT program — server-owned Workspace launch (see `LaunchWorkspacePipeline` on the
+ * API side). Behind `PIPELINE_RUN_ENABLED` on the backend and `NEXT_PUBLIC_PIPELINE_RUN_UI` on
+ * this side; 404s if the backend flag is off.
+ */
+export function launchWorkspacePipeline(
+    token: string,
+    projectId: string,
+    input: LaunchWorkspacePipelineInput,
+) {
+    return call<LaunchWorkspacePipelineResultDto>(
+        "POST",
+        `/v1/projects/${projectId}/pipeline/launch-workspace`,
+        input,
+        {
+            Authorization: `Bearer ${token}`,
+            "x-project-id": projectId,
+        },
+    );
+}
+
+/** I15 — reads back the PipelineRun a `launchWorkspacePipeline()` call created (I7's route). */
+export function getPipelineRun(token: string, projectId: string, runId: string) {
+    return call<{ run: PipelineRunDto }>(
+        "GET",
+        `/v1/projects/${projectId}/pipeline-runs/${runId}`,
         undefined,
         {
             Authorization: `Bearer ${token}`,

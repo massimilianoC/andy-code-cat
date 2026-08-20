@@ -63,6 +63,11 @@ export interface LlmChatInput {
     focusContext?: LlmFocusContext;
     /** BCP-47 UI language from the client (e.g. "it", "en"). Fallback source for Layer L. */
     uiLanguage?: string;
+    /**
+     * I15 of the SSOT program — when present, dispatch is governed by this PipelineRun's frozen
+     * modelLock instead of the legacy cascade (see ResolvePromptExecution.execute on the API).
+     */
+    pipelineRunId?: string;
 }
 
 /**
@@ -164,6 +169,8 @@ export interface OptimizePromptInput {
     model?: string;
     /** Task key to resolve platform task settings (e.g. "zero_effort_optimize"). Defaults to "optimize_user_prompt". */
     taskKey?: string;
+    /** I15 of the SSOT program — see LlmChatInput.pipelineRunId. */
+    pipelineRunId?: string;
 }
 
 export interface OptimizePromptResult {

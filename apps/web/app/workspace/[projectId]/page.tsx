@@ -18,6 +18,7 @@ import {
     setLlmPromptConfig,
     streamOptimizePrompt,
     getPromptUsageSummary,
+    getPipelineRun,
     type PromptPreviewResponse,
     listPreviewSnapshots,
     createPreviewSnapshot,
@@ -260,17 +261,24 @@ function WorkspacePageContent() {
     // Read once on mount so they survive the router.replace that clears autoPrompt.
     const preferredProviderRef = useRef(searchParams?.get("preferredProvider") ?? "");
     const preferredModelRef = useRef(searchParams?.get("preferredModel") ?? "");
+    // I15 of the SSOT program — server-owned run handoff. When present, the workspace re-derives
+    // the auto-send prompt from PipelineRun.canonicalBrief (not client storage) and the locked
+    // modelLock.effective becomes the preferred provider/model (mutated into the refs above once
+    // the run loads — see the mount effect below), instead of URL-param hints that can silently
+    // fall back to the wrong model.
+    const pipelineRunIdRef = useRef(searchParams?.get("pipelineRunId") ?? "");
     const [preferredModelResolutionComplete, setPreferredModelResolutionComplete] = useState(
-        () => !preferredProviderRef.current && !preferredModelRef.current,
+        () => !preferredProviderRef.current && !preferredModelRef.current && !pipelineRunIdRef.current,
     );
     // Track whether we arrived from the Zero Effort / Vibe pipeline.
-    // True when a sessionStorage handoff key exists for the conv param (new path)
-    // or when an autoPrompt URL param is present (legacy/fallback path).
+    // True when a sessionStorage handoff key exists for the conv param (new path),
+    // when an autoPrompt URL param is present (legacy/fallback path), or when a
+    // server-owned pipelineRunId handoff is present (I15).
     const fromZeroEffortRef = useRef(!!(searchParams?.get("conv") && (
         typeof sessionStorage !== "undefined"
             ? !!sessionStorage.getItem(`pipeline_handoff_${searchParams.get("conv")}`)
             : false
-    ) || searchParams?.get("autoPrompt")));
+    ) || searchParams?.get("autoPrompt") || pipelineRunIdRef.current));
     const projectAssetsBootstrappedRef = useRef(false);
     // voiceListening, voiceSupported, voiceError are provided by useSpeechDictation below
     const [chatAttachedFiles, setChatAttachedFiles] = useState<ChatAttachedFile[]>([]);
@@ -577,8 +585,43 @@ function WorkspacePageContent() {
             .catch(() => undefined);
     }, [token, loadProjectConversation, projectId]);
 
-    // ── Zero Effort auto-send: read prompt from sessionStorage (primary) or URL param (fallback) ──
+    // ── I15: server-owned run handoff (PipelineRun.canonicalBrief, not client storage) ──
+    // Takes priority over both legacy handoff paths below when a pipelineRunId is present —
+    // it's only ever set by the new launch-workspace flow, which never also writes the legacy
+    // sessionStorage/autoPrompt handoff for the same navigation.
     useEffect(() => {
+        const runId = pipelineRunIdRef.current;
+        if (!runId) return;
+        const authToken = getToken();
+        if (!authToken) return;
+        let cancelled = false;
+        void getPipelineRun(authToken, projectId, runId)
+            .then(({ run }) => {
+                if (cancelled) return;
+                if (run.canonicalBrief?.content) {
+                    setPrompt(run.canonicalBrief.content);
+                    setAutoPromptPending(true);
+                }
+                // Locked model is authoritative for this run — feed it into the existing
+                // preferred-provider/model resolution effect (which already validates against
+                // the hydrated catalog and shows a fallback notice if it's since gone inactive)
+                // instead of trusting a client-supplied URL param.
+                preferredProviderRef.current = run.modelLock.effective.providerId;
+                preferredModelRef.current = run.modelLock.effective.modelId;
+                setPreferredModelResolutionComplete(false);
+            })
+            .catch(() => {
+                // Run fetch failed (flag flipped off after launch, run not found, network) —
+                // fall through with an empty prompt; the user can still type/send manually.
+            });
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // run once on mount — searchParams/projectId are stable
+
+    // ── Zero Effort auto-send: read prompt from sessionStorage (primary) or URL param (fallback) ──
+    // Skipped entirely when a pipelineRunId handoff is present (I15 path above owns it instead).
+    useEffect(() => {
+        if (pipelineRunIdRef.current) return;
         const convId = searchParams?.get("conv");
         // Primary path: sessionStorage handoff (avoids URI-length limits and encoding errors).
         const handoffKey = convId ? `pipeline_handoff_${convId}` : null;
@@ -2034,6 +2077,7 @@ function WorkspacePageContent() {
                         history,
                         currentArtifacts,
                         focusContext,
+                        pipelineRunId: pipelineRunIdRef.current || undefined,
                     },
                     (event) => {
                         if (event.type === "thinking") {
@@ -2166,6 +2210,7 @@ function WorkspacePageContent() {
                     history,
                     currentArtifacts,
                     focusContext: retryWithoutFocusContext ? undefined : focusContext,
+                    pipelineRunId: pipelineRunIdRef.current || undefined,
                 });
             }
 
@@ -2500,6 +2545,7 @@ function WorkspacePageContent() {
                     conversationId: convId,
                     provider: selectedProvider || undefined,
                     model: selectedModel || undefined,
+                    pipelineRunId: pipelineRunIdRef.current || undefined,
                 },
                 (event) => {
                     if (event.type === "thinking") { setThinkingText((prev) => prev + event.content); return; }
