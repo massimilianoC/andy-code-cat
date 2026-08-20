@@ -1,11 +1,13 @@
 # Dashboard VibeCore — Feature Specification
 
-**Status**: Draft v2  
+**Status**: **historical design reference** — implementation directives for model routing, task defaults, fallback and handoff are superseded by the 2026-08-18 SSOT implementation program.
 **Priority**: High  
 **Last updated**: 2026-05-14  
 **Depends on**: DCL (Document Context Layer) — fully implemented; PrepromptEngine  
 **Target branch**: `feat/dashboard-lovable-chat` from `develop`  
 **Internal codename**: `VibeCore` (do not surface to users)
+
+> For active Vibe implementation, follow [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md). This document remains useful for UX/design context only.
 
 ---
 

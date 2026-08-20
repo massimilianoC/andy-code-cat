@@ -1,12 +1,14 @@
 # Andy Code Cat — Modular Workflow Pipeline Plan
 
-> Status: proposed implementation plan  
+> Status: future/deferred architecture reference — generic workflows and node-editor work are not in the current implementation cycle.
 > Date: 2026-04-16  
 > Scope: zero-effort generation flow, dynamic UX difficulty modes, backend-first orchestration, reusable pipeline templates, and future node-based workflow editor
 
 Related execution-grade handoff:
 
 - [docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md](../specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md)
+
+> Current implementation work must first complete the [SSOT Prompting and Model Routing Program](../specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md). Do not use this plan to introduce generic stages, a workflow editor or a parallel model-routing path.
 
 ---
 

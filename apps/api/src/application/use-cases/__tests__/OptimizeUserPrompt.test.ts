@@ -13,9 +13,11 @@ vi.mock("../../../config", () => ({
         COST_POLICY_VIDEO_EUR_PER_ASSET: 0.2,
         COST_POLICY_USD_TO_EUR_RATE: 0.92,
         COST_POLICY_PROVIDER_MARKUP_FACTOR: 1.2,
+        pipelineRunEnabled: true,
     },
 }));
 
+import { env } from "../../../config";
 import { OptimizeUserPrompt } from "../OptimizeUserPrompt";
 
 function streamResponse(lines: string[]) {
@@ -76,6 +78,8 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
     assets?: any[];
     assetRepository?: { listByProject: ReturnType<typeof vi.fn> };
     storageText?: string;
+    catalog?: unknown;
+    resolvePipelineModelLock?: { dispatch: ReturnType<typeof vi.fn>; createRun: ReturnType<typeof vi.fn> };
 }) {
     const projectRepository = {
         findByIdForUser: vi.fn(async () => ({
@@ -94,7 +98,7 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
     const userRepository = { incrementTokensConsumed: vi.fn(async () => undefined) };
     const promptExecutionLogRepository = { create: vi.fn(async () => undefined) };
     const getLlmCatalog = {
-        execute: vi.fn(async () => ({
+        execute: vi.fn(async () => overrides?.catalog ?? {
             source: "env",
             providers: [{
                 provider: "siliconflow",
@@ -114,11 +118,17 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
                 createdAt: new Date(),
                 updatedAt: new Date(),
             }],
-        })),
+        }),
     };
     const storage = {
         uploadFilePath: vi.fn((_userId: string, _projectId: string, storedFilename: string) => storedFilename),
         createReadStream: vi.fn(async () => Readable.from([overrides?.storageText ?? ""])),
+    };
+    const resolvePipelineModelLock = overrides?.resolvePipelineModelLock ?? {
+        dispatch: vi.fn(async () => {
+            throw new Error("resolvePipelineModelLock.dispatch should not be called on the legacy path");
+        }),
+        createRun: vi.fn(),
     };
 
     return {
@@ -131,9 +141,11 @@ function createUseCase(platformConfig: unknown = null, overrides?: {
             userRepository as any,
             promptExecutionLogRepository as any,
             getLlmCatalog as any,
+            resolvePipelineModelLock as any,
             storage as any,
         ),
         promptExecutionLogRepository,
+        resolvePipelineModelLock,
     };
 }
 
@@ -141,6 +153,7 @@ describe("OptimizeUserPrompt", () => {
     afterEach(() => {
         vi.unstubAllGlobals();
         vi.useRealTimers();
+        env.pipelineRunEnabled = true;
     });
 
     it("uses streamed reasoning text as the optimized prompt when content chunks are empty", async () => {
@@ -270,5 +283,244 @@ describe("OptimizeUserPrompt", () => {
         const messages = requestBody.messages as Array<{ role: string; content: string }>;
         expect(messages.map((message) => message.content).join("\n")).toContain("LAYER D");
         expect(messages.map((message) => message.content).join("\n")).toContain("catalogo Jazz Milano");
+    });
+
+    // ── resolveModelSelection pin: byte-identical (provider, model) vs. pre-refactor inline cascade ──
+
+    it("model resolution: honors a request-override model because the resolved provider is openai-compatible", async () => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { useCase } = createUseCase();
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            provider: "siliconflow",
+            model: "some-other-model-not-in-catalog",
+        });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        // KNOWN-DIVERGENCE (future work): the override model is honored WITHOUT verifying it is
+        // active in the catalog, because the resolved provider's apiType is openai-compatible.
+        expect(requestBody.model).toBe("some-other-model-not-in-catalog");
+    });
+
+    it("model resolution: no override falls through to the active dialogue-role default model", async () => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { useCase } = createUseCase();
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+        });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M2.5");
+    });
+
+    it("model resolution: task-setting model wins over the catalog default when active in the catalog", async () => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const catalog = {
+            source: "env",
+            providers: [{
+                provider: "siliconflow",
+                baseUrl: "https://llm.test/v1",
+                apiType: "openai-compatible",
+                authType: "none",
+                isActive: true,
+                models: [
+                    {
+                        id: "MiniMaxAI/MiniMax-M2.5",
+                        provider: "siliconflow",
+                        role: "dialogue",
+                        capabilities: ["chat"],
+                        isDefault: true,
+                        isFallback: false,
+                        isActive: true,
+                    },
+                    {
+                        id: "deepseek-ai/DeepSeek-V3",
+                        provider: "siliconflow",
+                        role: "dialogue",
+                        capabilities: ["chat"],
+                        isDefault: false,
+                        isFallback: false,
+                        isActive: true,
+                    },
+                ],
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            }],
+        };
+        const { useCase } = createUseCase({
+            governanceByProduct: {
+                default: {
+                    promptTaskSettings: {
+                        optimize_user_prompt: {
+                            provider: "siliconflow",
+                            model: "deepseek-ai/DeepSeek-V3",
+                        },
+                    },
+                },
+            },
+        }, { catalog });
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            taskKey: "optimize_user_prompt",
+        });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("deepseek-ai/DeepSeek-V3");
+    });
+
+    // ── I13 strict cutover wave 1: pipelineRunId governs dispatch instead of the legacy cascade ──
+
+    it("strict dispatch: uses the PipelineRun's locked provider/model and never calls the legacy cascade", async () => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const dispatch = vi.fn(async () => ({
+            run: {
+                id: "run-1",
+                modelLock: {
+                    policy: "strict",
+                    requested: { providerId: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5", catalogRevision: "rev-1" },
+                    effective: { providerId: "siliconflow", modelId: "MiniMaxAI/MiniMax-M2.5" },
+                    selectedAt: new Date().toISOString(),
+                    selectedBy: "catalog-proposal",
+                },
+            },
+            blocked: null,
+        }));
+        const resolvePipelineModelLock = { dispatch, createRun: vi.fn() };
+
+        const { useCase } = createUseCase(null, { resolvePipelineModelLock });
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            pipelineRunId: "run-1",
+        });
+
+        expect(dispatch).toHaveBeenCalledWith({ runId: "run-1", ownerUserId: "user-1", projectId: "project-1", stage: "optimize" });
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M2.5");
+    });
+
+    it("strict dispatch: throws a 409 and never calls the provider when the lock is blocked", async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+
+        const resolvePipelineModelLock = {
+            dispatch: vi.fn(async () => ({
+                run: {
+                    id: "run-1",
+                    modelLock: {
+                        effective: { providerId: "openrouter", modelId: "moonshotai/Kimi-K3" },
+                    },
+                },
+                blocked: { code: "MODEL_LOCK_UNAVAILABLE", stage: "optimize", at: new Date() },
+            })),
+            createRun: vi.fn(),
+        };
+
+        const { useCase, promptExecutionLogRepository } = createUseCase(null, { resolvePipelineModelLock });
+
+        await expect(useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            pipelineRunId: "run-1",
+        })).rejects.toMatchObject({ statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE" });
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        // I14.1 hardening: the audit journal must record the LOCKED model that failed to
+        // dispatch, not the hardcoded FALLBACK_PROVIDER/FALLBACK_MODEL — a blocked strict
+        // dispatch never even resolved a PreparedExecutionContext, so before this fix
+        // persistFailureLog silently fabricated a model that was never actually targeted.
+        expect(promptExecutionLogRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+            provider: "openrouter",
+            model: "moonshotai/Kimi-K3",
+            status: "failed",
+        }));
+    });
+
+    it("strict dispatch: throws a 409 when the locked provider is no longer in the active catalog", async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+
+        const resolvePipelineModelLock = {
+            dispatch: vi.fn(async () => ({
+                run: {
+                    id: "run-1",
+                    modelLock: {
+                        policy: "strict",
+                        requested: { providerId: "openrouter", modelId: "some/model", catalogRevision: "rev-1" },
+                        effective: { providerId: "openrouter", modelId: "some/model" },
+                        selectedAt: new Date().toISOString(),
+                        selectedBy: "catalog-proposal",
+                    },
+                },
+                blocked: null,
+            })),
+            createRun: vi.fn(),
+        };
+
+        const { useCase } = createUseCase(null, { resolvePipelineModelLock });
+
+        await expect(useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            pipelineRunId: "run-1",
+        })).rejects.toMatchObject({ statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE" });
+
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("PIPELINE_RUN_ENABLED=false: falls back to the legacy cascade even when pipelineRunId is set (master rollback lever)", async () => {
+        env.pipelineRunEnabled = false;
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
+            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const resolvePipelineModelLock = { dispatch: vi.fn(), createRun: vi.fn() };
+        const { useCase } = createUseCase(null, { resolvePipelineModelLock });
+
+        await useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            pipelineRunId: "run-1",
+        });
+
+        expect(resolvePipelineModelLock.dispatch).not.toHaveBeenCalled();
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M2.5");
     });
 });

@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import {
     getAdminConfig,
     getAdminLlmRegistry,
+    getAdminPromptRegistry,
     updateProductGovernance,
     type AdminLlmProviderDto,
     type PromptTaskSettingDto,
+    type PromptTaskDescriptorDto,
 } from "@/lib/api/admin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,159 +33,22 @@ const GENERATE_TASK_KEY       = "zero_effort_generate";
 const VIBE_GENERATE_TASK_KEY  = "vibe_mode_generate";
 const PROJECT_MODE_GENERATE_TASK_KEY = "god_mode_generate";
 
-// ── Default system prompts (mirrors API hardcoded prompts) ─────────────────
-// These are shown in the "System template override" textarea.
-// Override is honoured by the API only when non-empty.
-
-const CLASSIFY_DEFAULT_PROMPT =
-`You are a document-type and template classifier.
-Given a user prompt and optional file metadata, return a JSON object:
-{
-  "templateId": "<id from catalog or null>",
-  "formatHint": "<one of: one_pager, a3_document, ratio_1_1, ratio_16_9, interactive_form, portfolio, brochure, analytics_dashboard or null>",
-  "confidence": <number 0.0–1.0>,
-  "reasoning": "<one sentence>"
-}
-
-Rules:
-- Set templateId only if confidence >= 0.65 against the template catalog below.
-- Set formatHint independently of templateId; it can be non-null even when templateId is null.
-- If neither signal is clear, return both as null.
-- Choose by intended output, not by surface wording. A request for something playable, game-like, arcade,
-  puzzle, challenge, score, controls, levels, HUD, character movement, or interaction loop MUST prefer
-  the most specific active game template. Use "videogame" for generic playable browser games; use
-  "seriousgame" only when learning/training is the main goal; use "game3d" for explicit 3D scenes/games;
-  use "vr-aframe" for explicit VR/immersive A-Frame requests; use "interactive-story" for branching stories.
-- Do not choose "landing" or "website" for a prompt that asks to build a playable experience, even if it
-  also mentions a title, brand, launch page, or presentation copy.
-- Return valid JSON only — no markdown fences, no extra text.
-
-Available templates:
-{{TEMPLATE_LIST}}`;
-
-const PREFILL_DEFAULT_PROMPT =
-`You are a web project brief extractor.
-Given a user's free-form description of a project, return a JSON object that
-populates a structured project brief.
-
-Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
-{
-  "businessName": "brand or project name (string, required)",
-  "presetId": "one of: neutral|landing|website|form|manifesto|slideshow|keynote|a4poster|infographic|videogame|freerunner|seriousgame|game3d|vr-aframe|interactive-story (string, required)",
-  "outputLanguage": "BCP-47 language code of the content to generate, e.g. 'it', 'en', 'de', 'fr' (string, required)",
-  "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
-  "audience": "target audience description — 120 to 500 chars when possible (string, required)",
-  "tone": "communication tone, e.g. professional, playful (string or null)",
-  "primaryCta": "main call-to-action button text (string or null)",
-  "styleHint": "visual, UX, interaction, and production notes — 180 to 900 chars when useful (string or null)",
-  "contactInfo": [{"key": "Email", "value": "..."}],
-  "styleAttributes": ["minimal"]
-}
-
-presetId guidance — choose the best match:
-  neutral         generic project with no specific template
-  landing         marketing landing page / single page site
-  website         multi-section business website
-  form            guided form, wizard, or survey
-  manifesto       editorial page, manifesto, or long-form statement
-  slideshow       slide deck / presentation / carousel narrative
-  keynote         pitch deck / keynote / investor presentation
-  a4poster        A4 print-ready poster or flyer
-  infographic     data infographic / visual storytelling
-  videogame       2D browser arcade or action game
-  freerunner      2D infinite/endless runner with continuous movement, obstacles, score and retry loop
-  seriousgame     educational or training serious game
-  game3d          3D WebGL browser game
-  vr-aframe       WebVR / A-Frame immersive experience
-  interactive-story  branching narrative / choose-your-own-adventure
-
-Rules:
-- businessName: extract from the prompt; fall back to "Project" if unclear.
-- presetId: infer from the user's intent — use the MOST SPECIFIC matching id.
-  A "slideshow" or "presentation" request MUST use "slideshow" or "keynote", NOT "landing".
-  A "game" request MUST use one of the game presets. Default to "landing" only when no better match.
-- outputLanguage: detect the language the user wants the CONTENT in. If the user writes in Italian but asks "in tedesco" or "in German", outputLanguage must be "de". Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
-- primaryGoal: produce a robust structured brief that can be injected into downstream generation prompts. Include: project intent, selected template interpretation, required sections/screens, key functionality, success criteria, assumptions needed.
-- audience: infer who uses or views the result; include needs, context, and expectations.
-- contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
-- styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
-- IMPORTANT: write fields in order shown — businessName, presetId, outputLanguage first.
-- Return ONLY the JSON object.`;
-
-const OPTIMIZE_DEFAULT_PROMPT =
-`You rewrite a user's raw creative brief into a stronger, richer, production-ready content prompt for the current project.
-
-GOAL
-- Preserve the user's original intent, meaning, domain, and explicit preferences.
-- Enrich the brief so the platform can generate a better result with less effort from the user.
-- Expand the brief coherently with stronger guidance about message, audience, tone, content priorities, visual mood, and calls to action.
-
-STYLE POLICY
-- Keep the result modern, fresh, vivid, and professional.
-- Respect the script, style, sector, and preferences already expressed by the user.
-- If the user already provided a detailed brief, refine it lightly instead of rewriting aggressively.
-
-IMPORTANT BOUNDARIES
-- Do NOT mention technical output architecture.
-- Do NOT mention HTML, CSS, JS, JSON, single-file output, embedding, implementation details, or code constraints.
-- Focus only on business intent, content direction, storytelling quality, brand feel, and creative guidance.
-- Treat [SOURCE_REQUEST] as authoritative. Enrichment is additive only: never remove, weaken or contradict explicit requirements, template choices, constraints or prohibitions; preserve [MUST_AVOID].
-
-OUTPUT RULES
-- Return only the optimized prompt text.
-- Write in the same language as the user's input.
-- Make it directly usable as the next user prompt in a generation workflow.`;
-
-const TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
-    [CLASSIFY_TASK_KEY]: {
-        enabled: true,
-        provider: "",
-        model: "",
-        temperature: 0.0,
-        maxCompletionTokens: 256,
-        systemTemplate: CLASSIFY_DEFAULT_PROMPT,
-    },
-    [PREFILL_TASK_KEY]: {
-        enabled: true,
-        provider: "",
-        model: "",
-        temperature: 0.3,
-        maxCompletionTokens: 2048,
-        systemTemplate: PREFILL_DEFAULT_PROMPT,
-    },
-    [OPTIMIZE_TASK_KEY]: {
-        enabled: true,
-        provider: "",
-        model: "",
-        temperature: 0.7,
-        maxCompletionTokens: 32000,
-        systemTemplate: OPTIMIZE_DEFAULT_PROMPT,
-    },
-    [GENERATE_TASK_KEY]: {
-        enabled: true,
-        provider: "",
-        model: "",
-        temperature: 0.5,
-        maxCompletionTokens: 14000,
-        systemTemplate: "",
-    },
-    [VIBE_GENERATE_TASK_KEY]: {
-        enabled: true,
-        provider: "",
-        model: "",
-        temperature: 0.5,
-        maxCompletionTokens: 14000,
-        systemTemplate: "",
-    },
-    [PROJECT_MODE_GENERATE_TASK_KEY]: {
-        enabled: true,
-        provider: "",
-        model: "",
-        temperature: 0.5,
-        maxCompletionTokens: 14000,
-        systemTemplate: "",
-    },
+// Routing-only structural defaults (provider/model/temperature/token budget). These are NOT
+// prompt text — the actual default *text* for a task's system-template slot (when one
+// exists) always comes from the /v1/admin/prompt-registry endpoint, never from a literal
+// string here. See taskPromptRegistry.ts on the backend for the source of truth.
+const TASK_ROUTING_DEFAULTS: Record<string, Omit<PromptTaskSettingDto, "systemTemplate" | "systemTemplateBaselineHash">> = {
+    [CLASSIFY_TASK_KEY]:          { enabled: true, provider: "", model: "", temperature: 0.0, maxCompletionTokens: 256 },
+    [PREFILL_TASK_KEY]:           { enabled: true, provider: "", model: "", temperature: 0.3, maxCompletionTokens: 6000 },
+    [OPTIMIZE_TASK_KEY]:          { enabled: true, provider: "", model: "", temperature: 0.7, maxCompletionTokens: 32000 },
+    [GENERATE_TASK_KEY]:          { enabled: true, provider: "", model: "", temperature: 0.5, maxCompletionTokens: 14000 },
+    [VIBE_GENERATE_TASK_KEY]:     { enabled: true, provider: "", model: "", temperature: 0.5, maxCompletionTokens: 14000 },
+    [PROJECT_MODE_GENERATE_TASK_KEY]: { enabled: true, provider: "", model: "", temperature: 0.5, maxCompletionTokens: 14000 },
 };
+
+function emptyTask(key: string): PromptTaskSettingDto {
+    return { ...TASK_ROUTING_DEFAULTS[key], systemTemplate: "", systemTemplateBaselineHash: undefined };
+}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -196,6 +61,7 @@ export default function GuidedModeAdminPage() {
     const [success, setSuccess] = useState(false);
 
     const [providers, setProviders] = useState<AdminLlmProviderDto[]>([]);
+    const [registryTasks, setRegistryTasks] = useState<Record<string, PromptTaskDescriptorDto>>({});
 
     function mergeTask(
         key: string,
@@ -204,22 +70,35 @@ export default function GuidedModeAdminPage() {
         preferredProvider?: string,
     ): PromptTaskSettingDto {
         return resolvePromptTaskSettingAgainstCatalog(
-            {
-                ...TASK_DEFAULTS[key],
-                ...(saved ?? {}),
-                systemTemplate: saved?.systemTemplate || TASK_DEFAULTS[key].systemTemplate,
-            },
+            { ...emptyTask(key), ...(saved ?? {}) },
             nextProviders,
             { preferredProvider, requiredCapability: "chat" },
         );
     }
 
-    const [classifyTask,      setClassifyTask]      = useState<PromptTaskSettingDto>(TASK_DEFAULTS[CLASSIFY_TASK_KEY]);
-    const [prefillTask,       setPrefillTask]        = useState<PromptTaskSettingDto>(TASK_DEFAULTS[PREFILL_TASK_KEY]);
-    const [optimizeTask,      setOptimizeTask]       = useState<PromptTaskSettingDto>(TASK_DEFAULTS[OPTIMIZE_TASK_KEY]);
-    const [generateTask,      setGenerateTask]       = useState<PromptTaskSettingDto>(TASK_DEFAULTS[GENERATE_TASK_KEY]);
-    const [vibeGenerateTask,  setVibeGenerateTask]   = useState<PromptTaskSettingDto>(TASK_DEFAULTS[VIBE_GENERATE_TASK_KEY]);
-    const [projectModeGenerateTask, setProjectModeGenerateTask] = useState<PromptTaskSettingDto>(TASK_DEFAULTS[PROJECT_MODE_GENERATE_TASK_KEY]);
+    const [classifyTask,      setClassifyTask]      = useState<PromptTaskSettingDto>(emptyTask(CLASSIFY_TASK_KEY));
+    const [prefillTask,       setPrefillTask]        = useState<PromptTaskSettingDto>(emptyTask(PREFILL_TASK_KEY));
+    const [optimizeTask,      setOptimizeTask]       = useState<PromptTaskSettingDto>(emptyTask(OPTIMIZE_TASK_KEY));
+    const [generateTask,      setGenerateTask]       = useState<PromptTaskSettingDto>(emptyTask(GENERATE_TASK_KEY));
+    const [vibeGenerateTask,  setVibeGenerateTask]   = useState<PromptTaskSettingDto>(emptyTask(VIBE_GENERATE_TASK_KEY));
+    const [projectModeGenerateTask, setProjectModeGenerateTask] = useState<PromptTaskSettingDto>(emptyTask(PROJECT_MODE_GENERATE_TASK_KEY));
+
+    // Snapshot taken right after a successful load/save — used to gate the Save button on
+    // whether anything actually changed, instead of always allowing a save.
+    const [savedSnapshot, setSavedSnapshot] = useState<string>("");
+
+    function currentTasks(): Record<string, PromptTaskSettingDto> {
+        return {
+            [CLASSIFY_TASK_KEY]: classifyTask,
+            [PREFILL_TASK_KEY]: prefillTask,
+            [OPTIMIZE_TASK_KEY]: optimizeTask,
+            [GENERATE_TASK_KEY]: generateTask,
+            [VIBE_GENERATE_TASK_KEY]: vibeGenerateTask,
+            [PROJECT_MODE_GENERATE_TASK_KEY]: projectModeGenerateTask,
+        };
+    }
+
+    const hasChanges = JSON.stringify(currentTasks()) !== savedSnapshot;
 
     useEffect(() => {
         const t = getToken();
@@ -228,23 +107,45 @@ export default function GuidedModeAdminPage() {
         void Promise.all([
             getAdminConfig(t),
             getAdminLlmRegistry(t),
-        ]).then(([cfg, registry]) => {
+            getAdminPromptRegistry(t),
+        ]).then(([cfg, registry, promptRegistry]) => {
             const productSettings = cfg.governanceByProduct?.[DEFAULT_PRODUCT_KEY]?.promptTaskSettings ?? {};
             const nextProviders = registry.providers ?? [];
-            setClassifyTask(mergeTask(CLASSIFY_TASK_KEY, productSettings[CLASSIFY_TASK_KEY], nextProviders, registry.activeProvider));
-            setPrefillTask(mergeTask(PREFILL_TASK_KEY, productSettings[PREFILL_TASK_KEY], nextProviders, registry.activeProvider));
-            setOptimizeTask(mergeTask(OPTIMIZE_TASK_KEY, productSettings[OPTIMIZE_TASK_KEY], nextProviders, registry.activeProvider));
-            setGenerateTask(mergeTask(GENERATE_TASK_KEY, productSettings[GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
-            setVibeGenerateTask(mergeTask(VIBE_GENERATE_TASK_KEY, productSettings[VIBE_GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
-            setProjectModeGenerateTask(mergeTask(PROJECT_MODE_GENERATE_TASK_KEY, productSettings[PROJECT_MODE_GENERATE_TASK_KEY], nextProviders, registry.activeProvider));
+            const tasksByKey = Object.fromEntries(promptRegistry.tasks.map((task) => [task.key, task]));
+            setRegistryTasks(tasksByKey);
+
+            const nextClassify = mergeTask(CLASSIFY_TASK_KEY, productSettings[CLASSIFY_TASK_KEY], nextProviders, registry.activeProvider);
+            const nextPrefill = mergeTask(PREFILL_TASK_KEY, productSettings[PREFILL_TASK_KEY], nextProviders, registry.activeProvider);
+            const nextOptimize = mergeTask(OPTIMIZE_TASK_KEY, productSettings[OPTIMIZE_TASK_KEY], nextProviders, registry.activeProvider);
+            const nextGenerate = mergeTask(GENERATE_TASK_KEY, productSettings[GENERATE_TASK_KEY], nextProviders, registry.activeProvider);
+            const nextVibeGenerate = mergeTask(VIBE_GENERATE_TASK_KEY, productSettings[VIBE_GENERATE_TASK_KEY], nextProviders, registry.activeProvider);
+            const nextProjectModeGenerate = mergeTask(PROJECT_MODE_GENERATE_TASK_KEY, productSettings[PROJECT_MODE_GENERATE_TASK_KEY], nextProviders, registry.activeProvider);
+
+            setClassifyTask(nextClassify);
+            setPrefillTask(nextPrefill);
+            setOptimizeTask(nextOptimize);
+            setGenerateTask(nextGenerate);
+            setVibeGenerateTask(nextVibeGenerate);
+            setProjectModeGenerateTask(nextProjectModeGenerate);
             setProviders(nextProviders);
+            setSavedSnapshot(JSON.stringify({
+                [CLASSIFY_TASK_KEY]: nextClassify,
+                [PREFILL_TASK_KEY]: nextPrefill,
+                [OPTIMIZE_TASK_KEY]: nextOptimize,
+                [GENERATE_TASK_KEY]: nextGenerate,
+                [VIBE_GENERATE_TASK_KEY]: nextVibeGenerate,
+                [PROJECT_MODE_GENERATE_TASK_KEY]: nextProjectModeGenerate,
+            }));
         })
         .catch(() => setError("Unable to load config."))
         .finally(() => setLoading(false));
     }, [router]);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const hasChanges = useMemo(() => true, [classifyTask, prefillTask, optimizeTask, generateTask, vibeGenerateTask, projectModeGenerateTask]);
+    /** Attaches the registry's current defaultTextHash as the saved baseline whenever a non-empty override is being persisted; clears it otherwise. */
+    function withBaselineHash(key: string, task: PromptTaskSettingDto): PromptTaskSettingDto {
+        if (!task.systemTemplate.trim()) return { ...task, systemTemplateBaselineHash: undefined };
+        return { ...task, systemTemplateBaselineHash: registryTasks[key]?.defaultTextHash };
+    }
 
     async function handleSave() {
         if (!token) return;
@@ -252,17 +153,17 @@ export default function GuidedModeAdminPage() {
         setError(null);
         setSuccess(false);
         try {
-            await updateProductGovernance(token, DEFAULT_PRODUCT_KEY, {
-                promptTaskSettings: {
-                    [CLASSIFY_TASK_KEY]:          classifyTask,
-                    [PREFILL_TASK_KEY]:           prefillTask,
-                    [OPTIMIZE_TASK_KEY]:          optimizeTask,
-                    [GENERATE_TASK_KEY]:          generateTask,
-                    [VIBE_GENERATE_TASK_KEY]:     vibeGenerateTask,
-                    [PROJECT_MODE_GENERATE_TASK_KEY]: projectModeGenerateTask,
-                },
-            });
+            const payload = {
+                [CLASSIFY_TASK_KEY]:          withBaselineHash(CLASSIFY_TASK_KEY, classifyTask),
+                [PREFILL_TASK_KEY]:           withBaselineHash(PREFILL_TASK_KEY, prefillTask),
+                [OPTIMIZE_TASK_KEY]:          withBaselineHash(OPTIMIZE_TASK_KEY, optimizeTask),
+                [GENERATE_TASK_KEY]:          generateTask,
+                [VIBE_GENERATE_TASK_KEY]:     vibeGenerateTask,
+                [PROJECT_MODE_GENERATE_TASK_KEY]: projectModeGenerateTask,
+            };
+            await updateProductGovernance(token, DEFAULT_PRODUCT_KEY, { promptTaskSettings: payload });
             setSuccess(true);
+            setSavedSnapshot(JSON.stringify(payload));
             setTimeout(() => setSuccess(false), 3000);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Save failed.");
@@ -303,22 +204,28 @@ export default function GuidedModeAdminPage() {
                     <PromptTaskSettingsCard
                         title="Layer Φ — Classificazione intento (vibe_intent_classify)"
                         description="Classifica il prompt per templateId e formatHint. Modello rapido, temperatura 0."
-                        helperText="Usa un modello fast/istruzione-following. Max token: 256."
+                        helperText="Usa un modello fast/istruzione-following. Max token: 256. Il contratto canonico di selezione preset (procedura + catalogo annotato) è sempre aggiunto dal backend dopo questo template e non può essere sovrascritto."
                         value={classifyTask}
                         providers={providers}
                         onFieldChange={(field, value) =>
                             setClassifyTask((prev) => ({ ...prev, [field]: value }))
                         }
+                        registryDefaultText={registryTasks[CLASSIFY_TASK_KEY]?.defaultText}
+                        registryDefaultTextHash={registryTasks[CLASSIFY_TASK_KEY]?.defaultTextHash}
+                        routingOnly={registryTasks[CLASSIFY_TASK_KEY]?.operatorSlotId === undefined}
                     />
                     <PromptTaskSettingsCard
                         title="Prefill Brief — Estrazione brief (vibe_intent_prefill)"
                         description="Seleziona presetId dallo stesso catalogo di Vibe e compila il brief Guided Mode completo: struttura, contenuti, funzioni, interazioni, visual, vincoli e criteri di successo."
-                        helperText="Il backend aggiunge sempre contratto e catalogo correnti: questo override può specializzare il comportamento, ma non rimuoverli. Consigliati almeno 2048 token."
+                        helperText="Il backend antepone sempre il contratto e il catalogo correnti: questo override è ora consultivo e non può restringere lo schema. Consigliati almeno 6000 token (il brief completo a 19 campi richiede ~2.100–5.800 token di output; sotto questa soglia i campi espressivi vengono troncati silenziosamente)."
                         value={prefillTask}
                         providers={providers}
                         onFieldChange={(field, value) =>
                             setPrefillTask((prev) => ({ ...prev, [field]: value }))
                         }
+                        registryDefaultText={registryTasks[PREFILL_TASK_KEY]?.defaultText}
+                        registryDefaultTextHash={registryTasks[PREFILL_TASK_KEY]?.defaultTextHash}
+                        routingOnly={registryTasks[PREFILL_TASK_KEY]?.operatorSlotId === undefined}
                     />
                 </CardContent>
             </Card>
@@ -341,6 +248,9 @@ export default function GuidedModeAdminPage() {
                         onFieldChange={(field, value) =>
                             setOptimizeTask((prev) => ({ ...prev, [field]: value }))
                         }
+                        registryDefaultText={registryTasks[OPTIMIZE_TASK_KEY]?.defaultText}
+                        registryDefaultTextHash={registryTasks[OPTIMIZE_TASK_KEY]?.defaultTextHash}
+                        routingOnly={registryTasks[OPTIMIZE_TASK_KEY]?.operatorSlotId === undefined}
                     />
                     <PromptTaskSettingsCard
                         title="Generazione Contenuto (zero_effort_generate)"
@@ -351,6 +261,9 @@ export default function GuidedModeAdminPage() {
                         onFieldChange={(field, value) =>
                             setGenerateTask((prev) => ({ ...prev, [field]: value }))
                         }
+                        registryDefaultText={registryTasks[GENERATE_TASK_KEY]?.defaultText}
+                        registryDefaultTextHash={registryTasks[GENERATE_TASK_KEY]?.defaultTextHash}
+                        routingOnly={registryTasks[GENERATE_TASK_KEY]?.operatorSlotId === undefined}
                     />
                     <PromptTaskSettingsCard
                         title="Vibe Mode — Generazione finale (vibe_mode_generate)"
@@ -361,6 +274,9 @@ export default function GuidedModeAdminPage() {
                         onFieldChange={(field, value) =>
                             setVibeGenerateTask((prev) => ({ ...prev, [field]: value }))
                         }
+                        registryDefaultText={registryTasks[VIBE_GENERATE_TASK_KEY]?.defaultText}
+                        registryDefaultTextHash={registryTasks[VIBE_GENERATE_TASK_KEY]?.defaultTextHash}
+                        routingOnly={registryTasks[VIBE_GENERATE_TASK_KEY]?.operatorSlotId === undefined}
                     />
                     <PromptTaskSettingsCard
                         title="Project Mode — Generazione finale (god_mode_generate)"
@@ -371,6 +287,9 @@ export default function GuidedModeAdminPage() {
                         onFieldChange={(field, value) =>
                             setProjectModeGenerateTask((prev) => ({ ...prev, [field]: value }))
                         }
+                        registryDefaultText={registryTasks[PROJECT_MODE_GENERATE_TASK_KEY]?.defaultText}
+                        registryDefaultTextHash={registryTasks[PROJECT_MODE_GENERATE_TASK_KEY]?.defaultTextHash}
+                        routingOnly={registryTasks[PROJECT_MODE_GENERATE_TASK_KEY]?.operatorSlotId === undefined}
                     />
                 </CardContent>
             </Card>
@@ -387,7 +306,7 @@ export default function GuidedModeAdminPage() {
             )}
 
             <div className="flex justify-end">
-                <Button onClick={handleSave} disabled={saving}>
+                <Button onClick={handleSave} disabled={saving || !hasChanges}>
                     {saving ? "Salvataggio..." : "Salva impostazioni"}
                 </Button>
             </div>

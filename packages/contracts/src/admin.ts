@@ -27,6 +27,8 @@ const promptTaskSettingSchema = z.object({
     temperature: z.number().min(0).max(2).default(0.7),
     maxCompletionTokens: z.number().int().min(64).max(32000).default(1200),
     systemTemplate: z.string().max(20000).default(""),
+    /** sha256:<16 hex chars> of the platform default text this override was saved against — used to detect a stale override when the platform default later changes. */
+    systemTemplateBaselineHash: z.string().max(80).optional(),
 });
 
 const mediaStockProviderSchema = z.enum(["pexels", "pixabay", "unsplash", "loremflickr", "picsum"]);
@@ -340,6 +342,7 @@ export interface PlatformConfigDto {
             temperature: number;
             maxCompletionTokens: number;
             systemTemplate: string;
+            systemTemplateBaselineHash?: string;
         }>;
         injections: {
             headHtml: string;
@@ -381,6 +384,43 @@ export interface PlatformConfigDto {
             fallbackProviders: Array<"pexels" | "pixabay" | "unsplash" | "loremflickr" | "picsum">;
             allowPicsumFallback: boolean;
             strictPersistence?: boolean;
+        };
+    };
+}
+
+// ── Prompt task registry (governance SSOT) ──────────────────────────────────
+
+export interface PromptSlotDescriptorDto {
+    id: string;
+    key: string;
+    label: string;
+    description: string;
+    editableBy: string;
+    store: string;
+}
+
+export interface PromptTaskDescriptorDto {
+    key: string;
+    label: string;
+    group: string;
+    operatorSlotId?: string;
+    defaultText: string;
+    defaultTextHash: string;
+    slots: PromptSlotDescriptorDto[];
+}
+
+export interface AdminPromptRegistryDto {
+    tasks: PromptTaskDescriptorDto[];
+    policyDefaults: {
+        attachmentPolicy: {
+            maxAttachmentsPerPrompt: number;
+            maxFileSizeBytes: number;
+            maxTotalBytes: number;
+            warningThresholdBytes: number;
+        };
+        documentContextPolicy: {
+            maxAssetsPerPrompt: number;
+            fallbackInlineExtractionMaxAssets: number;
         };
     };
 }

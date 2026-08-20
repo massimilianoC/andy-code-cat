@@ -682,6 +682,10 @@
                 "noActive": "Seleziona prima un'immagine o genera un nuovo asset.",
                 "noActiveLabel": "Nessuna media attiva"
             },
+            "modelFallback": {
+                "label": "Modello cambiato automaticamente",
+                "message": "\"{{requested}}\" richiesto non era disponibile — in uso \"{{actual}}\"."
+            },
             "style": {
                 "done": "Stile applicato",
                 "doneSaved": "Stile applicato e salvato",
@@ -745,7 +749,9 @@
                 "doneMessage": "Risposta pronta con {{provider}} · {{model}}",
                 "abortedLabel": "Generazione interrotta",
                 "aborted": "Elaborazione annullata dall'utente.",
-                "abortedContent": "⏹ Elaborazione interrotta dall'utente"
+                "abortedContent": "⏹ Elaborazione interrotta dall'utente",
+                "parseErrorLabel": "Generazione fallita",
+                "parseError": "Il modello ha restituito una risposta non interpretabile. Nulla è stato salvato e il progetto è invariato. Riprova oppure seleziona un modello diverso."
             },
             "focusPatch": {
                 "parseErrorLabel": "Errore di parsing focus patch",

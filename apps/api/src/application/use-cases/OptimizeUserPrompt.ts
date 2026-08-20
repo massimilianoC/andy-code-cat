@@ -1,3 +1,4 @@
+import type { LlmPromptingTrace } from "@andy-code-cat/contracts";
 import { PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import type { ProjectRepository } from "../../domain/repositories/ProjectRepository";
 import type { ProjectMoodboardRepository } from "../../domain/repositories/ProjectMoodboardRepository";
@@ -23,6 +24,9 @@ import {
 } from "../../domain/entities/PlatformConfig";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
+import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
+import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
+import type { ResolvePipelineModelLock } from "./ResolvePipelineModelLock";
 
 const TASK_KEY = "optimize_user_prompt";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -61,14 +65,11 @@ type OptimizerUsage = {
     totalTokens: number;
 };
 
-type OptimizerTrace = {
-    originalUserMessage: string;
-    effectiveSystemPrompt: string;
-    messagesSentToLlm: Array<{
-        role: "system" | "user";
-        content: string;
-    }>;
-};
+// Structurally a subset of the canonical LlmPromptingTrace (packages/contracts/src/llm.ts) —
+// converged via Pick so the shape is authored once. The optimizer only ever sends
+// system/user messages (no assistant turn), which remains a valid subtype of
+// LlmPromptingTraceMessage's broader role union.
+type OptimizerTrace = Pick<LlmPromptingTrace, "originalUserMessage" | "effectiveSystemPrompt" | "messagesSentToLlm">;
 
 type OptimizePromptResponse = {
     taskKey: string;
@@ -108,6 +109,24 @@ function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" 
     return (authType ?? "bearer") === "api-key" ? key : `Bearer ${key}`;
 }
 
+/**
+ * When strict dispatch (I13/I14) throws before a `PreparedExecutionContext` exists (blocked or
+ * catalog-mismatch), `persistFailureLog` would otherwise fall back to the hardcoded
+ * FALLBACK_PROVIDER/FALLBACK_MODEL constants — recording a model that was never actually
+ * targeted, which corrupts the audit/cost journal this program exists to make trustworthy. The
+ * strict-dispatch throw sites attach `lockedProviderId`/`lockedModelId` (the run's locked target
+ * that failed to dispatch); this extracts them so the failure log can record the truth instead.
+ */
+function extractLockedModelFields(error: unknown): { provider?: string; model?: string } {
+    if (!error || typeof error !== "object") return {};
+    const provider = "lockedProviderId" in error ? (error as { lockedProviderId?: unknown }).lockedProviderId : undefined;
+    const model = "lockedModelId" in error ? (error as { lockedModelId?: unknown }).lockedModelId : undefined;
+    return {
+        provider: typeof provider === "string" ? provider : undefined,
+        model: typeof model === "string" ? model : undefined,
+    };
+}
+
 function estimateTokens(input: { messages: Array<{ content: string }>; outputText: string }): OptimizerUsage {
     const promptChars = input.messages.reduce((acc, msg) => acc + msg.content.length, 0);
     const promptTokens = Math.max(1, Math.round(promptChars / 4));
@@ -130,6 +149,7 @@ export class OptimizeUserPrompt {
         private readonly userRepository: UserRepository,
         private readonly promptExecutionLogRepository: PromptExecutionLogRepository,
         private readonly getLlmCatalog: GetLlmCatalog,
+        private readonly resolvePipelineModelLock: ResolvePipelineModelLock,
         private readonly storage?: IFileStorage,
     ) { }
 
@@ -324,6 +344,7 @@ export class OptimizeUserPrompt {
         provider?: string;
         model?: string;
         taskKey?: string;
+        pipelineRunId?: string;
     }): Promise<{ context: PreparedExecutionContext } | { skippedResult: OptimizePromptResponse }> {
         const project = await this.projectRepository.findByIdForUser(input.projectId, input.userId);
         if (!project) {
@@ -411,30 +432,77 @@ export class OptimizeUserPrompt {
         const activeProviders = catalog.providers.filter((provider) => provider.isActive);
         const requestedModel = input.model?.trim();
 
-        const selectedProviderCatalog =
-            activeProviders.find((provider) => provider.provider === input.provider)
-            ?? (requestedModel
-                ? activeProviders.find((provider) => provider.models.some((model) => model.isActive && model.id === requestedModel))
-                : undefined)
-            ?? activeProviders.find((provider) => provider.provider === taskSettings.provider)
-            ?? activeProviders.find((provider) => provider.provider === env.LLM_DEFAULT_PROVIDER)
-            ?? activeProviders.find((provider) => provider.provider === FALLBACK_PROVIDER)
-            ?? activeProviders[0];
+        let providerCatalog: (typeof activeProviders)[number] | undefined;
+        let modelId: string | undefined;
 
-        if (!selectedProviderCatalog) {
-            throw new Error("No active LLM provider configured for prompt optimization");
+        if (input.pipelineRunId && env.pipelineRunEnabled) {
+            // I13 strict cutover wave 1: a PipelineRun's frozen modelLock governs dispatch
+            // instead of the legacy cascade. dispatch() re-validates the lock against the live
+            // catalog and never substitutes a different model — a stale/deactivated lock blocks
+            // (409) rather than silently falling back. Gated on PIPELINE_RUN_ENABLED too, not
+            // just the presence of pipelineRunId: this is the master rollback lever's whole
+            // point — flipping the flag off must revert EVERY call site to legacy behavior, even
+            // one that (incorrectly, or from a stale client) still sends a pipelineRunId.
+            const { run, blocked } = await this.resolvePipelineModelLock.dispatch({
+                runId: input.pipelineRunId,
+                ownerUserId: input.userId,
+                projectId: input.projectId,
+                stage: "optimize",
+            });
+
+            if (blocked) {
+                throw Object.assign(
+                    new Error(`Pipeline model lock unavailable for optimize stage: ${blocked.code}`),
+                    {
+                        statusCode: 409,
+                        code: blocked.code,
+                        lockedProviderId: run.modelLock.effective.providerId,
+                        lockedModelId: run.modelLock.effective.modelId,
+                    },
+                );
+            }
+
+            const lockedProviderId = run.modelLock.effective.providerId;
+            const lockedModelId = run.modelLock.effective.modelId;
+            providerCatalog = activeProviders.find((provider) => provider.provider === lockedProviderId);
+            const lockedModel = providerCatalog?.models.find((model) => model.isActive && model.id === lockedModelId);
+            if (!providerCatalog || !lockedModel) {
+                throw Object.assign(
+                    new Error(`Locked provider/model is no longer in the active catalog: ${lockedProviderId}/${lockedModelId}`),
+                    { statusCode: 409, code: "MODEL_LOCK_UNAVAILABLE", lockedProviderId, lockedModelId },
+                );
+            }
+            modelId = lockedModelId;
+        } else {
+            const selectionInput: ResolveModelSelectionInput = {
+                profile: "optimizer-cascade",
+                activeProviders,
+                requestedProvider: input.provider,
+                requestedModel,
+                taskSettingProvider: taskSettings.provider,
+                taskSettingModel: taskSettings.model,
+                envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
+                fallbackProvider: FALLBACK_PROVIDER,
+                hardcodedFallbackModel: FALLBACK_MODEL,
+                requireOverrideInCatalog: false,
+                // Preserved exactly as-is (out of scope to "fix" here): an override is only honored
+                // when the resolved provider's apiType === "openai-compatible".
+                gateOverrideOnOpenAiCompatible: true,
+                policy: "legacy",
+            };
+            const decision = resolveModelSelection(selectionInput);
+            observeModelSelectionShadow(selectionInput, decision, {
+                projectId: input.projectId,
+                taskKey: input.taskKey ?? TASK_KEY,
+            });
+
+            if (!decision.providerCatalog) {
+                throw new Error("No active LLM provider configured for prompt optimization");
+            }
+
+            providerCatalog = decision.providerCatalog;
+            modelId = decision.effective.model;
         }
-
-        const providerCatalog = selectedProviderCatalog;
-
-        const activeModels = providerCatalog.models.filter((model) => model.isActive);
-        const modelId =
-            (requestedModel && providerCatalog.apiType === "openai-compatible" ? requestedModel : undefined)
-            || (taskSettings.model && activeModels.some((model) => model.id === taskSettings.model) ? taskSettings.model : undefined)
-            || activeModels.find((model) => model.role === "dialogue" && model.isDefault)?.id
-            || activeModels.find((model) => model.isDefault)?.id
-            || activeModels[0]?.id
-            || FALLBACK_MODEL;
 
         if (!taskSettings.enabled) {
             return {
@@ -492,6 +560,7 @@ export class OptimizeUserPrompt {
         provider?: string;
         model?: string;
         taskKey?: string;
+        pipelineRunId?: string;
     }): Promise<OptimizePromptResponse> {
         const startedAt = Date.now();
         let preparedContext: PreparedExecutionContext | undefined;
@@ -565,7 +634,12 @@ export class OptimizeUserPrompt {
             await this.persistSuccessLog({ request: input, context: preparedContext, result });
             return result;
         } catch (error) {
-            await this.persistFailureLog({ request: input, context: preparedContext, error, startedAt });
+            await this.persistFailureLog({
+                request: { ...input, ...extractLockedModelFields(error) },
+                context: preparedContext,
+                error,
+                startedAt,
+            });
             throw error;
         }
     }
@@ -580,6 +654,7 @@ export class OptimizeUserPrompt {
         provider?: string;
         model?: string;
         taskKey?: string;
+        pipelineRunId?: string;
     }, handlers?: {
         onThinking?: (chunk: string) => void;
         onAnswer?: (chunk: string) => void;
@@ -717,7 +792,12 @@ export class OptimizeUserPrompt {
             await this.persistSuccessLog({ request: input, context: preparedContext, result });
             return result;
         } catch (error) {
-            await this.persistFailureLog({ request: input, context: preparedContext, error, startedAt });
+            await this.persistFailureLog({
+                request: { ...input, ...extractLockedModelFields(error) },
+                context: preparedContext,
+                error,
+                startedAt,
+            });
             throw error;
         }
     }

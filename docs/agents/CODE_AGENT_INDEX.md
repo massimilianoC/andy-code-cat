@@ -4,21 +4,24 @@
 
 1. `AGENTS.md` — non-negotiable rules, layer boundaries, isolation model
 2. `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md` — layer ownership map, frozen zones, PP-NNN rule IDs, and collision-prevention checklist for all agents touching the prompting pipeline
-3. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (`R1` delivered, `R2`/`R3` active)
-4. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — current codebase structure
-5. `docs/architecture/PIPELINE_LAYERS.md` — 2-layer architecture and transition mechanism
-6. `docs/security/SECURITY_BASELINE.md` — auth and isolation baseline
-7. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
-8. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
-9. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
-10. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 16 presets (14 active, 2 hidden: `freerunner`, `data-dashboard`) with `outputSpec` and `systemPromptModule`
-11. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
-12. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
-13. `docs/project/PRODUCT_VISION.md` — current product vision and July 2026 direction lock
-14. `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md` — filesystem-first Layer S template-skills architecture and runtime strategy
-15. `docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md` — Layer S ownership, filesystem source of truth, validation workflow, and impact rubric
-16. `docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md` — implemented Layer S resolver, env flags, prompt trace, DB logging, and Docker packaging
-17. `docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md` — current deferred-R4 decision for declarative service manifests, runtime ownership, multi-tenant data scope, Forms Inbox and secure capability rollout
+3. `docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md` — active prompt-execution traceability remediation; read before changing prompting, Workshop prompt transparency, snapshots, or provider dispatch
+4. `docs/specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md` — active P0/P1 authority for model selection locks, canonical briefs, optimization policy, and Vibe/Zero Effort/GodMode handoffs
+5. `docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md` — current implementation order for the two SSOT refactors; read before adding an LLM resolver, fallback, optimizer, handoff, prompt storage, model UI, or notification
+6. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (`R1` delivered, `R2`/`R3` active)
+7. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — current codebase structure
+8. `docs/architecture/PIPELINE_LAYERS.md` — 2-layer architecture and transition mechanism
+9. `docs/security/SECURITY_BASELINE.md` — auth and isolation baseline
+10. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
+11. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
+12. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
+13. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 16 presets (14 active, 2 hidden: `freerunner`, `data-dashboard`) with `outputSpec` and `systemPromptModule`
+14. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
+15. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
+16. `docs/project/PRODUCT_VISION.md` — current product vision and July 2026 direction lock
+17. `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md` — filesystem-first Layer S template-skills architecture and runtime strategy
+18. `docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md` — Layer S ownership, filesystem source of truth, validation workflow, and impact rubric
+19. `docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md` — implemented Layer S resolver, env flags, prompt trace, DB logging, and Docker packaging
+20. `docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md` — current deferred-R4 decision for declarative service manifests, runtime ownership, multi-tenant data scope, Forms Inbox and secure capability rollout
 
 ---
 

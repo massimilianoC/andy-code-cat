@@ -1,5 +1,11 @@
 import { call } from "./call";
-import type { GenerationWorkspaceDto, GuidedLaunchResultDto } from "@andy-code-cat/contracts";
+import type {
+    GenerationWorkspaceDto,
+    GuidedLaunchResultDto,
+    LaunchWorkspacePipelineInput,
+    LaunchWorkspacePipelineResultDto,
+    PipelineRunDto,
+} from "@andy-code-cat/contracts";
 
 export interface GuidedLaunchInput {
     businessName: string;
@@ -24,6 +30,8 @@ export interface GuidedLaunchInput {
     styleAttributes?: string[];
     /** BCP-47 output language directive (e.g. "it", "en", "fr"). */
     outputLanguage?: string;
+    /** Filenames of documents attached during intake, included in the server-built canonical brief. */
+    attachmentNames?: string[];
 }
 
 export interface ProjectPipelineRunSummary {
@@ -89,6 +97,40 @@ export function getGuidedPipelineConfig(token: string, projectId: string) {
     return call<GuidedPipelineConfig>(
         "GET",
         `/v1/projects/${projectId}/pipelines/guided/config`,
+        undefined,
+        {
+            Authorization: `Bearer ${token}`,
+            "x-project-id": projectId,
+        },
+    );
+}
+
+/**
+ * I15 of the SSOT program — server-owned Workspace launch (see `LaunchWorkspacePipeline` on the
+ * API side). Behind `PIPELINE_RUN_ENABLED` on the backend and `NEXT_PUBLIC_PIPELINE_RUN_UI` on
+ * this side; 404s if the backend flag is off.
+ */
+export function launchWorkspacePipeline(
+    token: string,
+    projectId: string,
+    input: LaunchWorkspacePipelineInput,
+) {
+    return call<LaunchWorkspacePipelineResultDto>(
+        "POST",
+        `/v1/projects/${projectId}/pipeline/launch-workspace`,
+        input,
+        {
+            Authorization: `Bearer ${token}`,
+            "x-project-id": projectId,
+        },
+    );
+}
+
+/** I15 — reads back the PipelineRun a `launchWorkspacePipeline()` call created (I7's route). */
+export function getPipelineRun(token: string, projectId: string, runId: string) {
+    return call<{ run: PipelineRunDto }>(
+        "GET",
+        `/v1/projects/${projectId}/pipeline-runs/${runId}`,
         undefined,
         {
             Authorization: `Bearer ${token}`,

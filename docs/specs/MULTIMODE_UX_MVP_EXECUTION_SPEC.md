@@ -1,8 +1,11 @@
 # Andy Code Cat — Multimode UX MVP Execution Spec
 
-> Status: operational execution spec  
+> Status: **historical execution reference** — its delivery sequence is superseded by the 2026-08-18 SSOT implementation program.
 > Date: 2026-04-16  
 > Scope: Guided Mode + Workspace MVP, shared backend runtime, parallel multi-agent implementation, zero-regression rollout
+>
+> Do not use its endpoint, sprint, fallback or browser-handoff details as a current implementation
+> checklist. Use [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md) for active work.
 
 ---
 

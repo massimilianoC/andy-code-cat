@@ -18,6 +18,7 @@ import {
     setLlmPromptConfig,
     streamOptimizePrompt,
     getPromptUsageSummary,
+    getPipelineRun,
     type PromptPreviewResponse,
     listPreviewSnapshots,
     createPreviewSnapshot,
@@ -32,6 +33,7 @@ import {
     type ConversationDetail,
     type ProjectPreset,
     type MessageDto,
+    type OptimizePromptResult,
     type PreviewSnapshot,
     type LlmProviderCatalogDto,
     type LlmFocusContext,
@@ -230,6 +232,16 @@ function WorkspacePageContent() {
         const model = searchParams?.get("preferredModel") ?? "";
         return provider || model ? { provider, model, applied: false } : null;
     });
+    // Set when a requested/preferred provider or model (from a Zero Effort / Vibe pipeline
+    // handoff) could not be resolved against the hydrated catalog and the workspace silently
+    // fell through to a different model. Surfaced via a notification only — it never changes
+    // which model actually gets used.
+    const [modelFallbackNotice, setModelFallbackNotice] = useState<{
+        requestedProvider: string;
+        requestedModel: string;
+        actualProvider: string;
+        actualModel: string;
+    } | null>(null);
     const imageModelOptions = React.useMemo(() => {
         const imageProviders = providersCatalog.filter((provider) =>
             provider.models.some((model) => model.isActive && model.capabilities.includes("image_generation")),
@@ -249,17 +261,24 @@ function WorkspacePageContent() {
     // Read once on mount so they survive the router.replace that clears autoPrompt.
     const preferredProviderRef = useRef(searchParams?.get("preferredProvider") ?? "");
     const preferredModelRef = useRef(searchParams?.get("preferredModel") ?? "");
+    // I15 of the SSOT program — server-owned run handoff. When present, the workspace re-derives
+    // the auto-send prompt from PipelineRun.canonicalBrief (not client storage) and the locked
+    // modelLock.effective becomes the preferred provider/model (mutated into the refs above once
+    // the run loads — see the mount effect below), instead of URL-param hints that can silently
+    // fall back to the wrong model.
+    const pipelineRunIdRef = useRef(searchParams?.get("pipelineRunId") ?? "");
     const [preferredModelResolutionComplete, setPreferredModelResolutionComplete] = useState(
-        () => !preferredProviderRef.current && !preferredModelRef.current,
+        () => !preferredProviderRef.current && !preferredModelRef.current && !pipelineRunIdRef.current,
     );
     // Track whether we arrived from the Guided Mode / Vibe pipeline.
-    // True when a sessionStorage handoff key exists for the conv param (new path)
-    // or when an autoPrompt URL param is present (legacy/fallback path).
+    // True when a sessionStorage handoff key exists for the conv param (new path),
+    // when an autoPrompt URL param is present (legacy/fallback path), or when a
+    // server-owned pipelineRunId handoff is present (I15).
     const fromGuidedRef = useRef(!!(searchParams?.get("conv") && (
         typeof sessionStorage !== "undefined"
             ? !!sessionStorage.getItem(`pipeline_handoff_${searchParams.get("conv")}`)
             : false
-    ) || searchParams?.get("autoPrompt")));
+    ) || searchParams?.get("autoPrompt") || pipelineRunIdRef.current));
     const projectAssetsBootstrappedRef = useRef(false);
     // voiceListening, voiceSupported, voiceError are provided by useSpeechDictation below
     const [chatAttachedFiles, setChatAttachedFiles] = useState<ChatAttachedFile[]>([]);
@@ -566,8 +585,43 @@ function WorkspacePageContent() {
             .catch(() => undefined);
     }, [token, loadProjectConversation, projectId]);
 
-    // ── Guided Mode auto-send: read prompt from sessionStorage (primary) or URL param (fallback) ──
+    // ── I15: server-owned run handoff (PipelineRun.canonicalBrief, not client storage) ──
+    // Takes priority over both legacy handoff paths below when a pipelineRunId is present —
+    // it's only ever set by the new launch-workspace flow, which never also writes the legacy
+    // sessionStorage/autoPrompt handoff for the same navigation.
     useEffect(() => {
+        const runId = pipelineRunIdRef.current;
+        if (!runId) return;
+        const authToken = getToken();
+        if (!authToken) return;
+        let cancelled = false;
+        void getPipelineRun(authToken, projectId, runId)
+            .then(({ run }) => {
+                if (cancelled) return;
+                if (run.canonicalBrief?.content) {
+                    setPrompt(run.canonicalBrief.content);
+                    setAutoPromptPending(true);
+                }
+                // Locked model is authoritative for this run — feed it into the existing
+                // preferred-provider/model resolution effect (which already validates against
+                // the hydrated catalog and shows a fallback notice if it's since gone inactive)
+                // instead of trusting a client-supplied URL param.
+                preferredProviderRef.current = run.modelLock.effective.providerId;
+                preferredModelRef.current = run.modelLock.effective.modelId;
+                setPreferredModelResolutionComplete(false);
+            })
+            .catch(() => {
+                // Run fetch failed (flag flipped off after launch, run not found, network) —
+                // fall through with an empty prompt; the user can still type/send manually.
+            });
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // run once on mount — searchParams/projectId are stable
+
+    // ── Guided Mode auto-send: read prompt from sessionStorage (primary) or URL param (fallback) ──
+    // Skipped entirely when a pipelineRunId handoff is present (I15 path above owns it instead).
+    useEffect(() => {
+        if (pipelineRunIdRef.current) return;
         const convId = searchParams?.get("conv");
         // Primary path: sessionStorage handoff (avoids URI-length limits and encoding errors).
         const handoffKey = convId ? `pipeline_handoff_${convId}` : null;
@@ -670,8 +724,20 @@ function WorkspacePageContent() {
             ? providersCatalog.find((p) => p.provider === prefProvider)
             : providersCatalog.find((p) => p.models.some((m) => m.isActive && m.id === prefModel));
         if (!provider) {
+            // The requested provider isn't active in the hydrated catalog — silently falls
+            // through to whatever provider/model the earlier catalog-default / preset-
+            // recommendation effects already selected. Behavior is unchanged; surface it.
             setPipelineModelOverride(null);
             setPreferredModelResolutionComplete(true);
+            setModelFallbackNotice({ requestedProvider: prefProvider, requestedModel: prefModel, actualProvider: selectedProvider, actualModel: selectedModel });
+            addNotification({
+                label: t("workspace.notifications.modelFallback.label"),
+                status: "done",
+                message: t("workspace.notifications.modelFallback.message", {
+                    requested: prefProvider || prefModel || "—",
+                    actual: selectedModel || selectedProvider || "—",
+                }),
+            });
             return;
         }
 
@@ -679,8 +745,19 @@ function WorkspacePageContent() {
             ? provider.models.find((m) => m.isActive && m.id === prefModel)
             : provider.models.find((m) => m.isActive && m.isDefault) ?? provider.models.find((m) => m.isActive);
         if (!model) {
+            // The requested model isn't active on the resolved provider — same silent
+            // fallthrough as above, scoped to the model within an otherwise-valid provider.
             setPipelineModelOverride(null);
             setPreferredModelResolutionComplete(true);
+            setModelFallbackNotice({ requestedProvider: prefProvider, requestedModel: prefModel, actualProvider: selectedProvider, actualModel: selectedModel });
+            addNotification({
+                label: t("workspace.notifications.modelFallback.label"),
+                status: "done",
+                message: t("workspace.notifications.modelFallback.message", {
+                    requested: prefModel || prefProvider || "—",
+                    actual: selectedModel || selectedProvider || "—",
+                }),
+            });
             return;
         }
 
@@ -1640,7 +1717,7 @@ function WorkspacePageContent() {
         .reverse()
         .map((m) => m.metadata?.promptingTrace)
         .find((tr) => Boolean(tr && ((tr.messagesSentToLlm?.length ?? 0) > 0 || tr.effectiveSystemPrompt)));
-    const lastSentMessages: Array<{ role: "system" | "user"; content: string }> = lastSentTrace
+    const lastSentMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = lastSentTrace
         ? ((lastSentTrace.messagesSentToLlm?.length ?? 0) > 0
             ? lastSentTrace.messagesSentToLlm!
             : lastSentTrace.effectiveSystemPrompt
@@ -2000,6 +2077,7 @@ function WorkspacePageContent() {
                         history,
                         currentArtifacts,
                         focusContext,
+                        pipelineRunId: pipelineRunIdRef.current || undefined,
                     },
                     (event) => {
                         if (event.type === "thinking") {
@@ -2132,6 +2210,7 @@ function WorkspacePageContent() {
                     history,
                     currentArtifacts,
                     focusContext: retryWithoutFocusContext ? undefined : focusContext,
+                    pipelineRunId: pipelineRunIdRef.current || undefined,
                 });
             }
 
@@ -2178,14 +2257,19 @@ function WorkspacePageContent() {
 
             let previewVersionSaved = false;
 
-            // Persist preview snapshot to DB — only when html is non-empty.
+            // Persist preview snapshot to DB — only when html is non-empty AND the
+            // structured parse succeeded. A parse failure now returns empty artifacts
+            // (buildParseFailureStructured) and generationParseError=true; persisting it
+            // would activate a snapshot with no usable HTML and break every later
+            // focused edit (see FOCUSED_EDIT_SPEC isActive invariant).
             // In focused-patch mode the LLM returns artifacts:{html:"",…}; the server
             // merges the patch and returns the full HTML. If html is still empty after
             // the merge (anchor not found AND base was empty) we skip snapshot creation
             // to avoid versioning an empty artifact and corrupting the active baseline.
             // Also skip when the server explicitly reports focusPatchApplied === false
             // (anchor not found, fallback returned) to avoid creating no-op versions.
-            if (llm.structured?.artifacts && llm.structured.artifacts.html && convId && llm.focusPatchApplied !== false) {
+            if (llm.structured?.artifacts && llm.structured.artifacts.html && convId
+                && llm.focusPatchApplied !== false && llm.generationParseError !== true) {
                 try {
                     const snap = await createPreviewSnapshot(token, projectId, {
                         conversationId: convId,
@@ -2306,6 +2390,15 @@ function WorkspacePageContent() {
                 });
             }
 
+            // Initial/full generation whose JSON could not be parsed: nothing was saved.
+            if (llm.generationParseError) {
+                addNotification({
+                    label: t("workspace.notifications.llm.parseErrorLabel"),
+                    status: "error",
+                    message: t("workspace.notifications.llm.parseError"),
+                });
+            }
+
             if (userMessageId) {
                 await logBackgroundTask(token, projectId, convId, userMessageId, {
                     type: "llm_chat_preview",
@@ -2326,15 +2419,15 @@ function WorkspacePageContent() {
             }
 
             updateNotification(notifId, {
-                label: llm.focusPatchParseError
+                label: (llm.focusPatchParseError || llm.generationParseError)
                     ? t("workspace.notifications.focusPatch.parseResponseLabel")
                     : llm.focusPatchApplied
                         ? t("workspace.notifications.focusPatch.appliedLabel")
                         : previewVersionSaved
                             ? t("workspace.notifications.snapshot.newVersionLabel")
                             : t("workspace.notifications.llm.doneLabel"),
-                status: llm.focusPatchParseError ? "error" : "done",
-                message: llm.focusPatchParseError
+                status: (llm.focusPatchParseError || llm.generationParseError) ? "error" : "done",
+                message: (llm.focusPatchParseError || llm.generationParseError)
                     ? t("workspace.notifications.focusPatch.parseResponseMessage")
                     : llm.focusPatchApplied
                         ? t("workspace.notifications.focusPatch.appliedMessage")
@@ -2441,28 +2534,7 @@ function WorkspacePageContent() {
                 prev ? { ...prev, messages: [...prev.messages, userSaved.message] } : prev
             );
 
-            let finalResult: {
-                optimizedPrompt: string;
-                provider: string;
-                model: string;
-                usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
-                costEstimate?: {
-                    currency: "EUR";
-                    amount: number;
-                    breakdown: { tokenCost: number; imageCost: number; videoCost: number };
-                    unitRates: { textEurPer1kTokens: number; imageEurPerAsset: number; videoEurPerAsset: number };
-                    providerCostUsd?: number;
-                };
-                durationMs: number;
-                skipped?: boolean;
-                rawResponse?: string;
-                finishReason?: string;
-                promptingTrace?: {
-                    originalUserMessage: string;
-                    effectiveSystemPrompt: string;
-                    messagesSentToLlm: Array<{ role: "system" | "user"; content: string }>;
-                };
-            } | null = null;
+            let finalResult: OptimizePromptResult | null = null;
 
             await streamOptimizePrompt(
                 token,
@@ -2473,6 +2545,7 @@ function WorkspacePageContent() {
                     conversationId: convId,
                     provider: selectedProvider || undefined,
                     model: selectedModel || undefined,
+                    pipelineRunId: pipelineRunIdRef.current || undefined,
                 },
                 (event) => {
                     if (event.type === "thinking") { setThinkingText((prev) => prev + event.content); return; }

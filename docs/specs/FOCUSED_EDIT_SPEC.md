@@ -452,9 +452,20 @@ The `activeBaselineSnapshot` (with `isActive: true` in MongoDB) is the source of
 
 **Protection mechanisms:**
 
-- Frontend guard: `if (artifacts.html && convId)` — only creates a snapshot if `html` is non-empty
-- Backend fallback: if `isFocusedMode` and `focusPatch` is absent, `currentArtifacts` are returned intact (no dummy HTML from `buildFallbackStructured`)
+- Frontend guard: `if (artifacts.html && convId && llm.generationParseError !== true)` — no
+  snapshot is created when html is empty or the structured parse failed
+- Backend, focused mode: if `isFocusedMode` and `focusPatch` is absent, `currentArtifacts`
+  are returned intact
+- Backend, initial/full generation: if the structured parse fails, `buildParseFailureStructured()`
+  returns EMPTY artifacts and the response carries `generationParseError: true`. The previous
+  `buildFallbackStructured()` echoed the user's raw brief as literal HTML — non-empty garbage
+  that defeated the frontend guard and was activated as the live snapshot. That function has
+  been removed.
 - Merge fallback: if anchor not found, `currentArtifacts` are returned unchanged
+- Diagnosability: a parse failure emits `llm_generation_parse_failed`
+  (domain `llm`, level `error`, status `failure`) with a bounded prefix/suffix of the raw
+  completion and the provider `finishReason`; the companion `llm_generation_complete` event
+  is downgraded to level `warn` / status `partial`.
 
 ---
 

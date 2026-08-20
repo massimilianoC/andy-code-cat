@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { launchGuided, getGuidedPipelineConfig, type GuidedLaunchInput, type GuidedPipelineConfig } from "../../../lib/api/pipelines";
+import { launchGuided, getGuidedPipelineConfig, launchWorkspacePipeline, type GuidedLaunchInput, type GuidedPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
 import { optimizePrompt } from "../../../lib/api/llm";
@@ -505,104 +505,11 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
     );
 }
 
-// ─── Structured brief builder ─────────────────────────────────────────────────
-
-function buildStructuredBrief(
-    form: ExtendedForm,
-    projectName: string,
-    t: ReturnType<typeof useTranslation>["t"],
-    templateLabel?: string | null,
-    docNames?: string[],
-): string {
-    const siteLabel = t(`launch.templates.${form.presetId}`, { defaultValue: form.presetId });
-    const brandName = form.businessName.trim() || projectName;
-
-    const sections: string[] = [];
-
-    sections.push(
-        `# ${t("launch.brief.title", { brand: brandName })}\n\n` +
-        `## ${t("launch.brief.identity")}\n` +
-        `- **${t("launch.brief.brand")}:** ${brandName}\n` +
-        (templateLabel ? `- **${t("launch.brief.template")}:** ${templateLabel}\n` : "") +
-        `- **${t("launch.brief.siteType")}:** ${siteLabel}`,
-    );
-
-    const sourceRequest = form.sourceRequest?.trim() || form.primaryGoal.trim();
-    if (sourceRequest) {
-        sections.push(
-            `## [SOURCE_REQUEST] Original user request — authoritative\n\n${sourceRequest}\n\n` +
-            `> Preserve every explicit fact, preference, requirement and prohibition. ` +
-            `The enriched sections below are additive; if they conflict, this source request wins.`,
-        );
-    }
-
-    if (form.primaryGoal.trim()) {
-        sections.push(
-            `## ${t("launch.brief.goal")}\n\n` +
-            form.primaryGoal.trim(),
-        );
-    }
-
-    if (form.audience.trim()) {
-        sections.push(
-            `## ${t("launch.brief.audience")}\n\n` +
-            form.audience.trim(),
-        );
-    }
-
-    const expressiveSections: Array<[string, string, string | undefined]> = [
-        ["CONCEPT", "Project concept and value proposition", form.projectSummary],
-        ["STRUCTURE", "Required content structure, screens and states", form.contentStructure],
-        ["CONTENT", "Content, data, entities and asset requirements", form.contentRequirements],
-        ["FUNCTIONS", "Functional requirements and behavior", form.functionalRequirements],
-        ["INTERACTIONS", "Interaction model, controls and feedback", form.interactionModel],
-        ["VISUAL_DIRECTION", "Detailed visual and experiential direction", form.visualDirection],
-        ["SUCCESS", "Completion and success criteria", form.successCriteria],
-        ["CONSTRAINTS", "Constraints and compatibility requirements", form.constraints],
-        ["MUST_AVOID", "Explicit exclusions and negative requirements", form.mustAvoid],
-    ];
-    for (const [key, title, value] of expressiveSections) {
-        if (value?.trim()) sections.push(`## [${key}] ${title}\n\n${value.trim()}`);
-    }
-
-    const styleLines: string[] = [];
-    const selectedStyles = STYLE_ATTRIBUTES
-        .filter((a) => form.styleAttributes.includes(a.id))
-        .map((a) => t(`launch.styleAttributes.${a.id}`));
-    if (selectedStyles.length > 0) {
-        styleLines.push(`- **${t("launch.brief.visualAttributes")}:** ${selectedStyles.join(", ")}`);
-    }
-    if (form.tone?.trim()) {
-        styleLines.push(`- **${t("launch.brief.tone")}:** ${form.tone.trim()}`);
-    }
-    if (form.primaryCta?.trim()) {
-        styleLines.push(`- **${t("launch.brief.cta")}:** ${form.primaryCta.trim()}`);
-    }
-    if (form.styleHint?.trim()) {
-        styleLines.push(`- **${t("launch.brief.styleNotes")}:** ${form.styleHint.trim()}`);
-    }
-    if (styleLines.length > 0) {
-        sections.push(`## ${t("launch.brief.style")}\n\n${styleLines.join("\n")}`);
-    }
-
-    const validContacts = form.contactFields.filter((cf) => cf.key.trim() && cf.value.trim());
-    if (validContacts.length > 0) {
-        const contactLines = validContacts
-            .map((cf) => `- **${cf.key.trim()}:** ${cf.value.trim()}`)
-            .join("\n");
-        sections.push(`## ${t("launch.brief.contacts")}\n\n${contactLines}`);
-    }
-
-    if (docNames && docNames.length > 0) {
-        const docList = docNames.map((d) => `- ${d}`).join("\n");
-        sections.push(`## ${t("launch.brief.attachments")}\n\n${docList}`);
-    }
-
-    const footer = `\n---\n*${t("launch.brief.footer", { presetId: form.presetId, siteType: siteLabel, sections: sections.length - 1 })}*`;
-    return sections.join("\n\n") + footer;
-}
-
 // ─── Step config ──────────────────────────────────────────────────────────────
+// Structured brief text is no longer built client-side (see I9 of the SSOT program,
+// docs/SSOT_REFACTOR_PROGRESS.md): the server's buildCanonicalGenerationBrief is now the single
+// source of truth, and this page uses `briefResult.normalizedBrief` verbatim instead of
+// reconstructing a second, differently-formatted copy from raw form state.
 
 const STEPS = [
     { number: 1, titleKey: "launch.steps.1.title", subtitleKey: "launch.steps.1.subtitle", icon: FileText },
@@ -882,6 +789,7 @@ export default function GuidedLaunchPage() {
                 .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
             styleAttributes: form.styleAttributes,
             outputLanguage: form.outputLanguage,
+            attachmentNames: attachedFiles,
         };
         try {
             const [briefResult, configResult] = await Promise.all([
@@ -889,9 +797,9 @@ export default function GuidedLaunchPage() {
                 getGuidedPipelineConfig(token, projectId).catch(() => null),
             ]);
             setResult(briefResult);
-            // Build the structured brief client-side from the full form data
-            // so every section and long-text field is included verbatim.
-            setEditedBrief(buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles));
+            // Use the server's canonical brief verbatim (I9 — see the SSOT program docs) instead
+            // of reconstructing a second, differently-formatted copy client-side.
+            setEditedBrief(briefResult.normalizedBrief);
             setPipelineConfig(configResult);
             setCompletedSteps(new Set([1, 2, 3]));
             setPhase("review");
@@ -931,7 +839,12 @@ export default function GuidedLaunchPage() {
         // Store the prompt in sessionStorage to avoid URI-length limits.
         // The workspace page reads and deletes this key on mount.
         sessionStorage.setItem(`pipeline_handoff_${convId}`, finalPrompt);
-        let url = `/workspace/${projectId}?conv=${convId}`;
+        // This handler only runs after handleOptimize() already ran once on this page (the
+        // manual "review then go to Workspace" path) — the brief has already been through one
+        // optimization pass. Skip the workspace's own auto-optimize-before-first-send so we
+        // don't pay for a second, redundant LLM call, exactly like the automatic AI-prefilled
+        // path in handleProcessProject() already does below.
+        let url = `/workspace/${projectId}?conv=${convId}&skipAutoOptimize=1`;
         const effectiveProvider = pipelineOverride?.provider ?? pipelineConfig?.vibeGenerate?.provider ?? pipelineConfig?.generate?.provider;
         const effectiveModel = pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model;
         if (effectiveProvider) {
@@ -976,14 +889,34 @@ export default function GuidedLaunchPage() {
                 .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
             styleAttributes: form.styleAttributes,
             outputLanguage: form.outputLanguage,
+            attachmentNames: attachedFiles,
         };
         try {
+            // I15 of the SSOT program: when enabled, launch through the server-owned
+            // Workspace pipeline (freezes a modelLock + canonical brief on a real PipelineRun)
+            // instead of the legacy zero-effort + client-optimize + sessionStorage handoff.
+            // The workspace re-derives everything (brief, locked model) from the run itself —
+            // see the "I15" mount effect in workspace/[projectId]/page.tsx.
+            if (process.env.NEXT_PUBLIC_PIPELINE_RUN_UI === "true") {
+                const launchResult = await launchWorkspacePipeline(token, projectId, {
+                    ...payload,
+                    requestedProviderId: pipelineOverride?.provider,
+                    requestedModelId: pipelineOverride?.model,
+                    optimizationPolicy: "enabled",
+                });
+                router.push(
+                    `/workspace/${projectId}?conv=${launchResult.conversationId}&pipelineRunId=${encodeURIComponent(launchResult.pipelineRunId)}`,
+                );
+                return;
+            }
+
             const [briefResult, configResult] = await Promise.all([
                 launchGuided(token, projectId, payload),
                 getGuidedPipelineConfig(token, projectId).catch(() => null),
             ]);
             const localConfig = configResult;
-            const brief = buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles);
+            // Use the server's canonical brief verbatim (I9 — see the SSOT program docs).
+            const brief = briefResult.normalizedBrief;
 
             // Always run one optimization pass — the structured brief (AI-prefilled or manual)
             // needs to be rewritten with system-layer context before entering Guided Mode.

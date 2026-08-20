@@ -11,7 +11,8 @@ import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { env } from "../../config";
 import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
-import { inferDeterministicVibeTemplate } from "../prompting/vibeTemplateIntent";
+import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
+import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -19,10 +20,16 @@ const TASK_KEY = "vibe_intent_prefill";
 const FALLBACK_PROVIDER = "siliconflow";
 const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
 const MAX_PROMPT_CHARS = 2000;
-// MIN_TOKENS: enforce floor regardless of DB task settings — prevents JSON truncation.
-// The system prompt asks for a ~900-2200 char primaryGoal; 768 tokens cannot fit that.
-const MIN_TOKENS = 1200;
-const MAX_TOKENS = 2048;
+// MIN_TOKENS/MAX_TOKENS: enforce a floor and ceiling regardless of DB task settings.
+// Char budget from SYSTEM_PROMPT's own field-length hints + the zod caps in
+// packages/contracts/src/pipeline.ts, at ~4 chars/token:
+//   floor     ~4,100 chars  ~1,025 tok  (terse but complete — all 19 fields present)
+//   realistic ~8,500 chars  ~2,127 tok  (what a rich prompt actually produces)
+//   ceiling   ~23,200 chars ~5,800 tok  (every field at its schema cap)
+// The old 2048 ceiling sat below the realistic case, so the nine expressive fields —
+// written last by design (see the field-order rule below) — were silently truncated away.
+const MIN_TOKENS = 4000;
+const MAX_TOKENS = 8000;
 
 // All valid preset IDs from the catalog — kept in sync at startup.
 const VALID_PRESET_IDS: Set<string> = new Set(PRESET_CATALOG.map((p) => p.id));
@@ -34,6 +41,31 @@ const SITE_TYPE_COMPAT: Record<string, string> = {
     portfolio: "neutral",
     showcase: "neutral",
 };
+
+/** Presets that carry no format commitment — the classifier's specific pick wins over these. */
+const GENERIC_PRESET_IDS = new Set(["neutral"]);
+
+/**
+ * Resolve the final presetId.
+ *
+ * Precedence, LLM-first:
+ *   1. the prefill LLM's own presetId (validated, or mapped from a legacy siteType);
+ *   2. the upstream VibeClassify pick, when the LLM produced nothing usable OR
+ *      collapsed a specific classification into a generic preset;
+ *   3. "neutral".
+ *
+ * The prefill LLM receives the full annotated catalog, the selection procedure and the
+ * classifier's decision as a "Detected template" block, so its answer is at least as
+ * informed as the classifier's. The classifier is kept as an anchor, never as a veto.
+ */
+export function resolvePrefillPresetId(rawPreset: string, classifierPreset: string): string {
+    const llmPreset = VALID_PRESET_IDS.has(rawPreset)
+        ? rawPreset
+        : (SITE_TYPE_COMPAT[rawPreset] ?? "");
+    if (llmPreset && !(GENERIC_PRESET_IDS.has(llmPreset) && classifierPreset)) return llmPreset;
+    return classifierPreset || llmPreset || "neutral";
+}
+
 const VALID_STYLE_ATTRIBUTES = new Set([
     "minimal", "premium", "dark", "bright", "bold",
     "elegant", "corporate", "playful", "tech", "artisan", "luxury", "eco",
@@ -46,7 +78,7 @@ const VALID_VIS_STYLES = new Set(["executive", "operations", "exploratory", "mon
  * Normalize a BCP-47 language code to lowercase base language (e.g. "IT" → "it", "pt-BR" → "pt").
  * Returns "en" for any null/empty/invalid input.
  */
-function normalizeLang(raw?: string | null): string {
+export function normalizeLang(raw?: string | null): string {
     if (!raw || typeof raw !== "string") return "en";
     const base = raw.trim().toLowerCase().split("-")[0];
     return /^[a-z]{2,8}$/.test(base ?? "") ? (base ?? "en") : "en";
@@ -84,7 +116,7 @@ populates a structured project brief.
 Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
 {
   "businessName": "brand or project name (string, required)",
-  "presetId": "one of: neutral|landing|website|form|manifesto|slideshow|keynote|a4poster|infographic|videogame|freerunner|seriousgame|game3d|vr-aframe|interactive-story (string, required)",
+  "presetId": "the preset id selected by applying the CANONICAL PRESET SELECTION CONTRACT appended below (string, required)",
   "outputLanguage": "BCP-47 language code of the content to generate, e.g. 'it', 'en', 'de', 'fr' (string, required)",
   "primaryGoal": "rich structured project brief — 900 to 2200 chars when possible (string, required)",
   "audience": "target audience description — 120 to 500 chars when possible (string, required)",
@@ -104,28 +136,18 @@ Required JSON shape (return ONLY valid JSON, no markdown fences, no extra text):
   "styleAttributes": ["minimal"]
 }
 
-presetId guidance — choose the best match:
-  neutral         generic project with no specific template
-  landing         marketing landing page / single page site
-  website         multi-section business website
-  form            guided form, wizard, or survey
-  manifesto       editorial page, manifesto, or long-form statement
-  slideshow       slide deck / presentation / carousel narrative
-  keynote         pitch deck / keynote / investor presentation
-  a4poster        A4 print-ready poster or flyer
-  infographic     data infographic / visual storytelling
-  videogame       2D browser arcade or action game
-  freerunner      2D infinite/endless runner with continuous movement, obstacles, score and retry loop
-  seriousgame     educational or training serious game
-  game3d          3D WebGL browser game
-  vr-aframe       WebVR / A-Frame immersive experience
-  interactive-story  branching narrative / choose-your-own-adventure
+presetId — do NOT guess from this prompt alone. Apply the CANONICAL PRESET SELECTION
+CONTRACT appended below: it carries the full annotated catalog, the mandatory selection
+procedure, and the per-preset SELECT WHEN / DO NOT SELECT WHEN clauses.
 
 Rules:
 - businessName: extract from the prompt; fall back to "Project" if unclear.
-- presetId: infer from the user's intent — use the MOST SPECIFIC matching id.
-  A "slideshow" or "presentation" request MUST use "slideshow" or "keynote", NOT "landing".
-  A "game" request MUST use one of the game presets. Default to "landing" only when no better match.
+- presetId: apply the CANONICAL PRESET SELECTION CONTRACT below. Choose the MOST SPECIFIC
+  preset whose SELECT WHEN clause is satisfied and whose DO NOT SELECT WHEN clause is not.
+  A game or XR preset requires concrete mechanic evidence (procedure STEP 2) — animation,
+  interaction, micro-interactions, kinetic motion, immersion and Awwwards-level ambition
+  are website craft vocabulary, never gameplay evidence. When evidence is genuinely
+  ambiguous use "neutral"; never use "landing" as a generic fallback.
 - primaryGoal: do not summarize too aggressively. Produce a robust structured brief that can be injected
   into downstream generation prompts. Include:
   1. project intent and desired output,
@@ -137,10 +159,24 @@ Rules:
   Adapt to the chosen presetId: a videogame brief describes gameplay and controls;
   a slideshow brief describes slides and narrative arc; a form brief describes steps and fields.
 - audience: infer who uses or views the result; include needs, context, and expectations.
+- COMPLETENESS CONTRACT (mandatory): every one of the nine expressive fields — projectSummary,
+  contentStructure, contentRequirements, functionalRequirements, interactionModel, visualDirection,
+  successCriteria, constraints, mustAvoid — MUST be a non-empty string of 250 to 900 characters.
+  Use null ONLY when the request and the attached documents give literally zero signal for that
+  field; for a normal project request that is never the case. Absence of an explicit user statement
+  is not a reason to emit null — infer a concrete, defensible default consistent with the selected
+  preset and say so. A response in which any expressive field is null, "", "N/A", or a single generic
+  sentence is an INVALID response.
 - Fill every applicable expressive field. Prefer concrete ordered modules and behaviors over generic adjectives.
+- When a "Document knowledge extracted from project files" or brand-document block is present in this
+  prompt, mine it for businessName, tone, audience, contactInfo, palette, key messages and CTA, and
+  reflect it in contentRequirements and visualDirection.
 - Preserve every explicit user fact, preference, requirement and prohibition. Enrichment is additive: never replace,
   weaken or contradict a specific request with a generic best practice. Leave unknown facts unspecified.
-- If a Detected template block is present, its id takes priority as the presetId.
+- If a "Detected template" block is present in the user message, it is the upstream
+  classifier's decision made with this same contract. Adopt its id as presetId unless the
+  request explicitly names a different deliverable (procedure STEP 1); if you override it,
+  say why in projectSummary.
 - contactInfo: extract any contact data mentioned (email, phone, address, socials); empty array if none.
 - styleAttributes: pick 1–3 matching from: minimal, premium, dark, bright, bold, elegant, corporate, playful, tech, artisan, luxury, eco
 - outputLanguage: detect the language the user wants the CONTENT in. If the user writes in Italian but asks "in tedesco" or "in German", outputLanguage must be "de". Use BCP-47 base code only (2–3 chars). Default "en" if truly ambiguous.
@@ -171,6 +207,12 @@ Rules:
 - if a dataset/table/field is unknown, keep labels generic and safe.
 - respect grounded analytics: do not invent exact metric values.
 - Return ONLY the JSON object.`;
+
+// Stable, governance-registry-facing aliases. The registry (taskPromptRegistry.ts) imports
+// these instead of restating the prompt text, so the admin "default text" view can never
+// drift from what the pipeline actually sends.
+export const VIBE_PREFILL_SYSTEM_PROMPT = SYSTEM_PROMPT;
+export const VIBE_PREFILL_DATA_DASHBOARD_SYSTEM_PROMPT = DATA_DASHBOARD_SYSTEM_PROMPT;
 
 function buildPresetContext(templateId?: string | null): string {
     if (!templateId) return "";
@@ -220,128 +262,168 @@ function defaultDataDashboardDraft(prompt: string, attachmentMeta?: AttachmentMe
 
 // ── Response parser ───────────────────────────────────────────────────────────
 
-function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, detectedTemplateId?: string | null): { draft: GuidedDraft; confidence: number } {
-    // The template detected by Layer Φ (VibeClassify) is authoritative: when it names a
-    // real preset, it becomes the prefilled presetId and takes priority over whatever the
-    // prefill LLM emits (which often collapses a specific template like "infographic" into a
-    // generic siteType → "neutral"). The user can still change it in the Guided Mode form
-    // before launch. Without this anchor the identified template was silently lost.
-    const deterministicPreset = inferDeterministicVibeTemplate(prompt)?.templateId ?? "";
-    const detectedPreset = deterministicPreset
-        || (detectedTemplateId && VALID_PRESET_IDS.has(detectedTemplateId) ? detectedTemplateId : "");
-    let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+/**
+ * Deterministic mapping from a parsed (possibly repaired) LLM JSON object onto the
+ * GuidedDraft contract. Shared by the happy path and the truncation-repair path so a
+ * cut-off response still yields every field that was fully written before the cut, instead
+ * of the five-field regex recovery that used to discard everything else.
+ */
+function mapParsedToDraft(parsed: Record<string, unknown>, prompt: string, uiLanguage: string | undefined, classifierPreset: string): GuidedDraft {
+    const businessName = typeof parsed.businessName === "string" && parsed.businessName.trim()
+        ? parsed.businessName.trim().slice(0, 120)
+        : prompt.trim().slice(0, 64) || "Project";
+
+    // Accept new presetId field or old siteType for backward compat with cached drafts
+    const rawPreset = typeof parsed.presetId === "string" ? parsed.presetId.trim()
+        : typeof parsed.siteType === "string" ? parsed.siteType.trim() : "";
+    const presetId: string = resolvePrefillPresetId(rawPreset, classifierPreset);
+
+    const primaryGoal = typeof parsed.primaryGoal === "string" && parsed.primaryGoal.trim().length >= 8
+        ? parsed.primaryGoal.trim().slice(0, 3000)
+        : prompt.trim().slice(0, 500) || "Modern web project.";
+
+    const audience = typeof parsed.audience === "string" && parsed.audience.trim().length >= 3
+        ? parsed.audience.trim().slice(0, 1000)
+        : "General audience.";
+
+    const tone = typeof parsed.tone === "string" && parsed.tone.trim()
+        ? parsed.tone.trim().slice(0, 80)
+        : undefined;
+
+    const primaryCta = typeof parsed.primaryCta === "string" && parsed.primaryCta.trim()
+        ? parsed.primaryCta.trim().slice(0, 120)
+        : undefined;
+
+    const styleHint = typeof parsed.styleHint === "string" && parsed.styleHint.trim()
+        ? parsed.styleHint.trim().slice(0, 1000)
+        : undefined;
+
+    const optionalBriefField = (key: string, max: number): string | undefined => {
+        const value = parsed[key];
+        return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined;
+    };
+    const sourceRequest = prompt.trim().slice(0, 4000);
+    const projectSummary = optionalBriefField("projectSummary", 1600);
+    const contentStructure = optionalBriefField("contentStructure", 2400);
+    const contentRequirements = optionalBriefField("contentRequirements", 2400);
+    const functionalRequirements = optionalBriefField("functionalRequirements", 2400);
+    const interactionModel = optionalBriefField("interactionModel", 1800);
+    const visualDirection = optionalBriefField("visualDirection", 1800);
+    const successCriteria = optionalBriefField("successCriteria", 1600);
+    const constraints = optionalBriefField("constraints", 1600);
+    const mustAvoid = optionalBriefField("mustAvoid", 1200);
+
+    const rawContacts = Array.isArray(parsed.contactInfo) ? parsed.contactInfo : [];
+    const contactInfo = rawContacts
+        .filter((c): c is { key: string; value: string } =>
+            typeof c === "object" && c !== null &&
+            typeof (c as Record<string, unknown>).key === "string" &&
+            typeof (c as Record<string, unknown>).value === "string")
+        .map((c) => ({ key: c.key.trim().slice(0, 60), value: c.value.trim().slice(0, 200) }))
+        .filter((c) => c.key && c.value)
+        .slice(0, 15);
+
+    const rawStyles = Array.isArray(parsed.styleAttributes) ? parsed.styleAttributes : [];
+    const styleAttributes = rawStyles
+        .filter((s): s is string => typeof s === "string" && VALID_STYLE_ATTRIBUTES.has(s))
+        .slice(0, 20);
+
+    // Language: LLM-inferred → uiLanguage hint → "en"
+    const outputLanguage = normalizeLang(
+        typeof parsed.outputLanguage === "string" ? parsed.outputLanguage : uiLanguage
+    );
+
+    // Validate with zod to ensure the draft is safe to use downstream
+    const zodResult = guidedLaunchSchema.safeParse({
+        businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, sourceRequest,
+        projectSummary, contentStructure, contentRequirements, functionalRequirements, interactionModel,
+        visualDirection, successCriteria, constraints, mustAvoid, contactInfo, styleAttributes, outputLanguage,
+    });
+
+    return zodResult.success
+        ? { ...zodResult.data, outputLanguage }
+        : { businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, sourceRequest,
+            projectSummary, contentStructure, contentRequirements, functionalRequirements, interactionModel,
+            visualDirection, successCriteria, constraints, mustAvoid, contactInfo, styleAttributes, outputLanguage };
+}
+
+/**
+ * Closes a JSON object truncated mid-value (typically a max_tokens cutoff) so every
+ * COMPLETE top-level key/value pair written before the cut survives. Drops only the
+ * partially-written trailing pair, then closes the object. Returns null when no complete
+ * pair can be recovered.
+ */
+function repairTruncatedJson(candidate: string): string | null {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let lastSafe = -1;
+    for (let i = 0; i < candidate.length; i++) {
+        const ch = candidate[i]!;
+        if (escaped) { escaped = false; continue; }
+        if (ch === "\\") { escaped = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === "{" || ch === "[") depth++;
+        else if (ch === "}" || ch === "]") depth--;
+        // A comma at depth 1 ends a complete top-level key/value pair.
+        else if (ch === "," && depth === 1) lastSafe = i;
+    }
+    if (lastSafe < 0) return null;
+    return candidate.slice(0, lastSafe) + "}";
+}
+
+export function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, detectedTemplateId?: string | null): { draft: GuidedDraft; confidence: number } {
+    // The template picked by Layer Phi (VibeClassify) is authoritative CONTEXT, injected
+    // into this call's user message by buildPresetContext(). It anchors the answer but does
+    // not veto it: the prefill LLM sees the same annotated catalog and the same selection
+    // procedure. There is no keyword matcher in this path.
+    const classifierPreset = detectedTemplateId && VALID_PRESET_IDS.has(detectedTemplateId)
+        ? detectedTemplateId
+        : "";
+    const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
     const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
 
     try {
         const parsed = JSON.parse(candidate) as Record<string, unknown>;
-
-        const businessName = typeof parsed.businessName === "string" && parsed.businessName.trim()
-            ? parsed.businessName.trim().slice(0, 120)
-            : prompt.trim().slice(0, 64) || "Project";
-
-        // Accept new presetId field or old siteType for backward compat with cached drafts
-        const rawPreset = typeof parsed.presetId === "string" ? parsed.presetId.trim()
-            : typeof parsed.siteType === "string" ? parsed.siteType.trim() : "";
-        const presetId: string = detectedPreset
-            || (VALID_PRESET_IDS.has(rawPreset)
-                ? rawPreset
-                : (SITE_TYPE_COMPAT[rawPreset] ?? "neutral"));
-
-        const primaryGoal = typeof parsed.primaryGoal === "string" && parsed.primaryGoal.trim().length >= 8
-            ? parsed.primaryGoal.trim().slice(0, 3000)
-            : prompt.trim().slice(0, 500) || "Modern web project.";
-
-        const audience = typeof parsed.audience === "string" && parsed.audience.trim().length >= 3
-            ? parsed.audience.trim().slice(0, 1000)
-            : "General audience.";
-
-        const tone = typeof parsed.tone === "string" && parsed.tone.trim()
-            ? parsed.tone.trim().slice(0, 80)
-            : undefined;
-
-        const primaryCta = typeof parsed.primaryCta === "string" && parsed.primaryCta.trim()
-            ? parsed.primaryCta.trim().slice(0, 120)
-            : undefined;
-
-        const styleHint = typeof parsed.styleHint === "string" && parsed.styleHint.trim()
-            ? parsed.styleHint.trim().slice(0, 1000)
-            : undefined;
-
-        const optionalBriefField = (key: string, max: number): string | undefined => {
-            const value = parsed[key];
-            return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined;
-        };
-        const sourceRequest = prompt.trim().slice(0, 4000);
-        const projectSummary = optionalBriefField("projectSummary", 1600);
-        const contentStructure = optionalBriefField("contentStructure", 2400);
-        const contentRequirements = optionalBriefField("contentRequirements", 2400);
-        const functionalRequirements = optionalBriefField("functionalRequirements", 2400);
-        const interactionModel = optionalBriefField("interactionModel", 1800);
-        const visualDirection = optionalBriefField("visualDirection", 1800);
-        const successCriteria = optionalBriefField("successCriteria", 1600);
-        const constraints = optionalBriefField("constraints", 1600);
-        const mustAvoid = optionalBriefField("mustAvoid", 1200);
-
-        const rawContacts = Array.isArray(parsed.contactInfo) ? parsed.contactInfo : [];
-        const contactInfo = rawContacts
-            .filter((c): c is { key: string; value: string } =>
-                typeof c === "object" && c !== null &&
-                typeof (c as Record<string, unknown>).key === "string" &&
-                typeof (c as Record<string, unknown>).value === "string")
-            .map((c) => ({ key: c.key.trim().slice(0, 60), value: c.value.trim().slice(0, 200) }))
-            .filter((c) => c.key && c.value)
-            .slice(0, 15);
-
-        const rawStyles = Array.isArray(parsed.styleAttributes) ? parsed.styleAttributes : [];
-        const styleAttributes = rawStyles
-            .filter((s): s is string => typeof s === "string" && VALID_STYLE_ATTRIBUTES.has(s))
-            .slice(0, 20);
-
-        // Language: LLM-inferred → uiLanguage hint → "en"
-        const outputLanguage = normalizeLang(
-            typeof parsed.outputLanguage === "string" ? parsed.outputLanguage : uiLanguage
-        );
-
-        // Validate with zod to ensure the draft is safe to use downstream
-        const zodResult = guidedLaunchSchema.safeParse({
-            businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, sourceRequest,
-            projectSummary, contentStructure, contentRequirements, functionalRequirements, interactionModel,
-            visualDirection, successCriteria, constraints, mustAvoid, contactInfo, styleAttributes, outputLanguage,
-        });
-
-        const draft: GuidedDraft = zodResult.success
-            ? { ...zodResult.data, outputLanguage }
-            : { businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, sourceRequest,
-                projectSummary, contentStructure, contentRequirements, functionalRequirements, interactionModel,
-                visualDirection, successCriteria, constraints, mustAvoid, contactInfo, styleAttributes, outputLanguage };
-
-        return { draft, confidence: 0.85 };
+        return { draft: mapParsedToDraft(parsed, prompt, uiLanguage, classifierPreset), confidence: 0.85 };
     } catch {
-        // Partial recovery: extract critical fields from truncated JSON using regex.
-        // Truncation occurs when primaryGoal hits the token cap before the JSON is closed.
-        const partialPresetRaw = candidate.match(/"presetId"\s*:\s*"([^"]+)"/)?.[1]?.trim() ?? "";
-        const partialLangRaw   = candidate.match(/"outputLanguage"\s*:\s*"([^"]+)"/)?.[1]?.trim();
-        const partialName      = candidate.match(/"businessName"\s*:\s*"([^"\\]*)"/)?.[1]?.trim();
-        const partialGoal      = candidate.match(/"primaryGoal"\s*:\s*"([^"\\]*)"/)?.[1]?.trim();
-        const partialAudience  = candidate.match(/"audience"\s*:\s*"([^"\\]*)"/)?.[1]?.trim();
+        // Truncation occurs when the response hits the token cap before the JSON is closed.
+        // Try a real repair first — this recovers every field written before the cut, not
+        // just the handful the old regex path extracted.
+        const repaired = repairTruncatedJson(candidate);
+        if (repaired) {
+            try {
+                const parsed = JSON.parse(repaired) as Record<string, unknown>;
+                return { draft: mapParsedToDraft(parsed, prompt, uiLanguage, classifierPreset), confidence: 0.6 };
+            } catch { /* fall through to the regex path below */ }
+        }
+
+        // Last-resort partial recovery: extract critical fields from still-unparseable JSON
+        // using regex. `(?:[^"\\]|\\.)*` (not `[^"\\]*`) so values containing an escaped
+        // character (\n, \", …) — the common case for a multi-sentence field — still match.
+        const unescape = (s: string) => s.replace(/\\(["\\/bfnrt])/g, (_, c) =>
+            ({ '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" }[c as string] ?? c));
+        const partialPresetRaw = candidate.match(/"presetId"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1]?.trim() ?? "";
+        const partialLangRaw   = candidate.match(/"outputLanguage"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1]?.trim();
+        const partialName      = candidate.match(/"businessName"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
+        const partialGoal      = candidate.match(/"primaryGoal"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
+        const partialAudience  = candidate.match(/"audience"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
 
         const hasPartial = !!(partialPresetRaw || partialName || partialGoal);
         if (hasPartial) {
-            const partialPresetId = detectedPreset
-                || (VALID_PRESET_IDS.has(partialPresetRaw)
-                    ? partialPresetRaw
-                    : (SITE_TYPE_COMPAT[partialPresetRaw] ?? "neutral"));
+            const partialPresetId = resolvePrefillPresetId(partialPresetRaw, classifierPreset);
             const recoveredDraft: GuidedDraft = {
-                businessName: partialName?.slice(0, 120) || prompt.trim().slice(0, 64) || "Project",
+                businessName: (partialName ? unescape(partialName) : "").trim().slice(0, 120) || prompt.trim().slice(0, 64) || "Project",
                 presetId: partialPresetId,
-                primaryGoal: partialGoal?.slice(0, 3000) || prompt.trim().slice(0, 500) || "Modern web project.",
-                audience: partialAudience?.slice(0, 1000) || "General audience.",
+                primaryGoal: (partialGoal ? unescape(partialGoal) : "").trim().slice(0, 3000) || prompt.trim().slice(0, 500) || "Modern web project.",
+                audience: (partialAudience ? unescape(partialAudience) : "").trim().slice(0, 1000) || "General audience.",
                 sourceRequest: prompt.trim().slice(0, 4000),
                 outputLanguage: normalizeLang(partialLangRaw ?? uiLanguage),
             };
             return { draft: recoveredDraft, confidence: 0.4 };
         }
-        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage), detectedPreset || "neutral"), confidence: 0 };
+        return { draft: defaultDraft(prompt, normalizeLang(uiLanguage), classifierPreset || "neutral"), confidence: 0 };
     }
 }
 
@@ -350,7 +432,7 @@ function parseDataDashboardPrefillResponse(
     prompt: string,
     attachmentMeta?: AttachmentMeta[],
 ): { dataDashboardDraft: DataDashboardDraft; confidence: number } {
-    let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+    const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
     const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
 
     try {
@@ -461,20 +543,28 @@ export class VibePrefill {
 
         const catalog = await this.getLlmCatalog.execute();
         const activeProviders = catalog.providers.filter((p) => p.isActive);
-        const overrideProviderCatalog = input.provider
-            ? activeProviders.find((p) => p.provider === input.provider)
-            : undefined;
-        const selectedProviderCatalog =
-            overrideProviderCatalog ??
-            activeProviders.find((p) => p.provider === taskSettings.provider) ??
-            activeProviders.find((p) => p.provider === FALLBACK_PROVIDER) ??
-            // Never silently fall back to local LM Studio for this background task —
-            // prefer any reliable cloud provider; LM Studio is used only when explicitly
-            // configured (override or superadmin task settings) above.
-            activeProviders.find((p) => p.provider !== "lmstudio") ??
-            activeProviders[0];
+        // Never silently fall back to local LM Studio for this background task — prefer any
+        // reliable cloud provider; LM Studio is used only when explicitly configured (override
+        // or superadmin task settings). See resolveModelSelection's vibe-cascade fallback chain.
+        const selectionInput: ResolveModelSelectionInput = {
+            profile: "vibe-cascade",
+            activeProviders,
+            requestedProvider: input.provider,
+            requestedModel: input.model,
+            taskSettingProvider: taskSettings.provider,
+            taskSettingModel: taskSettings.model,
+            fallbackProvider: FALLBACK_PROVIDER,
+            hardcodedFallbackModel: FALLBACK_MODEL,
+            requireOverrideInCatalog: true,
+            gateOverrideOnOpenAiCompatible: false,
+            policy: "legacy",
+        };
+        const decision = resolveModelSelection(selectionInput);
+        if (input.projectId) {
+            observeModelSelectionShadow(selectionInput, decision, { projectId: input.projectId, taskKey: TASK_KEY });
+        }
 
-        if (!selectedProviderCatalog) {
+        if (!decision.providerCatalog) {
             return {
                 draft: defaultDraft(input.prompt, resolvedUiLanguage),
                 dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
@@ -485,18 +575,8 @@ export class VibePrefill {
             };
         }
 
-        const providerCatalog = selectedProviderCatalog;
-
-        const overrideModelId = input.model
-            ? providerCatalog.models.find((m) => m.isActive && m.id === input.model)?.id
-            : undefined;
-
-        const modelId =
-            overrideModelId ??
-            providerCatalog.models.find((m) => m.isActive && m.id === taskSettings.model)?.id ??
-            providerCatalog.models.find((m) => m.isActive && m.isDefault)?.id ??
-            providerCatalog.models.find((m) => m.isActive)?.id ??
-            FALLBACK_MODEL;
+        const providerCatalog = decision.providerCatalog;
+        const modelId = decision.effective.model;
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
@@ -515,12 +595,16 @@ export class VibePrefill {
         // Use custom systemTemplate from platform config if set; fall back to hardcoded SYSTEM_PROMPT
         const defaultSystemPrompt = resolvedMode === "data_dashboard" ? DATA_DASHBOARD_SYSTEM_PROMPT : SYSTEM_PROMPT;
         const configuredPrompt = taskSettings.systemTemplate?.trim() || defaultSystemPrompt;
-        // Configuration can specialize the extractor but never erase the current schema
-        // and catalog contract. This also upgrades legacy persisted overrides safely.
+        // The authoritative schema/catalog contract always comes FIRST. An operator override
+        // can never front-run it: if an override is stale or incomplete (e.g. missing fields
+        // from the JSON shape), models overwhelmingly follow the FIRST shape they see, which
+        // previously let a stale admin-page override silently collapse the full 19-field brief
+        // down to whatever subset the stale text listed. The override is now demoted to an
+        // advisory suffix — it may add emphasis or domain guidance, but cannot narrow the shape.
         const basePrompt = resolvedMode === "data_dashboard"
             ? configuredPrompt
             : taskSettings.systemTemplate?.trim()
-                ? `${configuredPrompt}\n\nCURRENT GUIDED MODE OUTPUT CONTRACT:\n${SYSTEM_PROMPT}\n\n${buildCanonicalPresetSelectionRules()}`
+                ? `${SYSTEM_PROMPT}\n\n${buildCanonicalPresetSelectionRules()}\n\nOPERATOR SPECIALIZATION (advisory only — the JSON shape and field list above are authoritative and MUST be emitted in full regardless of anything below):\n${configuredPrompt}`
                 : `${SYSTEM_PROMPT}\n\n${buildCanonicalPresetSelectionRules()}`;
         const contextLayers = [input.layerDContext, input.layerXDataContext].filter((value): value is string => Boolean(value && value.trim()));
         const systemPrompt = contextLayers.length > 0
@@ -566,6 +650,22 @@ export class VibePrefill {
             const raw = String(
                 (payload?.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? ""
             ).trim();
+            const finishReason = String(
+                (payload?.choices as Array<{ finish_reason?: string }>)?.[0]?.finish_reason ?? "stop"
+            );
+
+            const websitePrefill = parsePrefillResponse(raw, input.prompt, resolvedUiLanguage, input.templateId);
+            const dataPrefill = resolvedMode === "data_dashboard"
+                ? parseDataDashboardPrefillResponse(raw, input.prompt, input.attachmentMeta)
+                : undefined;
+            // A hard length cutoff means the recovery path (if any) is by definition partial —
+            // never report it as confidently as a clean parse.
+            const confidence = finishReason === "length"
+                ? Math.min(0.5, dataPrefill?.confidence ?? websitePrefill.confidence)
+                : (dataPrefill?.confidence ?? websitePrefill.confidence);
+            const filledOptionalFields = Object.entries(websitePrefill.draft)
+                .filter(([key, value]) => key !== "sourceRequest" && typeof value === "string" && value.trim())
+                .length;
 
             // Record cost transaction when userId + projectId are both present
             if (input.userId && input.projectId) {
@@ -605,19 +705,17 @@ export class VibePrefill {
                     meta: {
                         taskKey: TASK_KEY,
                         provider: providerCatalog.provider,
+                        finishReason,
+                        filledOptionalFields,
                     },
                 });
             }
 
-            const websitePrefill = parsePrefillResponse(raw, input.prompt, resolvedUiLanguage, input.templateId);
-            const dataPrefill = resolvedMode === "data_dashboard"
-                ? parseDataDashboardPrefillResponse(raw, input.prompt, input.attachmentMeta)
-                : undefined;
             return {
                 draft: websitePrefill.draft,
                 dataDashboardDraft: dataPrefill?.dataDashboardDraft,
                 resolvedMode,
-                confidence: dataPrefill?.confidence ?? websitePrefill.confidence,
+                confidence,
                 skipped: false,
                 ...echoProject,
             };

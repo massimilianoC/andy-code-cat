@@ -13,15 +13,22 @@ export interface PromptTaskSetting {
     temperature: number;
     maxCompletionTokens: number;
     systemTemplate: string;
+    /** sha256:<16 hex chars> of the platform default text this override was saved against — used to detect a stale override when the platform default later changes. */
+    systemTemplateBaselineHash?: string;
 }
 
 export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
+    // optimize_user_prompt is a full creative-brief rewrite (see OptimizeUserPrompt.ts /
+    // buildOptimizeUserPromptRequest) — the same kind of rich-output task as
+    // zero_effort_optimize below, so it needs the same generous budget. The old 1200 ceiling
+    // silently truncated the rewritten brief; see the stale-value repair guard in
+    // resolvePromptTaskSettingFromConfig() below, which now also covers this task key.
     optimize_user_prompt: {
         enabled: true,
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.7,
-        maxCompletionTokens: 1200,
+        maxCompletionTokens: 32000,
         systemTemplate: "",
     },
     optimize_image_prompt: {
@@ -95,12 +102,15 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         systemTemplate: "",
     },
     // VibeCore — Guided Mode LLM prefill (brief field extraction)
+    // 2048 was below the ~2,100-5,800 token range a complete 19-field brief actually needs
+    // (see VibePrefill.ts MIN_TOKENS/MAX_TOKENS comment for the char-budget arithmetic) —
+    // the nine expressive fields, written last by design, were silently truncated away.
     vibe_intent_prefill: {
         enabled: true,
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.3,
-        maxCompletionTokens: 2048,
+        maxCompletionTokens: 6000,
         systemTemplate: "",
     },
     // Vibe Mode — final generation step (workspace model when arriving from Vibe Mode expert path)
@@ -365,8 +375,11 @@ export function resolvePromptTaskSettingFromConfig(
     const defaultTask = (DEFAULT_PROMPT_TASK_SETTINGS[taskKey] ?? DEFAULT_PROMPT_TASK_SETTINGS.optimize_user_prompt)!;
     const fromDefault = platformConfig?.governanceByProduct?.default?.promptTaskSettings?.[taskKey];
     const fromProduct = platformConfig?.governanceByProduct?.[productKey]?.promptTaskSettings?.[taskKey];
+    // Self-heal a persisted legacy 1200-token budget for full-brief-rewrite tasks whose
+    // platform default has since been raised (see DEFAULT_PROMPT_TASK_SETTINGS above).
+    const STALE_1200_TOKEN_BUDGET_TASK_KEYS = new Set(["zero_effort_optimize", "optimize_user_prompt"]);
     const configuredMaxCompletionTokens = fromProduct?.maxCompletionTokens ?? fromDefault?.maxCompletionTokens;
-    const maxCompletionTokens = taskKey === "zero_effort_optimize" && configuredMaxCompletionTokens === 1200
+    const maxCompletionTokens = STALE_1200_TOKEN_BUDGET_TASK_KEYS.has(taskKey) && configuredMaxCompletionTokens === 1200
         ? defaultTask.maxCompletionTokens
         : configuredMaxCompletionTokens ?? defaultTask.maxCompletionTokens;
 

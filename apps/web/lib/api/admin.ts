@@ -91,6 +91,8 @@ export interface PromptTaskSettingDto {
     temperature: number;
     maxCompletionTokens: number;
     systemTemplate: string;
+    /** sha256:<16 hex chars> of the platform default text this override was saved against — used to detect a stale override. */
+    systemTemplateBaselineHash?: string;
 }
 
 export interface ProductInjectionsDto {
@@ -297,6 +299,35 @@ export interface AdminDeploymentDto {
     updatedAt: string;
 }
 
+// ── Prompt task registry (governance SSOT) ──────────────────────────────────
+
+export interface PromptSlotDescriptorDto {
+    id: string;
+    key: string;
+    label: string;
+    description: string;
+    editableBy: string;
+    store: string;
+}
+
+export interface PromptTaskDescriptorDto {
+    key: string;
+    label: string;
+    group: string;
+    operatorSlotId?: string;
+    defaultText: string;
+    defaultTextHash: string;
+    slots: PromptSlotDescriptorDto[];
+}
+
+export interface AdminPromptRegistryDto {
+    tasks: PromptTaskDescriptorDto[];
+    policyDefaults: {
+        attachmentPolicy: ProductAttachmentPolicyDto;
+        documentContextPolicy: ProductDocumentContextPolicyDto;
+    };
+}
+
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 function auth(token: string): Record<string, string> {
@@ -327,6 +358,10 @@ export function getAdminProjectAiAnalytics(
 
 export function getAdminConfig(token: string): Promise<PlatformConfigDto> {
     return call<PlatformConfigDto>("GET", "/v1/admin/config", undefined, auth(token));
+}
+
+export function getAdminPromptRegistry(token: string): Promise<AdminPromptRegistryDto> {
+    return call<AdminPromptRegistryDto>("GET", "/v1/admin/prompt-registry", undefined, auth(token));
 }
 
 export function updateAdminConfig(

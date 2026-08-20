@@ -97,6 +97,19 @@ export const llmChatPreviewSchema = z.object({
     conversationId: z.string().min(1).max(120).optional(),
     /** BCP-47 UI language from the client (e.g. "it", "en"). When provided, injects Layer L into the system prompt. */
     uiLanguage: z.string().min(2).max(10).optional(),
+    /**
+     * I11 (SSOT program) — a client-generated key stable across retries of the SAME logical
+     * send (e.g. re-tap after a network timeout). When a "succeeded" PromptExecutionLog already
+     * exists for this key, the server replays that stored result instead of dispatching a
+     * second provider call. Optional: omitting it means no idempotency protection, matching
+     * pre-I11 behavior exactly.
+     */
+    idempotencyKey: z.string().min(1).max(120).optional(),
+    /**
+     * I14 of the SSOT program — when present, dispatch is governed by this PipelineRun's frozen
+     * modelLock instead of the legacy cascade (see ResolvePromptExecution.execute).
+     */
+    pipelineRunId: z.string().min(1).max(120).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({
@@ -114,6 +127,12 @@ export const optimizePromptSchema = z.object({
     model: z.string().min(1).max(200).optional(),
     /** Override the task key used to resolve platform task settings (e.g. "zero_effort_optimize"). */
     taskKey: z.string().min(1).max(80).optional(),
+    /**
+     * I13 of the SSOT program — when present, dispatch is governed by this PipelineRun's frozen
+     * modelLock instead of the legacy cascade (see OptimizeUserPrompt.prepareExecutionContext).
+     * Omitted: 100% unchanged legacy behavior.
+     */
+    pipelineRunId: z.string().min(1).max(120).optional(),
 });
 
 export type LlmChatPreviewInput = z.infer<typeof llmChatPreviewSchema>;
@@ -284,6 +303,19 @@ export interface LlmChatPreviewResult {
     focusPatchApplied?: boolean;
     /** true when focused-mode was active but the LLM response could not be parsed at all (malformed JSON). */
     focusPatchParseError?: boolean;
+    /**
+     * true when the LLM completion could not be parsed into the structured artifact
+     * contract on a NON-focused (initial/full) generation. When true, `structured.artifacts`
+     * is empty by design: the client MUST NOT create or activate a preview snapshot.
+     * Mirrors focusPatchParseError, which covers the focused-edit path.
+     */
+    generationParseError?: boolean;
+    /**
+     * I11 (SSOT program) — id of the durable PromptExecutionLog record this response was
+     * persisted under. Callers that later create a PreviewSnapshot should store this as a FK
+     * reference instead of duplicating the full promptingTrace blob.
+     */
+    promptExecutionId?: string;
     provider: string;
     model: string;
     finishReason?: string;

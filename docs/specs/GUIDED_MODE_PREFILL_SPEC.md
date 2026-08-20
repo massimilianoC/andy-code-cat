@@ -1,9 +1,11 @@
 # Guided Mode LLM Prefill — Specification
 
 **Version:** 1.1
-**Status:** Implemented  
+**Status:** Implemented baseline; browser storage/query handoff, fallback behavior and any second brief construction are superseded by the 2026-08-18 SSOT implementation program.
 **Date:** 2026-07-13
 **Branch:** `feat/dashboard-lovable-chat`
+
+> Active Vibe → Zero Effort → GodMode work must follow [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md). This document remains the reference for the implemented prefill domain and fields.
 
 ---
 
@@ -245,8 +247,36 @@ The `zero_effort_optimize` task (storage key frozen — see `PlatformConfig.ts`)
 same preservation contract even when an operator has configured a custom system template,
 preventing the optimization pass from degrading the brief.
 
-Specific runner intent in supported natural-language variants maps to `freerunner`; generic playable
-intent maps to `videogame`. Missing or invalid classification falls back to `neutral`, not `landing`.
+Template and preset selection is performed exclusively by the LLM configured for
+`vibe_intent_classify` and `vibe_intent_prefill`. There is no keyword, regex or
+deterministic matcher anywhere in the selection path, and no post-hoc override of the
+model's answer.
+
+Both tasks receive the same CANONICAL PRESET SELECTION CONTRACT, built by
+`application/prompting/vibePresetCatalog.ts` and appended AFTER any superadmin
+`systemTemplate` override so a persisted legacy override cannot restore obsolete
+selection semantics. The contract carries: an ordered five-step selection procedure,
+attachment signal rules, and one annotated rendering of the complete preset catalog with
+per-preset SELECT WHEN / DO NOT SELECT WHEN / NOT TO BE CONFUSED WITH clauses.
+
+A game or XR preset requires concrete gameplay mechanic evidence (score, lives, HUD,
+player character, controls, win/lose, retry, core loop). Marketing-website craft
+vocabulary — interactive, micro-interactions, kinetic, animated, immersive, engaging,
+Awwwards-level — never selects a game or XR preset on its own. Symmetrically, an
+explicitly named web deliverable and a web production stack (React, Tailwind, Framer
+Motion, GSAP, Lenis) anchor toward the web presets and are not downgraded by animation
+language.
+
+In VibePrefill the prefill LLM's own `presetId` is trusted directly once validated
+against the catalog. The upstream VibeClassify result is injected as authoritative
+context via the `Detected template` block and is used as a code-level fallback only when
+the prefill LLM emits nothing usable or collapses a specific classification into the
+generic `neutral` preset. Missing or invalid classification falls back to `neutral`,
+never `landing`.
+
+When no LLM call is possible (no active provider, missing API key, provider error,
+network exception) the classifier returns `templateId: null, skipped: true`. It never
+guesses a template.
 
 ---
 

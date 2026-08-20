@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { SiteDeploymentDto } from "../../apps/web/lib/api";
-import { resolvePublicDeploymentUrl } from "../../apps/web/app/workspace/features/header/publishUrl";
+import type { SiteDeploymentDto } from "../../../../../lib/api";
+import { resolvePublicDeploymentUrl } from "../publishUrl";
 
 const deployment: SiteDeploymentDto = {
     id: "deployment-1",

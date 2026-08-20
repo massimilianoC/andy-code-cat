@@ -1,9 +1,16 @@
 # Prompt Layer SSOT — Single Source of Truth for Layer Definition, Composition, Persistence, and Display
 
-Status: **implemented (phases 1-2) — see PROMPT_LAYER_SSOT_EXECUTION_PLAN.md for the executed step list**
+Status: **implemented foundation; traceability remediation active**
 Owner: platform maintainer
 Supersedes the presentation/duplication aspects of: `PROMPT_LAYER_RESTRUCTURE_PLAN.md` (implemented), `PREPROMPT_ENGINE_SPEC.md` (composition flow section)
 Related: `PROMPTING_SERVICE_PLATFORM_SPEC.md`, `SUPER_ADMIN_SPEC.md`, `OUTPUT_LANGUAGE_CONTROL_SPEC.md`, `DOCUMENT_CONTEXT_LAYER_SPEC.md`
+
+> **Current execution guidance (2026-08-18):** the registry, marker and Prompt-tab foundation
+> described here are implemented. The remaining gap is server-authoritative persistence and
+> complete Workshop/provider-payload parity. Do not execute the historical step list in
+> `PROMPT_LAYER_SSOT_EXECUTION_PLAN.md` as a new plan. Use
+> [PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md)
+> for the active, incremental remediation plan.
 
 ---
 

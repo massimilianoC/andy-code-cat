@@ -26,6 +26,7 @@ import { AdminResetUserPassword } from "../../../application/use-cases/admin/Adm
 import { SetUserPasswordResetRequired } from "../../../application/use-cases/admin/SetUserPasswordResetRequired";
 import { GetPlatformStats } from "../../../application/use-cases/admin/GetPlatformStats";
 import { GetPlatformConfig } from "../../../application/use-cases/admin/GetPlatformConfig";
+import { GetPromptRegistry } from "../../../application/use-cases/admin/GetPromptRegistry";
 import { SetPlatformConfig } from "../../../application/use-cases/admin/SetPlatformConfig";
 import { AdminTogglePublication } from "../../../application/use-cases/admin/AdminTogglePublication";
 import { SeedLlmCatalog } from "../../../application/use-cases/SeedLlmCatalog";
@@ -154,6 +155,7 @@ export function createAdminRoutes(): Router {
     const setUserPasswordResetRequired = new SetUserPasswordResetRequired(userRepo);
     const getPlatformStats = new GetPlatformStats(userRepo, deploymentRepo, projectRepo);
     const getPlatformConfig = new GetPlatformConfig(configRepo);
+    const getPromptRegistry = new GetPromptRegistry();
     const setPlatformConfig = new SetPlatformConfig(configRepo);
     const adminTogglePublication = new AdminTogglePublication(deploymentRepo);
     const adminListProjects = new AdminListProjects(projectRepo, userRepo, deploymentRepo);
@@ -243,6 +245,15 @@ export function createAdminRoutes(): Router {
         try {
             const updated = await setPlatformConfig.execute(req.auth!.userId, req.body);
             res.json(updated);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.get("/admin/prompt-registry", async (_req, res, next) => {
+        try {
+            const registry = await getPromptRegistry.execute();
+            res.json(registry);
         } catch (err) {
             next(err);
         }

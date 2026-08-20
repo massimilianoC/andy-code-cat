@@ -4,27 +4,21 @@ import {
     llmPromptConfigSchema,
     optimizePromptSchema,
     type LlmChatPreviewResult,
-    type LlmFocusContext,
     type MediaResolutionMetadata,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson, buildFormattedReply } from "../../../application/llm/llmParser";
 import { applyFocusPatch } from "../../../application/llm/llmPatchMerger";
-import { buildFocusedModeSystemAddendum } from "../../../application/llm/focusedPrompt";
 import { assertPromptTraceParity } from "../../../application/llm/promptTraceParity";
 import { buildChatCompletionRequestBody } from "../../../application/llm/chatRequestAdapter";
 import {
-    buildOutputBudgetPolicy,
-    buildFallbackStructured,
+    buildParseFailureStructured,
+    isGenerationParseFailure,
     tryBuildSectionContextOpts,
     resolveUsageWithFallback,
     buildMessagesWithHistory,
 } from "../../../application/llm/llmMessageBuilder";
-import { buildStyleContextBlock } from "../../../application/llm/styleContextBuilder";
 import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
-import { composeSystemPromptWithLayers, type PromptLayerTraceEntry, type TemplateResolution } from "../../../application/llm/systemPromptComposer";
-import { buildGroundedDataContextLayer, buildGlobalBrandLayer, buildBrandDocumentLayerD, buildPresetLayerFromPreset } from "../../../application/llm/systemPromptLayers";
-import { resolveFilesystemTemplateSkills } from "../../../application/llm/templateSkillsLayer";
 import { estimateCost } from "../../../application/llm/costPolicy";
 import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
 import { env } from "../../../config";
@@ -50,47 +44,16 @@ import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptC
 import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
-import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../../../application/documents/projectLayerDContext";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
-import { PRESET_MAP, withStaticViewportFallback } from "../../../domain/entities/ProjectPreset";
-import { resolveAttachmentPolicyFromConfig, resolveDocumentContextPolicyFromConfig, resolveGovernanceSystemPromptFromConfig } from "../../../domain/entities/PlatformConfig";
+import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { ResolveBrandContext } from "../../../application/use-cases/ResolveBrandContext";
-import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../../../application/use-cases/ResolveBrandDocumentContext";
-
-type LlmRuntimeContext = {
-    providerCatalog: {
-        provider: string;
-        baseUrl: string;
-        apiType?: "openai-compatible" | "anthropic-compatible" | "custom";
-        authType?: "api-key" | "bearer" | "none";
-        models: Array<{
-            id: string;
-            role: string;
-            capabilities: string[];
-            isDefault: boolean;
-            isFallback: boolean;
-            isActive: boolean;
-            displayName?: string;
-            description?: string;
-            promptTemplate?: string;
-            focusPromptTemplate?: string;
-            supportedParameters?: string[];
-            priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
-            priceInputUsdPerM?: number;
-            priceOutputUsdPerM?: number;
-        }>;
-    };
-    modelId: string;
-    projectPresetId?: string;
-    promptConfigId?: string;
-    prePromptTemplate?: string;
-    systemPrompt: string;
-    /** Structured breakdown of systemPrompt — same spans, persisted in promptingTrace.layers. */
-    promptLayers: PromptLayerTraceEntry[];
-};
+import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
+import { ResolvePromptExecution, type LlmRuntimeContext } from "../../../application/use-cases/ResolvePromptExecution";
+import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
+import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
 
 type LlmProviderStatus = {
     requiresKey: boolean;
@@ -103,24 +66,12 @@ const PROVIDER_KEY_ENV_HINTS: Record<string, string> = {
     openrouter: "OPENROUTER_API_KEY",
 };
 
-function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]) {
-    const byId = new Map<string, LlmRuntimeContext["providerCatalog"]["models"][number]>();
-
-    for (const model of models) {
-        if (!model.isActive || !model.id) continue;
-        if (!byId.has(model.id)) {
-            byId.set(model.id, model);
-            continue;
-        }
-
-        const prev = byId.get(model.id)!;
-        if (model.isDefault && !prev.isDefault) {
-            byId.set(model.id, model);
-        }
-    }
-
-    return [...byId.values()];
-}
+/**
+ * I11 (SSOT program): a "pending" PromptExecutionLog older than this is treated as abandoned
+ * (e.g. the API process crashed mid-call) and no longer blocks a retry using the same
+ * idempotencyKey. Matches the generous end of this route's own generation timeouts.
+ */
+const PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS = 5 * 60_000;
 
 function resolveChatPreviewMaxTokens(requestedMaxTokens?: number): number {
     const previewCeiling = 64_000;
@@ -303,6 +254,8 @@ export function createLlmRoutes(): Router {
         env.LLM_DEFAULT_PROVIDER,
     );
     const getEffectiveLlmCatalog = new GetEffectiveLlmCatalog(getLlmCatalog);
+    const pipelineRunRepository = new MongoPipelineRunRepository();
+    const resolvePipelineModelLock = new ResolvePipelineModelLock(pipelineRunRepository, getLlmCatalog);
 
     const optimizeUserPrompt = new OptimizeUserPrompt(
         projectRepository,
@@ -313,6 +266,7 @@ export function createLlmRoutes(): Router {
         userRepo,
         promptExecutionLogRepository,
         getLlmCatalog,
+        resolvePipelineModelLock,
         getFileStorage(),
     );
 
@@ -330,257 +284,23 @@ export function createLlmRoutes(): Router {
         return kind === "api-key" ? key : `Bearer ${key}`;
     }
 
-    async function resolveContext(input: {
-        projectId: string;
-        userId: string;
-        pipelineRole: string;
-        provider?: string;
-        model?: string;
-        capability?: string;
-        assetIds?: string[];
-        systemPrompt?: string;
-        /** BCP-47 output language for Layer L injection (e.g. "it", "en"). When absent, Layer L is omitted. */
-        outputLanguage?: string;
-        focusedMode?: {
-            focusContext: LlmFocusContext;
-            pageMap?: Parameters<typeof buildFocusedModeSystemAddendum>[1];
-        };
-    }): Promise<LlmRuntimeContext> {
-        const catalog = await getLlmCatalog.execute();
-        const promptConfig = await getLlmPromptConfig.execute(input.projectId);
-        const [moodboard, userProfile, project, platformConfig, projectAssets] = await Promise.all([
-            moodboardRepository.findByProjectId(input.projectId),
-            userStyleProfileRepository.findByUserId(input.userId),
-            projectRepository.findByIdForUser(input.projectId, input.userId),
-            platformConfigRepo.get().catch(() => null),
-            assetRepository.listByProject(input.projectId, input.userId).catch(() => [] as Awaited<ReturnType<typeof assetRepository.listByProject>>),
-        ]);
-        const presetRaw = project?.presetId
-            ? (await presetRepository.findById(project.presetId).catch(() => null)) ?? PRESET_MAP.get(project.presetId) ?? null
-            : null;
-        // PP-018 pre-reseed safety: Mongo presets stored before viewportModel existed inherit
-        // the static catalog's viewport framing instead of degrading to document_scroll.
-        const preset = presetRaw && project?.presetId ? withStaticViewportFallback(presetRaw, project.presetId) : presetRaw;
-
-        const productKey = project?.presetId ?? "default";
-        const governanceResolved = resolveGovernanceSystemPromptFromConfig(platformConfig, productKey, "generationSystem");
-        const governanceSystemPrompt = governanceResolved.value || undefined;
-        const governanceFocusedBasePrompt = resolveGovernanceSystemPromptFromConfig(platformConfig, productKey, "focusedEditSystem").value || undefined;
-        const attachmentPolicy = resolveAttachmentPolicyFromConfig(platformConfig, productKey);
-        const documentContextPolicy = resolveDocumentContextPolicyFromConfig(platformConfig, productKey);
-
-        const styleBlock = buildStyleContextBlock(userProfile, moodboard);
-        const presetLayer = buildPresetLayerFromPreset(preset ?? undefined);
-        const selectedAssetIds = new Set(input.assetIds ?? []);
-        const contextAssets = selectedAssetIds.size > 0
-            ? projectAssets.filter((asset) => selectedAssetIds.has(asset.id))
-            : projectAssets;
-
-        if (selectedAssetIds.size > 0) {
-            if (contextAssets.length > attachmentPolicy.maxAttachmentsPerPrompt) {
-                throw new HttpError(
-                    `Too many attachments selected (max ${attachmentPolicy.maxAttachmentsPerPrompt})`,
-                    { statusCode: 422, code: "ATTACHMENT_LIMIT_EXCEEDED" },
-                );
-            }
-
-            const oversizedAsset = contextAssets.find((asset) => asset.fileSize > attachmentPolicy.maxFileSizeBytes);
-            if (oversizedAsset) {
-                throw new HttpError(
-                    `Attachment exceeds per-file size limit (${oversizedAsset.originalName})`,
-                    { statusCode: 413, code: "ATTACHMENT_FILE_TOO_LARGE" },
-                );
-            }
-
-            const selectedTotalBytes = contextAssets.reduce((acc, asset) => acc + asset.fileSize, 0);
-            if (selectedTotalBytes > attachmentPolicy.maxTotalBytes) {
-                throw new HttpError(
-                    "Selected attachments exceed total size limit",
-                    { statusCode: 422, code: "ATTACHMENT_TOTAL_SIZE_EXCEEDED" },
-                );
-            }
-        }
-
-        // Reusable brand documents (analysed once, cached) claim the Layer D budget first;
-        // project attachments fill the remainder. Failure never blocks generation.
-        // The enrichment content is functional to this generation, so in-flight (pending)
-        // analyses are AWAITED (bounded) — never treated as fire-and-forget.
-        const brandDocuments = await resolveBrandDocumentContext
-            .execute({ userId: input.userId, projectId: input.projectId, waitForPendingMs: BRAND_DOC_WAIT_FOR_PENDING_MS })
-            .catch(() => []);
-        const brandDocumentLayer = buildBrandDocumentLayerD(brandDocuments);
-        const remainingLayerDBudget = Math.max(0, env.ENRICHMENT_LAYER_D_MAX_CHARS - brandDocumentLayer.length);
-        const projectLayerD = remainingLayerDBudget > 0 && env.enrichmentInjectLayerD
-            ? await buildProjectLayerDContext({
-                assetRepository,
-                storage: getFileStorage(),
-                projectId: input.projectId,
-                userId: input.userId,
-                assets: contextAssets,
-                includeUnenrichedAssets: selectedAssetIds.size > 0,
-                maxChars: remainingLayerDBudget,
-                maxAssets: documentContextPolicy.maxAssetsPerPrompt,
-                fallbackInlineExtractionMaxAssets: documentContextPolicy.fallbackInlineExtractionMaxAssets,
-                waitForPendingMs: env.enrichmentEnabled ? PROJECT_LAYER_D_WAIT_FOR_PENDING_MS : 0,
-            })
-            : { layer: "", assets: contextAssets, documentNames: [] };
-        const documentContextLayer = [brandDocumentLayer, projectLayerD.layer].filter(Boolean).join("\n\n");
-        // Alpha guardrail: grounded dataset Layer X is restricted to explicit
-        // data-dashboard projects and is not injected into the standard website flow.
-        const dataContextLayer = project?.presetId === "data-dashboard"
-            ? buildGroundedDataContextLayer(projectLayerD.assets)
-            : "";
-
-        const providerCatalog =
-            (input.provider
-                ? catalog.providers.find((p) => p.provider === input.provider && p.isActive)
-                : undefined) ??
-            catalog.providers.find((p) => p.provider === env.LLM_DEFAULT_PROVIDER) ??
-            catalog.providers[0];
-
-        if (!providerCatalog) {
-            throw new Error("No active LLM provider catalog found");
-        }
-
-        const providerModels = dedupeModelsById(providerCatalog.models);
-        const explicitModel = input.model
-            ? providerModels.find((model) => model.id === input.model)
-            : undefined;
-
-        const roleModel = explicitModel ??
-            (input.capability
-                ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
-                : undefined) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
-            providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
-            providerModels.find((m) => m.isActive);
-
-        const effectivePrePromptTemplate = [
-            promptConfig.enabled ? promptConfig.prePromptTemplate : undefined,
-            roleModel?.promptTemplate,
-        ]
-            .filter((value): value is string => Boolean(value && value.trim()))
-            .join("\n\n---\n\n");
-
-        // Layer T: re-inject the Layer Φ format signal persisted at classify time.
-        // buildLayerT self-suppresses when presetId is set — but ONLY a preset that actually
-        // carries a systemPromptModule "covers" the format in Layer B. A module-less generic
-        // preset (e.g. "neutral", 0 chars) must NOT suppress the formatHint fallback, or the
-        // format directives vanish from the prompt entirely (B thin AND T empty).
-        const presetCoversFormat = Boolean(preset?.outputSpec.systemPromptModule?.trim());
-        const templateResolution: TemplateResolution | null = project?.templateResolution
-            ? {
-                presetId: presetCoversFormat ? (project.presetId ?? null) : null,
-                userTemplateId: null,
-                formatHint: (project.templateResolution.formatHint ?? null) as TemplateResolution["formatHint"],
-                confidence: project.templateResolution.confidence,
-                reasoning: project.templateResolution.reasoning,
-                source: project.templateResolution.source,
-            }
-            : null;
-
-        const brandContext = await resolveBrandContext.execute(
-            { userId: input.userId, projectId: input.projectId },
-        ).catch(() => ({ entries: [], hasMustUse: false }));
-        const brandContextLayer = buildGlobalBrandLayer(brandContext, { maxChars: 4000 });
-
-        // Layer L (OUTPUT LANGUAGE) resolution chain: explicit persisted project language
-        // (from Guided Mode/Vibe intake) → client UI language sent with the request → none
-        // (model default = English). See OUTPUT_LANGUAGE_CONTROL_SPEC.md.
-        const resolvedOutputLanguage = project?.outputLanguage || input.outputLanguage || null;
-        const outputLanguageSource = project?.outputLanguage
-            ? "project-config"
-            : input.outputLanguage ? "request-ui-language" : "empty";
-        const templateSkills = resolveFilesystemTemplateSkills({
-            presetId: project?.presetId,
-        });
-        const governanceFocusedSystemPrompt = [
-            roleModel?.focusPromptTemplate,
-            governanceFocusedBasePrompt,
-        ]
-            .filter((value): value is string => Boolean(value && value.trim()))
-            .join("\n\n");
-        const focusedModeLayer = input.focusedMode
-            ? [
-                buildFocusedModeSystemAddendum(
-                    input.focusedMode.focusContext,
-                    input.focusedMode.pageMap,
-                ),
-                governanceFocusedSystemPrompt,
-            ].filter(Boolean).join("\n\n")
-            : "";
-
-        const layerSources: Partial<Record<import("../../../application/llm/systemPromptComposer").PromptLayerId, string>> = {
-            L: outputLanguageSource,
-            B: project?.presetId ? "preset-catalog" : "code-default",
-            V: project?.serviceConfig?.forms?.enabled
-                ? "project-service-config"
-                : project?.presetId === "form" ? "preset-capability" : "empty",
-            S: templateSkills
-                ? `filesystem-template-skills:${templateSkills.presetId}:${templateSkills.documents.map((doc) => doc.id).join(",")}`
-                : "empty",
-            T: templateResolution?.formatHint ? "project-config" : "empty",
-            E: promptConfig.enabled && promptConfig.prePromptTemplate && roleModel?.promptTemplate
-                ? "project-config+model-template"
-                : roleModel?.promptTemplate ? "model-template"
-                    : promptConfig.enabled && promptConfig.prePromptTemplate ? "project-config" : "empty",
-            F: governanceResolved.source,
-            R: input.systemPrompt ? "request" : "empty",
-            Q: input.focusedMode
-                ? governanceFocusedSystemPrompt ? "focused-mode+governance" : "focused-mode"
-                : "empty",
-        };
-        const composedLayers = composeSystemPromptWithLayers({
-            presetId: project?.presetId,
-            presetLayer,
-            enabledServiceCapabilities: project?.serviceConfig?.forms?.enabled ? ["forms"] : [],
-            skillsLayer: templateSkills?.layer,
-            templateResolution,
-            styleBlock,
-            brandContextLayer: brandContextLayer || undefined,
-            documentContextLayer: documentContextLayer || undefined,
-            dataContextLayer: dataContextLayer || undefined,
-            prePromptTemplate: effectivePrePromptTemplate || undefined,
-            outputBudgetPolicy: buildOutputBudgetPolicy(),
-            requestSystemPrompt: input.systemPrompt,
-            governanceSystemPrompt,
-            focusedModeLayer,
-            outputLanguage: resolvedOutputLanguage,
-            sources: layerSources,
-        });
-        const systemPrompt = composedLayers.composed;
-
-        // For openai-compatible providers with an explicit model request, trust the
-        // requested id directly. The catalog is already live-hydrated (GetLlmCatalog →
-        // hydrateProviderCatalog), but this keeps the call safe even if a freshly
-        // discovered id has not yet propagated into this provider's hydrated list.
-        if (input.model && providerCatalog.apiType === "openai-compatible") {
-            return {
-                providerCatalog: { ...providerCatalog, models: providerModels },
-                modelId: input.model,
-                projectPresetId: project?.presetId,
-                promptConfigId: promptConfig.id,
-                prePromptTemplate: effectivePrePromptTemplate || undefined,
-                systemPrompt,
-                promptLayers: composedLayers.layers,
-            };
-        }
-
-        if (!roleModel) {
-            throw new Error("No active model available for requested role");
-        }
-
-        return {
-            providerCatalog: { ...providerCatalog, models: providerModels },
-            modelId: roleModel.id,
-            projectPresetId: project?.presetId,
-            promptConfigId: promptConfig.id,
-            prePromptTemplate: effectivePrePromptTemplate || undefined,
-            systemPrompt,
-            promptLayers: composedLayers.layers,
-        };
-    }
+    // I10 of the SSOT program: the composer previously nested here as `resolveContext()` is now
+    // ResolvePromptExecution — a pure move (see that file's doc comment), constructed once here
+    // with the same dependency instances the closure used to capture.
+    const resolvePromptExecution = new ResolvePromptExecution(
+        getLlmCatalog,
+        getLlmPromptConfig,
+        moodboardRepository,
+        userStyleProfileRepository,
+        projectRepository,
+        platformConfigRepo,
+        assetRepository,
+        presetRepository,
+        resolveBrandDocumentContext,
+        resolveBrandContext,
+        resolvePipelineModelLock,
+        getFileStorage(),
+    );
 
     router.get("/llm/providers", async (_req, res, next) => {
         try {
@@ -658,6 +378,7 @@ export function createLlmRoutes(): Router {
                 provider: body.provider,
                 model: body.model,
                 taskKey: body.taskKey,
+                pipelineRunId: body.pipelineRunId,
             });
 
             ExecutionLogger.instance.emit({
@@ -720,6 +441,7 @@ export function createLlmRoutes(): Router {
                 provider: body.provider,
                 model: body.model,
                 taskKey: body.taskKey,
+                pipelineRunId: body.pipelineRunId,
             }, {
                 onThinking: (chunk) => sendSse(res, { type: "thinking", content: String(chunk) }),
                 onAnswer: (chunk) => sendSse(res, { type: "answer", content: String(chunk) }),
@@ -793,7 +515,7 @@ export function createLlmRoutes(): Router {
             // next real generation will use. Never hardcode a role here (PROMPT_LAYER_SSOT_SPEC §7).
             const pipelineRole = typeof req.query.pipelineRole === "string" ? req.query.pipelineRole : "dialogue";
             // Dry-run of the EXACT generation path: same resolver, same composer, no provider call.
-            const context = await resolveContext({
+            const context = await resolvePromptExecution.execute({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 pipelineRole,
@@ -840,6 +562,9 @@ export function createLlmRoutes(): Router {
 
     router.post("/projects/:projectId/llm/chat-preview", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         const startedAt = Date.now();
+        // I11 (SSOT program): set once the durable pending record is written, read in the catch
+        // block to mark that same record failed. Declared outside the try so both see it.
+        let promptExecutionLogId: string | undefined;
 
         try {
             const body = parseLlmChatPreviewBody(req.body);
@@ -850,7 +575,7 @@ export function createLlmRoutes(): Router {
                 && (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
             );
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
-            const context = await resolveContext({
+            const context = await resolvePromptExecution.execute({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 pipelineRole: body.pipelineRole,
@@ -864,6 +589,7 @@ export function createLlmRoutes(): Router {
                     focusContext: body.focusContext!,
                     pageMap: sectionOpts?.pageMap,
                 } : undefined,
+                pipelineRunId: body.pipelineRunId,
             });
             const effectiveSystemPrompt = context.systemPrompt;
 
@@ -886,6 +612,43 @@ export function createLlmRoutes(): Router {
             if (!authHeader && context.providerCatalog.authType !== "none") {
                 throw buildProviderApiKeyMissingError(context);
             }
+
+            // ── I11: durable pending journal write, AWAITED before the provider call ──────
+            if (body.idempotencyKey) {
+                const activeDuplicate = await promptExecutionLogRepository.findActiveByIdempotencyKey(
+                    req.sandbox!.projectId,
+                    req.auth!.userId,
+                    body.idempotencyKey,
+                    PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS,
+                );
+                if (activeDuplicate) {
+                    throw new HttpError("A request with this idempotency key is already in flight or has already completed", {
+                        statusCode: 409,
+                        code: "DUPLICATE_REQUEST",
+                        userMessage: "Questa richiesta è già stata inviata. Attendi il completamento prima di ripetere.",
+                        details: { promptExecutionId: activeDuplicate.id, status: activeDuplicate.status },
+                    });
+                }
+            }
+            const pendingLog = await promptExecutionLogRepository.createPending({
+                taskKey: "chat",
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                conversationId: body.conversationId,
+                provider: context.providerCatalog.provider,
+                model: context.modelId,
+                inputPrompt: body.message.slice(0, 2000),
+                renderedSystemPrompt: effectiveSystemPrompt,
+                renderedUserPrompt: messages[messages.length - 1]?.content,
+                contextMeta: {
+                    projectPresetId: context.projectPresetId,
+                    usedMoodboard: false,
+                    usedUserProfile: false,
+                },
+                idempotencyKey: body.idempotencyKey,
+            });
+            promptExecutionLogId = pendingLog.id;
+            // ── end I11 pending write ───────────────────────────────────────────────────
 
             const sfRes = await fetch(`${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
                 method: "POST",
@@ -949,7 +712,12 @@ export function createLlmRoutes(): Router {
             }
 
             const parsed = tryParseStructuredJson(rawReply);
-            let structured = parsed.structured ?? buildFallbackStructured(body.message);
+            const generationParseError = isGenerationParseFailure({
+                parseValid: parsed.parseValid,
+                isFocusedMode,
+                hasCurrentArtifacts: Boolean(body.currentArtifacts?.html),
+            });
+            let structured = parsed.structured ?? buildParseFailureStructured();
             let mediaResolutionMetadata: MediaResolutionMetadata | undefined;
             let focusPatchApplied: boolean | undefined;
             let focusPatchParseError: boolean | undefined;
@@ -1041,7 +809,7 @@ export function createLlmRoutes(): Router {
             // Post-process media placeholders and legacy provider URLs into stable ProjectAsset URLs.
             // Wrapped in try/catch: media resolution must never abort the artifact delivery.
             // If resolution fails entirely the user gets the raw artifacts and a logged warning.
-            if (structured.artifacts?.html || structured.artifacts?.css) {
+            if (!generationParseError && (structured.artifacts?.html || structured.artifacts?.css)) {
                 try {
                     const mediaResolution = await resolveArtifactMedia.execute({
                         projectId: req.sandbox!.projectId,
@@ -1072,7 +840,7 @@ export function createLlmRoutes(): Router {
                     });
                 }
             }
-            const reply = (parsed.parseValid || focusPatchParseError) ? buildFormattedReply(structured) : rawReply;
+            const reply = (parsed.parseValid || focusPatchParseError || generationParseError) ? buildFormattedReply(structured) : rawReply;
             const resolvedUsage = resolveUsageWithFallback({
                 usage: sfJson?.usage
                     ? {
@@ -1119,6 +887,7 @@ export function createLlmRoutes(): Router {
                 mediaResolution: mediaResolutionMetadata,
                 focusPatchApplied,
                 focusPatchParseError,
+                generationParseError: generationParseError || undefined,
                 provider: context.providerCatalog.provider,
                 model: context.modelId,
                 finishReason: sfJson?.choices?.[0]?.finish_reason,
@@ -1139,6 +908,7 @@ export function createLlmRoutes(): Router {
                 ),
                 durationMs: Date.now() - startedAt,
                 simulated: false,
+                promptExecutionId: promptExecutionLogId,
             };
             const mediaResolutionSummary = buildPromptExecutionMediaResolutionSummary(result.mediaResolution);
 
@@ -1147,8 +917,8 @@ export function createLlmRoutes(): Router {
                 projectId: req.sandbox!.projectId,
                 domain: "llm",
                 eventType: "llm_generation_complete",
-                level: "info",
-                status: "success",
+                level: parsed.parseValid ? "info" : "warn",
+                status: parsed.parseValid ? "success" : "partial",
                 durationMs: result.durationMs,
                 metadata: {
                     provider: result.provider,
@@ -1163,6 +933,29 @@ export function createLlmRoutes(): Router {
                     focusPatchPresent: Boolean(focusPatchApplied !== undefined),
                 },
             });
+            if (generationParseError) {
+                const rawLen = rawReply.length;
+                ExecutionLogger.instance.emit({
+                    projectId: req.sandbox!.projectId,
+                    conversationId: body.conversationId,
+                    domain: "llm",
+                    eventType: "llm_generation_parse_failed",
+                    level: "error",
+                    status: "failure",
+                    durationMs: result.durationMs,
+                    metadata: {
+                        provider: result.provider,
+                        model: result.model,
+                        finishReason: result.finishReason,
+                        completionTokens: result.usage?.completionTokens,
+                        isFocusedMode,
+                        streaming: false,
+                        rawLength: rawLen,
+                        rawPrefix: rawReply.slice(0, 1200),
+                        rawSuffix: rawLen > 1800 ? rawReply.slice(-600) : "",
+                    },
+                });
+            }
             if (isFocusedMode && focusPatchApplied !== undefined) {
                 ExecutionLogger.instance.emit({
                     projectId: req.sandbox!.projectId,
@@ -1179,31 +972,20 @@ export function createLlmRoutes(): Router {
             }
             // ── end execution log ─────────────────────────────────────────────
 
-            // ── Cost accounting: write chat call to PromptExecutionLog ─────────
+            // ── I11: durable journal completion, AWAITED before the response is sent ──
             // This ensures chat costs are included in project cost totals alongside
-            // optimize/suggest costs. Fire-and-forget — never block the response.
-            promptExecutionLogRepository.create({
-                taskKey: "chat",
-                projectId: req.sandbox!.projectId,
-                userId: req.auth!.userId,
-                conversationId: body.conversationId,
-                provider: result.provider,
-                model: result.model,
-                inputPrompt: body.message.slice(0, 2000),
-                renderedSystemPrompt: effectiveSystemPrompt,
-                renderedUserPrompt: messages[messages.length - 1]?.content,
-                contextMeta: {
-                    projectPresetId: context.projectPresetId,
-                    usedMoodboard: false,
-                    usedUserProfile: false,
-                },
-                usage: result.usage,
-                mediaResolutionSummary,
-                costEstimate: result.costEstimate,
-                status: "succeeded",
-                durationMs: result.durationMs,
-            }).catch(() => { });
-            // ── end cost accounting ───────────────────────────────────────────
+            // optimize/suggest costs, and that the record a retry's idempotencyKey check
+            // would find is guaranteed to reflect the final outcome before the client sees it.
+            if (promptExecutionLogId) {
+                await promptExecutionLogRepository.complete(promptExecutionLogId, {
+                    status: "succeeded",
+                    usage: result.usage,
+                    mediaResolutionSummary,
+                    costEstimate: result.costEstimate,
+                    durationMs: result.durationMs,
+                });
+            }
+            // ── end I11 journal completion ──────────────────────────────────────
 
             // ── Cost ledger: append-only transaction record ───────────────────
             CostTransactionService.instance.record({
@@ -1240,12 +1022,23 @@ export function createLlmRoutes(): Router {
                 message: normalized.userMessage,
                 details: normalized.details,
             });
+            // I11: best-effort — never let a failed journal write mask the real error.
+            if (promptExecutionLogId) {
+                promptExecutionLogRepository.complete(promptExecutionLogId, {
+                    status: "failed",
+                    errorMessage: normalized.userMessage,
+                    durationMs: Date.now() - startedAt,
+                }).catch(() => { });
+            }
             next(error);
         }
     });
 
     router.post("/projects/:projectId/llm/chat-preview/stream", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         const startedAt = Date.now();
+        // I11 (SSOT program): set once the durable pending record is written, read wherever
+        // this handler exits (success, interrupted, or the outer catch) to complete that record.
+        let promptExecutionLogId: string | undefined;
 
         try {
             const body = parseLlmChatPreviewBody(req.body);
@@ -1256,7 +1049,7 @@ export function createLlmRoutes(): Router {
                 && (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
             );
             const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
-            const context = await resolveContext({
+            const context = await resolvePromptExecution.execute({
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 pipelineRole: body.pipelineRole,
@@ -1270,6 +1063,7 @@ export function createLlmRoutes(): Router {
                     focusContext: body.focusContext!,
                     pageMap: sectionOpts?.pageMap,
                 } : undefined,
+                pipelineRunId: body.pipelineRunId,
             });
             const effectiveSystemPrompt = context.systemPrompt;
 
@@ -1293,6 +1087,43 @@ export function createLlmRoutes(): Router {
             if (!authHeader && context.providerCatalog.authType !== "none") {
                 throw buildProviderApiKeyMissingError(context);
             }
+
+            // ── I11: durable pending journal write, AWAITED before the provider call ──────
+            if (body.idempotencyKey) {
+                const activeDuplicate = await promptExecutionLogRepository.findActiveByIdempotencyKey(
+                    req.sandbox!.projectId,
+                    req.auth!.userId,
+                    body.idempotencyKey,
+                    PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS,
+                );
+                if (activeDuplicate) {
+                    throw new HttpError("A request with this idempotency key is already in flight or has already completed", {
+                        statusCode: 409,
+                        code: "DUPLICATE_REQUEST",
+                        userMessage: "Questa richiesta è già stata inviata. Attendi il completamento prima di ripetere.",
+                        details: { promptExecutionId: activeDuplicate.id, status: activeDuplicate.status },
+                    });
+                }
+            }
+            const pendingLog = await promptExecutionLogRepository.createPending({
+                taskKey: "chat",
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                conversationId: body.conversationId,
+                provider: context.providerCatalog.provider,
+                model: context.modelId,
+                inputPrompt: body.message.slice(0, 2000),
+                renderedSystemPrompt: effectiveSystemPrompt,
+                renderedUserPrompt: messages[messages.length - 1]?.content,
+                contextMeta: {
+                    projectPresetId: context.projectPresetId,
+                    usedMoodboard: false,
+                    usedUserProfile: false,
+                },
+                idempotencyKey: body.idempotencyKey,
+            });
+            promptExecutionLogId = pendingLog.id;
+            // ── end I11 pending write ───────────────────────────────────────────────────
 
             // Abort provider fetch on client disconnect or after 5-minute hard timeout.
             // IMPORTANT: use res.on("close"), NOT req.on("close").
@@ -1467,6 +1298,13 @@ export function createLlmRoutes(): Router {
                     // Headers already flushed — send SSE error instead of next(error).
                     res.off("close", onClientClose);
                     console.log(`[stream-debug] stream read error at ${Date.now() - startedAt}ms:`, streamReadErr);
+                    if (promptExecutionLogId) {
+                        await promptExecutionLogRepository.complete(promptExecutionLogId, {
+                            status: "failed",
+                            errorMessage: streamReadErr instanceof Error ? streamReadErr.message : "Stream read error",
+                            durationMs: Date.now() - startedAt,
+                        }).catch(() => { });
+                    }
                     sendSse(res, { type: "error", message: streamReadErr instanceof Error ? streamReadErr.message : "Stream read error", durationMs: Date.now() - startedAt });
                     res.end();
                     return;
@@ -1500,6 +1338,15 @@ export function createLlmRoutes(): Router {
                         providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
                     }
                 );
+                // I11: the journal never got a success write for this run — mark it failed
+                // (interrupted) rather than leaving it "pending" forever.
+                if (promptExecutionLogId) {
+                    await promptExecutionLogRepository.complete(promptExecutionLogId, {
+                        status: "failed",
+                        errorMessage: "Generation interrupted (client disconnect or timeout)",
+                        durationMs: Date.now() - startedAt,
+                    }).catch(() => { });
+                }
                 if (!res.writableEnded && !res.destroyed) {
                     sendSse(res, {
                         type: "interrupted",
@@ -1517,7 +1364,12 @@ export function createLlmRoutes(): Router {
 
             const trimmedRaw = rawReply.trim();
             const parsed = tryParseStructuredJson(trimmedRaw);
-            let structured = parsed.structured ?? buildFallbackStructured(body.message);
+            const generationParseErrorStream = isGenerationParseFailure({
+                parseValid: parsed.parseValid,
+                isFocusedMode,
+                hasCurrentArtifacts: Boolean(body.currentArtifacts?.html),
+            });
+            let structured = parsed.structured ?? buildParseFailureStructured();
             let mediaResolutionMetadata: MediaResolutionMetadata | undefined;
             let focusPatchAppliedStream: boolean | undefined;
             let focusPatchParseErrorStream: boolean | undefined;
@@ -1592,7 +1444,7 @@ export function createLlmRoutes(): Router {
                 }
             }
             // Post-process media placeholders and legacy provider URLs into stable ProjectAsset URLs.
-            if (structured.artifacts?.html || structured.artifacts?.css) {
+            if (!generationParseErrorStream && (structured.artifacts?.html || structured.artifacts?.css)) {
                 try {
                     const mediaResolution = await resolveArtifactMedia.execute({
                         projectId: req.sandbox!.projectId,
@@ -1629,7 +1481,7 @@ export function createLlmRoutes(): Router {
                     });
                 }
             }
-            const reply = (parsed.parseValid || focusPatchParseErrorStream) ? buildFormattedReply(structured) : trimmedRaw;
+            const reply = (parsed.parseValid || focusPatchParseErrorStream || generationParseErrorStream) ? buildFormattedReply(structured) : trimmedRaw;
             const resolvedUsage = resolveUsageWithFallback({
                 usage,
                 messages,
@@ -1674,6 +1526,8 @@ export function createLlmRoutes(): Router {
                 simulated: false,
                 focusPatchApplied: focusPatchAppliedStream,
                 focusPatchParseError: focusPatchParseErrorStream,
+                generationParseError: generationParseErrorStream || undefined,
+                promptExecutionId: promptExecutionLogId,
             };
             const mediaResolutionSummary = buildPromptExecutionMediaResolutionSummary(result.mediaResolution);
 
@@ -1682,8 +1536,8 @@ export function createLlmRoutes(): Router {
                 projectId: req.sandbox!.projectId,
                 domain: "llm",
                 eventType: "llm_generation_complete",
-                level: "info",
-                status: "success",
+                level: parsed.parseValid ? "info" : "warn",
+                status: parsed.parseValid ? "success" : "partial",
                 durationMs: result.durationMs,
                 metadata: {
                     provider: result.provider,
@@ -1699,6 +1553,29 @@ export function createLlmRoutes(): Router {
                     streaming: true,
                 },
             });
+            if (generationParseErrorStream) {
+                const rawLenStream = trimmedRaw.length;
+                ExecutionLogger.instance.emit({
+                    projectId: req.sandbox!.projectId,
+                    conversationId: body.conversationId,
+                    domain: "llm",
+                    eventType: "llm_generation_parse_failed",
+                    level: "error",
+                    status: "failure",
+                    durationMs: result.durationMs,
+                    metadata: {
+                        provider: result.provider,
+                        model: result.model,
+                        finishReason: result.finishReason,
+                        completionTokens: result.usage?.completionTokens,
+                        isFocusedMode,
+                        streaming: true,
+                        rawLength: rawLenStream,
+                        rawPrefix: trimmedRaw.slice(0, 1200),
+                        rawSuffix: rawLenStream > 1800 ? trimmedRaw.slice(-600) : "",
+                    },
+                });
+            }
             if (isFocusedMode && focusPatchAppliedStream !== undefined) {
                 ExecutionLogger.instance.emit({
                     projectId: req.sandbox!.projectId,
@@ -1716,29 +1593,17 @@ export function createLlmRoutes(): Router {
             }
             // ── end execution log ─────────────────────────────────────────────
 
-            // ── Cost accounting: write chat-stream call to PromptExecutionLog ──
-            promptExecutionLogRepository.create({
-                taskKey: "chat",
-                projectId: req.sandbox!.projectId,
-                userId: req.auth!.userId,
-                conversationId: body.conversationId,
-                provider: result.provider,
-                model: result.model,
-                inputPrompt: body.message.slice(0, 2000),
-                renderedSystemPrompt: effectiveSystemPrompt,
-                renderedUserPrompt: messages[messages.length - 1]?.content,
-                contextMeta: {
-                    projectPresetId: context.projectPresetId,
-                    usedMoodboard: false,
-                    usedUserProfile: false,
-                },
-                usage: result.usage,
-                mediaResolutionSummary,
-                costEstimate: result.costEstimate,
-                status: "succeeded",
-                durationMs: result.durationMs,
-            }).catch(() => { });
-            // ── end cost accounting ───────────────────────────────────────────
+            // ── I11: durable journal completion, AWAITED before the SSE "done" event ──
+            if (promptExecutionLogId) {
+                await promptExecutionLogRepository.complete(promptExecutionLogId, {
+                    status: "succeeded",
+                    usage: result.usage,
+                    mediaResolutionSummary,
+                    costEstimate: result.costEstimate,
+                    durationMs: result.durationMs,
+                }).catch(() => { });
+            }
+            // ── end I11 journal completion ──────────────────────────────────────
 
             // ── Cost ledger: append-only transaction record ───────────────────
             CostTransactionService.instance.record({
@@ -1777,6 +1642,14 @@ export function createLlmRoutes(): Router {
                 message: normalized.userMessage,
                 details: normalized.details,
             });
+            // I11: best-effort — never let a failed journal write mask the real error.
+            if (promptExecutionLogId) {
+                promptExecutionLogRepository.complete(promptExecutionLogId, {
+                    status: "failed",
+                    errorMessage: normalized.userMessage,
+                    durationMs: Date.now() - startedAt,
+                }).catch(() => { });
+            }
             // If headers have already been flushed (SSE started), we cannot use
             // next(error) which would try res.status().json() and crash. Instead
             // send an SSE error event so the client can handle it gracefully.

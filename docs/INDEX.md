@@ -24,7 +24,10 @@ Read in this order before making changes:
 | [docs/project/PRODUCT_VISION.md](project/PRODUCT_VISION.md) | Current product vision: interactive artifact platform, VibeCore/Workspace/Didactic modes, Layer S direction, deferred BaaS boundary |
 | [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Current development-state summary: `R1` delivered, `R2`/`R3` active, live cross-cutting tracks |
 | [docs/project/ROADMAP.md](project/ROADMAP.md) | Project roadmap and release direction |
-| [docs/project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md](project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md) | Reuse-first implementation plan for Guided Mode flows, backend orchestration, and future node-based pipelines |
+| [docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md) | **Active prompt-execution remediation plan:** server-authoritative traceability from composition to provider payload, snapshot, and Workshop display |
+| [docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md) | **Immediate P0/P1 implementation authority:** unified model-routing, canonical-brief, execution-trace and Workshop-feedback program |
+| [docs/SSOT_REFACTOR_PROGRESS.md](SSOT_REFACTOR_PROGRESS.md) | **Resume here next session:** current status, exact first implementation slice, and gates for the SSOT refactor |
+| [docs/project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md](project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md) | ⚠️ Deferred architecture reference for future generic/node workflows; not the current implementation plan |
 | [docs/PRIVATE_CONFIG_GUIDE.md](PRIVATE_CONFIG_GUIDE.md) | Owner-only guidance for public/private repo hygiene |
 
 ---
@@ -87,9 +90,9 @@ Read in this order before making changes:
 | [docs/specs/DIDACTIC_MODE_SPEC.md](specs/DIDACTIC_MODE_SPEC.md) | Didactic Mode — read-only artifact interrogation layer: knowledge generation, Q&A, quizzes, dual-view, and cost tracking |
 | [docs/DIDACTIC_MODE_PROGRESS.md](DIDACTIC_MODE_PROGRESS.md) | Implementation progress log for Didactic Mode (branch `feat/didactic-mode`)
 | [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
-| [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | Preprompt engine service and composition flow |
+| [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | ⚠️ Partially historical PrepromptEngine reference; live prompt composition follows the registry/SSOT documentation |
 | [docs/specs/PROMPT_LAYER_SSOT_SPEC.md](specs/PROMPT_LAYER_SSOT_SPEC.md) | Prompt Layer SSOT — canonical layer registry, MongoDB override chain, self-describing markers, persisted trace, 1:1 superadmin/sent/stored/displayed correspondence |
-| [docs/specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md](specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md) | Agent-executable step-by-step plan for the Prompt Layer SSOT — exact anchors, code blocks, and acceptance checks per step |
+| [docs/specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md](specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md) | Historical implementation record for the first Prompt Layer SSOT wave; **not** an executable plan for new work |
 | [docs/specs/WORKFLOWS.md](specs/WORKFLOWS.md) | Automated workflow definitions WF-01 to WF-10 |
 | [docs/specs/UX_SPEC.md](specs/UX_SPEC.md) | End-to-end UX and product screen map |
 | [docs/specs/EXECUTION_LOG_SPEC.md](specs/EXECUTION_LOG_SPEC.md) | Structured operational audit logging |
@@ -114,13 +117,15 @@ Read in this order before making changes:
 | [docs/specs/MEDIA_STRATEGY_RESOLVER_PIPELINE_SPEC.md](specs/MEDIA_STRATEGY_RESOLVER_PIPELINE_SPEC.md) | Proposed next evolution for frontend-selectable media strategies: stock search, AI image generation, project/user assets, hybrid context planning, structured JSON planner outputs, failure traces, admin UI, and Playwright E2E |
 | [docs/specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md](specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md) | ⚠️ DEPRECATED / historical — Wave-1 analysis, superseded by [ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md](specs/ARTIFACT_MEDIA_ORCHESTRATOR_SPEC.md). Kept for context only. |
 | [docs/specs/SECTION_CONTEXT_OPT_SPEC.md](specs/SECTION_CONTEXT_OPT_SPEC.md) | Section-aware context optimization |
-| [docs/specs/PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX and guardrails |
+| [docs/specs/PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX and guardrails — explicit user action only; not for runs with skip policy |
 | [docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md](specs/PROMPTING_SERVICE_PLATFORM_SPEC.md) | Internal prompting platform and audit model |
-| [docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md](specs/TEMPLATE_SKILLS_INJECTION_PLAN.md) | Layer S template-skills architecture — filesystem-first runtime injection from by-template Markdown folders |
+| [docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md) | **Current implementation authority:** unified P0/P1 program for prompt-execution SSOT, user model locks, canonical briefs, explicit notifications, and review gates |
+| [docs/specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md](specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md) | **Active P0/P1 remediation:** local Docker regression analysis and refactor plan for a server-owned model lock, canonical brief, no-silent-fallback policy, and Vibe → Zero Effort → GodMode handoff |
+| [docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md](specs/TEMPLATE_SKILLS_INJECTION_PLAN.md) | ⚠️ Historical implementation plan for Layer S; runtime is implemented and active policy/implementation specs govern future work |
 | [docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md](specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md) | Project policy for filesystem-first Layer S: ownership, source-of-truth files, selection rules, validation workflow, impact evaluation, and rollback |
 | [docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md](specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md) | Implemented filesystem resolver for Layer S: by-template folder loading, env controls, prompt trace, DB logging, Docker packaging, and validation |
 | [docs/specs/LLM_PROVIDER_CATALOG_ALIGNMENT_SPEC.md](specs/LLM_PROVIDER_CATALOG_ALIGNMENT_SPEC.md) | Summary spec for provider compatibility fixes, single-source catalog alignment, shared picker UI, validation status, and review perimeter |
-| [docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md](specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md) | Ultra-operational MVP spec for Guided Mode + Workspace, shared orchestration, and parallel implementation waves |
+| [docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md](specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md) | ⚠️ Historical Guided Mode/Workspace MVP execution reference; superseded for implementation sequencing by the SSOT program |
 | [docs/specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md](specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md) | Evoluzione Zero Effort: media upload step, Layer F media context nel prompt, async job tracking, notifiche email/Telegram |
 | [docs/specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md](specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md) | Asset-aware prompt enrichment plan |
 | [docs/specs/DOCUMENT_CONTEXT_LAYER_SPEC.md](specs/DOCUMENT_CONTEXT_LAYER_SPEC.md) | Document Context Layer — PDF/DOCX parsing, image vision analysis, AssetEnrichmentTrace envelope, and Layer D prompt injection |
@@ -129,16 +134,16 @@ Read in this order before making changes:
 | [docs/specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md](specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md) | Agent-executable first capability: declarative forms, mailto/relay/capture, scoped Forms Inbox persistence, Layer V/runtime parity, privacy policy, tests and delivery waves |
 | [docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md](specs/FORM_RUNTIME_MAILTO_FOUNDATION.md) | Definitive mailto v1 form runtime: Layer V ownership, canonical snapshots, owner configuration, deterministic multi-step compilation, and isolated E2E |
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
-| [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | Multi-model platform playbook |
+| [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | ⚠️ Historical generic multi-model playbook; not the current product routing contract |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin controls and platform governance |
 | [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](specs/FIRST_INSTALL_SETUP_SPEC.md) | First-install wizard, guided server config, superadmin seed, emergency DB promotion |
 | [docs/specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md](specs/MULTIDOMAINS_IMPLEMENTATION_PLAN.md) | Multi-domain deployment implementation plan — R3.1–R3.4, nginx vhost generation, SSL automation, domain admin API/UI |
 | [docs/specs/USER_SETTINGS_AND_API_KEYS_SPEC.md](specs/USER_SETTINGS_AND_API_KEYS_SPEC.md) | R3.5 — User-owned API keys (programmatic access) and unified role-scoped settings panel |
-| [docs/specs/DASHBOARD_LOVABLE_CHAT_SPEC.md](specs/DASHBOARD_LOVABLE_CHAT_SPEC.md) | Dashboard Lovable Chat — ChatPanel reusable component, entry-point chat, and LLM intent-to-template classifier |
+| [docs/specs/DASHBOARD_LOVABLE_CHAT_SPEC.md](specs/DASHBOARD_LOVABLE_CHAT_SPEC.md) | ⚠️ Historical VibeCore UX/design reference; model-routing, fallback and handoff directives are superseded |
 | `apps/web/app/admin/experimental/data-dashboard/[projectId]/page.tsx` | Superadmin-only alpha console for the grounded dataset runtime: deterministic queries, browsing, insights, and dashboard experimentation detached from the main UX |
 | [docs/specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md](specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md) | Alpha-only strategy for the grounded dataset runtime and possible future re-integration, currently detached from the primary Vibe / Guided Mode UX |
 | [docs/specs/PUBLISHED_DATASET_BINDINGS_SPEC.md](specs/PUBLISHED_DATASET_BINDINGS_SPEC.md) | Decision spec for publish-time dataset bindings: original source vs normalized local runtime vs backend query endpoints, with hybrid-mode recommendation, manifest contract, exposure policies, and serial/parallel delivery plan |
-| [docs/specs/GUIDED_MODE_PREFILL_SPEC.md](specs/GUIDED_MODE_PREFILL_SPEC.md) | Guided Mode LLM Prefill — one-pass LLM pre-population of all Guided Mode wizard fields, token counter, AI review card, Workspace one-click generation |
+| [docs/specs/GUIDED_MODE_PREFILL_SPEC.md](specs/GUIDED_MODE_PREFILL_SPEC.md) | Guided Mode LLM Prefill — one-pass LLM pre-population of all Guided Mode wizard fields, token counter, AI review card, Workspace one-click generation; legacy storage/handoff and fallback details are superseded by the SSOT program |
 | [docs/specs/GEN_AI_MEDIA_MODE_SPEC.md](specs/GEN_AI_MEDIA_MODE_SPEC.md) | Gen AI Media Mode — extension of Vibe/Guided Mode/Workspace to support podcast, video, and music generation via external engine REST APIs, async job tracking, and HTML artifact containers |
 | [docs/specs/GEN_AI_MEDIA_MODE_INTERFACE_STANDARDS.md](specs/GEN_AI_MEDIA_MODE_INTERFACE_STANDARDS.md) | Interface standards analysis (MCP, A2A, OpenAPI, CLI) and REST contract for external podcast/video/music engines; dual-mode integration strategy (Direct API + Standard Adapter) |
 | [docs/specs/GLOBAL_BRAND_IDENTITY_SPEC.md](specs/GLOBAL_BRAND_IDENTITY_SPEC.md) | Global Brand Identity System (Layer G) — ✅ delivered (PR #26, release 2026.06.10.1); hierarchical (platform → user → project) additive brand-asset injection; reuses existing storage, auth, and route infrastructure; retrocompatible new layer |

@@ -4,19 +4,27 @@ import {
     type GuidedLaunchResultDto,
     guidedLaunchSchema,
     type GenerationWorkspaceDto,
+    launchWorkspacePipelineSchema,
+    type LaunchWorkspacePipelineResultDto,
 } from "@andy-code-cat/contracts";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import type { RequestWithContext } from "../types";
+import { env } from "../../../config";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
 import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
+import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
+import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { PrepareGenerationWorkspace } from "../../../application/use-cases/PrepareGenerationWorkspace";
 import { LaunchGuidedProject } from "../../../application/use-cases/LaunchGuidedProject";
+import { LaunchWorkspacePipeline } from "../../../application/use-cases/LaunchWorkspacePipeline";
+import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
+import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import type { GenerationWorkspace } from "../../../domain/entities/GenerationWorkspace";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import {
@@ -47,6 +55,8 @@ export function createPipelineRoutes(): Router {
     const assetRepository = new MongoProjectAssetRepository();
     const snapshotRepository = new MongoPreviewSnapshotRepository();
     const platformConfigRepository = new MongoPlatformConfigRepository();
+    const pipelineRunRepository = new MongoPipelineRunRepository();
+    const llmCatalogRepository = new MongoLlmCatalogRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
     const prepareGenerationWorkspace = new PrepareGenerationWorkspace(
@@ -60,6 +70,23 @@ export function createPipelineRoutes(): Router {
         moodboardRepository,
         conversationRepository,
         prepareGenerationWorkspace,
+    );
+
+    const getLlmCatalog = new GetLlmCatalog(
+        env.LLM_CATALOG_SOURCE,
+        env.SILICONFLOW_BASE_URL,
+        env.LMSTUDIO_BASE_URL,
+        env.OPENROUTER_BASE_URL,
+        llmCatalogRepository,
+        env.hasOpenRouterApiKey,
+        env.providerApiKeys,
+        env.LLM_DEFAULT_PROVIDER,
+    );
+    const resolvePipelineModelLock = new ResolvePipelineModelLock(pipelineRunRepository, getLlmCatalog);
+    const launchWorkspacePipeline = new LaunchWorkspacePipeline(
+        launchGuidedProject,
+        resolvePipelineModelLock,
+        pipelineRunRepository,
     );
 
     router.use(authMiddleware);
@@ -180,6 +207,78 @@ export function createPipelineRoutes(): Router {
         getGuidedPipelineConfig,
     );
     // Legacy alias — see the note on the POST route above.
+
+    /**
+     * I12 of the SSOT program — server-owned Workspace launch that freezes a `PipelineModelLock`
+     * and attaches the canonical brief to a real `PipelineRun` up front (see
+     * `LaunchWorkspacePipeline`). Gated behind the same `PIPELINE_RUN_ENABLED` master rollback
+     * lever as `pipelineRunRoutes.ts` since it persists a `PipelineRun`; the pre-existing
+     * `/pipelines/zero-effort` route above is completely untouched by this addition.
+     *
+     * Named "Workspace" (not "GodMode") since 2026-08-19, matching the product-owner-approved
+     * rename in PR #58; see `pipelineEntryModeSchema`'s doc comment in
+     * `packages/contracts/src/pipelineRun.ts` for the full rationale.
+     */
+    router.post(
+        "/projects/:projectId/pipeline/launch-workspace",
+        sandboxMiddleware,
+        async (req: RequestWithContext, res: Response, next: NextFunction) => {
+            try {
+                if (!env.pipelineRunEnabled) {
+                    res.status(404).json({ error: "Not found" });
+                    return;
+                }
+
+                const intake = launchWorkspacePipelineSchema.parse(req.body);
+
+                if (intake.presetId || intake.outputLanguage) {
+                    await projectRepository.update(req.sandbox!.projectId, req.auth!.userId, {
+                        ...(intake.presetId ? { presetId: intake.presetId } : {}),
+                        ...(intake.outputLanguage ? { outputLanguage: intake.outputLanguage } : {}),
+                    }).catch(() => {});
+                }
+
+                const result = await launchWorkspacePipeline.execute({
+                    userId: req.auth!.userId,
+                    projectId: req.sandbox!.projectId,
+                    intake,
+                });
+
+                ExecutionLogger.instance.emit({
+                    projectId: req.sandbox!.projectId,
+                    conversationId: result.conversationId,
+                    domain: "system",
+                    eventType: "workspace_pipeline_prepared",
+                    level: "info",
+                    status: "success",
+                    metadata: {
+                        mode: "workspace",
+                        jobId: result.jobId,
+                        pipelineRunId: result.pipelineRunId,
+                        workspaceRootPath: result.workspace.rootPath,
+                    },
+                });
+
+                const response: LaunchWorkspacePipelineResultDto = {
+                    mode: "workspace",
+                    status: "prepared",
+                    projectId: req.sandbox!.projectId,
+                    pipelineRunId: result.pipelineRunId,
+                    conversationId: result.conversationId,
+                    jobId: result.jobId,
+                    normalizedBrief: result.normalizedBrief,
+                    modelLock: result.modelLock,
+                    suggestedNextActions: result.suggestedNextActions,
+                    workspace: toWorkspaceDto(result.workspace),
+                };
+
+                res.status(201).json(response);
+            } catch (error) {
+                next(error);
+            }
+        },
+    );
+
     router.get(
         "/projects/:projectId/pipelines/zero-effort/config",
         sandboxMiddleware,
