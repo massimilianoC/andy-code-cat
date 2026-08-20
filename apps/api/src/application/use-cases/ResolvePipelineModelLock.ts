@@ -6,6 +6,7 @@ import type { NewPipelineRun, PipelineRunRepository } from "../../domain/reposit
 import { resolveModelSelection } from "../llm/modelSelection";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
 import { HttpError } from "../../presentation/http/errors/httpError";
+import { notifyPipelineRunBlocked } from "../llm/pipelineRunNotifications";
 
 const FALLBACK_PROVIDER = "siliconflow";
 const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
@@ -138,6 +139,21 @@ export class ResolvePipelineModelLock {
                 stage: input.stage,
                 at: new Date(),
             };
+            // I17: notify once, on the genuine transition INTO blocked — not on every retry
+            // against an already-blocked run (the idempotent re-block below allows those to
+            // succeed without erroring, so gating on run.status here is what keeps a client
+            // retry loop from spamming duplicate notifications for the same block event).
+            if (run.status !== "blocked") {
+                notifyPipelineRunBlocked({
+                    projectId: run.projectId,
+                    userId: run.ownerUserId,
+                    runId: run.id,
+                    stage: input.stage,
+                    code: blocked.code,
+                    lockedProviderId: run.modelLock.effective.providerId,
+                    lockedModelId: run.modelLock.effective.modelId,
+                });
+            }
             // Idempotent re-block: a retry against an already-blocked run re-confirms the block
             // (PipelineRun.ts now allows "blocked" -> "blocked") rather than throwing on what
             // used to be an illegal self-transition, which surfaced as a 500 and hid the real

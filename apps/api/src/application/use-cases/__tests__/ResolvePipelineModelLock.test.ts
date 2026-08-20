@@ -1,10 +1,25 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModelSelectionBlockCode, PipelineStage } from "@andy-code-cat/contracts";
 import type { LlmProviderCatalog } from "../../../domain/entities/LlmCatalog";
 import type { PipelineRun } from "../../../domain/entities/PipelineRun";
 import { assertStatusTransition } from "../../../domain/entities/PipelineRun";
+import type { CreateSystemNotificationInput, SystemNotificationRepository } from "../../../domain/repositories/SystemNotificationRepository";
+import type { SystemNotification } from "../../../domain/entities/SystemNotification";
 import type { NewPipelineRun, PipelineRunRepository } from "../../../domain/repositories/PipelineRunRepository";
 import { computeCatalogRevision, ResolvePipelineModelLock } from "../ResolvePipelineModelLock";
+import { SystemNotifier } from "../../services/SystemNotifier";
+
+class FakeSystemNotificationRepository implements SystemNotificationRepository {
+    created: CreateSystemNotificationInput[] = [];
+
+    async create(input: CreateSystemNotificationInput): Promise<SystemNotification> {
+        this.created.push(input);
+        return { ...input, id: `notif-${this.created.length}`, status: "unread", createdAt: new Date() };
+    }
+    async listForUser(): Promise<SystemNotification[]> { return []; }
+    async listForAdmin(): Promise<SystemNotification[]> { return []; }
+    async markRead(): Promise<SystemNotification | null> { return null; }
+}
 
 function fakeCatalog(overrides?: Partial<LlmProviderCatalog>): LlmProviderCatalog {
     return {
@@ -233,6 +248,78 @@ describe("ResolvePipelineModelLock — dispatch", () => {
         await expect(
             useCase.dispatch({ runId: "does-not-exist", ownerUserId: "user-1", projectId: "project-1", stage: "vibe_classify" }),
         ).rejects.toMatchObject({ statusCode: 404, code: "PIPELINE_RUN_NOT_FOUND" });
+    });
+
+    describe("I17 — SystemNotifier wiring", () => {
+        afterEach(() => {
+            SystemNotifier.configure({
+                async create(): Promise<never> { throw new Error("unconfigured in test teardown"); },
+                async listForUser() { return []; },
+                async listForAdmin() { return []; },
+                async markRead() { return null; },
+            });
+        });
+
+        it("emits exactly one persisted notification on the genuine draft->blocked transition", async () => {
+            const notifRepo = new FakeSystemNotificationRepository();
+            SystemNotifier.configure(notifRepo);
+
+            const repo = new InMemoryPipelineRunRepository();
+            const active = [fakeCatalog()];
+            const createUseCase = new ResolvePipelineModelLock(repo, fakeGetLlmCatalog(active) as any);
+            const run = await createUseCase.createRun({
+                projectId: "project-1",
+                ownerUserId: "user-1",
+                entryMode: "vibe",
+                optimizationPolicy: "skip",
+            });
+
+            const deactivated = fakeGetLlmCatalog([
+                fakeCatalog({ models: [{ ...fakeCatalog().models[0]!, isActive: false }] }),
+            ]);
+            const dispatchUseCase = new ResolvePipelineModelLock(repo, deactivated as any);
+            await dispatchUseCase.dispatch({ runId: run.id, ownerUserId: "user-1", projectId: "project-1", stage: "generate" });
+
+            expect(notifRepo.created).toHaveLength(1);
+            expect(notifRepo.created[0]).toMatchObject({
+                projectId: "project-1",
+                userId: "user-1",
+                domain: "llm",
+                severity: "warning",
+                sourceEventType: "pipeline_run_blocked",
+                metadata: expect.objectContaining({
+                    pipelineRunId: run.id,
+                    stage: "generate",
+                    code: "MODEL_LOCK_UNAVAILABLE",
+                    lockedProviderId: "siliconflow",
+                    lockedModelId: "MiniMaxAI/MiniMax-M3",
+                }),
+            });
+        });
+
+        it("does NOT emit a second notification when a retry re-confirms an already-blocked run", async () => {
+            const notifRepo = new FakeSystemNotificationRepository();
+            SystemNotifier.configure(notifRepo);
+
+            const repo = new InMemoryPipelineRunRepository();
+            const active = [fakeCatalog()];
+            const createUseCase = new ResolvePipelineModelLock(repo, fakeGetLlmCatalog(active) as any);
+            const run = await createUseCase.createRun({
+                projectId: "project-1",
+                ownerUserId: "user-1",
+                entryMode: "vibe",
+                optimizationPolicy: "skip",
+            });
+
+            const deactivated = fakeGetLlmCatalog([
+                fakeCatalog({ models: [{ ...fakeCatalog().models[0]!, isActive: false }] }),
+            ]);
+            const dispatchUseCase = new ResolvePipelineModelLock(repo, deactivated as any);
+            await dispatchUseCase.dispatch({ runId: run.id, ownerUserId: "user-1", projectId: "project-1", stage: "generate" });
+            await dispatchUseCase.dispatch({ runId: run.id, ownerUserId: "user-1", projectId: "project-1", stage: "generate" });
+
+            expect(notifRepo.created).toHaveLength(1);
+        });
     });
 
     it("retrying dispatch against an already-blocked run re-confirms the block (409) instead of throwing an illegal-transition error (500)", async () => {

@@ -1709,10 +1709,22 @@ function WorkspacePageContent() {
         .reverse()
         .find((m) => m.role === "assistant");
 
-    // Ground-truth: the exact messages ACTUALLY sent to the LLM in the most recent generation,
-    // recorded in the message's promptingTrace. The Prompt panel shows THIS — the real prompt,
-    // structured into system sections + user message(s) — not a live recomposed estimate.
-    const lastSentTrace = (activeConv?.messages ?? [])
+    // Ground-truth: the exact messages ACTUALLY sent to the LLM for the SELECTED snapshot's
+    // generation, recorded in the message's promptingTrace. The Prompt panel shows THIS — the
+    // real prompt, structured into system sections + message history — not a live recomposed
+    // estimate.
+    //
+    // I16 of the SSOT program: this used to always resolve to the LATEST assistant message's
+    // trace regardless of which snapshot was selected in the preview panel, so switching to an
+    // older version in the preview silently kept showing the newest generation's prompt. Each
+    // assistant message is stamped with metadata.snapshotId for the snapshot it produced (see
+    // handleSend), so the selected snapshot's own message can be found directly. Falls back to
+    // the latest trace when nothing is explicitly selected yet, or when the selected snapshot
+    // predates snapshotId-tagged messages (legacy data).
+    const selectedSnapshotTrace = selectedBackendSnapshotId
+        ? (activeConv?.messages ?? []).find((m) => m.metadata?.snapshotId === selectedBackendSnapshotId)?.metadata?.promptingTrace
+        : undefined;
+    const lastSentTrace = selectedSnapshotTrace ?? (activeConv?.messages ?? [])
         .slice()
         .reverse()
         .map((m) => m.metadata?.promptingTrace)
@@ -3039,12 +3051,18 @@ function WorkspacePageContent() {
                             layers={lastSentTrace.layers ?? []}
                             defaultRaw={!lastSentTrace.layers?.length}
                         />
+                        {/* I16: render every non-system message in the trace (user AND assistant
+                            history turns), not just role:user — a multi-turn conversation's
+                            prior assistant replies are part of what was actually sent to the
+                            LLM and were being silently dropped from this view before. */}
                         {lastSentMessages
-                            .filter((msg) => msg.role === "user")
+                            .filter((msg) => msg.role === "user" || msg.role === "assistant")
                             .map((msg, i) => (
-                                <div key={`sent-usr-${i}`} style={{ marginTop: "1rem" }}>
-                                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#7dd3fc", marginBottom: "0.35rem" }}>
-                                        {t("workspace.ui.promptPanelUserMessage", "Messaggio utente")}
+                                <div key={`sent-msg-${i}`} style={{ marginTop: "1rem" }}>
+                                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: msg.role === "assistant" ? "#a78bfa" : "#7dd3fc", marginBottom: "0.35rem" }}>
+                                        {msg.role === "assistant"
+                                            ? t("workspace.ui.promptPanelAssistantMessage", "Messaggio assistant (cronologia)")
+                                            : t("workspace.ui.promptPanelUserMessage", "Messaggio utente")}
                                     </div>
                                     <pre
                                         style={{
