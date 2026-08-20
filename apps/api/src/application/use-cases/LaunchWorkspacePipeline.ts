@@ -1,5 +1,5 @@
 import type { LaunchWorkspacePipelineInput, PipelineModelLock } from "@andy-code-cat/contracts";
-import type { LaunchZeroEffortProject } from "./LaunchZeroEffortProject";
+import type { LaunchGuidedProject } from "./LaunchGuidedProject";
 import type { ResolvePipelineModelLock } from "./ResolvePipelineModelLock";
 import type { PipelineRunRepository } from "../../domain/repositories/PipelineRunRepository";
 import type { GenerationWorkspace } from "../../domain/entities/GenerationWorkspace";
@@ -10,23 +10,24 @@ import { buildCanonicalGenerationBrief } from "../prompting/buildCanonicalGenera
  * the whole program that actually calls `PipelineRunRepository.attachCanonicalBrief()` — the
  * `PipelineRun` aggregate has existed since I7 but nothing wrote a real run+brief pair until now.
  *
- * Deliberately COMPOSES rather than reimplements: `LaunchZeroEffortProject` (unchanged) still
- * owns conversation creation, moodboard upsert and workspace preparation. This use case only adds
- * the two things Workspace entry needs on top — a frozen `PipelineModelLock`
- * (`ResolvePipelineModelLock.createRun()`) and the same canonical brief envelope attached to that
- * run for later stages (optimize/generate) to read back via `pipelineRunId`.
+ * Deliberately COMPOSES rather than reimplements: `LaunchGuidedProject` (renamed from
+ * `LaunchZeroEffortProject` by PR #58) still owns conversation creation, moodboard upsert and
+ * workspace preparation. This use case only adds the two things Workspace entry needs on top — a
+ * frozen `PipelineModelLock` (`ResolvePipelineModelLock.createRun()`) and the same canonical brief
+ * envelope attached to that run for later stages (optimize/generate) to read back via
+ * `pipelineRunId`.
  *
  * Named "Workspace" (not "GodMode") since 2026-08-19, matching the product-owner-approved rename
  * in PR #58 ("God Mode" -> "Workspace"); see `pipelineEntryModeSchema`'s doc comment in
  * `packages/contracts/src/pipelineRun.ts` for the full rationale.
  *
- * `LaunchWorkspacePipelineInput` is a structural superset of `ZeroEffortLaunchInput` (same intake
+ * `LaunchWorkspacePipelineInput` is a structural superset of `GuidedLaunchInput` (same intake
  * fields plus requestedProviderId/requestedModelId/optimizationPolicy), so it can be passed
- * directly wherever a `ZeroEffortLaunchInput` is expected.
+ * directly wherever a `GuidedLaunchInput` is expected.
  */
 export class LaunchWorkspacePipeline {
     constructor(
-        private readonly launchZeroEffortProject: LaunchZeroEffortProject,
+        private readonly launchGuidedProject: LaunchGuidedProject,
         private readonly resolvePipelineModelLock: ResolvePipelineModelLock,
         private readonly pipelineRunRepository: PipelineRunRepository,
     ) { }
@@ -44,7 +45,7 @@ export class LaunchWorkspacePipeline {
         suggestedNextActions: string[];
         workspace: GenerationWorkspace;
     }> {
-        const launched = await this.launchZeroEffortProject.execute({
+        const launched = await this.launchGuidedProject.execute({
             userId: input.userId,
             projectId: input.projectId,
             intake: input.intake,

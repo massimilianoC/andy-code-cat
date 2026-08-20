@@ -1,4 +1,4 @@
-# Zero-Effort LLM Prefill — Specification
+# Guided Mode LLM Prefill — Specification
 
 **Version:** 1.1
 **Status:** Implemented baseline; browser storage/query handoff, fallback behavior and any second brief construction are superseded by the 2026-08-18 SSOT implementation program.
@@ -11,7 +11,7 @@
 
 ## 1. Problem Statement
 
-The existing Zero Effort wizard (`/launch/[projectId]`) requires the user to manually
+The existing Guided Mode wizard (`/launch/[projectId]`) requires the user to manually
 fill in three steps (brand name, site type, objective, audience, style, contacts) before
 the AI can generate anything.  Users who arrive from the VibeCore entry box have already
 described their idea in free-form text — and optionally attached reference documents.  
@@ -23,11 +23,11 @@ That information is enough for an LLM to pre-populate the entire wizard automati
 
 | Goal | Description |
 |---|---|
-| **Prefill** | Use one structured LLM call to extract all `ZeroEffortLaunchInput` fields from the user's prompt + attachment metadata |
+| **Prefill** | Use one structured LLM call to extract all `GuidedLaunchInput` fields from the user's prompt + attachment metadata |
 | **Feedback** | Show an animated token counter + spinner during the LLM analysis so the user perceives processing |
-| **Single CTA** | When arriving from prefill, the wizard opens in "AI review" mode with a single "God Mode — Genera" button |
+| **Single CTA** | When arriving from prefill, the wizard opens in "AI review" mode with a single "Process Project" button |
 | **Document carry-through** | Attached files are uploaded to the project; their metadata is forwarded to the prefill LLM; the workspace can access them as project assets |
-| **Linked modes** | Easy, Medium and Hard modes all share the same prompt and attachment state |
+| **Linked modes** | Vibe, Guided and Project modes all share the same prompt and attachment state |
 | **Graceful fallback** | If the prefill LLM call fails or is skipped, the wizard opens in its normal manual mode |
 
 ---
@@ -43,13 +43,13 @@ VibeCoreEntry.tsx
  ├─ Phase 3: creating     →  createProject()                 (existing)
  ├─ Phase 4: uploading    →  uploadProjectAsset() × N        (existing)
  └─ Phase 5: redirecting  →  /launch/[projectId]?prefilled=1
-                              └─ sessionStorage: ze_prefill_${projectId}
+                              └─ sessionStorage: guided_prefill_${projectId}
 
 /launch/[projectId]
- ├─ On mount: reads ze_prefill_${projectId} from sessionStorage
+ ├─ On mount: reads guided_prefill_${projectId} from sessionStorage
  ├─ Applies draft to all form fields (all 3 steps)
  ├─ Shows "AI Pre-compiled" review card
- └─ CTA: "God Mode — Genera"  →  handleSubmit() → handleGoToGodMode()
+ └─ CTA: "Process Project"  →  handleSubmit() → handleGoToWorkspace()
 ```
 
 ---
@@ -67,13 +67,13 @@ export interface VibePrefillRequest {
 }
 
 export interface VibePrefillResponse {
-    draft: ZeroEffortLaunchInput; // validated against existing zod schema
+    draft: GuidedLaunchInput; // validated against existing zod schema
     confidence: number;           // 0.0–1.0
     skipped: boolean;             // true when classifier/LLM is disabled
 }
 ```
 
-`ZeroEffortLaunchInput` is the existing schema from `packages/contracts/src/pipeline.ts`.
+`GuidedLaunchInput` is the existing schema from `packages/contracts/src/pipeline.ts`.
 
 ---
 
@@ -125,7 +125,7 @@ Rules:
 
 ### 5.4 Validation
 
-The raw LLM output is parsed and validated against `zeroEffortLaunchSchema` (zod).
+The raw LLM output is parsed and validated against `guidedLaunchSchema` (zod).
 If validation fails, default fallback values are applied so the call never hard-fails.
 
 ---
@@ -163,7 +163,7 @@ Location: `/launch/[projectId]`
 
 When `?prefilled=1` is present in the query:
 
-1. Read `ze_prefill_${projectId}` from `sessionStorage`.
+1. Read `guided_prefill_${projectId}` from `sessionStorage`.
 2. Parse → apply to form state (all fields including `contactFields` and `styleAttributes`).
 3. Set `isPrefilled = true`.
 4. Render a compact AI review card instead of the step wizard, showing:
@@ -172,7 +172,7 @@ When `?prefilled=1` is present in the query:
    - Audience
    - Contact fields (if any)
 5. Two CTAs:
-   - **"God Mode — Genera"** (primary): calls `handleSubmit()` then `handleGoToGodMode()`
+   - **"Process Project"** (primary): calls `handleSubmit()` then `handleGoToWorkspace()`
    - **"Modifica"** (outline): sets `isPrefilled = false` to fall back to the step wizard
 
 ---
@@ -180,7 +180,7 @@ When `?prefilled=1` is present in the query:
 ## 9. Session-Storage Key Contract
 
 ```
-ze_prefill_${projectId}   →   JSON.stringify(ZeroEffortLaunchInput)
+guided_prefill_${projectId}   →   JSON.stringify(GuidedLaunchInput)
 ```
 
 - Scope: `sessionStorage` (cleared on tab close; no cross-tab leakage).
@@ -218,7 +218,7 @@ No additional piping is needed — the LLM workspace context already includes pr
 - The prefill LLM call is fire-and-forget safe: if it takes > 8 s, the UI still shows
   the token counter and waits.
 - No new DB collections or domain entities needed.
-- The feature is additive: zero-effort manual mode is untouched.
+- The feature is additive: Guided Mode's manual mode is untouched.
 
 ---
 
@@ -233,7 +233,7 @@ Persisted superadmin system-template overrides are customization prefixes. The A
 the current canonical catalog and output contract, so a legacy override cannot silently restore an
 obsolete website-only schema or remove newly supported presets and fields.
 
-The Zero Effort draft additionally carries:
+The Guided Mode draft additionally carries:
 
 - `sourceRequest` — verbatim authority boundary for the original request;
 - `projectSummary`, `contentStructure`, `contentRequirements`;
@@ -243,8 +243,9 @@ The Zero Effort draft additionally carries:
 The normalized brief emits these as separate semantic sections. Inferred content is additive only:
 it may clarify incomplete information but cannot weaken, remove, or contradict explicit user facts,
 preferences, requirements, or prohibitions. If a conflict exists, `[SOURCE_REQUEST]` wins.
-The `zero_effort_optimize` task always appends the same preservation contract even when an operator
-has configured a custom system template, preventing the optimization pass from degrading the brief.
+The `zero_effort_optimize` task (storage key frozen — see `PlatformConfig.ts`) always appends the
+same preservation contract even when an operator has configured a custom system template,
+preventing the optimization pass from degrading the brief.
 
 Template and preset selection is performed exclusively by the LLM configured for
 `vibe_intent_classify` and `vibe_intent_prefill`. There is no keyword, regex or
@@ -276,3 +277,15 @@ never `landing`.
 When no LLM call is possible (no active provider, missing API key, provider error,
 network exception) the classifier returns `templateId: null, skipped: true`. It never
 guesses a template.
+
+---
+
+## 14. Terminology (2026-08-18 rebrand)
+
+"Zero Effort" is now branded **Guided Mode**; "God Mode" (the destination editing screen) is now
+branded **Workspace** (route `/workspace/[projectId]`, unchanged); a third entry mode, **Project
+Mode**, maps onto the app's existing blank-project-creation path. See
+`docs/project/PRODUCT_VISION.md` for the full Vibe / Guided / Project terminology. Three
+`PlatformConfig` storage keys (`zero_effort_optimize`, `zero_effort_generate`,
+`god_mode_generate`) are intentionally NOT renamed — they are live production Mongo keys; only
+their surrounding labels and the local TypeScript constant names referencing them changed.

@@ -3,7 +3,7 @@
  *
  * Route map:
  *   POST /v1/vibecore/classify  → classify prompt + attachments, returns VibeClassifyResponse
- *   POST /v1/vibecore/prefill   → LLM-powered zero-effort form prefill, returns VibePrefillResponse
+ *   POST /v1/vibecore/prefill   → LLM-powered Guided Mode form prefill, returns VibePrefillResponse
  */
 
 import { Router, type RequestHandler } from "express";

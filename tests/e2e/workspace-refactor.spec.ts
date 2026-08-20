@@ -134,12 +134,12 @@ test.describe("Workspace refactor characterization", () => {
         await expectPersistedLayout(page);
     });
 
-    test("automatically starts generation after a Zero Effort God Mode handoff", async ({ page }) => {
+    test("automatically starts generation after a Guided Mode Workspace handoff", async ({ page }) => {
         await loginTestUser(page);
         expect(projectId).not.toBeNull();
 
         const fixture = await getPipelineHandoffFixture(page, projectId!);
-        const handoffPrompt = `E2E God Mode handoff ${Date.now()}`;
+        const handoffPrompt = `E2E Workspace handoff ${Date.now()}`;
         let streamedPrompt: string | null = null;
 
         await page.route(`**/v1/projects/${projectId}/llm/chat-preview/stream`, async (route) => {

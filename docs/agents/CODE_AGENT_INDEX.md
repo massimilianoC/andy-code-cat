@@ -37,7 +37,7 @@ Current active platform tracks:
 - **R2/R3 verification gate**: VibeCore -> enrichment -> workspace -> export/publish traceability before widening runtime scope
 - **Template Skills / Layer S**: filesystem resolver is implemented; runtime reads Markdown files from `docs/skills/template-skills/by-template/<presetId>/`, seed manuals live under `seed-catalog/`, and `template-skill-map.json` remains a validation/documentation map
 - **Artifact Media Orchestrator continuation**: media resolution reliability, trace completeness, resolver expansion, browser E2E
-- **Guided entry / Zero Effort / VibeCore evolution**: additive intake flows that reuse the same backend orchestration and project model
+- **Guided entry / Guided Mode / VibeCore evolution**: additive intake flows that reuse the same backend orchestration and project model
 
 BaaS remains a deferred R4 direction beyond the explicitly activated mailto v1 form foundation.
 `docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md` records the target architecture and supersedes

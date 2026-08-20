@@ -58,8 +58,8 @@ The product is now **beyond the original bootstrap phase**. The core platform is
 - [x] Per-project cost aggregation — LLM prompt costs + image generation costs summed in project list API (commit 9c97dea)
 - [x] Project card published URL display — live deployment URL surfaced from API and shown as badge in dashboard (commit 9c97dea)
 - [x] Puppeteer thumbnail screenshots — background job renders active snapshot to JPEG, stored in MinIO/filesystem, streamed back with long-lived cache headers (immutable per snapshotId); ProjectCard displays JPEG → legacy HTML iframe → gradient fallback
-- [x] Zero Effort pipeline — `/v1/pipeline/launch` and `/v1/pipeline/config` endpoints for guided single-step site generation with normalized brief and pre-seeded workspace (commit eff9e9b)
-- [x] Zero Effort auto-send — frontend prompt pre-fill with auto-submit on workspace entry for frictionless launch (commit b4eb3f5)
+- [x] Guided Mode pipeline — `/v1/pipeline/launch` and `/v1/pipeline/config` endpoints for guided single-step site generation with normalized brief and pre-seeded workspace (commit eff9e9b)
+- [x] Guided Mode auto-send — frontend prompt pre-fill with auto-submit on workspace entry for frictionless launch (commit b4eb3f5)
 - [x] Onboarding wizard (style profiling, tag taxonomy)
 - [x] Prompt optimizer (inline enrichment)
 - [x] i18n foundation (IT/EN)
@@ -148,13 +148,15 @@ server-side resolver with user override precedence and fail-closed tests. See
 - [ ] Full per-operation log coverage for every export/publish/UI workflow
 - [ ] Dedicated cost dashboard UI per project (data is now fully available from the API)
 - [ ] Verification gate: generate -> media resolution -> snapshot -> export -> publish emits enough execution/cost/notification data to debug failures without reading raw container logs
-- [ ] Verification gate: VibeCore and Zero Effort flows expose prompt/model/cost lineage consistently with GodMode generation
-- [ ] Prompt Execution SSOT remediation: server-owned immutable trace of the complete provider
-  payload; snapshot/execution linkage; Workshop projection of the selected execution. See
+- [ ] Verification gate: VibeCore and Guided Mode flows expose prompt/model/cost lineage consistently with Workspace generation
+- [x] Prompt Execution SSOT remediation: server-owned immutable trace of the complete provider
+  payload; snapshot/execution linkage; Workshop projection of the selected execution. I0-I15
+  landed (see [SSOT_REFACTOR_PROGRESS.md](../SSOT_REFACTOR_PROGRESS.md)); I16-I20 remain. See
   [PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](../specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md).
-- [ ] **P0 regression gate — Vibe → Zero Effort → GodMode model SSOT:** a user-selected
+- [x] **P0 regression gate — Vibe → Guided Mode → Workspace model SSOT:** a user-selected
   provider/model is a server-owned strict lock for every text stage; the canonical server brief
-  reaches GodMode without implicit optimization or browser-owned fallback. See
+  reaches Workspace without implicit optimization or browser-owned fallback. Live end-to-end as
+  of I15 (behind `PIPELINE_RUN_ENABLED` / `NEXT_PUBLIC_PIPELINE_RUN_UI`, default off). See
   [VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md](../specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md).
 
 **Notes**
@@ -174,7 +176,7 @@ server-side resolver with user override precedence and fail-closed tests. See
 - [ ] Custom domain mapping (BYOD — bring your own domain)
 - [ ] nginx dynamic vhost generation
 - [ ] SSL automation (Let's Encrypt)
-- [ ] Verification gate: path publish remains stable from a freshly generated VibeCore/Zero Effort project
+- [ ] Verification gate: path publish remains stable from a freshly generated VibeCore/Guided Mode project
 - [ ] Verification gate: unresolved media placeholders block publish/export and emit user/admin notifications
 
 **Notes**

@@ -18,7 +18,7 @@ export default function AdminExperimentalDataDashboardIndexPage() {
                 </p>
                 <h1 className="text-2xl font-semibold text-foreground">Data Dashboard</h1>
                 <p className="text-sm text-muted-foreground">
-                    This flow is intentionally detached from the native Vibe / Zero Effort UX.
+                    This flow is intentionally detached from the native Vibe / Guided Mode UX.
                     Use it only for explicit superadmin testing on a known project.
                 </p>
             </div>

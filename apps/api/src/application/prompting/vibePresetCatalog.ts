@@ -1,7 +1,7 @@
 import { PRESET_CATALOG, type ProjectPreset } from "../../domain/entities/ProjectPreset";
 
 /**
- * Canonical preset context shared by intent classification and Zero Effort prefill.
+ * Canonical preset context shared by intent classification and Guided Mode prefill.
  * Visibility in a UI catalog is deliberately not used as an AI-selection filter:
  * hidden specialist presets (for example freerunner) must remain matchable.
  */

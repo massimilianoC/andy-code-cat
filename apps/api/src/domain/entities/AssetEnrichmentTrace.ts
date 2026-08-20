@@ -227,7 +227,7 @@ export interface AssetEnrichmentTrace {
      *
      * Computed deterministically by `renderAssetLayerDFragment()` whenever the trace is
      * built or updated, so every downstream injection point (VibePrefill, OptimizePrompt,
-     * God Mode generation) reuses the SAME text without recomputing per call.
+     * Project Mode generation) reuses the SAME text without recomputing per call.
      *
      * Treat as null when the trace is freshly built by an older code path that didn't
      * populate this field — the renderer falls back to in-memory rendering in that case.

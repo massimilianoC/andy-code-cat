@@ -32,9 +32,6 @@ const ROLE_OPTIONS = [
     "image_gen",
     "image_gen_fast",
     "embeddings",
-    // Preprompt optimization roles — one per UX mode
-    "preprompt_zero_effort",
-    "preprompt_godmode",
 ] as const;
 
 const EMPTY_MODEL: AdminLlmModelDto = {

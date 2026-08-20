@@ -65,8 +65,8 @@ export interface VibeClassifyResponse {
     projectId?: string;
 }
 
-// ── Zero-Effort LLM Prefill ───────────────────────────────────────────────────
-// See docs/specs/ZERO_EFFORT_PREFILL_SPEC.md
+// ── Guided Mode LLM Prefill ────────────────────────────────────────────────────
+// See docs/specs/GUIDED_MODE_PREFILL_SPEC.md
 
 export interface VibePrefillRequest {
     prompt: string;
@@ -85,10 +85,10 @@ export interface VibePrefillRequest {
 }
 
 /**
- * Shape mirrors ZeroEffortLaunchInput (packages/contracts/src/pipeline.ts)
+ * Shape mirrors GuidedLaunchInput (packages/contracts/src/pipeline.ts)
  * but is inlined here so the vibecore module stays self-contained.
  */
-export interface ZeroEffortDraft {
+export interface GuidedDraft {
     businessName: string;
     /** PRESET_CATALOG id (e.g. "slideshow", "landing", "website", "videogame"). */
     presetId: string;
@@ -117,7 +117,7 @@ export interface ZeroEffortDraft {
 }
 
 export interface VibePrefillResponse {
-    draft: ZeroEffortDraft;
+    draft: GuidedDraft;
     dataDashboardDraft?: DataDashboardDraft;
     resolvedMode?: VibeResolvedMode;
     confidence: number;

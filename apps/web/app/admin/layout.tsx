@@ -12,7 +12,7 @@ const NAV_LINKS = [
     { href: "/admin/presets", label: "Template Models" },
     { href: "/admin/governance", label: "Preprompting" },
     { href: "/admin/integrations", label: "Integrations" },
-    { href: "/admin/zero-effort", label: "Zero Effort" },
+    { href: "/admin/guided-mode", label: "Guided Mode" },
     { href: "/admin/brand", label: "Brand" },
 ];
 

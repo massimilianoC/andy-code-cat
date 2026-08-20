@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import type { CanonicalBriefEnvelope, ZeroEffortLaunchInput } from "@andy-code-cat/contracts";
+import type { CanonicalBriefEnvelope, GuidedLaunchInput } from "@andy-code-cat/contracts";
 import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
 
 /**
@@ -19,7 +19,7 @@ import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
  * was kept because it is what was ALREADY being persisted server-side (the client's localized
  * version was only ever shown for editing, never actually the source of truth for anything else).
  */
-export function buildCanonicalGenerationBrief(input: ZeroEffortLaunchInput): CanonicalBriefEnvelope {
+export function buildCanonicalGenerationBrief(input: GuidedLaunchInput): CanonicalBriefEnvelope {
     const preset = PRESET_MAP.get(input.presetId);
     const siteLabel = preset?.labelEn ?? preset?.label ?? input.presetId;
     const outputLanguage = input.outputLanguage ?? "en";

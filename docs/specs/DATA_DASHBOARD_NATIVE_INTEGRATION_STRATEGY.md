@@ -26,7 +26,7 @@ This percentage reflects implemented production code, not planned work.
 | Wave 3 | Dashboard-specific prefill | completed | `100%` |
 | Wave 4 | Layer X grounded data context | completed | `100%` |
 | Wave 5 | Native preset and artifact structure | in progress | `60%` |
-| Wave 6 | God Mode manual controls | partial | `25%` |
+| Wave 6 | Workspace manual controls | partial | `25%` |
 | Wave 7 | Launch/runtime integration | in progress | `45%` |
 | Wave 8 | Editing, regeneration, observability | early partial | `20%` |
 
@@ -43,7 +43,7 @@ This percentage reflects implemented production code, not planned work.
 
 ### 0.1 Alpha rescoping note
 
-As of **2026-06-05**, the implementation is intentionally treated as **alpha** and is no longer considered part of the default user-facing Vibe / Zero Effort experience.
+As of **2026-06-05**, the implementation is intentionally treated as **alpha** and is no longer considered part of the default user-facing Vibe / Guided Mode experience.
 
 Operational consequence:
 
@@ -67,7 +67,7 @@ Backward-compatible redirect/guard:
 - source-file publication for dataset bindings
 - publish-scoped public backend query/browse/insights routes for live dashboards
 - frontend manifest-driven runtime adapter in generated `script.js`
-- power-user God Mode controls inside the workspace prompt panel
+- power-user Workspace controls inside the workspace prompt panel
 - governance thresholds and exposure controls for published dataset bindings
 - explicit observability/audit events for publish-time binding decisions
 
@@ -96,8 +96,8 @@ This document defines how the grounded dataset runtime should evolve from an add
 parallel feature into a first-class, native product path inside the existing:
 
 - VibeCore entry flow
-- Zero Effort guided flow
-- God Mode workspace
+- Guided Mode guided flow
+- Workspace workspace
 - artifact generation pipeline
 
 The goal is to let users attach structured datasets and describe a desired dashboard in
@@ -129,7 +129,7 @@ Current state:
 Target state:
 
 - Introduce a native **Data Dashboard** template/preset family integrated into the same
-  VibeCore → Zero Effort / God Mode orchestration path used by existing artifact flows.
+  VibeCore → Guided Mode / Workspace orchestration path used by existing artifact flows.
 - Keep the existing additive data dashboard route as an optional expert surface.
 - Add a dedicated data-processing layer before final prompt composition.
 - Generate not only `artifacts.html/css/js`, but also structured dashboard metadata and
@@ -156,8 +156,8 @@ The following flows must continue to work without behavior changes unless a user
 opts into the new data-dashboard mode:
 
 - standard website generation from VibeCore
-- Zero Effort website prefill
-- God Mode website workspace generation
+- Guided Mode website prefill
+- Workspace website workspace generation
 - current additive `/dashboard/data/[projectId]` flow
 - existing asset upload, enrichment, snapshot, publish, and export behavior
 
@@ -198,7 +198,7 @@ This is an extension of the native system, not a separate sub-product.
 - project asset upload and ownership enforcement
 - document/image enrichment pipeline
 - Layer D prompt injection for enriched assets
-- VibeCore classify and Zero Effort prefill
+- VibeCore classify and Guided Mode prefill
 - typed preset catalog and prompt modules
 - grounded dataset runtime:
   - normalization
@@ -220,7 +220,7 @@ Specifically missing:
 - native dashboard-data prefill contract
 - dedicated prompt layer for dataset runtime context
 - structured dashboard artifact/binding model
-- manual and automatic mode selection inside VibeCore / God Mode
+- manual and automatic mode selection inside VibeCore / Workspace
 - refined attachment interpretation strategy across all asset types
 
 ---
@@ -231,7 +231,7 @@ The correct strategic move is:
 
 1. Keep the current additive data dashboard route.
 2. Introduce a new native template family for dataset dashboards.
-3. Integrate dataset-driven generation into existing VibeCore / Zero Effort / God Mode flows.
+3. Integrate dataset-driven generation into existing VibeCore / Guided Mode / Workspace flows.
 4. Preserve manual user control over activation.
 5. Add specialized UI for power users without forcing it on standard website users.
 
@@ -440,7 +440,7 @@ Behavior:
 - `Website`: dataset may still inform content, but no dashboard pipeline
 - `Data Dashboard`: activates dataset-native flow
 
-### 9.2 Zero Effort flow
+### 9.2 Guided Mode flow
 
 If `Data Dashboard` is selected or inferred:
 
@@ -464,9 +464,9 @@ Suggested fields:
 - `preferredVisualizationStyle`
 - `notes`
 
-### 9.3 God Mode flow
+### 9.3 Workspace flow
 
-God Mode should remain the expert path, but gain a visible data mode.
+Workspace should remain the expert path, but gain a visible data mode.
 
 Suggested manual activation points:
 
@@ -518,7 +518,7 @@ Recommended additions:
 - override action:
   - `Change mode`
 
-### 10.3 Zero Effort UI
+### 10.3 Guided Mode UI
 
 Recommended additions when data mode is active:
 
@@ -529,7 +529,7 @@ Recommended additions when data mode is active:
 - inferred filters/dimensions
 - user-editable analytical focus
 
-### 10.4 God Mode UI
+### 10.4 Workspace UI
 
 Recommended power-user controls:
 
@@ -748,7 +748,7 @@ Deliverables:
 
 Acceptance:
 
-- Zero Effort can prefill a dashboard-oriented brief
+- Guided Mode can prefill a dashboard-oriented brief
 - existing website prefill remains stable
 
 ### Wave 4 — Layer X grounded data context
@@ -792,7 +792,7 @@ Acceptance:
 - artifact generation can target `data-dashboard`
 - website artifact path still works unchanged
 
-### Wave 6 — God Mode manual controls
+### Wave 6 — Workspace manual controls
 
 **Type:** parallel after Wave 5 contracts
 
@@ -868,7 +868,7 @@ Acceptance:
 
 - attachment interpretation quality improvements
 - additive expert UI hardening
-- God Mode power-user controls
+- Workspace power-user controls
 - observability and logs
 - admin governance tuning
 
@@ -879,8 +879,8 @@ Acceptance:
 Each wave must prove:
 
 - no regression on website generation
-- no regression on current Zero Effort website prefill
-- no regression on current God Mode website generation
+- no regression on current Guided Mode website prefill
+- no regression on current Workspace website generation
 - no regression on current additive `/dashboard/data/[projectId]` route
 
 Additional dedicated checks:
@@ -946,7 +946,7 @@ It should become a native, specialized branch of the current artifact-generation
 - same assets
 - same prompting governance
 - same artifact lifecycle
-- same VibeCore / Zero Effort / God Mode orchestration
+- same VibeCore / Guided Mode / Workspace orchestration
 
 but with:
 

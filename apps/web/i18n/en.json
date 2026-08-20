@@ -42,7 +42,7 @@
         "newProject": "New project",
         "logout": "Logout",
         "superadmin": "Superadmin",
-        "zeroEffort": "Zero Effort",
+        "guidedMode": "Guided Mode",
         "hero": {
             "title": "Projects",
             "empty": "No projects yet. Create the first one from a preset below.",
@@ -69,7 +69,7 @@
             "cancel": "Cancel",
             "create": "Create",
             "creating": "Creating...",
-            "startZeroEffort": "Start Zero Effort"
+            "startGuided": "Start Guided Mode"
         },
         "confirm": {
             "delete": "Delete project \"{{name}}\"? This operation is irreversible."
@@ -295,7 +295,7 @@
         "completed_other": "{{count}} completed"
     },
     "launch": {
-        "badge": "Zero Effort",
+        "badge": "Guided Mode",
         "title": "Guided generation",
         "subtitle": "{{name}} · Complete 3 steps and review the brief before launching.",
         "project": "Your project",
@@ -466,8 +466,8 @@
             "backToDashboard": "Back to dashboard",
             "continueInWorkspace": "Continue in workspace"
         },
-        "workspaceModeBadge": "God Mode",
-        "openGodMode": "Open God Mode",
+        "workspaceModeBadge": "Workspace",
+        "openWorkspace": "Open Workspace",
         "review": {
             "badge": "Review and generate",
             "prefillTitle": "✦ AI pre-filled",
@@ -642,7 +642,7 @@
         "tokenCounter": "~ {{count}} tokens",
         "prefillBanner": "✦ Pre-filled by AI · Review and generate",
         "prefillEdit": "Edit manually",
-        "prefillCta": "God Mode — Generate"
+        "prefillCta": "Process Project"
     },
     "workspace": {
         "selectionNone": "No selection",

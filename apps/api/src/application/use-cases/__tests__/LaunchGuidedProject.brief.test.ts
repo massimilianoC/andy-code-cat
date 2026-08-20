@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNormalizedBrief } from "../LaunchZeroEffortProject";
+import { buildNormalizedBrief } from "../LaunchGuidedProject";
 
 describe("buildNormalizedBrief", () => {
     it("keeps the original request authoritative and emits every expressive section", () => {

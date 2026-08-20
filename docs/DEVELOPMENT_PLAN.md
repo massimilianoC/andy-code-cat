@@ -26,7 +26,7 @@ The platform already has a working foundation for:
 - multi-provider LLM catalog and runtime selection
 - media resolution with persisted project assets and snapshot linkage
 - execution logging, notifications, and cost-tracking foundations
-- Zero Effort / guided-entry work that feeds into the same project model
+- Guided Mode / guided-entry work that feeds into the same project model
 - Didactic Mode as a read-only artifact interrogation layer
 - Document Context Layer / `enrichmentTrace` for uploaded assets and reusable brand documents
 
@@ -52,8 +52,8 @@ that converge on the same project, asset, snapshot, and publish model.
 
 ### Active experience tracks
 
-- **GodMode**: the existing advanced workspace remains the expert path
-- **Zero Effort / guided generation**: a simplified launch flow for faster project creation
+- **Workspace**: the existing advanced workspace remains the expert path
+- **Guided Mode / guided generation**: a simplified launch flow for faster project creation
 - **Dashboard entry / VibeCore direction**: single-prompt entry, intent classification,
   structured prefill, and fast handoff into guided or advanced flows
 
@@ -156,7 +156,7 @@ Purpose:
 
 - prove that the already implemented platform works across the real user path before expanding
   runtime scope
-- confirm that VibeCore, Zero Effort, GodMode, media resolution, snapshots, export, publish,
+- confirm that VibeCore, Guided Mode, Workspace, media resolution, snapshots, export, publish,
   cost logs, execution logs, and notifications form one observable path
 
 Current priorities:
@@ -200,7 +200,7 @@ Primary references:
 - `docs/specs/ARTIFACT_MEDIA_ORCHESTRATOR_GAPS.md`
 - `docs/specs/MEDIA_STRATEGY_RESOLVER_PIPELINE_SPEC.md`
 
-### Guided Entry, VibeCore, and Zero Effort Evolution
+### Guided Entry, VibeCore, and Guided Mode Evolution
 
 Status: active additive product track
 
@@ -211,13 +211,13 @@ Already in place or partially implemented:
 - pipeline launch/config route surface
 - dashboard-first guided creation direction
 - VibeCore classify/prefill API surface
-- Zero Effort prefill behavior and project handoff concepts
+- Guided Mode prefill behavior and project handoff concepts
 
 Current priorities:
 
-- treat Vibe → Zero Effort → GodMode model coherence as a P0 regression: a user-selected model must become a server-owned lock across all text stages, with no silent fallback
-- make the server-built canonical brief the only handoff input to GodMode and support the direct no-optimizer path requested from Vibe
-- keep guided entry, Zero Effort, and GodMode on one shared backend orchestration path
+- treat Vibe → Guided Mode → Workspace model coherence as a P0 regression: a user-selected model must become a server-owned lock across all text stages, with no silent fallback
+- make the server-built canonical brief the only handoff input to Workspace and support the direct no-optimizer path requested from Vibe
+- keep guided entry, Guided Mode, and Workspace on one shared backend orchestration path
 - preserve zero regression on the current workspace UX
 - improve intake classification, prefill quality, and launch ergonomics
 - converge new entry flows with prompt governance and asset-aware context

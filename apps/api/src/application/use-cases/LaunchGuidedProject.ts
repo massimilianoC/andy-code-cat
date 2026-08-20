@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { ZeroEffortLaunchInput } from "@andy-code-cat/contracts";
+import type { GuidedLaunchInput } from "@andy-code-cat/contracts";
 import type { ProjectMoodboardRepository } from "../../domain/repositories/ProjectMoodboardRepository";
 import type { ConversationRepository } from "../../domain/repositories/ConversationRepository";
 import { PrepareGenerationWorkspace } from "./PrepareGenerationWorkspace";
@@ -11,11 +11,11 @@ import { buildCanonicalGenerationBrief } from "../prompting/buildCanonicalGenera
  * The actual brief-building logic lives in `buildCanonicalGenerationBrief` (I9 of the SSOT
  * program) — see that module's doc comment for why this used to be duplicated client-side.
  */
-export function buildNormalizedBrief(input: ZeroEffortLaunchInput): string {
+export function buildNormalizedBrief(input: GuidedLaunchInput): string {
     return buildCanonicalGenerationBrief(input).content;
 }
 
-function buildStyleNotes(input: ZeroEffortLaunchInput): string | undefined {
+function buildStyleNotes(input: GuidedLaunchInput): string | undefined {
     const parts = [
         input.tone ? `Tone: ${input.tone}` : undefined,
         input.primaryCta ? `CTA: ${input.primaryCta}` : undefined,
@@ -25,7 +25,7 @@ function buildStyleNotes(input: ZeroEffortLaunchInput): string | undefined {
     return parts.length > 0 ? parts.join(" • ") : undefined;
 }
 
-export class LaunchZeroEffortProject {
+export class LaunchGuidedProject {
     constructor(
         private readonly moodboardRepository: ProjectMoodboardRepository,
         private readonly conversationRepository: ConversationRepository,
@@ -35,7 +35,7 @@ export class LaunchZeroEffortProject {
     async execute(input: {
         userId: string;
         projectId: string;
-        intake: ZeroEffortLaunchInput;
+        intake: GuidedLaunchInput;
     }): Promise<{
         conversationId: string;
         jobId: string;

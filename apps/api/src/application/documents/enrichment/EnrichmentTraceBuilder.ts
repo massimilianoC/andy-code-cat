@@ -74,7 +74,7 @@ export function buildEnrichmentTrace(input: TraceBuilderInput): AssetEnrichmentT
     };
 
     // Pre-render the Layer D fragment once at build time. This is what every downstream
-    // injection point (VibePrefill, OptimizePrompt, God Mode generation) will read,
+    // injection point (VibePrefill, OptimizePrompt, Project Mode generation) will read,
     // guaranteeing deterministic single-pass analysis of the asset.
     traceWithoutFragment.renderedFragment = renderAssetLayerDFragment(traceWithoutFragment);
 

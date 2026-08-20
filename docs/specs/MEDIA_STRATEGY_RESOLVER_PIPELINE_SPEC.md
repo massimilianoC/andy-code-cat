@@ -256,7 +256,7 @@ Guardrail:
 
 Use when the system should inspect the available context first and decide the best source for each media slot.
 
-This is the highest-value mode for Zero Effort and complex projects.
+This is the highest-value mode for Guided Mode and complex projects.
 
 Inputs:
 
@@ -326,7 +326,7 @@ Resolver:
 
 ## 5. Frontend Strategy Selector
 
-Recommended UI surface in workspace and Zero Effort:
+Recommended UI surface in workspace and Guided Mode:
 
 ```text
 Media strategy
@@ -347,7 +347,7 @@ Advanced options:
 | Prefer uploaded assets | auto mix, project assets | on |
 | Allow stock fallback | initial generation | on |
 | Allow AI fallback | auto mix | off until implemented |
-| Require review before applying media | auto mix, project assets | on for Zero Effort, off for direct workspace generation |
+| Require review before applying media | auto mix, project assets | on for Guided Mode, off for direct workspace generation |
 | Strict missing media failure | all | on for publish/export |
 
 Frontend request extension:
@@ -588,7 +588,7 @@ Never invent asset IDs.
 ### Wave A - Documentation and UI contract
 
 - Add this spec to docs index.
-- Add frontend strategy selector design to workspace and Zero Effort specs.
+- Add frontend strategy selector design to workspace and Guided Mode specs.
 - Add shared `MediaStrategyPreferences` and `MediaStrategyPlan` contracts.
 
 ### Wave B - Planner MVP
@@ -643,7 +643,7 @@ Never invent asset IDs.
 
 The feature is complete when:
 
-- frontend exposes a media strategy control in workspace generation and Zero Effort
+- frontend exposes a media strategy control in workspace generation and Guided Mode
 - selected strategy is sent to backend and stored in snapshot/trace metadata
 - all four strategies have validated JSON planner contracts
 - `stock_search` uses configured provider policy and fallback

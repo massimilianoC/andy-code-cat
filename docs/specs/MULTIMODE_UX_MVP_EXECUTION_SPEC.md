@@ -2,7 +2,7 @@
 
 > Status: **historical execution reference** — its delivery sequence is superseded by the 2026-08-18 SSOT implementation program.
 > Date: 2026-04-16  
-> Scope: Zero Effort + GodMode MVP, shared backend runtime, parallel multi-agent implementation, zero-regression rollout
+> Scope: Guided Mode + Workspace MVP, shared backend runtime, parallel multi-agent implementation, zero-regression rollout
 >
 > Do not use its endpoint, sprint, fallback or browser-handoff details as a current implementation
 > checklist. Use [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md) for active work.
@@ -14,7 +14,7 @@
 Start implementation immediately with an additive architecture that:
 
 - preserves the current advanced workspace UX
-- introduces a new Gamma-style frontend channel for Zero Effort generation
+- introduces a new Gamma-style frontend channel for Guided Mode generation
 - shares backend services and orchestration across both modes
 - keeps new services and endpoints generic so they can later support other UX flows
 - allows parallel work by multiple implementation agents without stepping on each other
@@ -26,13 +26,13 @@ This is the execution spec for the MVP, not a long-term theoretical vision docum
 ## 2. Non-Negotiable Rules
 
 1. **Zero regressions on the current workspace**  
-   The current advanced UX remains the active GodMode path and must continue to work during all rollout phases.
+   The current advanced UX remains the active Workspace path and must continue to work during all rollout phases.
 
 2. **No destructive frontend refactor**  
    The new UX is a separate frontend channel or route group. The existing workspace is not replaced.
 
 3. **One project model only**  
-   Projects created in Zero Effort remain normal projects and must open immediately in GodMode.
+   Projects created in Guided Mode remain normal projects and must open immediately in Workspace.
 
 4. **Backend is the orchestration source of truth**  
    Workflow sequencing, retries, publish policy, and stage transitions must live in the backend.
@@ -47,7 +47,7 @@ This is the execution spec for the MVP, not a long-term theoretical vision docum
 
 ## 3. Active MVP Tracks
 
-## 3.1 Zero Effort
+## 3.1 Guided Mode
 
 Purpose:
 
@@ -68,7 +68,7 @@ Pipeline style:
 - opinionated
 - mostly automatic
 
-## 3.2 GodMode
+## 3.2 Workspace
 
 Purpose:
 
@@ -104,15 +104,15 @@ They must remain representable in the UX-mode data model, but they do not block 
 
 The sidebar difficulty switch should exist conceptually from the start:
 
-- Zero Effort
+- Guided Mode
 - Curiosity
 - Nerdy
-- GodMode
+- Workspace
 
 For the MVP:
 
-- Zero Effort is active
-- GodMode is active
+- Guided Mode is active
+- Workspace is active
 - Curiosity and Nerdy are placeholders or disabled states
 
 Switching mode changes:
@@ -209,7 +209,7 @@ Suggested fields:
 
 ## 6. New Generic Endpoints
 
-These endpoints must be generic and reusable beyond Zero Effort.
+These endpoints must be generic and reusable beyond Guided Mode.
 
 ## 6.1 Execution
 
@@ -226,7 +226,7 @@ Request body:
 
 This is the preferred generic execution entrypoint.
 
-### Convenience alias for Zero Effort
+### Convenience alias for Guided Mode
 
 POST /v1/projects/:projectId/pipelines/zero-effort
 
@@ -273,7 +273,7 @@ This allows the frontend shell to remember the user’s preferred interaction di
 
 ---
 
-## 7. Zero Effort UX Channel — Frontend Spec
+## 7. Guided Mode UX Channel — Frontend Spec
 
 This must be a **new** channel, not a replacement of the current workspace.
 
@@ -294,19 +294,19 @@ The exact naming can be chosen during implementation, but it must remain distinc
 
 ## 7.2 UI behavior
 
-Zero Effort should present:
+Guided Mode should present:
 
 - one guided intake experience
 - simplified preview and progress states
 - suggested copy rather than open-ended free tooling everywhere
-- a prominent action to open the same project in GodMode
+- a prominent action to open the same project in Workspace
 
 ## 7.3 Minimum screens
 
 1. intake screen
 2. progress screen
 3. live result screen
-4. handoff action to GodMode
+4. handoff action to Workspace
 
 ## 7.4 Coherence with current design
 
@@ -322,7 +322,7 @@ But it should **not** reuse the same interaction density or same layout assumpti
 
 ---
 
-## 8. GodMode Continuity Spec
+## 8. Workspace Continuity Spec
 
 The current workspace remains the advanced branch.
 
@@ -330,8 +330,8 @@ Required behavior:
 
 - no removal of existing controls
 - no forced migration to the new channel
-- new backend services can be reused from GodMode only when they improve the flow without reducing control
-- every Zero Effort project must open as a normal project in GodMode immediately after creation
+- new backend services can be reused from Workspace only when they improve the flow without reducing control
+- every Guided Mode project must open as a normal project in Workspace immediately after creation
 
 This is how the product serves both end users and resellers without splitting the system.
 
@@ -353,9 +353,9 @@ Recommended stage keys:
 8. publish_optional
 9. build_launch_summary
 
-Zero Effort uses these as a mostly automatic aggregate flow.
+Guided Mode uses these as a mostly automatic aggregate flow.
 
-GodMode can later call or expose some of the same stages more granularly.
+Workspace can later call or expose some of the same stages more granularly.
 
 ---
 
@@ -421,7 +421,7 @@ Deliverables:
 - zero-effort alias endpoint
 - status and events endpoints
 
-## Wave C — Zero Effort frontend channel
+## Wave C — Guided Mode frontend channel
 
 Goal:
 
@@ -437,9 +437,9 @@ Owned files:
 Deliverables:
 
 - dedicated guided channel
-- handoff to GodMode
+- handoff to Workspace
 
-## Wave D — GodMode compatibility and reuse
+## Wave D — Workspace compatibility and reuse
 
 Goal:
 
@@ -507,7 +507,7 @@ These rules are mandatory during implementation:
 - do not remove or replace the current workspace route
 - do not change existing publish or snapshot behavior unless the change is backward-compatible or clearly bug-fixing
 - do not move advanced user controls out of the current workspace as part of this MVP
-- do not hardwire Zero Effort assumptions into generic services
+- do not hardwire Guided Mode assumptions into generic services
 - do not create UX-specific APIs when a generic endpoint can serve the same purpose
 
 ---
@@ -559,9 +559,9 @@ Create:
 - apps/web/lib/api/pipelines.ts
 - a new guided route group or create shell
 - a mode selector component
-- a Zero Effort intake page
-- a Zero Effort progress screen
-- a GodMode handoff control
+- a Guided Mode intake page
+- a Guided Mode progress screen
+- a Workspace handoff control
 
 ---
 
@@ -578,16 +578,16 @@ Shared backend foundation:
 
 ## Sprint 2
 
-Zero Effort activation:
+Guided Mode activation:
 
 - new guided frontend channel
 - guided intake flow
 - live progress and publish result
-- open in GodMode handoff
+- open in Workspace handoff
 
 ## Sprint 3
 
-GodMode reuse and hardening:
+Workspace reuse and hardening:
 
 - consume shared services where useful
 - keep the existing advanced flow stable
@@ -601,9 +601,9 @@ Curiosity and Nerdy remain paused until user evidence justifies their exact desi
 
 The MVP is ready when all of the following are true:
 
-- Zero Effort can create a working project through one guided flow
-- GodMode remains fully usable with no functional regressions
-- the same project can move from Zero Effort to GodMode without conversion
+- Guided Mode can create a working project through one guided flow
+- Workspace remains fully usable with no functional regressions
+- the same project can move from Guided Mode to Workspace without conversion
 - shared orchestration lives in the backend, not in the UI
 - generic endpoints are reusable for later UX flows
 - the new UI feels visually coherent with the current product, even if the pipeline is different
@@ -623,7 +623,7 @@ This gives a good starting point for a zero-regression implementation approach.
 
 ## 17. Final Execution Recommendation
 
-Start immediately with the shared backend runtime and the new Zero Effort frontend channel in parallel.
+Start immediately with the shared backend runtime and the new Guided Mode frontend channel in parallel.
 
 Do not wait for the intermediate modes.
 Do not refactor away the current workspace.
@@ -631,7 +631,7 @@ Do not build UX-specific orchestration that cannot be reused.
 
 Build one strong shared backend core, then let:
 
-- Zero Effort provide the aggregate automated path
-- GodMode provide the granular expert path
+- Guided Mode provide the aggregate automated path
+- Workspace provide the granular expert path
 
 This is the fastest route to a broader MVP that serves both end users and resellers.

@@ -42,7 +42,7 @@
         "newProject": "Nuovo progetto",
         "logout": "Logout",
         "superadmin": "Superadmin",
-        "zeroEffort": "Zero Effort",
+        "guidedMode": "Modalità Guidata",
         "hero": {
             "title": "Dashboard Progetti",
             "empty": "Nessun progetto ancora. Crea il primo da un preset qui sotto.",
@@ -69,7 +69,7 @@
             "cancel": "Annulla",
             "create": "Crea",
             "creating": "Creazione...",
-            "startZeroEffort": "Avvia Zero Effort"
+            "startGuided": "Avvia Modalità Guidata"
         },
         "confirm": {
             "delete": "Eliminare il progetto \"{{name}}\"? Questa operazione è irreversibile."
@@ -295,7 +295,7 @@
         "completed_other": "{{count}} completati"
     },
     "launch": {
-        "badge": "Zero Effort",
+        "badge": "Modalità Guidata",
         "title": "Generazione guidata",
         "subtitle": "{{name}} · Compila i 3 step e rivedi il brief prima di avviare.",
         "project": "Il tuo progetto",
@@ -466,8 +466,8 @@
             "backToDashboard": "Torna alla dashboard",
             "continueInWorkspace": "Continua nel workspace"
         },
-        "workspaceModeBadge": "God Mode",
-        "openGodMode": "Apri God Mode",
+        "workspaceModeBadge": "Workspace",
+        "openWorkspace": "Apri Workspace",
         "review": {
             "badge": "Rivedi e genera",
             "prefillTitle": "✦ Pre-compilato dall'AI",
@@ -642,7 +642,7 @@
         "tokenCounter": "~ {{count}} token",
         "prefillBanner": "✦ Pre-compilato dall'AI · Rivedi e genera",
         "prefillEdit": "Modifica manualmente",
-        "prefillCta": "God Mode — Genera"
+        "prefillCta": "Elabora Progetto"
     },
     "workspace": {
         "selectionNone": "Nessuna selezione",

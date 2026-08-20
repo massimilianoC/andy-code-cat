@@ -21,7 +21,7 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [README.md](../README.md) | Public project overview, quick start, and positioning |
-| [docs/project/PRODUCT_VISION.md](project/PRODUCT_VISION.md) | Current product vision: interactive artifact platform, VibeCore/GodMode/Didactic modes, Layer S direction, deferred BaaS boundary |
+| [docs/project/PRODUCT_VISION.md](project/PRODUCT_VISION.md) | Current product vision: interactive artifact platform, VibeCore/Workspace/Didactic modes, Layer S direction, deferred BaaS boundary |
 | [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Current development-state summary: `R1` delivered, `R2`/`R3` active, live cross-cutting tracks |
 | [docs/project/ROADMAP.md](project/ROADMAP.md) | Project roadmap and release direction |
 | [docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md) | **Active prompt-execution remediation plan:** server-authoritative traceability from composition to provider payload, snapshot, and Workshop display |
@@ -97,7 +97,7 @@ Read in this order before making changes:
 | [docs/specs/UX_SPEC.md](specs/UX_SPEC.md) | End-to-end UX and product screen map |
 | [docs/specs/EXECUTION_LOG_SPEC.md](specs/EXECUTION_LOG_SPEC.md) | Structured operational audit logging |
 | [docs/specs/FOCUSED_EDIT_SPEC.md](specs/FOCUSED_EDIT_SPEC.md) | Focused editing behavior and constraints |
-| [docs/specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md](specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md) | Output language control — Layer L, per-mode resolution chain, contract changes, UI selector, God Mode fallback |
+| [docs/specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md](specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md) | Output language control — Layer L, per-mode resolution chain, contract changes, UI selector, Workspace fallback |
 
 ---
 
@@ -125,7 +125,7 @@ Read in this order before making changes:
 | [docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md](specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md) | Project policy for filesystem-first Layer S: ownership, source-of-truth files, selection rules, validation workflow, impact evaluation, and rollback |
 | [docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md](specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md) | Implemented filesystem resolver for Layer S: by-template folder loading, env controls, prompt trace, DB logging, Docker packaging, and validation |
 | [docs/specs/LLM_PROVIDER_CATALOG_ALIGNMENT_SPEC.md](specs/LLM_PROVIDER_CATALOG_ALIGNMENT_SPEC.md) | Summary spec for provider compatibility fixes, single-source catalog alignment, shared picker UI, validation status, and review perimeter |
-| [docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md](specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md) | ⚠️ Historical Zero Effort/GodMode MVP execution reference; superseded for implementation sequencing by the SSOT program |
+| [docs/specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md](specs/MULTIMODE_UX_MVP_EXECUTION_SPEC.md) | ⚠️ Historical Guided Mode/Workspace MVP execution reference; superseded for implementation sequencing by the SSOT program |
 | [docs/specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md](specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md) | Evoluzione Zero Effort: media upload step, Layer F media context nel prompt, async job tracking, notifiche email/Telegram |
 | [docs/specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md](specs/ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md) | Asset-aware prompt enrichment plan |
 | [docs/specs/DOCUMENT_CONTEXT_LAYER_SPEC.md](specs/DOCUMENT_CONTEXT_LAYER_SPEC.md) | Document Context Layer — PDF/DOCX parsing, image vision analysis, AssetEnrichmentTrace envelope, and Layer D prompt injection |
@@ -141,10 +141,10 @@ Read in this order before making changes:
 | [docs/specs/USER_SETTINGS_AND_API_KEYS_SPEC.md](specs/USER_SETTINGS_AND_API_KEYS_SPEC.md) | R3.5 — User-owned API keys (programmatic access) and unified role-scoped settings panel |
 | [docs/specs/DASHBOARD_LOVABLE_CHAT_SPEC.md](specs/DASHBOARD_LOVABLE_CHAT_SPEC.md) | ⚠️ Historical VibeCore UX/design reference; model-routing, fallback and handoff directives are superseded |
 | `apps/web/app/admin/experimental/data-dashboard/[projectId]/page.tsx` | Superadmin-only alpha console for the grounded dataset runtime: deterministic queries, browsing, insights, and dashboard experimentation detached from the main UX |
-| [docs/specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md](specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md) | Alpha-only strategy for the grounded dataset runtime and possible future re-integration, currently detached from the primary Vibe / Zero Effort UX |
+| [docs/specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md](specs/DATA_DASHBOARD_NATIVE_INTEGRATION_STRATEGY.md) | Alpha-only strategy for the grounded dataset runtime and possible future re-integration, currently detached from the primary Vibe / Guided Mode UX |
 | [docs/specs/PUBLISHED_DATASET_BINDINGS_SPEC.md](specs/PUBLISHED_DATASET_BINDINGS_SPEC.md) | Decision spec for publish-time dataset bindings: original source vs normalized local runtime vs backend query endpoints, with hybrid-mode recommendation, manifest contract, exposure policies, and serial/parallel delivery plan |
-| [docs/specs/ZERO_EFFORT_PREFILL_SPEC.md](specs/ZERO_EFFORT_PREFILL_SPEC.md) | Implemented Zero Effort prefill baseline; legacy storage/handoff and fallback details are superseded by the SSOT program |
-| [docs/specs/GEN_AI_MEDIA_MODE_SPEC.md](specs/GEN_AI_MEDIA_MODE_SPEC.md) | Gen AI Media Mode — extension of Vibe/Zero Effort/God Mode to support podcast, video, and music generation via external engine REST APIs, async job tracking, and HTML artifact containers |
+| [docs/specs/GUIDED_MODE_PREFILL_SPEC.md](specs/GUIDED_MODE_PREFILL_SPEC.md) | Guided Mode LLM Prefill — one-pass LLM pre-population of all Guided Mode wizard fields, token counter, AI review card, Workspace one-click generation; legacy storage/handoff and fallback details are superseded by the SSOT program |
+| [docs/specs/GEN_AI_MEDIA_MODE_SPEC.md](specs/GEN_AI_MEDIA_MODE_SPEC.md) | Gen AI Media Mode — extension of Vibe/Guided Mode/Workspace to support podcast, video, and music generation via external engine REST APIs, async job tracking, and HTML artifact containers |
 | [docs/specs/GEN_AI_MEDIA_MODE_INTERFACE_STANDARDS.md](specs/GEN_AI_MEDIA_MODE_INTERFACE_STANDARDS.md) | Interface standards analysis (MCP, A2A, OpenAPI, CLI) and REST contract for external podcast/video/music engines; dual-mode integration strategy (Direct API + Standard Adapter) |
 | [docs/specs/GLOBAL_BRAND_IDENTITY_SPEC.md](specs/GLOBAL_BRAND_IDENTITY_SPEC.md) | Global Brand Identity System (Layer G) — ✅ delivered (PR #26, release 2026.06.10.1); hierarchical (platform → user → project) additive brand-asset injection; reuses existing storage, auth, and route infrastructure; retrocompatible new layer |
 | [docs/specs/BRAND_REUSABLE_CONTEXT_IMPLEMENTATION.md](specs/BRAND_REUSABLE_CONTEXT_IMPLEMENTATION.md) | Reusable brand context — wave-based plan extending Layer G/D so brand books & guidelines are LLM-analysed once and injected as Layer D development context into every project |
@@ -168,8 +168,8 @@ Read in this order before making changes:
 | `apps/web/lib/api/vibecore.ts` | Web client for `GET /v1/vibecore/config`, `POST /v1/vibecore/classify`, and `POST /v1/vibecore/prefill` |
 | `packages/contracts/src/vibecore.ts` | Shared VibeCore types: `FormatHint`, `AttachmentMeta`, `VibeClassifyRequest/Response` |
 | `apps/api/src/application/use-cases/VibeClassify.ts` | Layer Φ intent + format classifier use-case (LLM call, confidence threshold, graceful skip) |
-| `apps/api/src/application/use-cases/VibePrefill.ts` | Structured Zero Effort brief prefill use-case with optional Layer D document context |
-| `apps/api/src/application/prompting/vibePresetCatalog.ts` | Canonical full-preset descriptive context shared by Vibe classification and Zero Effort prefill |
+| `apps/api/src/application/use-cases/VibePrefill.ts` | Structured Guided Mode brief prefill use-case with optional Layer D document context |
+| `apps/api/src/application/prompting/vibePresetCatalog.ts` | Canonical full-preset descriptive context shared by Vibe classification and Guided Mode prefill |
 | `apps/api/src/application/prompting/formatHintRules.ts` | Format hint catalog (7 categories) and template list block builder |
 | `apps/api/src/presentation/http/routes/vibecoreRoutes.ts` | `GET /v1/vibecore/config` + `POST /v1/vibecore/classify` + `POST /v1/vibecore/prefill` — auth-protected, project-aware vibe entry surface |
 

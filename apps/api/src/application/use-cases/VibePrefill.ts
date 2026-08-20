@@ -1,5 +1,5 @@
-import type { DataDashboardDraft, VibeGenerationMode, VibePrefillResponse, AttachmentMeta, FormatHint, ZeroEffortDraft } from "@andy-code-cat/contracts";
-import { zeroEffortLaunchSchema } from "@andy-code-cat/contracts";
+import type { DataDashboardDraft, VibeGenerationMode, VibePrefillResponse, AttachmentMeta, FormatHint, GuidedDraft } from "@andy-code-cat/contracts";
+import { guidedLaunchSchema } from "@andy-code-cat/contracts";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
@@ -86,7 +86,7 @@ export function normalizeLang(raw?: string | null): string {
 
 // ── Default draft ─────────────────────────────────────────────────────────────
 
-function defaultDraft(prompt: string, outputLanguage = "en", presetId = "neutral"): ZeroEffortDraft {
+function defaultDraft(prompt: string, outputLanguage = "en", presetId = "neutral"): GuidedDraft {
     const projectName = prompt.trim().slice(0, 64) || "Project";
     return {
         businessName: projectName,
@@ -264,11 +264,11 @@ function defaultDataDashboardDraft(prompt: string, attachmentMeta?: AttachmentMe
 
 /**
  * Deterministic mapping from a parsed (possibly repaired) LLM JSON object onto the
- * ZeroEffortDraft contract. Shared by the happy path and the truncation-repair path so a
+ * GuidedDraft contract. Shared by the happy path and the truncation-repair path so a
  * cut-off response still yields every field that was fully written before the cut, instead
  * of the five-field regex recovery that used to discard everything else.
  */
-function mapParsedToDraft(parsed: Record<string, unknown>, prompt: string, uiLanguage: string | undefined, classifierPreset: string): ZeroEffortDraft {
+function mapParsedToDraft(parsed: Record<string, unknown>, prompt: string, uiLanguage: string | undefined, classifierPreset: string): GuidedDraft {
     const businessName = typeof parsed.businessName === "string" && parsed.businessName.trim()
         ? parsed.businessName.trim().slice(0, 120)
         : prompt.trim().slice(0, 64) || "Project";
@@ -334,7 +334,7 @@ function mapParsedToDraft(parsed: Record<string, unknown>, prompt: string, uiLan
     );
 
     // Validate with zod to ensure the draft is safe to use downstream
-    const zodResult = zeroEffortLaunchSchema.safeParse({
+    const zodResult = guidedLaunchSchema.safeParse({
         businessName, presetId, primaryGoal, audience, tone, primaryCta, styleHint, sourceRequest,
         projectSummary, contentStructure, contentRequirements, functionalRequirements, interactionModel,
         visualDirection, successCriteria, constraints, mustAvoid, contactInfo, styleAttributes, outputLanguage,
@@ -373,7 +373,7 @@ function repairTruncatedJson(candidate: string): string | null {
     return candidate.slice(0, lastSafe) + "}";
 }
 
-export function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, detectedTemplateId?: string | null): { draft: ZeroEffortDraft; confidence: number } {
+export function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: string, detectedTemplateId?: string | null): { draft: GuidedDraft; confidence: number } {
     // The template picked by Layer Phi (VibeClassify) is authoritative CONTEXT, injected
     // into this call's user message by buildPresetContext(). It anchors the answer but does
     // not veto it: the prefill LLM sees the same annotated catalog and the same selection
@@ -413,7 +413,7 @@ export function parsePrefillResponse(raw: string, prompt: string, uiLanguage?: s
         const hasPartial = !!(partialPresetRaw || partialName || partialGoal);
         if (hasPartial) {
             const partialPresetId = resolvePrefillPresetId(partialPresetRaw, classifierPreset);
-            const recoveredDraft: ZeroEffortDraft = {
+            const recoveredDraft: GuidedDraft = {
                 businessName: (partialName ? unescape(partialName) : "").trim().slice(0, 120) || prompt.trim().slice(0, 64) || "Project",
                 presetId: partialPresetId,
                 primaryGoal: (partialGoal ? unescape(partialGoal) : "").trim().slice(0, 3000) || prompt.trim().slice(0, 500) || "Modern web project.",
