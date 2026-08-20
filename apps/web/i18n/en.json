@@ -906,6 +906,9 @@
             "promptPanelLoading": "Loading…",
             "promptPanelHint": "The prompt will load automatically. If it doesn't appear, click ↻ Reload.",
             "promptPanelTokensPreset": "~{{tokens}} tokens · preset: {{preset}}",
+            "promptPanelUserMessage": "User message",
+            "promptPanelAssistantMessage": "Assistant message (history)",
+            "promptPanelNoGenYet": "No generation yet — preview of what will be sent on the next request.",
             "stream": {
                 "optimizing": "Optimizing prompt...",
                 "analysingOptimizer": "Analysing optimizer...",

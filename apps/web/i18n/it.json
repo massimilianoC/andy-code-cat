@@ -906,6 +906,9 @@
             "promptPanelLoading": "Caricamento…",
             "promptPanelHint": "Il prompt verrà caricato automaticamente. Se non appare, clicca ↻ Ricarica.",
             "promptPanelTokensPreset": "~{{tokens}} token · preset: {{preset}}",
+            "promptPanelUserMessage": "Messaggio utente",
+            "promptPanelAssistantMessage": "Messaggio assistant (cronologia)",
+            "promptPanelNoGenYet": "Nessuna generazione ancora — anteprima di cosa verrà inviato alla prossima request.",
             "stream": {
                 "optimizing": "Ottimizzazione prompt in corso...",
                 "analysingOptimizer": "Analisi optimizer...",
