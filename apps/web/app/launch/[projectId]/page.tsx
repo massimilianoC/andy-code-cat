@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { launchZeroEffort, getZeroEffortConfig, type ZeroEffortLaunchInput, type ZeroEffortPipelineConfig } from "../../../lib/api/pipelines";
+import { launchZeroEffort, getZeroEffortConfig, launchWorkspacePipeline, type ZeroEffortLaunchInput, type ZeroEffortPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
 import { optimizePrompt } from "../../../lib/api/llm";
@@ -892,6 +892,24 @@ export default function ZeroEffortLaunchPage() {
             attachmentNames: attachedFiles,
         };
         try {
+            // I15 of the SSOT program: when enabled, launch through the server-owned
+            // Workspace pipeline (freezes a modelLock + canonical brief on a real PipelineRun)
+            // instead of the legacy zero-effort + client-optimize + sessionStorage handoff.
+            // The workspace re-derives everything (brief, locked model) from the run itself —
+            // see the "I15" mount effect in workspace/[projectId]/page.tsx.
+            if (process.env.NEXT_PUBLIC_PIPELINE_RUN_UI === "true") {
+                const launchResult = await launchWorkspacePipeline(token, projectId, {
+                    ...payload,
+                    requestedProviderId: pipelineOverride?.provider,
+                    requestedModelId: pipelineOverride?.model,
+                    optimizationPolicy: "enabled",
+                });
+                router.push(
+                    `/workspace/${projectId}?conv=${launchResult.conversationId}&pipelineRunId=${encodeURIComponent(launchResult.pipelineRunId)}`,
+                );
+                return;
+            }
+
             const [briefResult, configResult] = await Promise.all([
                 launchZeroEffort(token, projectId, payload),
                 getZeroEffortConfig(token, projectId).catch(() => null),
