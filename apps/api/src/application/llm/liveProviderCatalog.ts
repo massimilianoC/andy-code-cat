@@ -1,6 +1,7 @@
 import type { LlmProviderCatalog } from "../../domain/entities/LlmCatalog";
 import { getSiliconFlowPrice } from "./siliconflowPricing";
 import { decorateSeedModel } from "./modelRegistryPresets";
+import { dedupeModelsById } from "./catalogModels";
 
 const LIVE_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -10,20 +11,6 @@ const liveModelCache = new Map<string, { expiresAt: number; models: RuntimeModel
 
 export function clearLiveModelCatalogCache(): void {
     liveModelCache.clear();
-}
-
-function dedupeModelsById(models: RuntimeModel[]): RuntimeModel[] {
-    const byId = new Map<string, RuntimeModel>();
-
-    for (const model of models) {
-        if (!model.isActive || !model.id) continue;
-        const previous = byId.get(model.id);
-        if (!previous || (model.isDefault && !previous.isDefault)) {
-            byId.set(model.id, model);
-        }
-    }
-
-    return [...byId.values()];
 }
 
 function assignPriceTiers(models: RuntimeModel[]): RuntimeModel[] {
