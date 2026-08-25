@@ -29,6 +29,7 @@ import {
 import { resolveFilesystemTemplateSkills } from "../llm/templateSkillsLayer";
 import { buildFocusedModeSystemAddendum } from "../llm/focusedPrompt";
 import { buildOutputBudgetPolicy } from "../llm/llmMessageBuilder";
+import { dedupeModelsById, resolveComposerCascade } from "../llm/catalogModels";
 import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../documents/projectLayerDContext";
 import { env } from "../../config";
 
@@ -97,25 +98,6 @@ export interface ResolvePromptExecutionInput {
      * the lock is unavailable. Omitted: 100% unchanged legacy path.
      */
     pipelineRunId?: string;
-}
-
-function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]) {
-    const byId = new Map<string, LlmRuntimeContext["providerCatalog"]["models"][number]>();
-
-    for (const model of models) {
-        if (!model.isActive || !model.id) continue;
-        if (!byId.has(model.id)) {
-            byId.set(model.id, model);
-            continue;
-        }
-
-        const prev = byId.get(model.id)!;
-        if (model.isDefault && !prev.isDefault) {
-            byId.set(model.id, model);
-        }
-    }
-
-    return [...byId.values()];
 }
 
 export class ResolvePromptExecution {
@@ -221,8 +203,8 @@ export class ResolvePromptExecution {
             : "";
 
         let providerCatalog: (typeof catalog.providers)[number] | undefined;
-        let providerModels: ReturnType<typeof dedupeModelsById> = [];
-        let roleModel: ReturnType<typeof dedupeModelsById>[number] | undefined;
+        let providerModels: (typeof catalog.providers)[number]["models"] = [];
+        let roleModel: (typeof catalog.providers)[number]["models"][number] | undefined;
         let pipelineRunLocked = false;
 
         if (input.pipelineRunId && env.pipelineRunEnabled) {
@@ -270,30 +252,25 @@ export class ResolvePromptExecution {
 
             pipelineRunLocked = true;
         } else {
-            providerCatalog =
-                (input.provider
-                    ? catalog.providers.find((p) => p.provider === input.provider && p.isActive)
-                    : undefined) ??
-                catalog.providers.find((p) => p.provider === env.LLM_DEFAULT_PROVIDER) ??
-                catalog.providers[0];
+            // The cascade itself lives in catalogModels.ts, next to the other model-resolution
+            // rules, instead of being hand-inlined here — this call site serves 100% of real
+            // generation traffic and was the last one still carrying its own private copy.
+            const cascade = resolveComposerCascade({
+                providers: catalog.providers,
+                requestedProvider: input.provider,
+                requestedModel: input.model,
+                capability: input.capability,
+                pipelineRole: input.pipelineRole,
+                envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
+            });
 
-            if (!providerCatalog) {
+            if (!cascade.providerCatalog) {
                 throw new Error("No active LLM provider catalog found");
             }
 
-            providerModels = dedupeModelsById(providerCatalog.models);
-            const explicitModel = input.model
-                ? providerModels.find((model) => model.id === input.model)
-                : undefined;
-
-            roleModel = explicitModel ??
-                (input.capability
-                    ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
-                    : undefined) ??
-                providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
-                providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
-                providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
-                providerModels.find((m) => m.isActive);
+            providerCatalog = cascade.providerCatalog;
+            providerModels = cascade.providerModels;
+            roleModel = cascade.roleModel;
         }
 
         const effectivePrePromptTemplate = [
