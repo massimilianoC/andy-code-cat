@@ -79,6 +79,7 @@ services:
       target: prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+        NEXT_PUBLIC_PIPELINE_RUN_UI: ${NEXT_PUBLIC_PIPELINE_RUN_UI:-false}
     container_name: andy-code-cat-web
     restart: unless-stopped
     env_file:
