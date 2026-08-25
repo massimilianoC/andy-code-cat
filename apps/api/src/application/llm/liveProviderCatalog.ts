@@ -136,6 +136,13 @@ export async function hydrateProviderCatalog(
     options?: { forceRefresh?: boolean },
 ): Promise<LlmProviderCatalog> {
     const fallbackModels = dedupeModelsById(providerCatalog.models);
+    // The CURATED list, before dedupeModelsById drops the deactivated entries. A model a
+    // superadmin switched off in /admin/models only exists here — looking it up in
+    // `fallbackModels` (as the discovery loop below used to) can never find it, which is exactly
+    // why a deactivated model used to come back `isActive: true` the moment the provider still
+    // listed it. Every openai-compatible provider is live-discovered, so that was every model.
+    const curatedById = new Map(providerCatalog.models.filter((model) => model.id).map((model) => [model.id, model]));
+    const isDeactivatedByOperator = (id: string) => curatedById.get(id)?.isActive === false;
 
     if (providerCatalog.apiType !== "openai-compatible") {
         return { ...providerCatalog, models: fallbackModels };
@@ -171,6 +178,9 @@ export async function hydrateProviderCatalog(
 
         const mapped = rawModels
             .filter((model) => shouldKeepDiscoveredModel(providerCatalog.provider, model))
+            // An operator's explicit "off" outranks live discovery. Without this, curating the
+            // catalog is impossible for any provider that lists the model itself.
+            .filter((model) => !isDeactivatedByOperator(String(model.id ?? "").trim()))
             .map((model, index): RuntimeModel => {
                 const id = String(model.id ?? "").trim();
                 const modality = model.architecture?.modality ?? "";
