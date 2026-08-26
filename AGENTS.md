@@ -232,6 +232,24 @@ This project is open-source and regularly visited by external contributors ("osp
 
 > A contributor who clones this repo should see a self-explanatory, navigable structure — not a graveyard of experiments.
 
+## Live LLM Calls In Tests — Spending Rule
+
+Every live provider call bills the account owner. Agents do not get to decide how that money is
+spent.
+
+1. **Only models listed in `tests/config/authorized-test-models.json` may be called without
+   asking.** Prefer a `:free` tier when the provider offers one; the ceiling is USD 0.50 per 1M
+   input tokens.
+2. **Anything above that ceiling requires the owner's explicit approval, per run** — including a
+   single probe, and including "just to compare quality against a better model".
+3. **Model quality is never a reason to reach for a premium model in a test.** If a test only
+   passes on a frontier model, the test is measuring the model, not the code.
+4. **Report what a test run cost** when you ran live calls. `cost_transactions` has the figures;
+   see `tests/config/README.md` for the query.
+
+Local models (LM Studio) carry no metered cost, but use only the ones LM Studio reports as
+**loaded** — forcing a swap into memory disrupts whatever the owner had running.
+
 ## Coding Rules
 
 - Keep functions small and focused.
