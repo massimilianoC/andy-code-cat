@@ -208,17 +208,23 @@ export class ResolvePromptExecution {
         let roleModel: (typeof catalog.providers)[number]["models"][number] | undefined;
         let pipelineRunLocked = false;
 
+        // I14 strict cutover wave 2: a PipelineRun's frozen modelLock governs dispatch instead of
+        // the legacy cascade. dispatch() re-validates the lock against the live catalog and never
+        // substitutes a different model — a stale/deactivated lock blocks (409) rather than
+        // silently falling back to the cascade below. Gated on PIPELINE_RUN_ENABLED too, not just
+        // the presence of pipelineRunId: this is the master rollback lever's whole point —
+        // flipping the flag off must revert EVERY call site to legacy behavior, even one that
+        // (incorrectly, or from a stale client) still sends a pipelineRunId.
+        //
+        // The lock is single-use: it certifies the run's own generation, the one whose
+        // canonicalBrief contentHash the run attests. Once dispatched, dispatch() reports
+        // lockApplies:false and we fall through to the cascade, so the model the user picks in
+        // the selector governs every later turn (owner decision, 2026-08-26). Before this, a run
+        // pinned its model for the whole conversation and discarded the selector in silence.
+        let lockedSelection: { providerId: string; modelId: string } | null = null;
         if (input.pipelineRunId && env.pipelineRunEnabled) {
-            // I14 strict cutover wave 2: a PipelineRun's frozen modelLock governs dispatch
-            // instead of the legacy cascade. dispatch() re-validates the lock against the live
-            // catalog and never substitutes a different model — a stale/deactivated lock blocks
-            // (409) rather than silently falling back to the cascade below. Gated on
-            // PIPELINE_RUN_ENABLED too, not just the presence of pipelineRunId: this is the
-            // master rollback lever's whole point — flipping the flag off must revert EVERY call
-            // site to legacy behavior, even one that (incorrectly, or from a stale client) still
-            // sends a pipelineRunId.
             const stage = input.focusedMode ? "focused_edit" : "generate";
-            const { run, blocked } = await this.resolvePipelineModelLock.dispatch({
+            const { run, blocked, lockApplies } = await this.resolvePipelineModelLock.dispatch({
                 runId: input.pipelineRunId,
                 ownerUserId: input.userId,
                 projectId: input.projectId,
@@ -232,8 +238,17 @@ export class ResolvePromptExecution {
                 });
             }
 
-            const lockedProviderId = run.modelLock.effective.providerId;
-            const lockedModelId = run.modelLock.effective.modelId;
+            if (lockApplies) {
+                lockedSelection = {
+                    providerId: run.modelLock.effective.providerId,
+                    modelId: run.modelLock.effective.modelId,
+                };
+            }
+        }
+
+        if (lockedSelection) {
+            const lockedProviderId = lockedSelection.providerId;
+            const lockedModelId = lockedSelection.modelId;
             providerCatalog = catalog.providers.find((p) => p.provider === lockedProviderId);
             if (!providerCatalog) {
                 throw new HttpError(`Locked provider is no longer in the active catalog: ${lockedProviderId}`, {

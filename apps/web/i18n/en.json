@@ -317,7 +317,7 @@
             "slideshow": "Slideshow",
             "keynote": "Visual keynote",
             "videogame": "Videogame",
-      "freerunner": "Infinite Runner",
+            "freerunner": "Infinite Runner",
             "seriousgame": "Serious Game",
             "game3d": "3D Game",
             "vr-aframe": "VR A-Frame Experience",
@@ -1043,7 +1043,9 @@
                 "copied": "Copied",
                 "copyError": "Error",
                 "copyTitle": "Copy message",
-                "nextSteps": "Next steps"
+                "nextSteps": "Next steps",
+                "errorBadge": "Error",
+                "errorHint": "No version was saved — the project is unchanged."
             }
         }
     },

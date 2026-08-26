@@ -443,15 +443,19 @@ export class OptimizeUserPrompt {
         let providerCatalog: (typeof activeProviders)[number] | undefined;
         let modelId: string | undefined;
 
+        // I13 strict cutover wave 1: a PipelineRun's frozen modelLock governs dispatch instead of
+        // the legacy cascade. dispatch() re-validates the lock against the live catalog and never
+        // substitutes a different model — a stale/deactivated lock blocks (409) rather than
+        // silently falling back. Gated on PIPELINE_RUN_ENABLED too, not just the presence of
+        // pipelineRunId: this is the master rollback lever's whole point — flipping the flag off
+        // must revert EVERY call site to legacy behavior, even one that (incorrectly, or from a
+        // stale client) still sends a pipelineRunId.
+        //
+        // Single-use, same rule as the generate stage: once the run has dispatched, lockApplies
+        // is false and the cascade honours the user's own selection.
+        let lockedSelection: { providerId: string; modelId: string } | null = null;
         if (input.pipelineRunId && env.pipelineRunEnabled) {
-            // I13 strict cutover wave 1: a PipelineRun's frozen modelLock governs dispatch
-            // instead of the legacy cascade. dispatch() re-validates the lock against the live
-            // catalog and never substitutes a different model — a stale/deactivated lock blocks
-            // (409) rather than silently falling back. Gated on PIPELINE_RUN_ENABLED too, not
-            // just the presence of pipelineRunId: this is the master rollback lever's whole
-            // point — flipping the flag off must revert EVERY call site to legacy behavior, even
-            // one that (incorrectly, or from a stale client) still sends a pipelineRunId.
-            const { run, blocked } = await this.resolvePipelineModelLock.dispatch({
+            const { run, blocked, lockApplies } = await this.resolvePipelineModelLock.dispatch({
                 runId: input.pipelineRunId,
                 ownerUserId: input.userId,
                 projectId: input.projectId,
@@ -470,8 +474,17 @@ export class OptimizeUserPrompt {
                 );
             }
 
-            const lockedProviderId = run.modelLock.effective.providerId;
-            const lockedModelId = run.modelLock.effective.modelId;
+            if (lockApplies) {
+                lockedSelection = {
+                    providerId: run.modelLock.effective.providerId,
+                    modelId: run.modelLock.effective.modelId,
+                };
+            }
+        }
+
+        if (lockedSelection) {
+            const lockedProviderId = lockedSelection.providerId;
+            const lockedModelId = lockedSelection.modelId;
             providerCatalog = activeProviders.find((provider) => provider.provider === lockedProviderId);
             const lockedModel = providerCatalog?.models.find((model) => model.isActive && model.id === lockedModelId);
             if (!providerCatalog || !lockedModel) {

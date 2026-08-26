@@ -396,6 +396,9 @@ function WorkspacePageContent() {
     // search param. We pre-fill the prompt and auto-trigger generation once the
     // conversation and providers are both ready.
     const autoPromptFiredRef = useRef(false);
+    // The text the run handoff dropped into the composer. Kept so a refresh that finds the brief
+    // already dispatched can clear the composer without touching anything the user typed.
+    const handoffPromptRef = useRef<string | null>(null);
     const [autoPromptPending, setAutoPromptPending] = useState(false);
     const [editSessionId, setEditSessionId] = useState<string | null>(null);
     const [isSavingEditVersion, setIsSavingEditVersion] = useState(false);
@@ -613,6 +616,7 @@ function WorkspacePageContent() {
                     setAutoOptimize(false);
                 }
                 if (run.canonicalBrief?.content) {
+                    handoffPromptRef.current = run.canonicalBrief.content;
                     setPrompt(run.canonicalBrief.content);
                     setAutoPromptPending(true);
                 }
@@ -668,12 +672,25 @@ function WorkspacePageContent() {
         if (autoPromptFiredRef.current) return;
         if (!preferredModelResolutionComplete) return;
         if (conversationLoading || !selectedModel || sending || !token) return;
+        // A reload re-runs this effect with the same pipelineRunId still in the URL, and the ref
+        // above is fresh on every mount — so without a stored signal the brief would be sent
+        // again on every refresh. The conversation itself is that signal: LaunchGuidedProject
+        // creates it EMPTY on purpose (see its comment), so "no messages yet" is the precise,
+        // server-owned answer to "has this brief already been dispatched?".
+        if ((activeConv?.messages.length ?? 0) > 0) {
+            autoPromptFiredRef.current = true;
+            setAutoPromptPending(false);
+            // Drop the pre-filled brief so the composer doesn't come back holding a 7 000-character
+            // prompt the user never typed and has already sent. Anything else is left alone.
+            setPrompt((current) => (current === handoffPromptRef.current ? "" : current));
+            return;
+        }
         autoPromptFiredRef.current = true;
         setAutoPromptPending(false);
         // Trigger send with a fake FormEvent — handleSend will read the current prompt state.
         void handleSend({ preventDefault: () => {} } as React.FormEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [autoPromptPending, conversationLoading, preferredModelResolutionComplete, selectedModel, sending, token]);
+    }, [activeConv, autoPromptPending, conversationLoading, preferredModelResolutionComplete, selectedModel, sending, token]);
 
     useEffect(() => {
         if (!selectedProvider) return;
@@ -2246,8 +2263,12 @@ function WorkspacePageContent() {
                 || llm.structured?.chat?.summary?.trim()
                 || "Risposta AI generata senza testo visibile.").slice(0, 50000);
 
+            // A generation whose JSON could not be parsed is a failure, not a reply. Storing it
+            // as "assistant" is what made it render like a normal turn and, worse, fed its
+            // empty artifacts back as conversation history on the next request. Role "error"
+            // is already excluded from the history window built above.
             const assistantSaved = await addMessage(token, projectId, convId, {
-                role: "assistant",
+                role: llm.generationParseError ? "error" : "assistant",
                 content: assistantContent,
                 metadata: {
                     model: llm.model,
@@ -5054,7 +5075,11 @@ function MessageBubble({ message }: { message: MessageDto }) {
     const { t } = useTranslation();
     const [copyLabel, setCopyLabel] = useState(() => t("workspace.ui.messageBubble.copy"));
     const isUser = message.role === "user";
-    const isError = message.role === "error";
+    // A failed generation is an error even when the HTTP call succeeded: the model answered,
+    // the answer could not be parsed, and nothing was saved. Rendering that as an ordinary reply
+    // is what made "nessuna versione salvata" read like a normal chat turn. `structuredParseValid`
+    // is stored truth, so conversations written before this fix render correctly too.
+    const isError = message.role === "error" || message.metadata?.structuredParseValid === false;
     const operation = message.metadata?.operation;
 
     const chatStructured = message.metadata?.chatStructured ?? (!isUser && !isError ? parseChatFromContent(message.content) : null);
@@ -5065,13 +5090,19 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 className="message-bubble-content"
                 style={{
                     maxWidth: "92%",
-                    background: isUser ? "var(--accent)" : isError ? "rgba(239,68,68,0.12)" : "var(--surface)",
-                    border: isUser ? "none" : `1px solid ${isError ? "rgba(239,68,68,0.3)" : "var(--border)"}`,
+                    background: isUser ? "var(--accent)" : isError ? "rgba(239,68,68,0.10)" : "var(--surface)",
+                    border: isUser ? "none" : `1px solid ${isError ? "var(--danger)" : "var(--border)"}`,
+                    // The left rule is what makes a failure scannable in a long transcript: the
+                    // tint alone reads as decoration, an unbroken red edge does not.
+                    borderLeft: isError ? "3px solid var(--danger)" : undefined,
+                    boxShadow: isError ? "0 0 0 1px rgba(239,68,68,0.18)" : undefined,
                     borderRadius: "var(--radius)",
                     padding: "0.55rem 0.75rem",
                     fontSize: "0.86rem",
                     lineHeight: 1.48,
-                    color: isError ? "var(--danger)" : "var(--text)",
+                    // Body stays readable; the badge and the border carry the red. All-red prose
+                    // at 0.86rem is harder to read precisely when it matters most.
+                    color: "var(--text)",
                     wordBreak: "break-word",
                 }}
             >
@@ -5093,6 +5124,28 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 >
                     {copyLabel}
                 </button>
+                {isError && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.4rem", flexWrap: "wrap" }}>
+                        <span
+                            style={{
+                                fontSize: "0.66rem",
+                                fontWeight: 700,
+                                letterSpacing: "0.04em",
+                                textTransform: "uppercase",
+                                padding: "0.12rem 0.4rem",
+                                borderRadius: "999px",
+                                background: "rgba(239,68,68,0.16)",
+                                color: "var(--danger)",
+                                border: "1px solid rgba(239,68,68,0.45)",
+                            }}
+                        >
+                            ⚠ {t("workspace.ui.messageBubble.errorBadge")}
+                        </span>
+                        <span style={{ fontSize: "0.66rem", color: "var(--text-muted)" }}>
+                            {t("workspace.ui.messageBubble.errorHint")}
+                        </span>
+                    </div>
+                )}
                 {operation && (
                     <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.45rem", flexWrap: "wrap" }}>
                         <span
@@ -5142,7 +5195,10 @@ function MessageBubble({ message }: { message: MessageDto }) {
             <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.18rem" }}>
                 {operation?.label ? `${message.role} · ${operation.label}` : message.role}
             </span>
-            {!isUser && !isError && <RequestMetaInfo message={message} />}
+            {/* Failures keep their meta strip: a run that burned tokens and produced nothing is
+                exactly when "which model, how long, what did it cost" matters most. Messages with
+                no metadata (a transport error) render nothing — RequestMetaInfo bails out. */}
+            {!isUser && <RequestMetaInfo message={message} />}
         </div>
     );
 }

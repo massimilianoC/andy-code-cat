@@ -260,8 +260,8 @@
     },
     "session": {
         "expired": "Sessione scaduta",
-        "requiresLogin": "La tua sessione \u00e8 scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
-        "tokenExpired": "La tua sessione \u00e8 scaduta. Effettua di nuovo il login per continuare.",
+        "requiresLogin": "La tua sessione è scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
+        "tokenExpired": "La tua sessione è scaduta. Effettua di nuovo il login per continuare.",
         "logout": "Esci"
     },
     "security": {
@@ -317,7 +317,7 @@
             "slideshow": "Slideshow",
             "keynote": "Keynote visiva",
             "videogame": "Videogioco",
-      "freerunner": "Runner infinito",
+            "freerunner": "Runner infinito",
             "seriousgame": "Serious Game",
             "game3d": "Gioco 3D",
             "vr-aframe": "Esperienza VR A-Frame",
@@ -1043,7 +1043,9 @@
                 "copied": "Copiato",
                 "copyError": "Errore",
                 "copyTitle": "Copia messaggio",
-                "nextSteps": "Prossimi passi"
+                "nextSteps": "Prossimi passi",
+                "errorBadge": "Errore",
+                "errorHint": "Nessuna versione salvata — il progetto non è stato modificato."
             }
         }
     },

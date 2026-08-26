@@ -184,6 +184,75 @@ describe("ResolvePipelineModelLock — dispatch", () => {
         expect(result.run.status).toBe("draft");
     });
 
+    it("applies the lock on the first dispatch and records the stage that consumed it", async () => {
+        const repo = new InMemoryPipelineRunRepository();
+        const useCase = new ResolvePipelineModelLock(repo, fakeGetLlmCatalog([fakeCatalog()]) as any);
+
+        const run = await useCase.createRun({
+            projectId: "project-1",
+            ownerUserId: "user-1",
+            entryMode: "workspace",
+            optimizationPolicy: "skip",
+        });
+
+        const first = await useCase.dispatch({ runId: run.id, ownerUserId: "user-1", projectId: "project-1", stage: "generate" });
+
+        expect(first.lockApplies).toBe(true);
+        expect(first.blocked).toBeNull();
+        expect(first.run.stages).toHaveLength(1);
+        expect(first.run.stages[0]).toMatchObject({ stage: "generate", status: "dispatched" });
+        expect(first.run.stages[0]?.decision.effective).toEqual({
+            providerId: "siliconflow",
+            modelId: "MiniMaxAI/MiniMax-M3",
+            source: "pipeline-run-lock",
+        });
+    });
+
+    it("stops applying the lock after the run has dispatched, so later turns follow the selector", async () => {
+        const repo = new InMemoryPipelineRunRepository();
+        const useCase = new ResolvePipelineModelLock(repo, fakeGetLlmCatalog([fakeCatalog()]) as any);
+
+        const run = await useCase.createRun({
+            projectId: "project-1",
+            ownerUserId: "user-1",
+            entryMode: "workspace",
+            optimizationPolicy: "skip",
+        });
+
+        await useCase.dispatch({ runId: run.id, ownerUserId: "user-1", projectId: "project-1", stage: "generate" });
+        const second = await useCase.dispatch({ runId: run.id, ownerUserId: "user-1", projectId: "project-1", stage: "generate" });
+
+        // The lock certifies the run's own generation and nothing after it: a second turn is
+        // user-driven iteration, and the caller must fall back to its normal model cascade.
+        expect(second.lockApplies).toBe(false);
+        expect(second.blocked).toBeNull();
+        // Exhausted, not re-recorded — the run keeps exactly the one stage that consumed it.
+        expect(second.run.stages).toHaveLength(1);
+    });
+
+    it("an exhausted lock cannot block: a run that already generated keeps iterating after its model is deactivated", async () => {
+        const repo = new InMemoryPipelineRunRepository();
+        const useCase = new ResolvePipelineModelLock(repo, fakeGetLlmCatalog([fakeCatalog()]) as any);
+
+        const run = await useCase.createRun({
+            projectId: "project-1",
+            ownerUserId: "user-1",
+            entryMode: "workspace",
+            optimizationPolicy: "skip",
+        });
+        await useCase.dispatch({ runId: run.id, ownerUserId: "user-1", projectId: "project-1", stage: "generate" });
+
+        const deactivated = new ResolvePipelineModelLock(
+            repo,
+            fakeGetLlmCatalog([fakeCatalog({ models: [{ ...fakeCatalog().models[0]!, isActive: false }] })]) as any,
+        );
+        const second = await deactivated.dispatch({ runId: run.id, ownerUserId: "user-1", projectId: "project-1", stage: "generate" });
+
+        expect(second.lockApplies).toBe(false);
+        expect(second.blocked).toBeNull();
+        expect(second.run.status).not.toBe("blocked");
+    });
+
     it("blocks the run when the locked model has since been deactivated", async () => {
         const repo = new InMemoryPipelineRunRepository();
         const active = [fakeCatalog()];
