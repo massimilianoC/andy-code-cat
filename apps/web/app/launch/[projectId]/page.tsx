@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { launchGuided, getGuidedPipelineConfig, launchWorkspacePipeline, type GuidedLaunchInput, type GuidedPipelineConfig } from "../../../lib/api/pipelines";
+import { previewCanonicalBrief, getGuidedPipelineConfig, launchWorkspacePipeline, type GuidedLaunchInput, type GuidedPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
 import { optimizePrompt } from "../../../lib/api/llm";
@@ -27,7 +27,6 @@ import {
     Target,
     Trash2,
     Upload,
-    Wand2,
 } from "lucide-react";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -86,9 +85,13 @@ function ExpressiveBriefField({ id, label, hint, value, onChange }: {
 }
 
 type GenerationPhase =
-    | "review"       // show normalized brief, Avvia Generazione button
-    | "optimizing"   // calling optimize API
-    | "optimized";   // show optimized prompt — redirect to Guided Mode to generate
+    | "review"      // canonical brief on screen, editable, nothing created yet
+    | "launching";  // creating the PipelineRun and handing off to the workspace
+
+// The "optimizing"/"optimized" phases are gone. They ran a `zero_effort_optimize` pass over the
+// brief before it ever reached the workspace, which contradicts the guided flow's own contract:
+// the canonical brief IS the optimized artifact, and rewriting it invalidated the contentHash
+// the run certifies. See AGENTS.md Rule Zero.
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -522,8 +525,7 @@ const STEPS = [
 function phaseLabel(phase: GenerationPhase, t: ReturnType<typeof useTranslation>["t"]): string {
     switch (phase) {
         case "review": return t("launch.phase.review");
-        case "optimizing": return t("launch.phase.optimizing");
-        case "optimized": return t("launch.phase.optimized");
+        case "launching": return t("launch.phase.launching");
     }
 }
 
@@ -556,7 +558,12 @@ export default function GuidedLaunchPage() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [result, setResult] = useState<Awaited<ReturnType<typeof launchGuided>> | null>(null);
+    // The brief currently on screen was previewed from THIS intake. Launching sends the same
+    // object back, so the text the user approved and the text the run freezes cannot diverge.
+    const [previewedIntake, setPreviewedIntake] = useState<GuidedLaunchInput | null>(null);
+    // The pristine previewed brief, so launching can tell "user edited this" from "user left it
+    // alone" without diffing against a re-derivation.
+    const previewBriefRef = useRef("");
     const [pipelineConfig, setPipelineConfig] = useState<GuidedPipelineConfig | null>(null);
     const [currentStep, setCurrentStep] = useState(1);
     const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
@@ -696,10 +703,10 @@ export default function GuidedLaunchPage() {
     }, [projectId, searchParams]);
 
     useEffect(() => {
-        if (result && step4Ref.current) {
+        if (previewedIntake && step4Ref.current) {
             step4Ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
         }
-    }, [result]);
+    }, [previewedIntake]);
 
     const step1Valid = useMemo(
         () => form.businessName.trim().length >= 2 && form.primaryGoal.trim().length >= 8,
@@ -762,11 +769,14 @@ export default function GuidedLaunchPage() {
         setUploadingFiles(false);
     }
 
-    async function handleSubmit() {
-        if (!token || !step1Valid || !step2Valid) return;
-        setSubmitting(true);
-        setError(null);
-        const payload: GuidedLaunchInput = {
+    /**
+     * The intake exactly as the server will receive it. Built in one place so the brief the user
+     * previews and the brief the run freezes are derived from identical input — two copies of
+     * this object drifting apart is the "two brief builders" failure the canonical builder was
+     * introduced to end.
+     */
+    function buildIntakePayload(): GuidedLaunchInput {
+        return {
             businessName: form.businessName,
             presetId: form.presetId,
             primaryGoal: form.primaryGoal,
@@ -791,15 +801,26 @@ export default function GuidedLaunchPage() {
             outputLanguage: form.outputLanguage,
             attachmentNames: attachedFiles,
         };
+    }
+
+    async function handleSubmit() {
+        if (!token || !step1Valid || !step2Valid) return;
+        setSubmitting(true);
+        setError(null);
+        const payload = buildIntakePayload();
         try {
+            // Preview only — nothing is created until the user presses Avvia generazione. The
+            // previous version called launchGuided here, so merely reaching the review step
+            // created a conversation and a workspace even if the user walked away.
             const [briefResult, configResult] = await Promise.all([
-                launchGuided(token, projectId, payload),
+                previewCanonicalBrief(token, projectId, payload),
                 getGuidedPipelineConfig(token, projectId).catch(() => null),
             ]);
-            setResult(briefResult);
-            // Use the server's canonical brief verbatim (I9 — see the SSOT program docs) instead
-            // of reconstructing a second, differently-formatted copy client-side.
-            setEditedBrief(briefResult.normalizedBrief);
+            setPreviewedIntake(payload);
+            // The server's canonical brief verbatim (I9 — see the SSOT program docs), never a
+            // second copy reconstructed client-side.
+            previewBriefRef.current = briefResult.brief.content;
+            setEditedBrief(briefResult.brief.content);
             setPipelineConfig(configResult);
             setCompletedSteps(new Set([1, 2, 3]));
             setPhase("review");
@@ -811,86 +832,55 @@ export default function GuidedLaunchPage() {
         }
     }
 
-    async function handleOptimize() {
-        if (!token || !result) return;
-        setPhase("optimizing");
+    /**
+     * The one and only launch. Creates the PipelineRun, freezes the model lock and the canonical
+     * brief, and hands the workspace a runId to read them back from.
+     *
+     * What used to live here — handleOptimize() running a `zero_effort_optimize` pass, and
+     * handleGoToWorkspace() stuffing the result into `sessionStorage` and passing
+     * skipAutoOptimize/preferredProvider/preferredModel as URL parameters — created no
+     * PipelineRun at all. The wizard was therefore still running the legacy pipeline while the
+     * one-click card next to it ran the strict one: two paths for one user action, which is
+     * exactly what AGENTS.md Rule Zero forbids.
+     */
+    async function handleLaunch() {
+        if (!token || !previewedIntake) return;
+        setPhase("launching");
         setGenError(null);
         try {
-            const optimizeRes = await optimizePrompt(token, projectId, {
-                rawPrompt: editedBrief,
-                conversationId: result.conversationId,
-                taskKey: "zero_effort_optimize",
-                provider: pipelineOverride?.provider ?? pipelineConfig?.optimize.provider,
-                model: pipelineOverride?.model ?? pipelineConfig?.optimize.model,
+            const trimmedBrief = editedBrief.trim();
+            const launchResult = await launchWorkspacePipeline(token, projectId, {
+                ...previewedIntake,
+                requestedProviderId: pipelineOverride?.provider,
+                requestedModelId: pipelineOverride?.model,
+                // The canonical brief is already the structured output of the guided flow.
+                // Optimizing it again would rewrite the text whose hash the run certifies.
+                optimizationPolicy: "skip",
+                // Sent only when the user actually changed something, so an untouched brief stays
+                // marked as derived from the intake rather than as a hand-edit.
+                briefOverride: trimmedBrief && trimmedBrief !== previewBriefRef.current.trim()
+                    ? trimmedBrief
+                    : undefined,
             });
-            setOptimizedPrompt(optimizeRes.optimizedPrompt);
-            setEditedOptimizedPrompt(optimizeRes.optimizedPrompt);
-            setPhase("optimized");
+            router.push(
+                `/workspace/${projectId}?conv=${launchResult.conversationId}&pipelineRunId=${encodeURIComponent(launchResult.pipelineRunId)}`,
+            );
         } catch (err) {
-            setGenError(err instanceof Error ? err.message : t("launch.errors.optimizePrompt"));
+            setGenError(err instanceof Error ? err.message : t("launch.errors.startGeneration"));
             setPhase("review");
         }
     }
 
-    function handleGoToWorkspace() {
-        if (!result) return;
-        const finalPrompt = editedOptimizedPrompt || optimizedPrompt;
-        const convId = result.conversationId;
-        // Store the prompt in sessionStorage to avoid URI-length limits.
-        // The workspace page reads and deletes this key on mount.
-        sessionStorage.setItem(`pipeline_handoff_${convId}`, finalPrompt);
-        // This handler only runs after handleOptimize() already ran once on this page (the
-        // manual "review then go to Workspace" path) — the brief has already been through one
-        // optimization pass. Skip the workspace's own auto-optimize-before-first-send so we
-        // don't pay for a second, redundant LLM call, exactly like the automatic AI-prefilled
-        // path in handleProcessProject() already does below.
-        let url = `/workspace/${projectId}?conv=${convId}&skipAutoOptimize=1`;
-        const effectiveProvider = pipelineOverride?.provider ?? pipelineConfig?.vibeGenerate?.provider ?? pipelineConfig?.generate?.provider;
-        const effectiveModel = pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model;
-        if (effectiveProvider) {
-            url += `&preferredProvider=${encodeURIComponent(effectiveProvider)}`;
-        }
-        if (effectiveModel) {
-            url += `&preferredModel=${encodeURIComponent(effectiveModel)}`;
-        }
-        router.push(url);
-    }
-
     /**
-     * Guided Mode one-click flow (from AI prefill card):
-     * 1. launchGuided    → get brief + conversationId
-     * 2. optimizePrompt  → get optimized prompt
-     * 3. navigate        → /workspace with autoPrompt
+     * Guided Mode one-click flow (from the AI prefill card): launch the Workspace pipeline and
+     * hand the workspace the runId. Same single path as the reviewed flow above — this one just
+     * skips the review step because the user asked for one click.
      */
     async function handleProcessProject() {
         if (!token) return;
         setSubmitting(true);
         setError(null);
-        const payload: GuidedLaunchInput = {
-            businessName:   form.businessName,
-            presetId:       form.presetId,
-            primaryGoal:    form.primaryGoal,
-            audience:       form.audience,
-            tone:           form.tone,
-            primaryCta:     form.primaryCta,
-            styleHint:      form.styleHint,
-            sourceRequest: form.sourceRequest || form.primaryGoal,
-            projectSummary: form.projectSummary,
-            contentStructure: form.contentStructure,
-            contentRequirements: form.contentRequirements,
-            functionalRequirements: form.functionalRequirements,
-            interactionModel: form.interactionModel,
-            visualDirection: form.visualDirection,
-            successCriteria: form.successCriteria,
-            constraints: form.constraints,
-            mustAvoid: form.mustAvoid,
-            contactInfo:    form.contactFields
-                .filter((cf) => cf.key.trim() && cf.value.trim())
-                .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
-            styleAttributes: form.styleAttributes,
-            outputLanguage: form.outputLanguage,
-            attachmentNames: attachedFiles,
-        };
+        const payload = buildIntakePayload();
         try {
             // The guided launch has exactly one path: the server-owned Workspace pipeline.
             // It freezes a modelLock and a canonical brief on a real PipelineRun, and the
@@ -951,14 +941,14 @@ export default function GuidedLaunchPage() {
                         <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")}>
                             {t("launch.step4.backToDashboard")}
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => router.push(
-                            result ? `/workspace/${projectId}?conv=${result.conversationId}` : `/workspace/${projectId}`
-                        )}>{t("launch.openWorkspace")}</Button>
+                        <Button size="sm" variant="outline" onClick={() => router.push(`/workspace/${projectId}`)}>
+                            {t("launch.openWorkspace")}
+                        </Button>
                     </div>
                 </div>
 
                 {/* ── AI Prefill review card ── */}
-                {aiPrefilled && !result && (
+                {aiPrefilled && !previewedIntake && (
                     <Card className="border-primary/40 bg-primary/[0.03]">
                         <CardHeader className="pb-3">
                             <div className="flex items-start gap-3">
@@ -1254,20 +1244,14 @@ export default function GuidedLaunchPage() {
                 </Card>
 
                 {/* Automatic generation appears after the API prepares the brief. */}
-                {result && (
-                    <Card ref={step4Ref} className={cn(
-                        "border-primary/40 transition-all",
-                        phase === "optimized" && "border-primary/60",
-                    )}>
+                {previewedIntake && (
+                    <Card ref={step4Ref} className="border-primary/40 transition-all">
                         <CardHeader className="pb-3">
                             <div className="flex items-center gap-3">
-                                <div className={cn(
-                                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                                    phase === "optimized" ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary",
-                                )}>
-                                    {phase === "optimizing" ? <Loader2 className="h-4 w-4 animate-spin" /> :
-                                     phase === "optimized" ? <Check className="h-4 w-4" /> :
-                                     <Sparkles className="h-4 w-4" />}
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                    {phase === "launching"
+                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                        : <Sparkles className="h-4 w-4" />}
                                 </div>
                                 <div className="flex-1">
                                     <CardTitle className="text-base">{t("launch.step4.generationTitle")}</CardTitle>
@@ -1275,8 +1259,8 @@ export default function GuidedLaunchPage() {
                                         {phaseLabel(phase, t)}
                                     </CardDescription>
                                 </div>
-                                <Badge variant={phase === "optimized" ? "success" : "secondary"} className="ml-auto text-xs">
-                                    {phase === "optimized" ? t("launch.step4.promptReady") : `${pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model ?? "MiniMax-M3"}`}
+                                <Badge variant="secondary" className="ml-auto text-xs">
+                                    {pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model ?? "MiniMax-M3"}
                                 </Badge>
                             </div>
                         </CardHeader>
@@ -1284,7 +1268,7 @@ export default function GuidedLaunchPage() {
                         <CardContent className="space-y-4">
 
                             {/* ── Phase: review ── */}
-                            {(phase === "review" || phase === "optimizing") && (
+                            {(phase === "review" || phase === "launching") && (
                                 <>
                                     <div className="space-y-1.5">
                                         <Label className="text-xs text-muted-foreground">
@@ -1304,7 +1288,7 @@ export default function GuidedLaunchPage() {
                                                     fontSize: 13,
                                                     padding: { top: 12 },
                                                     scrollBeyondLastLine: false,
-                                                    readOnly: phase === "optimizing",
+                                                    readOnly: phase === "launching",
                                                 }}
                                             />
                                         </div>
@@ -1321,83 +1305,16 @@ export default function GuidedLaunchPage() {
                                             {t("launch.step4.optimizeHint")}
                                         </p>
                                         <Button
-                                            onClick={handleOptimize}
-                                            disabled={phase === "optimizing" || !editedBrief.trim()}
+                                            onClick={handleLaunch}
+                                            disabled={phase === "launching" || !editedBrief.trim()}
                                             className="gap-2"
                                         >
-                                            {phase === "optimizing" ? (
-                                                <><Loader2 className="h-4 w-4 animate-spin" /> {t("launch.step4.optimizing")}</>
+                                            {phase === "launching" ? (
+                                                <><Loader2 className="h-4 w-4 animate-spin" /> {t("launch.step4.launching")}</>
                                             ) : (
-                                                <><Wand2 className="h-4 w-4" /> {t("launch.step4.startGeneration")}</>
+                                                <><Rocket className="h-4 w-4" /> {t("launch.step4.startGeneration")}</>
                                             )}
                                         </Button>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* ── Phase: optimized ── */}
-                            {phase === "optimized" && (
-                                <>
-                                    <div className="space-y-1.5">
-                                        <div className="flex items-center justify-between">
-                                            <Label className="text-xs text-muted-foreground">
-                                                {t("launch.step4.optimizedPromptLabel")}
-                                            </Label>
-                                            <button
-                                                type="button"
-                                                onClick={() => setPhase("review")}
-                                                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-                                            >
-                                                {t("launch.step4.backToBrief")}
-                                            </button>
-                                        </div>
-                                        <div className="rounded-md border border-border overflow-hidden h-[220px]">
-                                            <MonacoEditor
-                                                height="220px"
-                                                defaultLanguage="markdown"
-                                                value={editedOptimizedPrompt}
-                                                onChange={(val) => setEditedOptimizedPrompt(val ?? "")}
-                                                theme="vs-dark"
-                                                options={{
-                                                    minimap: { enabled: false },
-                                                    wordWrap: "on",
-                                                    lineNumbers: "off",
-                                                    fontSize: 13,
-                                                    padding: { top: 12 },
-                                                    scrollBeyondLastLine: false,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {genError && (
-                                        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                                            {genError}
-                                        </div>
-                                    )}
-
-                                    <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3">
-                                        <div className="flex items-start gap-3">
-                                            <Sparkles className="mt-0.5 h-4 w-4 text-primary shrink-0" />
-                                            <p className="text-xs text-muted-foreground">
-                                                {t("launch.step4.readyPrefix")} <strong className="text-foreground">{t("launch.step4.continueInGuided")}</strong> {t("launch.step4.readySuffix")}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border">
-                                        <Badge variant="outline" className="font-mono text-xs">
-                                            Conv {result.conversationId.slice(0, 8)}
-                                        </Badge>
-                                        <div className="ml-auto flex gap-2">
-                                            <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")}>
-                                                {t("launch.step4.dashboard")}
-                                            </Button>
-                                            <Button size="sm" onClick={handleGoToWorkspace} className="gap-2">
-                                                <Rocket className="h-3.5 w-3.5" />
-                                                {t("launch.step4.continueInGuided")}
-                                            </Button>
-                                        </div>
                                     </div>
                                 </>
                             )}

@@ -366,8 +366,7 @@
         },
         "phase": {
             "review": "Pronto per la generazione",
-            "optimizing": "Ottimizzazione prompt...",
-            "optimized": "Prompt ottimizzato — continua in Guided Mode per generare"
+            "launching": "Creo la run e apro il workspace…"
         },
         "brief": {
             "title": "BRIEF DI PROGETTO — {{brand}}",
@@ -464,7 +463,8 @@
             "readySuffix": "per generare il sito con salvataggio completo dell'artefatto, preview e strumenti di modifica.",
             "dashboard": "Dashboard",
             "backToDashboard": "Torna alla dashboard",
-            "continueInWorkspace": "Continua nel workspace"
+            "continueInWorkspace": "Continua nel workspace",
+            "launching": "Avvio…"
         },
         "workspaceModeBadge": "Workspace",
         "openWorkspace": "Apri Workspace",

@@ -46,7 +46,9 @@ class MemoryPreviewSnapshotRepository {
         return this.snapshots.find((snapshot) => snapshot.id === snapshotId) ?? null;
     });
     getActive = vi.fn();
-    getActiveForProject = vi.fn();
+    getActiveForProject = vi.fn(async (_projectId: string) => {
+        return this.snapshots.find((snapshot) => snapshot.isActive) ?? null;
+    });
     deleteById = vi.fn();
     updateThumbnailPath = vi.fn();
     getActiveForProjects = vi.fn();
@@ -223,5 +225,57 @@ describe("Preview snapshot media resolution guardrails", () => {
             snapshotId: "snapshot-1",
         })).rejects.toThrow("Cannot activate preview snapshot with unresolved media placeholders");
         expect(repository.activate).not.toHaveBeenCalled();
+    });
+});
+
+describe("CreatePreviewSnapshot — version chain", () => {
+    function makeUseCase() {
+        const repo = new MemoryPreviewSnapshotRepository();
+        return { repo, useCase: new CreatePreviewSnapshot(repo as never) };
+    }
+
+    const artifacts = { html: "<p>hi</p>", css: "", js: "" };
+
+    it("continues from the active snapshot when the caller omits a parent", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const first = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        });
+        // Manual editor saves (Monaco, WYSIWYG degraded mode) send no parentSnapshotId. Before
+        // the server defaulted it, each one started a fresh root and the history collapsed to a
+        // single visible version.
+        const second = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        });
+
+        expect(first.parentSnapshotId).toBeUndefined();
+        expect(second.parentSnapshotId).toBe(first.id);
+        expect(repo.snapshots).toHaveLength(2);
+    });
+
+    it("keeps an explicit parent, so restoring an older version branches from THAT one", async () => {
+        const { useCase } = makeUseCase();
+
+        const root = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        });
+        const branch = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: root.id,
+        });
+
+        expect(branch.parentSnapshotId).toBe(root.id);
+    });
+
+    it("does not invent a parent that no longer exists", async () => {
+        const { useCase } = makeUseCase();
+
+        const orphan = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: "deleted-snapshot",
+        });
+
+        expect(orphan.parentSnapshotId).toBeUndefined();
     });
 });

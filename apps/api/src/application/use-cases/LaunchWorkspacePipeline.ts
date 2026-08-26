@@ -85,13 +85,20 @@ export class LaunchWorkspacePipeline {
             },
         });
 
-        const brief = buildCanonicalGenerationBrief(input.intake);
+        // The wizard lets the user edit the brief before launching. When they did, THAT text is
+        // what the workspace will send, so it is what the run has to certify — re-deriving the
+        // brief from the intake here would freeze a hash for text nobody ever sends.
+        const brief = buildCanonicalGenerationBrief(input.intake, input.intake.briefOverride);
         const finalRun = await this.pipelineRunRepository.attachCanonicalBrief(run.id, brief);
 
         tracePipeline({
             runId: finalRun.id,
             step: "canonical-brief",
-            detail: { chars: brief.content.length, hash: brief.contentHash.slice(0, 16), provenance: brief.provenance?.join("+") },
+            detail: {
+                chars: brief.content.length,
+                hash: brief.contentHash.slice(0, 16),
+                provenance: brief.provenance?.join("+"),
+            },
         });
 
         return {

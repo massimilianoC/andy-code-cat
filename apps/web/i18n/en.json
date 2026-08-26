@@ -366,8 +366,7 @@
         },
         "phase": {
             "review": "Ready for generation",
-            "optimizing": "Optimizing prompt...",
-            "optimized": "Prompt optimized — continue in Guided Mode to generate"
+            "launching": "Creating the run and opening the workspace…"
         },
         "brief": {
             "title": "PROJECT BRIEF — {{brand}}",
@@ -464,7 +463,8 @@
             "readySuffix": "to generate the site with complete artifact saving, preview, and editing tools.",
             "dashboard": "Dashboard",
             "backToDashboard": "Back to dashboard",
-            "continueInWorkspace": "Continue in workspace"
+            "continueInWorkspace": "Continue in workspace",
+            "launching": "Launching…"
         },
         "workspaceModeBadge": "Workspace",
         "openWorkspace": "Open Workspace",

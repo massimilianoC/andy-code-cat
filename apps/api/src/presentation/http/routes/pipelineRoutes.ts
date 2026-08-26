@@ -5,12 +5,14 @@ import {
     guidedLaunchSchema,
     type GenerationWorkspaceDto,
     launchWorkspacePipelineSchema,
+    previewCanonicalBriefSchema,
     type LaunchWorkspacePipelineResultDto,
 } from "@andy-code-cat/contracts";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import type { RequestWithContext } from "../types";
 import { env } from "../../../config";
+import { buildCanonicalGenerationBrief } from "../../../application/prompting/buildCanonicalGenerationBrief";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
 import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
@@ -273,6 +275,30 @@ export function createPipelineRoutes(): Router {
                 };
 
                 res.status(201).json(response);
+            } catch (error) {
+                next(error);
+            }
+        },
+    );
+
+    /**
+     * Side-effect-free preview of the canonical brief.
+     *
+     * The guided wizard needs to show the brief for review before the user commits. It used to
+     * get that text from POST /pipelines/guided, which creates a conversation and a workspace as
+     * a side effect — so every abandoned wizard left an empty conversation behind, and the brief
+     * the user reviewed belonged to a launch that had already happened. This returns the same
+     * text from the same single builder and writes nothing; the launch happens once, when the
+     * user actually presses the button.
+     */
+    router.post(
+        "/projects/:projectId/pipeline/brief-preview",
+        sandboxMiddleware,
+        async (req: RequestWithContext, res: Response, next: NextFunction) => {
+            try {
+                const intake = previewCanonicalBriefSchema.parse(req.body);
+                const brief = buildCanonicalGenerationBrief(intake);
+                res.status(200).json({ brief });
             } catch (error) {
                 next(error);
             }

@@ -19,7 +19,28 @@ import { PRESET_MAP } from "../../domain/entities/ProjectPreset";
  * was kept because it is what was ALREADY being persisted server-side (the client's localized
  * version was only ever shown for editing, never actually the source of truth for anything else).
  */
-export function buildCanonicalGenerationBrief(input: GuidedLaunchInput): CanonicalBriefEnvelope {
+export function buildCanonicalGenerationBrief(
+    input: GuidedLaunchInput,
+    /**
+     * Verbatim brief text supplied by the user, replacing the derived one. Still returned as a
+     * full envelope — hashed, timestamped, and marked `USER_EDITED` in `provenance` so a reader
+     * can tell a hand-edited brief from a derived one. `sourceFields` keeps the intake either
+     * way, so the derivation that produced the text the user started from is not lost.
+     */
+    briefOverride?: string,
+): CanonicalBriefEnvelope {
+    if (briefOverride?.trim()) {
+        const content = briefOverride.trim();
+        return {
+            schemaVersion: "canonical-brief-v1",
+            content,
+            contentHash: createHash("sha256").update(content).digest("hex"),
+            provenance: ["USER_EDITED"],
+            sourceFields: { ...input },
+            builtAt: new Date().toISOString(),
+        };
+    }
+
     const preset = PRESET_MAP.get(input.presetId);
     const siteLabel = preset?.labelEn ?? preset?.label ?? input.presetId;
     const outputLanguage = input.outputLanguage ?? "en";

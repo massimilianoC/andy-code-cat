@@ -41,11 +41,21 @@ export class CreatePreviewSnapshot {
             }
         }
 
-        const parentSnapshot = input.parentSnapshotId
-            ? await this.previewSnapshotRepository.findById(input.projectId, input.parentSnapshotId)
+        // The version chain is a server invariant, not something every caller has to remember.
+        // A snapshot created without an explicit parent continues from whatever is active — that
+        // is what "save this as a new version" means. Three client call sites (the Monaco save,
+        // the WYSIWYG degraded commit, the focused-edit fallback) omitted the parent and each
+        // silently started a second root, which is what made the history look like a single v1
+        // that kept being overwritten.
+        const parentSnapshotId = input.parentSnapshotId
+            ?? (await this.previewSnapshotRepository.getActiveForProject(input.projectId))?.id;
+        const parentSnapshot = parentSnapshotId
+            ? await this.previewSnapshotRepository.findById(input.projectId, parentSnapshotId)
             : null;
         const snapshot = await this.previewSnapshotRepository.create({
             ...input,
+            // Never parent a snapshot to itself, and never invent a parent that no longer exists.
+            parentSnapshotId: parentSnapshot?.id,
             // Focused edits and WYSIWYG commits do not regenerate a manifest. Preserve the
             // explicitly selected parent definition rather than silently dropping forms.
             serviceManifest: input.serviceManifest ?? parentSnapshot?.serviceManifest,
