@@ -25,7 +25,9 @@ export const PIPELINE_STEPS = [
 export type PipelineStep = (typeof PIPELINE_STEPS)[number];
 
 function shortId(value: string | undefined): string {
-    if (!value) return "--------";
+    // A run-less request (a plain chat turn) still has to be groupable, so callers pass the
+    // project as a last resort. Only a caller with none of the three gets the placeholder.
+    if (!value) return "no-key--";
     return value.length <= 8 ? value : value.slice(0, 8);
 }
 
@@ -70,11 +72,12 @@ export function tracePipeline(input: {
 export function tracePromptLayers(input: {
     runId?: string;
     conversationId?: string;
+    projectId?: string;
     layers: ReadonlyArray<{ id: string; chars: number; source: string }>;
     totalChars: number;
 }): void {
     try {
-        const key = shortId(input.runId ?? input.conversationId);
+        const key = shortId(input.runId ?? input.conversationId ?? input.projectId);
         const present = input.layers.filter((layer) => layer.chars > 0);
         const skipped = input.layers.filter((layer) => layer.chars === 0).map((layer) => layer.id);
         const breakdown = present.map((layer) => `${layer.id}:${layer.chars}`).join(" ");

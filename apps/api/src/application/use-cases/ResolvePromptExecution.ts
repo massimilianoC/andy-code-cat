@@ -372,6 +372,7 @@ export class ResolvePromptExecution {
         // Rule Zero: the composed prompt must be reconstructable from the log alone.
         tracePromptLayers({
             runId: input.pipelineRunId,
+            projectId: input.projectId,
 
             layers: composedLayers.layers,
             totalChars: systemPrompt.length,

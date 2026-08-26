@@ -52,13 +52,6 @@ export class LaunchWorkspacePipeline {
             intake: input.intake,
         });
 
-        tracePipeline({
-            projectId: input.projectId,
-            conversationId: launched.conversationId,
-            step: "launch",
-            detail: { entryMode: "workspace", presetId: input.intake.presetId, conversationId: launched.conversationId },
-        });
-
         const run = await this.resolvePipelineModelLock.createRun({
             projectId: input.projectId,
             ownerUserId: input.userId,
@@ -67,6 +60,19 @@ export class LaunchWorkspacePipeline {
             requestedProviderId: input.intake.requestedProviderId,
             requestedModelId: input.intake.requestedModelId,
             optimizationPolicy: input.intake.optimizationPolicy,
+        });
+
+        // Emitted after createRun so it carries the runId: every line of one generation must share
+        // the same key, or grepping it returns a partial story — which is the failure this trace exists to prevent.
+        tracePipeline({
+            runId: run.id,
+            step: "launch",
+            detail: {
+                entryMode: "workspace",
+                presetId: input.intake.presetId,
+                projectId: input.projectId,
+                conversationId: launched.conversationId,
+            },
         });
 
         tracePipeline({
