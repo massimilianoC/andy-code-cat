@@ -171,6 +171,12 @@ export interface OptimizePromptInput {
     taskKey?: string;
     /** I15 of the SSOT program — see LlmChatInput.pipelineRunId. */
     pipelineRunId?: string;
+    /**
+     * "follow-up" for any turn after the first artifact exists: the optimizer then clarifies the
+     * user's instruction instead of rebuilding the project brief around it. Defaults server-side
+     * to "initial".
+     */
+    optimizeMode?: "initial" | "follow-up";
 }
 
 export interface OptimizePromptResult {

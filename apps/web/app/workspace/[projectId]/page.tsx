@@ -598,6 +598,19 @@ function WorkspacePageContent() {
         void getPipelineRun(authToken, projectId, runId)
             .then(({ run }) => {
                 if (cancelled) return;
+                // The run's optimizationPolicy is authoritative — the workspace must not decide
+                // this for itself. "skip" means the brief arriving here IS the optimized artifact
+                // of the guided flow: re-optimizing it rewrites the very text whose contentHash
+                // is frozen on the run, so what reaches the model stops matching the run's own
+                // record of what was supposed to reach it.
+                //
+                // Written to the ref (not just state) because this runs inside an async .then():
+                // the auto-send below reads it during the same tick and would otherwise still see
+                // the mount-time default of "optimize".
+                if (run.optimizationPolicy === "skip") {
+                    autoOptimizeSuppressedByHandoffRef.current = true;
+                    setAutoOptimize(false);
+                }
                 if (run.canonicalBrief?.content) {
                     setPrompt(run.canonicalBrief.content);
                     setAutoPromptPending(true);
@@ -1932,7 +1945,9 @@ function WorkspacePageContent() {
         if (!content || !token || sending || conversationLoading || optimizingPrompt) return;
 
         // Auto-optimize pipeline: run optimizer first, then send with the result.
-        if (autoOptimize) {
+        // The ref wins over the state: a handoff that arrives asynchronously (the I15 run fetch)
+        // sets it after this component has already rendered with autoOptimize = true.
+        if (autoOptimize && !autoOptimizeSuppressedByHandoffRef.current) {
             const optimized = await runOptimizeAsync(content);
             if (optimized === null) return; // aborted or failed — don't send
             content = optimized;
@@ -2504,6 +2519,14 @@ function WorkspacePageContent() {
     async function runOptimizeAsync(original: string): Promise<string | null> {
         if (!token || !original || optimizingPrompt || conversationLoading) return null;
 
+        // An empty conversation means this is the opening brief and the optimizer should enrich
+        // it with the full project context. Anything else is a revision instruction: the history
+        // and the system prompt layers already carry that context on every send, so enriching it
+        // again here turns "add some text, the contrast is poor" into a fresh project brief and
+        // the user's actual request never reaches the model.
+        const optimizeMode: "initial" | "follow-up" =
+            (activeConv?.messages.length ?? 0) > 0 ? "follow-up" : "initial";
+
         let trackedConversationId: string | null = activeConvId;
         let trackedUserMessageId: string | null = null;
         const notifId = addNotification({
@@ -2558,6 +2581,7 @@ function WorkspacePageContent() {
                     provider: selectedProvider || undefined,
                     model: selectedModel || undefined,
                     pipelineRunId: pipelineRunIdRef.current || undefined,
+                    optimizeMode,
                 },
                 (event) => {
                     if (event.type === "thinking") { setThinkingText((prev) => prev + event.content); return; }

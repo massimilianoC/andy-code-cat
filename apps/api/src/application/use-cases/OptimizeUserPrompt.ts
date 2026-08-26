@@ -345,6 +345,7 @@ export class OptimizeUserPrompt {
         model?: string;
         taskKey?: string;
         pipelineRunId?: string;
+        optimizeMode?: "initial" | "follow-up";
     }): Promise<{ context: PreparedExecutionContext } | { skippedResult: OptimizePromptResponse }> {
         const project = await this.projectRepository.findByIdForUser(input.projectId, input.userId);
         if (!project) {
@@ -393,7 +394,13 @@ export class OptimizeUserPrompt {
             });
         }
 
-        const layerDContext = env.enrichmentInjectLayerD && this.storage
+        // Follow-up mode discards this block anyway (see buildOptimizeUserPromptRequest), and
+        // building it costs a storage round-trip per asset plus a wait on pending enrichment —
+        // pure latency on a turn that is supposed to feel immediate.
+        const isFollowUp = input.optimizeMode === "follow-up";
+        const layerDContext = isFollowUp
+            ? ""
+            : env.enrichmentInjectLayerD && this.storage
             ? (await buildProjectLayerDContext({
                 assetRepository: this.assetRepository,
                 storage: this.storage,
@@ -421,6 +428,7 @@ export class OptimizeUserPrompt {
             assets: selectedAssets,
             taskSettings,
             layerDContext: layerDContext || undefined,
+            mode: input.optimizeMode,
         });
 
         const messages: Array<{ role: "system" | "user"; content: string }> = [
@@ -561,6 +569,7 @@ export class OptimizeUserPrompt {
         model?: string;
         taskKey?: string;
         pipelineRunId?: string;
+        optimizeMode?: "initial" | "follow-up";
     }): Promise<OptimizePromptResponse> {
         const startedAt = Date.now();
         let preparedContext: PreparedExecutionContext | undefined;
@@ -655,6 +664,7 @@ export class OptimizeUserPrompt {
         model?: string;
         taskKey?: string;
         pipelineRunId?: string;
+        optimizeMode?: "initial" | "follow-up";
     }, handlers?: {
         onThinking?: (chunk: string) => void;
         onAnswer?: (chunk: string) => void;
