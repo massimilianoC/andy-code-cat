@@ -238,8 +238,8 @@ Every live provider call bills the account owner. Agents do not get to decide ho
 spent.
 
 1. **Only models listed in `tests/config/authorized-test-models.json` may be called without
-   asking.** Prefer a `:free` tier when the provider offers one; the ceiling is USD 0.50 per 1M
-   input tokens.
+   asking.** Do not substitute an OpenRouter `:free` variant to save money — they are excluded
+   because they do not work reliably. The ceiling is USD 1.50 per 1M input tokens.
 2. **Anything above that ceiling requires the owner's explicit approval, per run** — including a
    single probe, and including "just to compare quality against a better model".
 3. **Model quality is never a reason to reach for a premium model in a test.** If a test only

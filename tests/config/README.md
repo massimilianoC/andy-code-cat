@@ -15,11 +15,13 @@ call to make.
 
 ## Choosing a model
 
-1. Prefer a `:free` entry when the provider offers one.
-2. Otherwise take the cheapest entry that exercises what you are testing.
-3. Ceiling is `policy.maxPriceInputUsdPerM` (USD 0.50 per 1M input tokens). Above that: ask.
+1. **Do not use OpenRouter `:free` variants.** They do not work reliably, so "it was free" is not a
+   defence for a flaky or misleading test result. They are excluded on purpose, not by oversight.
+2. Take the cheapest allow-listed entry that exercises what you are testing.
+3. Ceiling is `policy.maxPriceInputUsdPerM` (USD 1.50 per 1M input tokens), set by the account
+   owner. Above that: ask.
 
-Model *quality* is not a reason to reach for a premium model in a test. If a test only passes on a
+Model *quality* is not a reason to reach for a model outside the list. If a test only passes on a
 frontier model, the test is measuring the model, not the code.
 
 ## For local models (LM Studio)

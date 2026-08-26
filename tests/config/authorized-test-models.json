@@ -4,34 +4,39 @@
     "Live tests spend the account owner's money. Anything not listed here requires explicit",
     "authorization from the account owner BEFORE the call, per test run — no exceptions for",
     "'just one probe' or 'to compare quality'.",
-    "Owner-authorized on 2026-08-26. Prices are USD per 1M input tokens, from the live catalog.",
-    "See tests/config/README.md."
+    "This list was chosen by the account owner on 2026-08-26, not derived from price alone.",
+    "Prices are USD per 1M input tokens, read from the live catalog. See tests/config/README.md."
   ],
   "policy": {
-    "maxPriceInputUsdPerM": 0.5,
-    "preferFreeTierWhenAvailable": true,
+    "maxPriceInputUsdPerM": 1.5,
+    "maxPriceSetBy": "account owner, 2026-08-26 — covers GLM 5.3 at 1.40",
+    "useFreeTiers": false,
+    "useFreeTiersReason": "OpenRouter ':free' variants do not work reliably — owner instruction, 2026-08-26",
     "requireExplicitApprovalAbovePolicy": true
   },
   "allowed": [
-    { "provider": "openrouter",  "model": "minimax/minimax-m3:free",            "priceInputUsdPerM": 0,     "note": "first choice — free tier" },
-    { "provider": "openrouter",  "model": "z-ai/glm-5.2:free",                  "priceInputUsdPerM": 0,     "note": "first choice — free tier" },
-    { "provider": "openrouter",  "model": "google/gemma-4-26b-a4b-it:free",     "priceInputUsdPerM": 0,     "note": "first choice — free tier" },
-    { "provider": "openrouter",  "model": "google/gemma-4-26b-a4b-it",          "priceInputUsdPerM": 0.07 },
-    { "provider": "openrouter",  "model": "z-ai/glm-5.3-flash",                 "priceInputUsdPerM": 0.075 },
-    { "provider": "openrouter",  "model": "minimax/minimax-m3",                 "priceInputUsdPerM": 0.3 },
-    { "provider": "openrouter",  "model": "qwen/qwen3.8-27b",                   "priceInputUsdPerM": 0.425 },
+    { "provider": "openrouter",  "model": "google/gemma-4-31b-it",     "priceInputUsdPerM": 0.09,  "note": "owner's preference among the Gemma variants" },
+    { "provider": "openrouter",  "model": "google/gemma-4-26b-a4b-it", "priceInputUsdPerM": 0.07 },
+    { "provider": "openrouter",  "model": "minimax/minimax-m3",        "priceInputUsdPerM": 0.3 },
+    { "provider": "openrouter",  "model": "qwen/qwen3.8-27b",          "priceInputUsdPerM": 0.425 },
+    { "provider": "openrouter",  "model": "z-ai/glm-5.2",              "priceInputUsdPerM": 1.19 },
+    { "provider": "openrouter",  "model": "z-ai/glm-5.3",              "priceInputUsdPerM": 1.4 },
+
+    { "provider": "siliconflow", "model": "google/gemma-4-31B-it",     "priceInputUsdPerM": 0.1 },
+    { "provider": "siliconflow", "model": "google/gemma-4-26B-A4B-it", "priceInputUsdPerM": 0.07 },
     { "provider": "siliconflow", "model": "MiniMaxAI/MiniMax-M3" },
     { "provider": "siliconflow", "model": "zai-org/GLM-5.2" },
-    { "provider": "siliconflow", "model": "google/gemma-4-26B-A4B-it",          "priceInputUsdPerM": 0.07 },
-    { "provider": "siliconflow", "model": "google/gemma-4-31B-it",              "priceInputUsdPerM": 0.1 },
-    { "provider": "lmstudio",    "model": "*",                                  "note": "local — no metered cost; only models LM Studio reports as loaded" }
+    { "provider": "siliconflow", "model": "zai-org/GLM-5.3" },
+
+    { "provider": "lmstudio",    "model": "*", "note": "local — no metered cost; only models LM Studio reports as loaded" }
   ],
-  "forbiddenExamples": [
-    { "model": "anthropic/claude-opus-5",   "reason": "premium tier — spent EUR 0.0882 in one unauthorized probe on 2026-08-26" },
-    { "model": "x-ai/grok-4.6",             "reason": "premium tier — spent EUR 0.0779 in one unauthorized probe on 2026-08-26" },
-    { "model": "qwen/qwen3.8-max",          "reason": "premium tier, USD 2.00 per 1M input tokens" },
-    { "model": "qwen/qwen3.8-2.4t-a95b",    "reason": "premium tier, USD 2.00 per 1M input tokens" },
-    { "model": "z-ai/glm-5.3",              "reason": "USD 1.40 per 1M input tokens — above policy ceiling" },
-    { "model": "deepseek-ai/DeepSeek-V4-Pro", "reason": "premium tier" }
+  "excluded": [
+    { "model": "*:free",                      "reason": "OpenRouter free tiers do not work reliably — owner instruction, do not fall back to them to save money" },
+    { "model": "z-ai/glm-5.3-flash",          "reason": "owner prefers the full GLM 5.3 over the flash variant" },
+    { "model": "anthropic/claude-opus-5",     "reason": "premium tier — EUR 0.0882 spent in one unauthorized probe on 2026-08-26" },
+    { "model": "x-ai/grok-4.6",               "reason": "premium tier — EUR 0.0779 spent in one unauthorized probe on 2026-08-26" },
+    { "model": "qwen/qwen3.8-max",            "reason": "USD 2.00 per 1M input tokens" },
+    { "model": "qwen/qwen3.8-2.4t-a95b",      "reason": "USD 2.00 per 1M input tokens" },
+    { "model": "deepseek-ai/DeepSeek-V4-Pro", "reason": "premium tier — EUR 0.0181 spent in one unauthorized probe on 2026-08-26" }
   ]
 }
