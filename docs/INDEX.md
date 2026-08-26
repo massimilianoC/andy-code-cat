@@ -92,6 +92,7 @@ Read in this order before making changes:
 | [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
 | [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | ⚠️ Partially historical PrepromptEngine reference; live prompt composition follows the registry/SSOT documentation |
 | [docs/specs/PROMPT_LAYER_SSOT_SPEC.md](specs/PROMPT_LAYER_SSOT_SPEC.md) | Prompt Layer SSOT — canonical layer registry, MongoDB override chain, self-describing markers, persisted trace, 1:1 superadmin/sent/stored/displayed correspondence |
+| [docs/specs/PROMPT_LAYER_COMPACTION_SPEC.md](specs/PROMPT_LAYER_COMPACTION_SPEC.md) | ⏸️ Specified, not implemented — Layer K context compaction: binary threshold on the composed system prompt, contract/evidence layers preserved, deferred with measured evidence |
 | [docs/specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md](specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md) | Historical implementation record for the first Prompt Layer SSOT wave; **not** an executable plan for new work |
 | [docs/specs/WORKFLOWS.md](specs/WORKFLOWS.md) | Automated workflow definitions WF-01 to WF-10 |
 | [docs/specs/UX_SPEC.md](specs/UX_SPEC.md) | End-to-end UX and product screen map |
