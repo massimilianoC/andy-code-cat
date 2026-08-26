@@ -19,6 +19,49 @@ Architecture goals:
 - modern and proven design patterns
 - single source of truth for contracts and docs
 
+## Rule Zero — One Path, Always
+
+**This project exists to make one thing knowable: exactly what is sent to the LLM to produce a
+given result.** Everything else is secondary. A change that improves performance, safety, or
+rollback while making the executed path harder to identify is a regression, no matter what it
+optimizes.
+
+Therefore:
+
+1. **There is exactly one execution path for a given user action.** No feature flag, environment
+   variable, build argument, or config value may select between two implementations of the same
+   behaviour. If a second implementation exists, one of them is dead code and must be deleted in
+   the same change.
+2. **Do not add a flag to protect a deployment.** This system is alpha; a broken alpha is
+   recoverable, an unknowable pipeline is not. The correct protections are tests, a revert, and a
+   redeploy — not a parallel path that nobody exercises.
+3. **"Behind a flag, default off" is not a safe way to ship.** It guarantees the code under
+   development is not the code being run, which is strictly worse than not shipping it.
+4. **Migration means replacing, not coexisting.** When a new path lands, the old one is removed in
+   the same change. A deprecation that leaves both live is not a deprecation.
+5. **Every stage of the prompt pipeline must be traceable after the fact**, from a stored record or
+   a sequential log, without re-running anything. If you cannot reconstruct which layers were
+   composed, which model was chosen and why, and what text reached the provider, the change is not
+   finished.
+6. **Never fail silently.** A fallback that returns a plausible result without recording that it
+   fell back is forbidden. Log the reason, the provider's answer, and surface it to the caller.
+
+### Why this rule is written this way
+
+It was violated repeatedly by agent-driven development, always with a defensible-sounding local
+reason: protecting production, keeping a rollback lever, staging a cutover. The cumulative result
+was several hidden pipelines where nobody could say which one produced a given output.
+
+The concrete case that produced this rule: `NEXT_PUBLIC_PIPELINE_RUN_UI` selected between a legacy
+launch and the server-owned pipeline. Because Next inlines `NEXT_PUBLIC_*` at build time while
+compose resolved the value from `env_file` (runtime only), the shipped bundle had the flag off
+while the running container reported it on. For a full day, UI testing exercised the legacy path
+and API testing exercised the strict one, and the code being developed was not the code being
+used. The flag intended to protect the deploy is what made the system unknowable.
+
+**Treat this rule as absolute. Do not weigh it against convenience, risk appetite, or delivery
+pressure, and do not ask for an exception — there isn't one.**
+
 ## Non-Negotiable Rules
 
 1. Never bypass security middleware in protected routes.
@@ -27,6 +70,7 @@ Architecture goals:
 4. Never introduce project logic without user + project sandbox checks.
 5. Never hardcode secrets in code.
 6. Never break workspace contract paths without updating docs index.
+7. Never introduce a second execution path for an existing behaviour — see Rule Zero.
 
 ## Source Of Truth
 

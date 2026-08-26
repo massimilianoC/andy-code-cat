@@ -32,6 +32,7 @@ import { buildOutputBudgetPolicy } from "../llm/llmMessageBuilder";
 import { dedupeModelsById, resolveComposerCascade } from "../llm/catalogModels";
 import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../documents/projectLayerDContext";
 import { env } from "../../config";
+import { tracePromptLayers } from "../services/PipelineTrace";
 
 /**
  * I10 of the SSOT program (see docs/SSOT_REFACTOR_PROGRESS.md) — extracted verbatim (pure move,
@@ -367,6 +368,14 @@ export class ResolvePromptExecution {
             sources: layerSources,
         });
         const systemPrompt = composedLayers.composed;
+
+        // Rule Zero: the composed prompt must be reconstructable from the log alone.
+        tracePromptLayers({
+            runId: input.pipelineRunId,
+
+            layers: composedLayers.layers,
+            totalChars: systemPrompt.length,
+        });
 
         // For openai-compatible providers with an explicit model request, trust the
         // requested id directly. The catalog is already live-hydrated (GetLlmCatalog →

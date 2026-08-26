@@ -7,6 +7,7 @@ import { resolveModelSelection } from "../llm/modelSelection";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
 import { HttpError } from "../../presentation/http/errors/httpError";
 import { notifyPipelineRunBlocked } from "../llm/pipelineRunNotifications";
+import { tracePipeline } from "../services/PipelineTrace";
 
 const FALLBACK_PROVIDER = "siliconflow";
 const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
@@ -162,9 +163,28 @@ export class ResolvePipelineModelLock {
                 code: blocked.code,
                 stage: blocked.stage,
             });
+            tracePipeline({
+                runId: run.id,
+                step: "dispatch",
+                detail: {
+                    stage: input.stage,
+                    outcome: "BLOCKED",
+                    code: blocked.code,
+                    locked: `${run.modelLock.effective.providerId}/${run.modelLock.effective.modelId}`,
+                },
+            });
             return { run: blockedRun, blocked };
         }
 
+        tracePipeline({
+            runId: run.id,
+            step: "dispatch",
+            detail: {
+                stage: input.stage,
+                outcome: "ok",
+                locked: `${run.modelLock.effective.providerId}/${run.modelLock.effective.modelId}`,
+            },
+        });
         return { run, blocked: null };
     }
 }
