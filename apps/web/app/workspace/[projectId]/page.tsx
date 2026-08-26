@@ -73,6 +73,7 @@ import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { buildPreviewDoc } from "@/lib/preview/buildPreviewDoc";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import PromptLayersView from "@/components/PromptLayersView";
+import PromptTranscriptView from "@/components/PromptTranscriptView";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
 import { DidacticPanel } from "../../../components/didactic/DidacticPanel";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
@@ -3075,37 +3076,19 @@ function WorkspacePageContent() {
                             layers={lastSentTrace.layers ?? []}
                             defaultRaw={!lastSentTrace.layers?.length}
                         />
-                        {/* I16: render every non-system message in the trace (user AND assistant
-                            history turns), not just role:user — a multi-turn conversation's
-                            prior assistant replies are part of what was actually sent to the
-                            LLM and were being silently dropped from this view before. */}
-                        {lastSentMessages
-                            .filter((msg) => msg.role === "user" || msg.role === "assistant")
-                            .map((msg, i) => (
-                                <div key={`sent-msg-${i}`} style={{ marginTop: "1rem" }}>
-                                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: msg.role === "assistant" ? "#a78bfa" : "#7dd3fc", marginBottom: "0.35rem" }}>
-                                        {msg.role === "assistant"
-                                            ? t("workspace.ui.promptPanelAssistantMessage", "Messaggio assistant (cronologia)")
-                                            : t("workspace.ui.promptPanelUserMessage", "Messaggio utente")}
-                                    </div>
-                                    <pre
-                                        style={{
-                                            margin: 0,
-                                            padding: "0.75rem 1rem",
-                                            background: "#080e1a",
-                                            color: "#94a3b8",
-                                            fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                                            fontSize: "0.78rem",
-                                            lineHeight: 1.65,
-                                            whiteSpace: "pre-wrap",
-                                            wordBreak: "break-word",
-                                            overflowX: "auto",
-                                        }}
-                                    >
-                                        {msg.content}
-                                    </pre>
-                                </div>
-                            ))}
+                        {/* I16: every non-system message in the trace (user AND assistant history
+                            turns), not just role:user — prior assistant replies are part of what
+                            was actually sent and were being dropped from this view before.
+                            Folded: once an artifact exists each turn carries the full generated
+                            markup, which used to bury the conversation under thousands of lines. */}
+                        <PromptTranscriptView
+                            messages={lastSentMessages}
+                            labels={{
+                                user: t("workspace.ui.promptPanelUserMessage", "Messaggio utente"),
+                                assistant: t("workspace.ui.promptPanelAssistantMessage", "Messaggio assistant (cronologia)"),
+                                system: "System",
+                            }}
+                        />
                     </>
                 ) : promptPreview ? (
                     <>
