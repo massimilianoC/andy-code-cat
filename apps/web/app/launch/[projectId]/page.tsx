@@ -902,7 +902,13 @@ export default function GuidedLaunchPage() {
                     ...payload,
                     requestedProviderId: pipelineOverride?.provider,
                     requestedModelId: pipelineOverride?.model,
-                    optimizationPolicy: "enabled",
+                    // "skip", not "enabled": the canonical brief this run freezes is already the
+                    // structured, enriched output of the guided flow. Optimizing it again in the
+                    // workspace was the legacy path's job precisely because the legacy path had
+                    // no canonical brief — here it would rewrite the text the run's contentHash
+                    // certifies. The legacy branch below still optimizes, and still sends
+                    // skipAutoOptimize=1 so the workspace does not do it a second time.
+                    optimizationPolicy: "skip",
                 });
                 router.push(
                     `/workspace/${projectId}?conv=${launchResult.conversationId}&pipelineRunId=${encodeURIComponent(launchResult.pipelineRunId)}`,

@@ -133,6 +133,20 @@ export const optimizePromptSchema = z.object({
      * Omitted: 100% unchanged legacy behavior.
      */
     pipelineRunId: z.string().min(1).max(120).optional(),
+    /**
+     * What kind of text is being optimized — the two cases need opposite amounts of context.
+     *
+     * "initial"   — an opening project brief. Enrich it with the full project context (moodboard,
+     *               style profile, document knowledge): nothing else has established that context yet.
+     *
+     * "follow-up" — a revision instruction inside a conversation that already produced an artifact.
+     *               The chat history and the system prompt re-inject the project context on every
+     *               send, so doing it here too makes the optimizer restate the whole brief and
+     *               discard what the user actually asked for. Expand the instruction's wording only.
+     *
+     * Defaults to "initial" so existing callers keep their exact behavior.
+     */
+    optimizeMode: z.enum(["initial", "follow-up"]).default("initial"),
 });
 
 export type LlmChatPreviewInput = z.infer<typeof llmChatPreviewSchema>;

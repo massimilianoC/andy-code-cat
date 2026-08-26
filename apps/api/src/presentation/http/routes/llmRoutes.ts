@@ -379,6 +379,7 @@ export function createLlmRoutes(): Router {
                 model: body.model,
                 taskKey: body.taskKey,
                 pipelineRunId: body.pipelineRunId,
+                optimizeMode: body.optimizeMode,
             });
 
             ExecutionLogger.instance.emit({
@@ -442,6 +443,7 @@ export function createLlmRoutes(): Router {
                 model: body.model,
                 taskKey: body.taskKey,
                 pipelineRunId: body.pipelineRunId,
+                optimizeMode: body.optimizeMode,
             }, {
                 onThinking: (chunk) => sendSse(res, { type: "thinking", content: String(chunk) }),
                 onAnswer: (chunk) => sendSse(res, { type: "answer", content: String(chunk) }),
