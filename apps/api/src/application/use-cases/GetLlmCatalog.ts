@@ -36,7 +36,17 @@ export class GetLlmCatalog {
             if (mongoProviders.length > 0) {
                 return {
                     source: "mongo" as const,
-                    providers: mongoProviders,
+                    // A local provider's address is deployment configuration, not catalog
+                    // content. The persisted record here held a LAN IP that the API container
+                    // could not reach (the machine had moved behind Docker), so every discovery
+                    // and every dispatch to LM Studio timed out — invisibly, because the catalog
+                    // then served the seeded placeholder model as if it were real. The
+                    // configured URL is the one the runtime can actually reach, so it wins.
+                    providers: mongoProviders.map((provider) => (
+                        provider.provider === "lmstudio" && this.lmStudioBaseUrl
+                            ? { ...provider, baseUrl: this.lmStudioBaseUrl }
+                            : provider
+                    )),
                 };
             }
 

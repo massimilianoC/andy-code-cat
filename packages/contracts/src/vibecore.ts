@@ -128,6 +128,12 @@ export interface VibePrefillResponse {
      * Optional only for backward compatibility with pre-cost-attribution clients.
      */
     projectId?: string;
+    /**
+     * Human-readable notices for the user. Populated when `skipped` is true so a failed
+     * automatic prefill is visible instead of presenting an empty wizard with no explanation.
+     * The route merges these with its own attachment warnings.
+     */
+    warnings?: string[];
 }
 
 export interface VibeConfigResponse {

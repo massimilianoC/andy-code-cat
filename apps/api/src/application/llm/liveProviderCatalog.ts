@@ -5,12 +5,78 @@ import { dedupeModelsById } from "./catalogModels";
 
 const LIVE_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * Providers whose model list is volatile by nature: the operator loads and unloads models by
+ * hand while working, so a five-minute cache would keep offering a model that is no longer in
+ * memory — and dispatching to it fails. Always re-read these.
+ */
+const ALWAYS_FRESH_PROVIDERS = new Set(["lmstudio"]);
+
+/**
+ * A local endpoint either answers immediately or is not running. Waiting the platform default
+ * for it would make every catalog read — including ones that never touch LM Studio — pay a TCP
+ * timeout whenever the operator has it closed.
+ */
+const LOCAL_DISCOVERY_TIMEOUT_MS = 2_000;
+
+/** Ceiling for a remote provider's model list — generous, but never unbounded. */
+const DISCOVERY_TIMEOUT_MS = 15_000;
+
+/**
+ * Skipping the cache for a volatile provider must not mean hammering a dead endpoint. When
+ * discovery fails, remember that briefly: long enough to keep the next few requests fast, short
+ * enough that starting LM Studio is reflected almost at once.
+ */
+const LOCAL_DISCOVERY_FAILURE_TTL_MS = 20_000;
+
+const localDiscoveryFailures = new Map<string, number>();
+
+async function fetchWithTimeout(url: string, timeoutMs: number, headers?: Record<string, string>) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { method: "GET", headers, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
+ * LM Studio's native endpoint, richer than the OpenAI-compatible `/models`: it reports which
+ * models are actually resident in memory (`state: "loaded"`) along with context length and
+ * capabilities. Only a loaded model answers a completion request promptly, so that distinction
+ * is the difference between a working pick and a stalled one.
+ */
+interface LmStudioNativeModel {
+    id?: string;
+    type?: string;
+    state?: string;
+    max_context_length?: number;
+    loaded_context_length?: number;
+    capabilities?: string[];
+}
+
+async function fetchLmStudioNativeModels(baseUrl: string): Promise<LmStudioNativeModel[] | null> {
+    // baseUrl ends in /v1 for the OpenAI-compatible surface; the native API is a sibling.
+    const nativeUrl = `${baseUrl.replace(/\/$/, "").replace(/\/v1$/, "")}/api/v0/models`;
+    try {
+        const response = await fetchWithTimeout(nativeUrl, LOCAL_DISCOVERY_TIMEOUT_MS);
+        if (!response.ok) return null;
+        const payload = await response.json().catch(() => ({})) as { data?: LmStudioNativeModel[] };
+        return Array.isArray(payload.data) ? payload.data : null;
+    } catch {
+        // Older LM Studio builds have no native API — the caller falls back to /v1/models.
+        return null;
+    }
+}
+
 type RuntimeModel = LlmProviderCatalog["models"][number];
 
 const liveModelCache = new Map<string, { expiresAt: number; models: RuntimeModel[] }>();
 
 export function clearLiveModelCatalogCache(): void {
     liveModelCache.clear();
+    localDiscoveryFailures.clear();
 }
 
 function assignPriceTiers(models: RuntimeModel[]): RuntimeModel[] {
@@ -141,25 +207,57 @@ export async function hydrateProviderCatalog(
         return { ...providerCatalog, models: fallbackModels };
     }
 
+    const alwaysFresh = ALWAYS_FRESH_PROVIDERS.has(providerCatalog.provider);
     const cacheKey = `${providerCatalog.provider}|${providerCatalog.baseUrl}|${Boolean(authHeader)}`;
     const cached = liveModelCache.get(cacheKey);
-    if (!options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
+    if (!alwaysFresh && !options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
         return { ...providerCatalog, models: cached.models };
     }
 
-    try {
-        const response = await fetch(`${providerCatalog.baseUrl.replace(/\/$/, "")}/models`, {
-            method: "GET",
-            headers: authHeader ? { Authorization: authHeader } : {},
-        });
+    if (alwaysFresh && !options?.forceRefresh) {
+        const failedUntil = localDiscoveryFailures.get(cacheKey);
+        if (failedUntil && failedUntil > Date.now()) {
+            return { ...providerCatalog, models: fallbackModels };
+        }
+    }
 
-        if (!response.ok) {
+    try {
+        // LM Studio first: its native endpoint tells us which models are resident in memory,
+        // which /v1/models does not. Falls through to the standard path when unavailable.
+        const nativeModels = providerCatalog.provider === "lmstudio"
+            ? await fetchLmStudioNativeModels(providerCatalog.baseUrl)
+            : null;
+
+        const response = nativeModels
+            ? null
+            : await fetchWithTimeout(
+                `${providerCatalog.baseUrl.replace(/\/$/, "")}/models`,
+                alwaysFresh ? LOCAL_DISCOVERY_TIMEOUT_MS : DISCOVERY_TIMEOUT_MS,
+                authHeader ? { Authorization: authHeader } : undefined,
+            );
+
+        if (response && !response.ok) {
             return { ...providerCatalog, models: fallbackModels };
         }
 
-        const payload = await response.json().catch(() => ({})) as { data?: DiscoveredModel[] };
-        const rawModels = payload.data ?? [];
+        const rawModels: DiscoveredModel[] = nativeModels
+            ? nativeModels.map((model) => ({
+                id: model.id,
+                architecture: { modality: model.type === "embeddings" ? "text->embedding" : "text->text" },
+            }))
+            : ((await response!.json().catch(() => ({})) as { data?: DiscoveredModel[] }).data ?? []);
+
+        // Loaded models first, so the promoted default is one that can answer immediately.
+        const loadedIds = new Set(
+            (nativeModels ?? []).filter((model) => model.state === "loaded").map((model) => String(model.id ?? "").trim()),
+        );
+        if (loadedIds.size > 0) {
+            rawModels.sort((left, right) =>
+                Number(loadedIds.has(String(right.id ?? "").trim())) - Number(loadedIds.has(String(left.id ?? "").trim())));
+        }
+
         if (rawModels.length === 0) {
+            if (alwaysFresh) localDiscoveryFailures.set(cacheKey, Date.now() + LOCAL_DISCOVERY_FAILURE_TTL_MS);
             return { ...providerCatalog, models: fallbackModels };
         }
 
@@ -198,7 +296,13 @@ export async function hydrateProviderCatalog(
                     isDefault: existing?.isDefault ?? (index === 0 && !fallbackModels.some((candidate) => candidate.isDefault)),
                     isFallback: existing?.isFallback ?? index !== 0,
                     isActive: existing?.isActive ?? true,
-                    displayName: existing?.displayName,
+                    // The operator needs to see at a glance which local models are resident:
+                    // picking an unloaded one means waiting for it to be pulled into memory,
+                    // or a timeout. Suffixed rather than added as a new domain field to keep
+                    // this out of the persisted schema — it is runtime state, not catalog data.
+                    displayName: loadedIds.has(id)
+                        ? `${existing?.displayName ?? id} · caricato`
+                        : existing?.displayName,
                     description: existing?.description,
                     promptTemplate: existing?.promptTemplate,
                     focusPromptTemplate: existing?.focusPromptTemplate,
@@ -231,10 +335,16 @@ export async function hydrateProviderCatalog(
         }
 
         const discoveredIds = new Set(mapped.map((model) => model.id));
-        const nonTextFallbacks = fallbackModels
-            .filter((model) => model.isActive && !discoveredIds.has(model.id))
-            .map((model) => ({ ...model, provider: providerCatalog.provider, isDefault: false }));
+        // For a volatile local provider the discovered list is the whole truth. Appending seeded
+        // entries here is what kept the placeholder `local/default-chat` in the catalog long
+        // after LM Studio stopped serving anything by that name — and every dispatch to it failed.
+        const nonTextFallbacks = alwaysFresh
+            ? []
+            : fallbackModels
+                .filter((model) => model.isActive && !discoveredIds.has(model.id))
+                .map((model) => ({ ...model, provider: providerCatalog.provider, isDefault: false }));
 
+        localDiscoveryFailures.delete(cacheKey);
         const hydratedModels = assignPriceTiers([...mapped, ...nonTextFallbacks]);
         liveModelCache.set(cacheKey, {
             expiresAt: Date.now() + LIVE_MODEL_CACHE_TTL_MS,
@@ -246,6 +356,7 @@ export async function hydrateProviderCatalog(
             models: hydratedModels,
         };
     } catch {
+        if (alwaysFresh) localDiscoveryFailures.set(cacheKey, Date.now() + LOCAL_DISCOVERY_FAILURE_TTL_MS);
         return { ...providerCatalog, models: fallbackModels };
     }
 }

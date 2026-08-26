@@ -13,6 +13,7 @@ import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset"
 import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
 import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
 import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
+import { ExecutionLogger } from "../services/ExecutionLogger";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -520,6 +521,64 @@ export class VibePrefill {
         private readonly getLlmCatalog: GetLlmCatalog,
     ) { }
 
+    /**
+     * Every failure path in this use case returns HTTP 200 with a default draft, because a
+     * half-filled wizard is better than a dead end. That is a deliberate product choice — what
+     * was NOT deliberate is that it happened invisibly: no execution log, no journal entry, no
+     * warning to the user, and no record of the provider's answer. Success and failure were
+     * distinguishable only by the byte size of the response.
+     *
+     * This funnels all of them through one place that records what happened and returns a
+     * user-visible warning. `reason` is a stable machine code for querying; `detail` carries the
+     * provider status and a body excerpt — the thing you actually need when a model that worked
+     * yesterday stops working today.
+     */
+    private fallback(input: {
+        prompt: string;
+        outputLanguage: string;
+        resolvedMode: "website" | "data_dashboard";
+        attachmentMeta?: AttachmentMeta[];
+        echoProject: { projectId?: string };
+        reason:
+        | "task-disabled"
+        | "no-active-provider"
+        | "missing-api-key"
+        | "provider-http-error"
+        | "provider-exception";
+        userMessage: string;
+        detail?: Record<string, unknown>;
+    }): VibePrefillResponse {
+        // Console first: this survives even when the project scope is unknown (no projectId) or
+        // Mongo is unreachable, which are exactly the situations worth seeing in `docker logs`.
+        console.error(
+            `[VibePrefill] fallback reason=${input.reason}`,
+            JSON.stringify({ ...input.detail, projectId: input.echoProject.projectId ?? null }),
+        );
+
+        if (input.echoProject.projectId) {
+            ExecutionLogger.instance.emit({
+                projectId: input.echoProject.projectId,
+                domain: "llm",
+                eventType: "vibe_prefill_fallback",
+                level: "warn",
+                status: "failure",
+                metadata: { taskKey: TASK_KEY, reason: input.reason, ...input.detail },
+            });
+        }
+
+        return {
+            draft: defaultDraft(input.prompt, input.outputLanguage),
+            dataDashboardDraft: input.resolvedMode === "data_dashboard"
+                ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta)
+                : undefined,
+            resolvedMode: input.resolvedMode,
+            confidence: 0,
+            skipped: true,
+            warnings: [input.userMessage],
+            ...input.echoProject,
+        };
+    }
+
     async execute(input: VibePrefillInput): Promise<VibePrefillResponse> {
         const echoProject = input.projectId ? { projectId: input.projectId } : {};
         const platformConfig = await this.platformConfigRepository.get().catch(() => null);
@@ -531,14 +590,16 @@ export class VibePrefill {
         const resolvedUiLanguage = normalizeLang(input.uiLanguage);
 
         if (!env.vibeClassifierEnabled || !taskSettings.enabled) {
-            return {
-                draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
                 resolvedMode,
-                confidence: 0,
-                skipped: true,
-                ...echoProject,
-            };
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "task-disabled",
+                userMessage: "Compilazione automatica disattivata: il modulo va compilato manualmente.",
+                detail: { vibeClassifierEnabled: env.vibeClassifierEnabled, taskEnabled: taskSettings.enabled },
+            });
         }
 
         const catalog = await this.getLlmCatalog.execute();
@@ -565,14 +626,16 @@ export class VibePrefill {
         }
 
         if (!decision.providerCatalog) {
-            return {
-                draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
                 resolvedMode,
-                confidence: 0,
-                skipped: true,
-                ...echoProject,
-            };
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "no-active-provider",
+                userMessage: "Nessun provider LLM disponibile per la compilazione automatica: il modulo va compilato manualmente.",
+                detail: { requestedProvider: input.provider, requestedModel: input.model },
+            });
         }
 
         const providerCatalog = decision.providerCatalog;
@@ -580,14 +643,16 @@ export class VibePrefill {
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
-            return {
-                draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
                 resolvedMode,
-                confidence: 0,
-                skipped: true,
-                ...echoProject,
-            };
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "missing-api-key",
+                userMessage: "Chiave API mancante per il provider selezionato: il modulo va compilato manualmente.",
+                detail: { provider: providerCatalog.provider, authType: providerCatalog.authType },
+            });
         }
 
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta, input.templateId, input.formatHint);
@@ -636,14 +701,26 @@ export class VibePrefill {
             });
 
             if (!response.ok) {
-                return {
-                    draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                    dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                // The provider's own words are the only thing that explains a model that worked
+                // yesterday and fails today (rate limit, context overflow, decommissioned id).
+                // Read it before discarding the response — without this the failure is unknowable.
+                const errorBody = await response.text().catch(() => "<body non leggibile>");
+                return this.fallback({
+                    prompt: input.prompt,
+                    outputLanguage: resolvedUiLanguage,
                     resolvedMode,
-                    confidence: 0,
-                    skipped: true,
-                    ...echoProject,
-                };
+                    attachmentMeta: input.attachmentMeta,
+                    echoProject,
+                    reason: "provider-http-error",
+                    userMessage: `Il modello ${providerCatalog.provider}/${modelId} ha rifiutato la richiesta (HTTP ${response.status}): il modulo va compilato manualmente o riprovato con un altro modello.`,
+                    detail: {
+                        provider: providerCatalog.provider,
+                        model: modelId,
+                        providerStatus: response.status,
+                        providerStatusText: response.statusText,
+                        providerBody: errorBody.slice(0, 2000),
+                    },
+                });
             }
 
             const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -719,15 +796,29 @@ export class VibePrefill {
                 skipped: false,
                 ...echoProject,
             };
-        } catch {
-            return {
-                draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+        } catch (error) {
+            // Was an empty `catch {}`. An abort after the 4.5-minute timeout, a DNS failure and a
+            // malformed provider payload all produced the identical silent default draft.
+            const aborted = providerAbort.signal.aborted;
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
                 resolvedMode,
-                confidence: 0,
-                skipped: true,
-                ...echoProject,
-            };
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "provider-exception",
+                userMessage: aborted
+                    ? `Il modello ${providerCatalog.provider}/${modelId} non ha risposto entro il tempo massimo: riprova o scegli un altro modello.`
+                    : `Errore di comunicazione con ${providerCatalog.provider}/${modelId}: il modulo va compilato manualmente.`,
+                detail: {
+                    provider: providerCatalog.provider,
+                    model: modelId,
+                    aborted,
+                    errorName: error instanceof Error ? error.name : typeof error,
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                    errorCause: error instanceof Error && error.cause ? String(error.cause) : undefined,
+                },
+            });
         } finally {
             clearTimeout(providerTimeout);
         }
