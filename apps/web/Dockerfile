@@ -21,8 +21,6 @@ ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # SSOT program (I15): run-based launch handoff. Defaults to the legacy path when unset,
 # matching PIPELINE_RUN_ENABLED on the API side — both must be "true" for the strict chain.
-ARG NEXT_PUBLIC_PIPELINE_RUN_UI
-ENV NEXT_PUBLIC_PIPELINE_RUN_UI=$NEXT_PUBLIC_PIPELINE_RUN_UI
 RUN npm install
 RUN npm run build -w packages/contracts && npm run build -w apps/web
 

@@ -115,7 +115,12 @@ const envSchema = z.object({
     // area. It exists now so later increments (I9+) that DO wire live traffic
     // through PipelineRun can be reverted with a single env change + restart,
     // with no code revert and no data migration. See docs/SSOT_REFACTOR_PROGRESS.md.
-    PIPELINE_RUN_ENABLED: z.string().default("false"),
+    /**
+     * Strict PipelineRun dispatch. Defaults ON: the frontend no longer has a path that avoids
+     * it, so a false default would leave the API refusing runs the UI unconditionally creates.
+     * Kept as an env var purely as an emergency lever.
+     */
+    PIPELINE_RUN_ENABLED: z.string().default("true"),
     PIPELINE_MODEL_LOCK_DEFAULT_POLICY: z.enum(["legacy", "strict"]).default("legacy"),
 });
 

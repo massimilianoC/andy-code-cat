@@ -892,61 +892,28 @@ export default function GuidedLaunchPage() {
             attachmentNames: attachedFiles,
         };
         try {
-            // I15 of the SSOT program: when enabled, launch through the server-owned
-            // Workspace pipeline (freezes a modelLock + canonical brief on a real PipelineRun)
-            // instead of the legacy zero-effort + client-optimize + sessionStorage handoff.
-            // The workspace re-derives everything (brief, locked model) from the run itself —
-            // see the "I15" mount effect in workspace/[projectId]/page.tsx.
-            if (process.env.NEXT_PUBLIC_PIPELINE_RUN_UI === "true") {
-                const launchResult = await launchWorkspacePipeline(token, projectId, {
-                    ...payload,
-                    requestedProviderId: pipelineOverride?.provider,
-                    requestedModelId: pipelineOverride?.model,
-                    // "skip", not "enabled": the canonical brief this run freezes is already the
-                    // structured, enriched output of the guided flow. Optimizing it again in the
-                    // workspace was the legacy path's job precisely because the legacy path had
-                    // no canonical brief — here it would rewrite the text the run's contentHash
-                    // certifies. The legacy branch below still optimizes, and still sends
-                    // skipAutoOptimize=1 so the workspace does not do it a second time.
-                    optimizationPolicy: "skip",
-                });
-                router.push(
-                    `/workspace/${projectId}?conv=${launchResult.conversationId}&pipelineRunId=${encodeURIComponent(launchResult.pipelineRunId)}`,
-                );
-                return;
-            }
-
-            const [briefResult, configResult] = await Promise.all([
-                launchGuided(token, projectId, payload),
-                getGuidedPipelineConfig(token, projectId).catch(() => null),
-            ]);
-            const localConfig = configResult;
-            // Use the server's canonical brief verbatim (I9 — see the SSOT program docs).
-            const brief = briefResult.normalizedBrief;
-
-            // Always run one optimization pass — the structured brief (AI-prefilled or manual)
-            // needs to be rewritten with system-layer context before entering Guided Mode.
-            // When AI-prefilled, skipAutoOptimize=1 prevents a second pass in the workspace.
-            const optimizeRes = await optimizePrompt(token, projectId, {
-                rawPrompt: brief,
-                conversationId: briefResult.conversationId,
-                taskKey: "zero_effort_optimize",
-                provider: pipelineOverride?.provider ?? localConfig?.optimize.provider,
-                model: pipelineOverride?.model ?? localConfig?.optimize.model,
+            // The guided launch has exactly one path: the server-owned Workspace pipeline.
+            // It freezes a modelLock and a canonical brief on a real PipelineRun, and the
+            // workspace re-derives both from the run itself (see the run-handoff mount effect
+            // in workspace/[projectId]/page.tsx).
+            //
+            // The legacy path — launchGuided + a client-side "zero_effort_optimize" pass +
+            // a sessionStorage handoff — was removed with the NEXT_PUBLIC_PIPELINE_RUN_UI flag
+            // that selected it. Keeping both meant the behaviour under test depended on a
+            // build-time variable that was silently false in the deploy image, so the pipeline
+            // people exercised was not the pipeline being developed.
+            //
+            // optimizationPolicy is "skip" because the canonical brief this run freezes is
+            // already the structured output of the guided flow: optimizing it again would
+            // rewrite the very text the run's contentHash certifies.
+            const launchResult = await launchWorkspacePipeline(token, projectId, {
+                ...payload,
+                requestedProviderId: pipelineOverride?.provider,
+                requestedModelId: pipelineOverride?.model,
+                optimizationPolicy: "skip",
             });
-            const finalPrompt = optimizeRes.optimizedPrompt;
-
-            const convId = briefResult.conversationId;
-            // Store the prompt in sessionStorage to avoid URI-length limits.
-            sessionStorage.setItem(`pipeline_handoff_${convId}`, finalPrompt);
-            const skipParam = aiPrefilled ? "&skipAutoOptimize=1" : "";
-            const effectiveProvider = pipelineOverride?.provider ?? localConfig?.vibeGenerate?.provider ?? localConfig?.generate?.provider;
-            const effectiveModel = pipelineOverride?.model ?? localConfig?.vibeGenerate?.model ?? localConfig?.generate?.model;
-            const modelParams = effectiveProvider && effectiveModel
-                ? `&preferredProvider=${encodeURIComponent(effectiveProvider)}&preferredModel=${encodeURIComponent(effectiveModel)}`
-                : "";
             router.push(
-                `/workspace/${projectId}?conv=${convId}${skipParam}${modelParams}`,
+                `/workspace/${projectId}?conv=${launchResult.conversationId}&pipelineRunId=${encodeURIComponent(launchResult.pipelineRunId)}`,
             );
         } catch (e) {
             const message = e instanceof Error ? e.message : t("launch.errors.startGeneration");
