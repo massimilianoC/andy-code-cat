@@ -53,6 +53,7 @@ import {
     type SuggestProjectImageIdeaResult,
     type StockImageProviderStatus,
 } from "../../../lib/api";
+import { ARTIFACT_BASE_STALE, type CreatePreviewSnapshotRequest } from "@andy-code-cat/contracts";
 import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
 import { getProjectCostSummary } from "../../../lib/api/cost";
@@ -883,6 +884,70 @@ function WorkspacePageContent() {
         selectedBackendSnapshotIdRef.current = selectedBackendSnapshotId;
     }, [selectedBackendSnapshotId]);
 
+    // AL-042 — the versions as the server described them, readable from inside callbacks.
+    // The certification a write declares is read from here, never recomputed from what the
+    // editor happens to be holding.
+    const previewSnapshotsRef = useRef<PreviewSnapshot[]>([]);
+    useEffect(() => { previewSnapshotsRef.current = previewSnapshots; }, [previewSnapshots]);
+
+    /**
+     * AL-042/043 — the single client write path for an artifact version.
+     *
+     * Every editing mode goes through here, so every mode declares the same base: the version
+     * the user has selected, plus the contentHash the server issued for it. Four call sites
+     * each assembling their own declaration is exactly how they came to disagree — one of them
+     * used to omit the parent entirely and silently start a second root.
+     *
+     * The hash is echoed, never recomputed. What the API returns has been compiled for the
+     * preview runtime (forms, inline assets) and legitimately differs from the canonical
+     * artifacts the hash certifies, so a locally computed one would never match.
+     *
+     * When the base predates AL-039 there is no hash to declare; the server accepts the write
+     * and records it as unverifiable rather than locking the user out of their own history.
+     */
+    const certifiedHashOf = useCallback((snapshotId: string | null | undefined): string | undefined => {
+        if (!snapshotId) return undefined;
+        return previewSnapshotsRef.current.find((snapshot) => snapshot.id === snapshotId)?.metadata?.contentHash;
+    }, []);
+
+    const commitArtifactVersion = useCallback(async (
+        authToken: string,
+        input: Omit<CreatePreviewSnapshotRequest, "parentSnapshotId" | "baseContentHash">,
+    ) => {
+        const baseId = selectedBackendSnapshotIdRef.current ?? undefined;
+        const result = await createPreviewSnapshot(authToken, projectId, {
+            ...input,
+            parentSnapshotId: baseId,
+            baseContentHash: certifiedHashOf(baseId),
+        });
+        // Keep the certification current without waiting for the list to reload, so a second
+        // save in the same interaction declares the version the first one just produced.
+        previewSnapshotsRef.current = [
+            result.snapshot,
+            ...previewSnapshotsRef.current.filter((snapshot) => snapshot.id !== result.snapshot.id),
+        ];
+        return result;
+    }, [projectId, certifiedHashOf]);
+
+    /**
+     * AL-042 — the server refused the write because its base is no longer current. Re-read the
+     * history and say so; do not retry. Retrying would send an edit built on something that is
+     * not there any more, which is the overwrite this rule exists to prevent.
+     *
+     * Returns true when it handled the error, so callers can fall through to their own
+     * handling for everything else.
+     */
+    const handleStaleArtifactBase = useCallback(async (err: unknown): Promise<boolean> => {
+        if (!(err instanceof ApiError) || err.code !== ARTIFACT_BASE_STALE) return false;
+        if (token) await loadSnapshots(token);
+        addNotification({
+            label: t("workspace.notifications.snapshot.staleBaseLabel"),
+            status: "error",
+            message: err.userMessage ?? t("workspace.notifications.snapshot.staleBase"),
+        });
+        return true;
+    }, [token, loadSnapshots, addNotification]);
+
     useEffect(() => { editorHtmlRef.current = editorHtml; }, [editorHtml]);
     useEffect(() => { editorCssRef.current = editorCss; }, [editorCss]);
     useEffect(() => { editorJsRef.current = editorJs; }, [editorJs]);
@@ -1145,19 +1210,20 @@ function WorkspacePageContent() {
 
             if (!conversationId) return false;
 
-            const result = await createPreviewSnapshot(token, projectId, {
+            const result = await commitArtifactVersion(token, {
                 conversationId,
-                parentSnapshotId: selectedBackendSnapshotIdRef.current ?? undefined,
                 artifacts: { html, css: editorCssRef.current, js: editorJsRef.current },
                 metadata: { finishReason },
                 activate: true,
             });
             await persistWorkspaceSnapshot(result.snapshot.id, { html, css: editorCssRef.current, js: editorJsRef.current }, options);
             return true;
-        } catch {
+        } catch (err) {
+            // AL-042 — a refused base is a real answer, not a failed save to swallow silently.
+            await handleStaleArtifactBase(err);
             return false;
         }
-    }, [token, activeConvId, projectId, persistWorkspaceSnapshot]);
+    }, [token, activeConvId, projectId, persistWorkspaceSnapshot, handleStaleArtifactBase]);
 
     const handleApplyAsset = useCallback(async (asset: ProjectAssetDto) => {
         if (!token || !selectedElement) return;
@@ -1536,7 +1602,7 @@ function WorkspacePageContent() {
         if (!token || !activeConvId) return;
         setIsSavingEditorSnapshot(true);
         try {
-            const result = await createPreviewSnapshot(token, projectId, {
+            const result = await commitArtifactVersion(token, {
                 conversationId: activeConvId,
                 artifacts: { html: editorHtml, css: editorCss, js: editorJs },
                 metadata: { finishReason: "manual-save" },
@@ -1546,15 +1612,20 @@ function WorkspacePageContent() {
             incrementSnapCount(projectId);
             await loadSnapshots(token);
             setSelectedBackendSnapshotId(result.snapshot.id);
-            addNotification({ label: t("workspace.notifications.snapshot.savedLabel"), status: "done", message: t("workspace.notifications.snapshot.saved") });
+            // AL-045 — say which of the two things happened. Reporting "version saved" when
+            // the content was identical teaches the user to distrust the history panel.
+            addNotification(result.created
+                ? { label: t("workspace.notifications.snapshot.savedLabel"), status: "done", message: t("workspace.notifications.snapshot.saved") }
+                : { label: t("workspace.notifications.snapshot.noChangeLabel"), status: "done", message: t("workspace.notifications.snapshot.noChange") });
         } catch (err) {
+            if (await handleStaleArtifactBase(err)) return;
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
             }
         } finally {
             setIsSavingEditorSnapshot(false);
         }
-    }, [token, projectId, activeConvId, editorHtml, editorCss, editorJs, loadSnapshots, addNotification]);
+    }, [token, projectId, activeConvId, editorHtml, editorCss, editorJs, loadSnapshots, addNotification, handleStaleArtifactBase]);
 
     // Receive element selections + EDIT mode messages from the sandboxed preview iframe
     useEffect(() => {
@@ -1690,6 +1761,7 @@ function WorkspacePageContent() {
     const handleCommitEditVersion = useCallback(async (html: string) => {
         if (!token || !activeConvId) return;
         setIsSavingEditVersion(true);
+        let editProducedVersion = true;
         try {
             // AL-009 — `html` is read back from the sandboxed preview DOM, which had project
             // asset URLs inlined as base64 data URIs so the sandbox could render them without
@@ -1706,15 +1778,19 @@ function WorkspacePageContent() {
                 });
                 const res = await commitWysiwygSession(token, projectId, editSessionId, {
                     description: "EDIT Light",
+                    // AL-043 — the session pinned its origin when it opened; the certification
+                    // travels at commit, which is the moment the base could have moved.
+                    baseContentHash: certifiedHashOf(selectedBackendSnapshotIdRef.current),
                 });
                 saveThumbnail(projectId, { html: sourceHtml, css: editorCss, js: editorJs });
                 incrementSnapCount(projectId);
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
                 setEditSessionId(null);
+                editProducedVersion = res.created;
             } else {
                 // Degraded mode: session was not created, save directly as PreviewSnapshot
-                const res = await createPreviewSnapshot(token, projectId, {
+                const res = await commitArtifactVersion(token, {
                     conversationId: activeConvId,
                     artifacts: { html: sourceHtml, css: editorCss, js: editorJs },
                     metadata: { finishReason: "wysiwyg-edit-light" },
@@ -1724,17 +1800,21 @@ function WorkspacePageContent() {
                 incrementSnapCount(projectId);
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
+                editProducedVersion = res.created;
             }
-            addNotification({ label: t("workspace.notifications.snapshot.editSavedLabel"), status: "done", message: t("workspace.notifications.snapshot.editSaved") });
+            addNotification(editProducedVersion
+                ? { label: t("workspace.notifications.snapshot.editSavedLabel"), status: "done", message: t("workspace.notifications.snapshot.editSaved") }
+                : { label: t("workspace.notifications.snapshot.noChangeLabel"), status: "done", message: t("workspace.notifications.snapshot.noChange") });
             setEditMode(false);
         } catch (err) {
+            if (await handleStaleArtifactBase(err)) return;
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
             }
         } finally {
             setIsSavingEditVersion(false);
         }
-    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification, previewAssetResolved]);
+    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification, previewAssetResolved, commitArtifactVersion, certifiedHashOf, handleStaleArtifactBase]);
     handleCommitEditVersionRef.current = handleCommitEditVersion;
 
     // ── Derived values ──────────────────────────────────────────────────────
@@ -2341,10 +2421,9 @@ function WorkspacePageContent() {
             if (llm.structured?.artifacts && llm.structured.artifacts.html && convId
                 && llm.focusPatchApplied !== false && llm.generationParseError !== true) {
                 try {
-                    const snap = await createPreviewSnapshot(token, projectId, {
+                    const snap = await commitArtifactVersion(token, {
                         conversationId: convId,
                         sourceMessageId: assistantSaved.message.id,
-                        parentSnapshotId: selectedBackendSnapshotIdRef.current ?? undefined,
                         artifacts: {
                             html: llm.structured.artifacts.html ?? "",
                             css: llm.structured.artifacts.css ?? "",
@@ -2437,8 +2516,12 @@ function WorkspacePageContent() {
                         setPreviewRefreshing(false);
                     }, 3000);
                     previewVersionSaved = true;
-                } catch {
-                    // non-blocking — UI works without snapshot persistence
+                } catch (err) {
+                    // AL-042 — a refused base is not "snapshot persistence is optional": the
+                    // model produced a version that could not be attached to what the user is
+                    // looking at, and they need to know before they build on it.
+                    await handleStaleArtifactBase(err);
+                    // Anything else stays non-blocking — the chat works without the snapshot.
                 }
             }
 

@@ -121,7 +121,7 @@ describe("CreatePreviewSnapshot — AL-026 promptExecutionId", () => {
         const repository = new MemoryPreviewSnapshotRepository();
         const useCase = new CreatePreviewSnapshot(repository as any);
 
-        const snapshot = await useCase.execute({
+        const { snapshot } = await useCase.execute({
             projectId: "project-1",
             conversationId: "conversation-1",
             artifacts: { html: "<main></main>", css: "", js: "" },
@@ -136,7 +136,7 @@ describe("CreatePreviewSnapshot — AL-026 promptExecutionId", () => {
         const repository = new MemoryPreviewSnapshotRepository();
         const useCase = new CreatePreviewSnapshot(repository as any);
 
-        const snapshot = await useCase.execute({
+        const { snapshot } = await useCase.execute({
             projectId: "project-1",
             conversationId: "conversation-1",
             artifacts: { html: "<main></main>", css: "", js: "" },
@@ -153,7 +153,7 @@ describe("Preview snapshot media resolution guardrails", () => {
         const traceRepository = { attachSnapshot: vi.fn(async () => undefined), createMany: vi.fn() };
         const useCase = new CreatePreviewSnapshot(repository as any, traceRepository as any);
 
-        const snapshot = await useCase.execute({
+        const { snapshot } = await useCase.execute({
             projectId: "project-1",
             conversationId: "conversation-1",
             artifacts: { html: "<main></main>", css: "", js: "" },
@@ -183,7 +183,7 @@ describe("Preview snapshot media resolution guardrails", () => {
             conversationRepository as any,
         );
 
-        const snapshot = await useCase.execute({
+        const { snapshot } = await useCase.execute({
             projectId: "project-1",
             conversationId: "conversation-1",
             sourceMessageId: "message-1",
@@ -286,14 +286,16 @@ describe("CreatePreviewSnapshot — version chain", () => {
     it("continues from the active snapshot when the caller omits a parent", async () => {
         const { repo, useCase } = makeUseCase();
 
-        const first = await useCase.execute({
+        const { snapshot: first } = await useCase.execute({
             projectId: "p1", conversationId: "c1", artifacts, activate: true,
         });
         // Manual editor saves (Monaco, WYSIWYG degraded mode) send no parentSnapshotId. Before
         // the server defaulted it, each one started a fresh root and the history collapsed to a
         // single visible version.
-        const second = await useCase.execute({
-            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        const { snapshot: second } = await useCase.execute({
+            // Distinct content: an identical save is deliberately suppressed by AL-045, which
+            // is a different rule from the one under test here.
+            projectId: "p1", conversationId: "c1", artifacts: { ...artifacts, html: "<p>hi again</p>" }, activate: true,
         });
 
         expect(first.parentSnapshotId).toBeUndefined();
@@ -304,11 +306,11 @@ describe("CreatePreviewSnapshot — version chain", () => {
     it("keeps an explicit parent, so restoring an older version branches from THAT one", async () => {
         const { useCase } = makeUseCase();
 
-        const root = await useCase.execute({
+        const { snapshot: root } = await useCase.execute({
             projectId: "p1", conversationId: "c1", artifacts, activate: true,
         });
-        const branch = await useCase.execute({
-            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        const { snapshot: branch } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: { ...artifacts, html: "<p>branched</p>" }, activate: true,
             parentSnapshotId: root.id,
         });
 
@@ -318,7 +320,7 @@ describe("CreatePreviewSnapshot — version chain", () => {
     it("does not invent a parent that no longer exists", async () => {
         const { useCase } = makeUseCase();
 
-        const orphan = await useCase.execute({
+        const { snapshot: orphan } = await useCase.execute({
             projectId: "p1", conversationId: "c1", artifacts, activate: true,
             parentSnapshotId: "deleted-snapshot",
         });
@@ -393,5 +395,166 @@ describe("DeletePreviewSnapshot — AL-015 chain re-linking", () => {
 
         expect(repo.snapshots.find((s) => s.id === v2.id)?.parentSnapshotId).toBeUndefined();
         expect(repo.snapshots.find((s) => s.id === foreign.id)?.parentSnapshotId).toBe(v1.id);
+    });
+});
+
+describe("CreatePreviewSnapshot — AL-039…AL-045 version certification", () => {
+    function makeUseCase() {
+        const repo = new MemoryPreviewSnapshotRepository();
+        return { repo, useCase: new CreatePreviewSnapshot(repo as never) };
+    }
+
+    const artifacts = { html: "<p>base</p>", css: "", js: "" };
+    const edited = { html: "<p>edited</p>", css: "", js: "" };
+
+    it("AL-039 — stamps a server-computed contentHash on every version", async () => {
+        const { useCase } = makeUseCase();
+
+        const { snapshot } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        });
+
+        expect(snapshot.metadata?.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it("AL-039 — the same artifacts hash the same, different artifacts do not", async () => {
+        const { useCase } = makeUseCase();
+
+        const a = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+        const b = await useCase.execute({ projectId: "p2", conversationId: "c1", artifacts, activate: false });
+        const c = await useCase.execute({ projectId: "p3", conversationId: "c1", artifacts: edited, activate: false });
+
+        expect(b.snapshot.metadata?.contentHash).toBe(a.snapshot.metadata?.contentHash);
+        expect(c.snapshot.metadata?.contentHash).not.toBe(a.snapshot.metadata?.contentHash);
+    });
+
+    it("AL-039 — the hash is computed, never taken from the request", async () => {
+        const { useCase } = makeUseCase();
+        const forged = "0".repeat(64);
+
+        const { snapshot } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            metadata: { contentHash: forged },
+        });
+
+        expect(snapshot.metadata?.contentHash).not.toBe(forged);
+    });
+
+    it("AL-041 — a write declaring the current base is accepted", async () => {
+        const { useCase } = makeUseCase();
+
+        const base = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        const child = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: edited, activate: true,
+            parentSnapshotId: base.snapshot.id,
+            baseContentHash: base.snapshot.metadata!.contentHash!,
+        });
+
+        expect(child.created).toBe(true);
+        expect(child.snapshot.parentSnapshotId).toBe(base.snapshot.id);
+    });
+
+    it("AL-041 — a write declaring a base that no longer hashes that way is refused", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const base = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        // Someone else advanced the version behind this editor's back.
+        repo.snapshots[0]!.metadata = { contentHash: "b".repeat(64) };
+
+        await expect(useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: edited, activate: true,
+            parentSnapshotId: base.snapshot.id,
+            baseContentHash: "a".repeat(64),
+        })).rejects.toMatchObject({
+            statusCode: 409,
+            code: "ARTIFACT_BASE_STALE",
+            details: { currentSnapshotId: base.snapshot.id, currentContentHash: "b".repeat(64) },
+        });
+        expect(repo.snapshots).toHaveLength(1);
+    });
+
+    it("AL-041 — a write declaring a base that was deleted is refused, not re-rooted", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        await expect(useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: "deleted-version",
+            baseContentHash: "a".repeat(64),
+        })).rejects.toMatchObject({ statusCode: 409, code: "ARTIFACT_BASE_STALE" });
+        expect(repo.snapshots).toHaveLength(0);
+    });
+
+    it("AL-041 — a base stored before AL-039 cannot be verified, so the write is accepted", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const legacy = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        });
+        expect(legacy.metadata?.contentHash).toBeUndefined();
+
+        const { snapshot, created } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: edited, activate: true,
+            parentSnapshotId: legacy.id,
+            baseContentHash: "a".repeat(64),
+        });
+
+        expect(created).toBe(true);
+        expect(snapshot.parentSnapshotId).toBe(legacy.id);
+    });
+
+    it("AL-041 — a write that declares nothing is accepted, as it was before the rule", async () => {
+        const { useCase } = makeUseCase();
+
+        const base = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        const child = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: edited, activate: true,
+        });
+
+        expect(child.created).toBe(true);
+        expect(child.snapshot.parentSnapshotId).toBe(base.snapshot.id);
+    });
+
+    it("AL-045 — an edit identical to its base creates no version and returns the base", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const base = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        const again = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: base.snapshot.id,
+            baseContentHash: base.snapshot.metadata!.contentHash!,
+        });
+
+        expect(again.created).toBe(false);
+        expect(again.snapshot.id).toBe(base.snapshot.id);
+        expect(repo.snapshots).toHaveLength(1);
+    });
+
+    it("AL-045 — suppression also covers a base stored before AL-039, whose hash is computed on the fly", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const legacy = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+
+        const again = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: legacy.id,
+        });
+
+        expect(again.created).toBe(false);
+        expect(again.snapshot.id).toBe(legacy.id);
+        expect(repo.snapshots).toHaveLength(1);
+    });
+
+    it("AL-045 — a suppressed write still activates the base when activation was asked for", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const inactive = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+
+        const again = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: inactive.id,
+        });
+
+        expect(again.created).toBe(false);
+        expect(repo.activateForProject).toHaveBeenCalledWith("p1", inactive.id);
     });
 });

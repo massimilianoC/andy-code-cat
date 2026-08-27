@@ -1,64 +1,18 @@
+import type {
+    CreatePreviewSnapshotRequest,
+    PreviewSnapshotDto,
+} from "@andy-code-cat/contracts";
 import { call } from "./call";
-import type { LlmFocusContext } from "./llm";
 
-export interface PreviewSnapshot {
-    id: string;
-    projectId: string;
-    conversationId: string;
-    sourceMessageId?: string;
-    parentSnapshotId?: string;
-    isActive: boolean;
-    artifacts: {
-        html: string;
-        css: string;
-        js: string;
-    };
-    serviceManifest?: import("@andy-code-cat/contracts").ServiceManifestV1;
-    runtimePlan?: import("@andy-code-cat/contracts").RuntimePlanV1;
-    focusContext?: LlmFocusContext;
-    metadata?: {
-        model?: string;
-        provider?: string;
-        durationMs?: number;
-        finishReason?: string;
-        structuredParseValid?: boolean;
-        rawResponse?: string;
-        // AL-026 — FK to the PromptExecutionLog record this version's generation was persisted
-        // under. Optional client-side ahead of the contract: until previewSnapshotMetadataSchema
-        // (packages/contracts) grows this field, the backend zod schema just drops it on write.
-        promptExecutionId?: string;
-        tokenUsage?: {
-            promptTokens: number;
-            completionTokens: number;
-            totalTokens: number;
-        };
-        promptingTrace?: {
-            originalUserMessage: string;
-            /** MongoDB _id of the llm_prompt_configs document used to build the pipeline wrapper */
-            promptConfigId?: string;
-            prePromptTemplate?: string;
-            effectiveSystemPrompt?: string;
-        };
-        mediaResolution?: {
-            version: "media-resolution-v1";
-            traceIds: string[];
-            assetIds: string[];
-            mediaKeys: string[];
-            degraded: boolean;
-            directives?: Array<{
-                key: string;
-                role?: string;
-                semanticQuery?: string;
-                status: "resolved" | "fallback_resolved" | "unresolved";
-                provider?: string;
-                assetId?: string;
-                fallbackUsed?: boolean;
-            }>;
-        };
-    };
-    createdAt: string;
-    activatedAt?: string;
-}
+// The shape of an artifact version lives in packages/contracts/src/preview.ts and nowhere
+// else. This module used to restate it twice — once for the response, once for the request
+// body — and both copies had drifted from the schema the server actually validates against
+// (promptingTrace.promptConfigId was declared and sent here but silently stripped on write).
+// Import the contract; do not re-describe it.
+
+export type PreviewSnapshot = PreviewSnapshotDto;
+
+export type CreatePreviewSnapshotBody = CreatePreviewSnapshotRequest;
 
 export function listPreviewSnapshots(token: string, projectId: string, conversationId?: string) {
     const qs = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : "";
@@ -76,52 +30,12 @@ export function listPreviewSnapshots(token: string, projectId: string, conversat
 export function createPreviewSnapshot(
     token: string,
     projectId: string,
-    input: {
-        conversationId: string;
-        sourceMessageId?: string;
-        parentSnapshotId?: string;
-        artifacts: { html: string; css: string; js: string };
-        serviceManifest?: import("@andy-code-cat/contracts").ServiceManifestV1;
-        rawLlmResponse?: string;
-        focusContext?: LlmFocusContext;
-        metadata?: {
-            model?: string;
-            provider?: string;
-            durationMs?: number;
-            finishReason?: string;
-            structuredParseValid?: boolean;
-            rawResponse?: string;
-            // AL-026 — see PreviewSnapshot.metadata above.
-            promptExecutionId?: string;
-            tokenUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
-            promptingTrace?: {
-                originalUserMessage: string;
-                /** MongoDB _id of the llm_prompt_configs document used to build the pipeline wrapper */
-                promptConfigId?: string;
-                prePromptTemplate?: string;
-                effectiveSystemPrompt?: string;
-            };
-            mediaResolution?: {
-                version: "media-resolution-v1";
-                traceIds: string[];
-                assetIds: string[];
-                mediaKeys: string[];
-                degraded: boolean;
-                directives?: Array<{
-                    key: string;
-                    role?: string;
-                    semanticQuery?: string;
-                    status: "resolved" | "fallback_resolved" | "unresolved";
-                    provider?: string;
-                    assetId?: string;
-                    fallbackUsed?: boolean;
-                }>;
-            };
-        };
-        activate?: boolean;
-    }
+    input: CreatePreviewSnapshotBody
 ) {
-    return call<{ snapshot: PreviewSnapshot }>(
+    // AL-045 — `created` is false when the write was byte-identical to its base: the server
+    // returns the base rather than adding a duplicate version, so the caller must be able to
+    // tell "here is the version you made" from "here is the version you are already on".
+    return call<{ snapshot: PreviewSnapshot; created: boolean }>(
         "POST",
         `/v1/projects/${projectId}/preview-snapshots`,
         input,

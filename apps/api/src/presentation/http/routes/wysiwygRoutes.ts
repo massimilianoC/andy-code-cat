@@ -13,6 +13,7 @@ import { MongoWysiwygEditSessionRepository } from "../../../infra/repositories/M
 import { CreateWysiwygEditSession } from "../../../application/use-cases/CreateWysiwygEditSession";
 import { SaveWysiwygEditState } from "../../../application/use-cases/SaveWysiwygEditState";
 import { CommitWysiwygSession } from "../../../application/use-cases/CommitWysiwygSession";
+import { CreatePreviewSnapshot } from "../../../application/use-cases/CreatePreviewSnapshot";
 
 export function createWysiwygRoutes(): Router {
     const router = Router();
@@ -24,7 +25,7 @@ export function createWysiwygRoutes(): Router {
 
     const createSession = new CreateWysiwygEditSession(wysiwygRepository);
     const saveState = new SaveWysiwygEditState(wysiwygRepository);
-    const commitSession = new CommitWysiwygSession(wysiwygRepository, snapshotRepository);
+    const commitSession = new CommitWysiwygSession(wysiwygRepository, new CreatePreviewSnapshot(snapshotRepository));
 
     router.use(authMiddleware);
 
@@ -129,12 +130,15 @@ export function createWysiwygRoutes(): Router {
                     sessionId,
                     projectId: req.sandbox!.projectId,
                     description: body.description,
+                    baseContentHash: body.baseContentHash,
                 });
                 if (!result) {
                     res.status(404).json({ error: "Session not found or already committed" });
                     return;
                 }
-                res.status(201).json({
+                // AL-045 — 200 when the edit changed nothing and the origin came back unchanged.
+                res.status(result.created ? 201 : 200).json({
+                    created: result.created,
                     snapshot: result.snapshot,
                     session: result.session,
                 });

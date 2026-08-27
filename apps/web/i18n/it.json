@@ -737,7 +737,11 @@
                 "activatedLabel": "Versione attivata",
                 "activated": "Snapshot selezionato come versione attiva.",
                 "newVersionLabel": "Nuova versione salvata",
-                "newVersionMessage": "Snapshot salvato e attivato dal backend."
+                "newVersionMessage": "Snapshot salvato e attivato dal backend.",
+                "staleBaseLabel": "Versione non aggiornata",
+                "staleBase": "Questa modifica parte da una versione che nel frattempo è cambiata. La versione corrente è stata ricaricata — riapplica la modifica su quella.",
+                "noChangeLabel": "Nessuna modifica",
+                "noChange": "Il contenuto è identico alla versione corrente: nessuna nuova versione creata."
             },
             "llm": {
                 "label": "Generazione AI",

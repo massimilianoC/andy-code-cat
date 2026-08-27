@@ -1,21 +1,9 @@
+import type { WysiwygEditSessionDto } from "@andy-code-cat/contracts";
 import { call } from "./call";
 import type { PreviewSnapshot } from "./snapshots";
 
-export interface WysiwygEditSessionDto {
-    id: string;
-    projectId: string;
-    userId: string;
-    conversationId: string;
-    originSnapshotId: string;
-    currentHtml: string;
-    currentCss: string;
-    currentJs: string;
-    committedSnapshotId?: string;
-    operationCount: number;
-    status: "active" | "committed";
-    createdAt: string;
-    updatedAt: string;
-}
+// The session shape is declared once, in packages/contracts/src/wysiwyg.ts.
+export type { WysiwygEditSessionDto };
 
 export function createWysiwygEditSession(
     token: string,
@@ -54,9 +42,9 @@ export function commitWysiwygSession(
     token: string,
     projectId: string,
     sessionId: string,
-    input?: { description?: string }
+    input?: { description?: string; baseContentHash?: string }
 ) {
-    return call<{ snapshot: PreviewSnapshot; session: WysiwygEditSessionDto }>(
+    return call<{ snapshot: PreviewSnapshot; session: WysiwygEditSessionDto; created: boolean }>(
         "POST",
         `/v1/projects/${projectId}/wysiwyg/sessions/${sessionId}/commit`,
         input ?? {},
