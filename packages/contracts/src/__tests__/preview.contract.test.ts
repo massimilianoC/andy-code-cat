@@ -85,3 +85,57 @@ describe("preview snapshot contract — single source of truth", () => {
         expect(createPreviewSnapshotSchema.parse({ conversationId: "c1", artifacts }).activate).toBe(true);
     });
 });
+
+/**
+ * A generation that succeeded must always be storable. These pin the fields where a hard cap
+ * could otherwise reject the artifact because its own diagnostic trace was too long — the failure
+ * observed on 2026-08-27, where a run with four enriched documents produced a complete page and
+ * the snapshot write came back VALIDATION_ERROR, leaving nothing to publish.
+ */
+describe("preview snapshot contract — diagnostics never destroy the artifact", () => {
+    const artifacts = { html: "<main></main>", css: "", js: "" };
+
+    it("accepts a system prompt far past the old 50k cap, truncating it", () => {
+        const huge = "x".repeat(120_000);
+
+        const parsed = createPreviewSnapshotSchema.parse({
+            conversationId: "c1",
+            artifacts,
+            metadata: { promptingTrace: { originalUserMessage: "go", effectiveSystemPrompt: huge } },
+        });
+
+        expect(parsed.metadata?.promptingTrace?.effectiveSystemPrompt).toHaveLength(120_000);
+    });
+
+    it("truncates rather than rejecting beyond the storage limit", () => {
+        const beyond = "y".repeat(260_000);
+
+        const parsed = createPreviewSnapshotSchema.parse({
+            conversationId: "c1",
+            artifacts,
+            metadata: { promptingTrace: { originalUserMessage: "go", effectiveSystemPrompt: beyond } },
+        });
+
+        expect(parsed.metadata?.promptingTrace?.effectiveSystemPrompt).toHaveLength(200_000);
+    });
+
+    it("truncates an oversized raw response instead of failing the write", () => {
+        const parsed = createPreviewSnapshotSchema.parse({
+            conversationId: "c1",
+            artifacts,
+            metadata: { rawResponse: "z".repeat(400_000) },
+        });
+
+        expect(parsed.metadata?.rawResponse).toHaveLength(300_000);
+    });
+
+    it("a long user message no longer rejects the snapshot", () => {
+        const result = createPreviewSnapshotSchema.safeParse({
+            conversationId: "c1",
+            artifacts,
+            metadata: { promptingTrace: { originalUserMessage: "m".repeat(80_000) } },
+        });
+
+        expect(result.success).toBe(true);
+    });
+});

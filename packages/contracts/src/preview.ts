@@ -44,12 +44,26 @@ export const previewSnapshotTokenUsageSchema = z.object({
     totalTokens: z.number().int().nonnegative(),
 });
 
+/**
+ * Diagnostic text is truncated, never rejected.
+ *
+ * These fields describe what happened; they are not the artifact. A hard `.max()` on them means a
+ * generation that SUCCEEDED can fail to be saved because its own trace was too long to describe —
+ * which is exactly what happened on 2026-08-27: a run with four enriched documents composed a
+ * 13.851-token system prompt (~55.000 chars), the model produced a complete page, and the snapshot
+ * write was refused with VALIDATION_ERROR. No version, and then "No snapshot found to publish".
+ *
+ * A cap that can destroy the thing it describes is the wrong shape of cap. These truncate instead,
+ * so the record shrinks and the artifact survives.
+ */
+const truncatedTrace = (limit: number) => z.string().transform((value) => value.slice(0, limit));
+
 export const previewSnapshotPromptingTraceSchema = z.object({
-    originalUserMessage: z.string().max(50000),
+    originalUserMessage: truncatedTrace(50000),
     /** MongoDB _id of the llm_prompt_configs document used to build the pipeline wrapper. */
     promptConfigId: z.string().max(120).optional(),
-    prePromptTemplate: z.string().max(50000).optional(),
-    effectiveSystemPrompt: z.string().max(50000).optional(),
+    prePromptTemplate: truncatedTrace(50000).optional(),
+    effectiveSystemPrompt: truncatedTrace(200000).optional(),
 });
 
 export const previewSnapshotMetadataSchema = z.object({
@@ -58,7 +72,7 @@ export const previewSnapshotMetadataSchema = z.object({
     durationMs: z.number().int().nonnegative().optional(),
     finishReason: z.string().max(120).optional(),
     structuredParseValid: z.boolean().optional(),
-    rawResponse: z.string().max(300000).optional(),
+    rawResponse: truncatedTrace(300000).optional(),
     wysiwygSessionId: z.string().max(100).optional(),
     /** Free-text label the user gave the WYSIWYG commit. Declared here rather than cast
      *  in at the write site, which is how it existed outside the contract until now. */
