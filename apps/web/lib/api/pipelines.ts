@@ -2,7 +2,6 @@ import { call } from "./call";
 import type {
     CanonicalBriefEnvelope,
     GenerationWorkspaceDto,
-    GuidedLaunchResultDto,
     LaunchWorkspacePipelineInput,
     LaunchWorkspacePipelineResultDto,
     PipelineRunDto,
@@ -79,22 +78,6 @@ export interface GuidedPipelineConfig {
     };
 }
 
-export function launchGuided(
-    token: string,
-    projectId: string,
-    input: GuidedLaunchInput,
-) {
-    return call<GuidedLaunchResultDto>(
-        "POST",
-        `/v1/projects/${projectId}/pipelines/guided`,
-        input,
-        {
-            Authorization: `Bearer ${token}`,
-            "x-project-id": projectId,
-        },
-    );
-}
-
 export function getGuidedPipelineConfig(token: string, projectId: string) {
     return call<GuidedPipelineConfig>(
         "GET",
@@ -130,8 +113,9 @@ export function previewCanonicalBrief(
 /**
  * I15 of the SSOT program — server-owned Workspace launch (see `LaunchWorkspacePipeline` on the
  * API side). Behind `PIPELINE_RUN_ENABLED` on the backend; 404s if that flag is off. This is the
- * only guided-launch entry point: the legacy `launchGuided` + client-side optimize + sessionStorage
- * handoff was removed, see AGENTS.md Rule Zero.
+ * only guided-launch entry point. The legacy client function and the three routes behind it
+ * (/pipelines/guided and its aliases) were removed on 2026-08-27: they launched without creating
+ * a PipelineRun, so the same user action could run certified or uncertified depending on the URL.
  */
 export function launchWorkspacePipeline(
     token: string,

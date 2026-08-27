@@ -73,29 +73,39 @@ describe("Pipeline launch-workspace E2E — PIPELINE_RUN_ENABLED=false (shipped 
         await mongod.stop();
     });
 
-    it("404s when the flag is disabled — and, crucially, the pre-existing /pipelines/zero-effort route is unaffected", async () => {
+    it("404s when the flag is disabled — and there is no second route to fall back to", async () => {
         const token = signToken(ownerUserId);
+        const intake = {
+            businessName: "Runner Lab",
+            primaryGoal: "Un runner arcade completo per studenti.",
+            audience: "Studenti e giocatori casual.",
+        };
 
         const workspaceRes = await request(app)
             .post(`/v1/projects/${projectId}/pipeline/launch-workspace`)
             .set("Authorization", `Bearer ${token}`)
             .set("x-project-id", projectId)
-            .send({
-                businessName: "Runner Lab",
-                primaryGoal: "Un runner arcade completo per studenti.",
-                audience: "Studenti e giocatori casual.",
-            });
+            .send(intake);
         expect(workspaceRes.status).toBe(404);
 
-        const zeroEffortRes = await request(app)
-            .post(`/v1/projects/${projectId}/pipelines/zero-effort`)
-            .set("Authorization", `Bearer ${token}`)
-            .set("x-project-id", projectId)
-            .send({
-                businessName: "Runner Lab",
-                primaryGoal: "Un runner arcade completo per studenti.",
-                audience: "Studenti e giocatori casual.",
-            });
-        expect(zeroEffortRes.status).toBe(201);
+        // This assertion inverted on 2026-08-27. PIPELINE_RUN_ENABLED used to be a rollback
+        // lever whose fallback was /pipelines/zero-effort, which launched without creating a
+        // PipelineRun. That fallback WAS the second operational line, so it was removed along
+        // with /pipelines/guided and /pipelines/execute. The flag is now a kill switch for
+        // launching, not a switch between a certified path and an uncertified one — which is
+        // the whole point of having one line.
+        for (const legacyPath of ["pipelines/guided", "pipelines/zero-effort", "pipelines/execute"]) {
+            const res = await request(app)
+                .post(`/v1/projects/${projectId}/${legacyPath}`)
+                .set("Authorization", `Bearer ${token}`)
+                .set("x-project-id", projectId)
+                .send(intake);
+            // 404 or 403, not 201. An unmatched /v1 path falls through to adminRoutes, whose
+            // unscoped `router.use(authMiddleware, requireSuperAdmin)` answers 403 before Express
+            // can answer 404 — so the exact code depends on mount order, not on these routes.
+            // What this test pins is the part that matters: no launch happens.
+            expect([403, 404], `${legacyPath} must not launch: ${res.status} ${JSON.stringify(res.body)}`)
+                .toContain(res.status);
+        }
     });
 });

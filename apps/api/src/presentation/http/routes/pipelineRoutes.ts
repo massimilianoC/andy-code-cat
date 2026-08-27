@@ -1,8 +1,5 @@
 import { Router, type Response, type NextFunction } from "express";
 import {
-    executeProjectPipelineSchema,
-    type GuidedLaunchResultDto,
-    guidedLaunchSchema,
     type GenerationWorkspaceDto,
     launchWorkspacePipelineSchema,
     previewCanonicalBriefSchema,
@@ -93,83 +90,13 @@ export function createPipelineRoutes(): Router {
 
     router.use(authMiddleware);
 
-    const runGuidedLaunch = async (req: RequestWithContext, res: Response, next: NextFunction) => {
-        try {
-            const intake = guidedLaunchSchema.parse(req.body);
-
-            // Propagate inferred presetId to the project so Layer T picks the right template,
-            // and persist the resolved output language so Layer L (OUTPUT LANGUAGE) is injected
-            // into every subsequent generation for this project (not just the intake brief text).
-            if (intake.presetId || intake.outputLanguage) {
-                await projectRepository.update(req.sandbox!.projectId, req.auth!.userId, {
-                    ...(intake.presetId ? { presetId: intake.presetId } : {}),
-                    ...(intake.outputLanguage ? { outputLanguage: intake.outputLanguage } : {}),
-                }).catch(() => {});
-            }
-
-            const result = await launchGuidedProject.execute({
-                userId: req.auth!.userId,
-                projectId: req.sandbox!.projectId,
-                intake,
-            });
-
-            ExecutionLogger.instance.emit({
-                projectId: req.sandbox!.projectId,
-                conversationId: result.conversationId,
-                domain: "system",
-                eventType: "guided_pipeline_prepared",
-                level: "info",
-                status: "success",
-                metadata: {
-                    mode: "guided",
-                    jobId: result.jobId,
-                    workspaceRootPath: result.workspace.rootPath,
-                },
-            });
-
-            const response: GuidedLaunchResultDto = {
-                mode: "guided",
-                status: "prepared",
-                projectId: req.sandbox!.projectId,
-                conversationId: result.conversationId,
-                jobId: result.jobId,
-                normalizedBrief: result.normalizedBrief,
-                suggestedNextActions: result.suggestedNextActions,
-                workspace: toWorkspaceDto(result.workspace),
-            };
-
-            res.status(201).json(response);
-        } catch (error) {
-            next(error);
-        }
-    };
-
-    router.post(
-        "/projects/:projectId/pipelines/guided",
-        sandboxMiddleware,
-        runGuidedLaunch,
-    );
-    // Legacy alias — kept for one release so cached frontend bundles / external clients still
-    // posting to the old path keep working. See docs/specs/GUIDED_MODE_PREFILL_SPEC.md.
-    router.post(
-        "/projects/:projectId/pipelines/zero-effort",
-        sandboxMiddleware,
-        runGuidedLaunch,
-    );
-
-    router.post(
-        "/projects/:projectId/pipelines/execute",
-        sandboxMiddleware,
-        async (req: RequestWithContext, res, next) => {
-            try {
-                const body = executeProjectPipelineSchema.parse(req.body);
-                req.body = body.input;
-                await runGuidedLaunch(req, res, next);
-            } catch (error) {
-                next(error);
-            }
-        },
-    );
+    // The guided launch has exactly one HTTP entry point: POST /pipeline/launch-workspace,
+    // below. Three more used to reach the same handler without creating a PipelineRun —
+    // /pipelines/guided and its aliases /pipelines/zero-effort and /pipelines/execute — which
+    // meant the same user action could take a certified path or an uncertified one depending on
+    // which URL the caller happened to know. Removed 2026-08-27 on the owner's instruction:
+    // one operational line, the SSOT one. `LaunchGuidedProject` is untouched — it is still the
+    // engine, composed by `LaunchWorkspacePipeline` rather than reached directly.
 
     const getGuidedPipelineConfig = async (req: RequestWithContext, res: Response, next: NextFunction) => {
         try {
@@ -208,14 +135,13 @@ export function createPipelineRoutes(): Router {
         sandboxMiddleware,
         getGuidedPipelineConfig,
     );
-    // Legacy alias — see the note on the POST route above.
 
     /**
      * I12 of the SSOT program — server-owned Workspace launch that freezes a `PipelineModelLock`
      * and attaches the canonical brief to a real `PipelineRun` up front (see
      * `LaunchWorkspacePipeline`). Gated behind the same `PIPELINE_RUN_ENABLED` master rollback
-     * lever as `pipelineRunRoutes.ts` since it persists a `PipelineRun`; the pre-existing
-     * `/pipelines/zero-effort` route above is completely untouched by this addition.
+     * lever as `pipelineRunRoutes.ts` since it persists a `PipelineRun`. Since 2026-08-27 this
+     * is the only route that launches a project.
      *
      * Named "Workspace" (not "GodMode") since 2026-08-19, matching the product-owner-approved
      * rename in PR #58; see `pipelineEntryModeSchema`'s doc comment in
@@ -285,7 +211,8 @@ export function createPipelineRoutes(): Router {
      * Side-effect-free preview of the canonical brief.
      *
      * The guided wizard needs to show the brief for review before the user commits. It used to
-     * get that text from POST /pipelines/guided, which creates a conversation and a workspace as
+     * get that text from the removed POST /pipelines/guided, which created a conversation and a
+     * workspace as
      * a side effect — so every abandoned wizard left an empty conversation behind, and the brief
      * the user reviewed belonged to a launch that had already happened. This returns the same
      * text from the same single builder and writes nothing; the launch happens once, when the
@@ -303,12 +230,6 @@ export function createPipelineRoutes(): Router {
                 next(error);
             }
         },
-    );
-
-    router.get(
-        "/projects/:projectId/pipelines/zero-effort/config",
-        sandboxMiddleware,
-        getGuidedPipelineConfig,
     );
 
     return router;
