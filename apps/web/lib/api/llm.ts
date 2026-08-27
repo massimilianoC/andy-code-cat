@@ -86,6 +86,12 @@ export interface LlmChatPreviewResult {
     structuredParseValid?: boolean;
     /** Canonical shape from packages/contracts/src/llm.ts — see LlmPromptingTrace. */
     promptingTrace?: LlmPromptingTrace;
+    /**
+     * AL-026 — id of the durable PromptExecutionLog record this response was persisted under
+     * (packages/contracts/src/llm.ts LlmChatPreviewResult.promptExecutionId, populated at
+     * llmRoutes.ts:913/:1532). Callers that create a PreviewSnapshot store this as an FK.
+     */
+    promptExecutionId?: string;
     structured?: {
         chat: {
             summary: string;

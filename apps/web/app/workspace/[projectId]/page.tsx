@@ -108,7 +108,9 @@ import {
 import {
     parseProtectedAssetDownloadUrl,
     resolvePreviewAssetUrls,
+    reversePreviewAssetReplacements,
 } from "../features/preview/resolvePreviewAssetUrls";
+import { buildVersionIndex } from "../features/versions/versionNumbering";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
     ssr: false,
@@ -353,6 +355,9 @@ function WorkspacePageContent() {
         sourceCss: string;
         html: string;
         css: string;
+        // AL-009 — original-URL -> data-URI map, kept so handleCommitEditVersion can reverse
+        // the substitution before persisting what WYSIWYG reads back from the iframe DOM.
+        replacements: Map<string, string>;
     } | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const assetPreviewUrlCacheRef = useRef<Map<string, string>>(new Map());
@@ -1686,17 +1691,23 @@ function WorkspacePageContent() {
         if (!token || !activeConvId) return;
         setIsSavingEditVersion(true);
         try {
+            // AL-009 — `html` is read back from the sandboxed preview DOM, which had project
+            // asset URLs inlined as base64 data URIs so the sandbox could render them without
+            // an auth header (see resolvePreviewAssetUrls). Undo that here so the persisted
+            // version stores the source URLs, not the render: one measured save otherwise went
+            // 10.703 -> 131.884 characters. Both branches below persist, so both need it.
+            const sourceHtml = reversePreviewAssetReplacements(html, previewAssetResolved?.replacements ?? new Map());
             if (editSessionId) {
                 // Autosave current state first, then commit via session
                 await saveWysiwygEditState(token, projectId, editSessionId, {
-                    html,
+                    html: sourceHtml,
                     css: editorCss,
                     js: editorJs,
                 });
                 const res = await commitWysiwygSession(token, projectId, editSessionId, {
                     description: "EDIT Light",
                 });
-                saveThumbnail(projectId, { html, css: editorCss, js: editorJs });
+                saveThumbnail(projectId, { html: sourceHtml, css: editorCss, js: editorJs });
                 incrementSnapCount(projectId);
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
@@ -1705,11 +1716,11 @@ function WorkspacePageContent() {
                 // Degraded mode: session was not created, save directly as PreviewSnapshot
                 const res = await createPreviewSnapshot(token, projectId, {
                     conversationId: activeConvId,
-                    artifacts: { html, css: editorCss, js: editorJs },
+                    artifacts: { html: sourceHtml, css: editorCss, js: editorJs },
                     metadata: { finishReason: "wysiwyg-edit-light" },
                     activate: true,
                 });
-                saveThumbnail(projectId, { html, css: editorCss, js: editorJs });
+                saveThumbnail(projectId, { html: sourceHtml, css: editorCss, js: editorJs });
                 incrementSnapCount(projectId);
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
@@ -1723,7 +1734,7 @@ function WorkspacePageContent() {
         } finally {
             setIsSavingEditVersion(false);
         }
-    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification]);
+    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification, previewAssetResolved]);
     handleCommitEditVersionRef.current = handleCommitEditVersion;
 
     // ── Derived values ──────────────────────────────────────────────────────
@@ -1773,15 +1784,24 @@ function WorkspacePageContent() {
     // snapshot with actual content to prevent sending blank context to the LLM.
     const activeMarked = previewSnapshots.find((s) => s.isActive);
 
+    // AL-011 — number = depth along the seed chain, not list position (see
+    // versionNumbering.ts). Shared by the Live banner below and SnapshotHistoryPanel so the
+    // two never disagree about which version a given badge refers to.
+    const versionIndex = useMemo(() => buildVersionIndex(previewSnapshots), [previewSnapshots]);
+
     // Published version tracking — for the Live banner stale warning.
-    const publishedSnapshotIdx = publishDeployment
-        ? previewSnapshots.findIndex((s) => s.id === publishDeployment.snapshotId)
-        : -1;
-    const publishedVersionNumber = publishedSnapshotIdx !== -1
-        ? previewSnapshots.length - publishedSnapshotIdx
+    const publishedVersionNumber = publishDeployment
+        ? versionIndex.get(publishDeployment.snapshotId) ?? null
         : null;
-    const activeMarkedIdx = previewSnapshots.findIndex((s) => s.isActive);
-    const activeVersionNumber = activeMarkedIdx !== -1 ? previewSnapshots.length - activeMarkedIdx : null;
+    const activeVersionNumber = activeMarked ? versionIndex.get(activeMarked.id) ?? null : null;
+
+    // AL-014 — branch notice near the composer. previewSnapshots is newest-first (backend
+    // sorts createdAt desc), so index 0 is whatever was created most recently, independent of
+    // its chain depth. The seed of the next edit is the active version (AL-012); if that isn't
+    // the newest snapshot, the next change branches rather than continuing the tip.
+    const newestSnapshot = previewSnapshots[0] ?? null;
+    const willBranchOnNextEdit = !!activeMarked && !!newestSnapshot && activeMarked.id !== newestSnapshot.id;
+    const newestVersionNumberForBranchNotice = newestSnapshot ? versionIndex.get(newestSnapshot.id) ?? null : null;
     const isPublishStale =
         publishDeployment?.status === "live" &&
         !!activeMarked &&
@@ -1836,6 +1856,7 @@ function WorkspacePageContent() {
                 sourceCss: editorCss,
                 html: resolved.html,
                 css: resolved.css,
+                replacements: resolved.replacements,
             });
         });
 
@@ -2335,6 +2356,10 @@ function WorkspacePageContent() {
                         // structured.artifacts. Sending rawResponse here would cause the
                         // snapshot route to overwrite the correct merged HTML with empty.
                         rawLlmResponse: llm.focusPatchApplied ? undefined : (llm.rawResponse ?? undefined),
+                        // AL-029 — records which element (or code selection) this generation
+                        // targeted, on the version it produced. 0 of 195 stored snapshots carry
+                        // this today because no client call site ever sent it.
+                        focusContext,
                         metadata: {
                             model: llm.model,
                             provider: llm.provider,
@@ -2344,6 +2369,11 @@ function WorkspacePageContent() {
                             tokenUsage: llm.usage,
                             promptingTrace: llm.promptingTrace,
                             mediaResolution: llm.mediaResolution,
+                            // AL-026 — the durable PromptExecutionLog id this response was
+                            // persisted under (packages/contracts llm.ts:332). The contract
+                            // field on the snapshot side (preview.ts) is landing in a parallel
+                            // change; until it does, the backend simply drops this key.
+                            promptExecutionId: llm.promptExecutionId,
                         },
                         activate: true,
                     });
@@ -3303,6 +3333,27 @@ function WorkspacePageContent() {
                     aria-orientation="horizontal"
                     aria-label={t("workspace.ui.resizeChat")}
                 />
+                {/* AL-014 — the seed of the next version is already the active one (enforced
+                    server-side); this only makes that fact visible. Without it, going back to
+                    an old version and editing silently starts a branch the user cannot see
+                    forming, and the newer versions it leaves behind look lost even though they
+                    stay reachable in the history panel. */}
+                {willBranchOnNextEdit && (
+                    <div
+                        style={{
+                            padding: "0.3rem 0.7rem",
+                            fontSize: "0.72rem",
+                            color: "#f59e0b",
+                            background: "rgba(245,158,11,0.07)",
+                            borderTop: "1px solid rgba(245,158,11,0.20)",
+                        }}
+                    >
+                        {t("workspace.ui.branchNotice", {
+                            active: activeVersionNumber ?? "?",
+                            latest: newestVersionNumberForBranchNotice ?? "?",
+                        })}
+                    </div>
+                )}
                 <form
                     onSubmit={(e) => void handleSend(e)}
                     className="workspace-input-form relative"
@@ -3825,6 +3876,7 @@ function WorkspacePageContent() {
                                     snapshots={previewSnapshots}
                                     selectedId={selectedBackendSnapshotId}
                                     loading={loadingSnapshots}
+                                    publishDeployment={publishDeployment}
                                     onSelect={(id) => {
                                         const snap = previewSnapshots.find((s) => s.id === id);
                                         if (snap?.artifacts) {

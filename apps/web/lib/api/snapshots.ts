@@ -23,6 +23,10 @@ export interface PreviewSnapshot {
         finishReason?: string;
         structuredParseValid?: boolean;
         rawResponse?: string;
+        // AL-026 — FK to the PromptExecutionLog record this version's generation was persisted
+        // under. Optional client-side ahead of the contract: until previewSnapshotMetadataSchema
+        // (packages/contracts) grows this field, the backend zod schema just drops it on write.
+        promptExecutionId?: string;
         tokenUsage?: {
             promptTokens: number;
             completionTokens: number;
@@ -87,6 +91,8 @@ export function createPreviewSnapshot(
             finishReason?: string;
             structuredParseValid?: boolean;
             rawResponse?: string;
+            // AL-026 — see PreviewSnapshot.metadata above.
+            promptExecutionId?: string;
             tokenUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
             promptingTrace?: {
                 originalUserMessage: string;
