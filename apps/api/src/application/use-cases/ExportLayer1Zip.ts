@@ -324,12 +324,16 @@ export class ExportLayer1Zip {
         conversationId?: string;
         formSettings?: ProjectFormSettings;
     }): Promise<ExportRecord & { downloadToken: string; downloadUrl: string }> {
-        // Resolve snapshot
+        // Resolve snapshot. AL-025: export follows the same version semantics as publication —
+        // an explicit snapshotId wins; absent that, the active version is resolved at PROJECT
+        // scope (AL-016: activation deactivates every snapshot in the project, not just the ones
+        // in one conversation), matching PublishProject. conversationId is used below only to
+        // pull chat history for the README, never to resolve which snapshot is active.
         let snapshot;
         if (input.snapshotId) {
             snapshot = await this.snapshotRepository.findById(input.projectId, input.snapshotId);
-        } else if (input.conversationId) {
-            snapshot = await this.snapshotRepository.getActive(input.projectId, input.conversationId);
+        } else {
+            snapshot = await this.snapshotRepository.getActiveForProject(input.projectId);
         }
 
         if (!snapshot) {
@@ -337,7 +341,7 @@ export class ExportLayer1Zip {
                 new Error(
                     input.snapshotId
                         ? "Snapshot not found"
-                        : "No active snapshot found for this project. Provide a snapshotId or conversationId."
+                        : "No active snapshot found for this project. Provide a snapshotId, or activate a version first."
                 ),
                 { statusCode: 404 }
             );

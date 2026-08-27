@@ -37,6 +37,8 @@ export interface PreviewSnapshotMetadata {
     structuredParseValid?: boolean;
     rawResponse?: string;
     wysiwygSessionId?: string;
+    /** AL-026: the prompt execution that produced this version, where one exists. */
+    promptExecutionId?: string;
     tokenUsage?: {
         promptTokens: number;
         completionTokens: number;

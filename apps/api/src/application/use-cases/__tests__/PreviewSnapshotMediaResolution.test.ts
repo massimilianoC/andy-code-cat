@@ -3,6 +3,7 @@ import type { Conversation } from "../../../domain/entities/Conversation";
 import type { PreviewSnapshot } from "../../../domain/entities/PreviewSnapshot";
 import { ActivatePreviewSnapshot } from "../ActivatePreviewSnapshot";
 import { CreatePreviewSnapshot } from "../CreatePreviewSnapshot";
+import { DeletePreviewSnapshot } from "../DeletePreviewSnapshot";
 
 class MemoryPreviewSnapshotRepository {
     snapshots: PreviewSnapshot[] = [];
@@ -49,7 +50,22 @@ class MemoryPreviewSnapshotRepository {
     getActiveForProject = vi.fn(async (_projectId: string) => {
         return this.snapshots.find((snapshot) => snapshot.isActive) ?? null;
     });
-    deleteById = vi.fn();
+    deleteById = vi.fn(async (projectId: string, snapshotId: string) => {
+        const index = this.snapshots.findIndex((snapshot) => snapshot.id === snapshotId && snapshot.projectId === projectId);
+        if (index === -1) return false;
+        this.snapshots.splice(index, 1);
+        return true;
+    });
+    relinkChildren = vi.fn(async (projectId: string, fromParentId: string, toParentId?: string) => {
+        let relinked = 0;
+        for (const snapshot of this.snapshots) {
+            if (snapshot.projectId === projectId && snapshot.parentSnapshotId === fromParentId) {
+                snapshot.parentSnapshotId = toParentId;
+                relinked++;
+            }
+        }
+        return relinked;
+    });
     updateThumbnailPath = vi.fn();
     getActiveForProjects = vi.fn();
 }
@@ -99,6 +115,37 @@ class MemoryConversationRepository {
     addBackgroundTask = vi.fn();
     updateBackgroundTask = vi.fn();
 }
+
+describe("CreatePreviewSnapshot — AL-026 promptExecutionId", () => {
+    it("stores and returns metadata.promptExecutionId when the caller supplies it", async () => {
+        const repository = new MemoryPreviewSnapshotRepository();
+        const useCase = new CreatePreviewSnapshot(repository as any);
+
+        const snapshot = await useCase.execute({
+            projectId: "project-1",
+            conversationId: "conversation-1",
+            artifacts: { html: "<main></main>", css: "", js: "" },
+            metadata: { promptExecutionId: "exec-123" },
+            activate: true,
+        });
+
+        expect(snapshot.metadata?.promptExecutionId).toBe("exec-123");
+    });
+
+    it("leaves a snapshot created without promptExecutionId unaffected", async () => {
+        const repository = new MemoryPreviewSnapshotRepository();
+        const useCase = new CreatePreviewSnapshot(repository as any);
+
+        const snapshot = await useCase.execute({
+            projectId: "project-1",
+            conversationId: "conversation-1",
+            artifacts: { html: "<main></main>", css: "", js: "" },
+            activate: true,
+        });
+
+        expect(snapshot.metadata?.promptExecutionId).toBeUndefined();
+    });
+});
 
 describe("Preview snapshot media resolution guardrails", () => {
     it("attaches persisted media trace IDs after snapshot creation", async () => {
@@ -277,5 +324,74 @@ describe("CreatePreviewSnapshot — version chain", () => {
         });
 
         expect(orphan.parentSnapshotId).toBeUndefined();
+    });
+});
+
+describe("DeletePreviewSnapshot — AL-015 chain re-linking", () => {
+    const artifacts = { html: "<p>hi</p>", css: "", js: "" };
+
+    it("mid-chain delete re-parents children to the grandparent", async () => {
+        const repo = new MemoryPreviewSnapshotRepository();
+        const v1 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+        const v2 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v1.id, activate: false });
+        const v3 = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v2.id, activate: true,
+        });
+
+        const useCase = new DeletePreviewSnapshot(repo as any);
+        await useCase.execute("p1", v2.id);
+
+        expect(repo.relinkChildren).toHaveBeenCalledWith("p1", v2.id, v1.id);
+        expect(repo.snapshots.find((s) => s.id === v3.id)?.parentSnapshotId).toBe(v1.id);
+        expect(repo.snapshots.some((s) => s.id === v2.id)).toBe(false);
+    });
+
+    it("deleting a root leaves its children as roots", async () => {
+        const repo = new MemoryPreviewSnapshotRepository();
+        const v1 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+        const v2 = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v1.id, activate: true,
+        });
+
+        const useCase = new DeletePreviewSnapshot(repo as any);
+        await useCase.execute("p1", v1.id);
+
+        expect(repo.relinkChildren).toHaveBeenCalledWith("p1", v1.id, undefined);
+        expect(repo.snapshots.find((s) => s.id === v2.id)?.parentSnapshotId).toBeUndefined();
+    });
+
+    it("deleting a leaf changes nothing else in the chain", async () => {
+        const repo = new MemoryPreviewSnapshotRepository();
+        const v1 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        const v2 = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v1.id, activate: false,
+        });
+
+        const useCase = new DeletePreviewSnapshot(repo as any);
+        await useCase.execute("p1", v2.id);
+
+        expect(await repo.relinkChildren.mock.results[0]?.value).toBe(0);
+        expect(repo.snapshots).toHaveLength(1);
+        expect(repo.snapshots[0]?.id).toBe(v1.id);
+        expect(repo.snapshots[0]?.parentSnapshotId).toBeUndefined();
+    });
+
+    it("scopes the re-link to the deleted snapshot's own project", async () => {
+        const repo = new MemoryPreviewSnapshotRepository();
+        const v1 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+        const v2 = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v1.id, activate: true,
+        });
+        // A different project's snapshot that happens to carry the same id as its parent — must
+        // never be touched by a delete happening in project "p1".
+        const foreign = await repo.create({
+            projectId: "p2", conversationId: "c2", artifacts, parentSnapshotId: v1.id, activate: true,
+        });
+
+        const useCase = new DeletePreviewSnapshot(repo as any);
+        await useCase.execute("p1", v1.id);
+
+        expect(repo.snapshots.find((s) => s.id === v2.id)?.parentSnapshotId).toBeUndefined();
+        expect(repo.snapshots.find((s) => s.id === foreign.id)?.parentSnapshotId).toBe(v1.id);
     });
 });

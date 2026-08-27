@@ -18,6 +18,10 @@ export const previewSnapshotMetadataSchema = z.object({
     structuredParseValid: z.boolean().optional(),
     rawResponse: z.string().max(300000).optional(),
     wysiwygSessionId: z.string().max(100).optional(),
+    // AL-026: immutable link from a version to the prompt execution that produced it. The id
+    // already exists (llmChatPreviewResponse.promptExecutionId); this is only the storage side —
+    // nothing generates it here, it is simply never dropped on the way into the snapshot.
+    promptExecutionId: z.string().max(100).optional(),
     tokenUsage: z.object({
         promptTokens: z.number().int().nonnegative(),
         completionTokens: z.number().int().nonnegative(),
