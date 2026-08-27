@@ -174,6 +174,9 @@ export interface AdminLlmModelDto {
     priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
     priceInputUsdPerM?: number;
     priceOutputUsdPerM?: number;
+    /** "deprecated" = the provider no longer lists it. Kept so ids in existing builds resolve. */
+    availability?: "live" | "deprecated";
+    availabilityCheckedAt?: string;
 }
 
 export interface AdminLlmProviderDto {
@@ -422,6 +425,26 @@ export function updateAdminLlmModel(
         "PUT",
         `/v1/admin/llm-registry/providers/${encodeURIComponent(provider)}/models/${encodeURIComponent(modelId)}`,
         body,
+        auth(token),
+    );
+}
+
+/**
+ * Turn a set of models on or off in one call — one model, an author group, or a whole provider.
+ * One request per decision, not one per model: a partial failure would leave a catalog the
+ * operator never chose. Returns the refreshed registry so the caller renders the persisted truth
+ * rather than its own optimistic guess.
+ */
+export function setAdminLlmModelsActive(
+    token: string,
+    provider: string,
+    modelIds: string[],
+    isActive: boolean,
+): Promise<AdminLlmRegistryDto & { ok: boolean; applied: string[]; unknown: string[] }> {
+    return call(
+        "POST",
+        `/v1/admin/llm-registry/providers/${encodeURIComponent(provider)}/models/activation`,
+        { modelIds, isActive },
         auth(token),
     );
 }

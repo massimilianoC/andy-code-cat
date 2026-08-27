@@ -194,8 +194,9 @@ export async function hydrateProviderCatalog(
     // `fallbackModels` (as the discovery loop below used to) can never find it, which is exactly
     // why a deactivated model used to come back `isActive: true` the moment the provider still
     // listed it. Every openai-compatible provider is live-discovered, so that was every model.
+    // It is now also the source of the activation state itself: what the operator decided is the
+    // only thing that decides, and silence means off.
     const curatedById = new Map(providerCatalog.models.filter((model) => model.id).map((model) => [model.id, model]));
-    const isDeactivatedByOperator = (id: string) => curatedById.get(id)?.isActive === false;
 
     if (providerCatalog.apiType !== "openai-compatible") {
         return { ...providerCatalog, models: fallbackModels };
@@ -263,9 +264,12 @@ export async function hydrateProviderCatalog(
 
         const mapped = rawModels
             .filter((model) => shouldKeepDiscoveredModel(providerCatalog.provider, model))
-            // An operator's explicit "off" outranks live discovery. Without this, curating the
-            // catalog is impossible for any provider that lists the model itself.
-            .filter((model) => !isDeactivatedByOperator(String(model.id ?? "").trim()))
+            // An operator's explicit "off" outranks live discovery, but "off" is a state, not a
+            // deletion: the model stays in the catalog carrying isActive: false. Dropping it here
+            // (as this used to) meant a model switched off in /admin/models vanished from the
+            // admin list too, so there was no way to switch it back on. Every consumer already
+            // filters on isActive — catalogModels.ts, ResolvePipelineModelLock, the picker — so
+            // carrying the inactive entry costs nothing and is what makes curation possible.
             .map((model, index): RuntimeModel => {
                 const id = String(model.id ?? "").trim();
                 const modality = model.architecture?.modality ?? "";
@@ -293,9 +297,21 @@ export async function hydrateProviderCatalog(
                     provider: providerCatalog.provider,
                     role: inferRole({ existingRole: existing?.role, capabilities: existing?.capabilities?.length ? existing.capabilities : inferredCapabilities }),
                     capabilities: existing?.capabilities?.length ? existing.capabilities : inferredCapabilities,
-                    isDefault: existing?.isDefault ?? (index === 0 && !fallbackModels.some((candidate) => candidate.isDefault)),
+                    // Only an active model can be the default. Before activation defaulted to
+                    // off, "first discovered" was a reasonable stand-in for "the one to use";
+                    // now it would nominate a model nobody has approved.
+                    isDefault: curatedById.get(id)?.isDefault
+                        ?? (curatedById.get(id)?.isActive === true
+                            && index === 0
+                            && !fallbackModels.some((candidate) => candidate.isDefault)),
                     isFallback: existing?.isFallback ?? index !== 0,
-                    isActive: existing?.isActive ?? true,
+                    // A model the operator has never ruled on arrives OFF. The platform spends
+                    // the account owner's money, so a provider adding two hundred models to its
+                    // listing must not silently make two hundred models spendable. Read from
+                    // curatedById, not from `existing`: `existing` comes from fallbackModels,
+                    // which dedupeModelsById has already stripped of every inactive entry, so an
+                    // explicit "off" would read back as undefined and flip to the default.
+                    isActive: curatedById.get(id)?.isActive ?? false,
                     // The operator needs to see at a glance which local models are resident:
                     // picking an unloaded one means waiting for it to be pulled into memory,
                     // or a timeout. Suffixed rather than added as a new domain field to keep
@@ -316,33 +332,52 @@ export async function hydrateProviderCatalog(
             return { ...providerCatalog, models: fallbackModels };
         }
 
-        // Exactly one default per provider, and it must be a live-discovered model:
-        // keep the first discovered default (or promote discovered[0] when none has it),
-        // and strip isDefault from every other entry. This prevents a stale seed default
-        // that is no longer in the provider's live /models list from coexisting with the
-        // promoted discovered[0] (which previously yielded two `isDefault` models).
+        // At most one default per provider, and it must be a live-discovered model the operator
+        // has actually activated: keep the first such default, strip isDefault from every other
+        // entry. This prevents a stale seed default that is no longer in the provider's live
+        // /models list from coexisting with a promoted one.
         let discoveredDefaultSeen = false;
         for (let index = 0; index < mapped.length; index += 1) {
             const model = mapped[index]!;
-            if (model.isDefault && !discoveredDefaultSeen) {
+            if (model.isDefault && model.isActive && !discoveredDefaultSeen) {
                 discoveredDefaultSeen = true;
             } else if (model.isDefault) {
                 mapped[index] = { ...model, isDefault: false, isFallback: true };
             }
         }
         if (!discoveredDefaultSeen) {
-            mapped[0] = { ...mapped[0]!, isDefault: true, isFallback: false };
+            // Promote the first ACTIVE model, not simply the first. Promoting index 0 blindly —
+            // which is what this did while everything arrived active — now nominates a model
+            // nobody approved, and every role cascade in catalogModels.ts looks for
+            // `isDefault && isActive`, so it would nominate it into a state no resolver accepts.
+            // When the operator has activated nothing, this provider has no default, and that is
+            // the honest answer rather than an invented one.
+            const firstActive = mapped.findIndex((model) => model.isActive);
+            if (firstActive >= 0) {
+                mapped[firstActive] = { ...mapped[firstActive]!, isDefault: true, isFallback: false };
+            }
         }
 
         const discoveredIds = new Set(mapped.map((model) => model.id));
         // For a volatile local provider the discovered list is the whole truth. Appending seeded
         // entries here is what kept the placeholder `local/default-chat` in the catalog long
         // after LM Studio stopped serving anything by that name — and every dispatch to it failed.
+        // Stored models the provider did not list this time. They are kept so the operator can
+        // still see and manage them — and so an id referenced by an existing build still resolves
+        // to a real catalog row — but they are marked, because "the provider stopped offering
+        // this" is a different fact from "the operator switched it off". The persisted flag is
+        // written by ReconcileLlmCatalogAvailability; this is the read-time view of the same
+        // thing, for the case where reconciliation has not run yet.
         const nonTextFallbacks = alwaysFresh
             ? []
-            : fallbackModels
-                .filter((model) => model.isActive && !discoveredIds.has(model.id))
-                .map((model) => ({ ...model, provider: providerCatalog.provider, isDefault: false }));
+            : providerCatalog.models
+                .filter((model) => model.id && !discoveredIds.has(model.id))
+                .map((model) => ({
+                    ...model,
+                    provider: providerCatalog.provider,
+                    isDefault: false,
+                    availability: "deprecated" as const,
+                }));
 
         localDiscoveryFailures.delete(cacheKey);
         const hydratedModels = assignPriceTiers([...mapped, ...nonTextFallbacks]);

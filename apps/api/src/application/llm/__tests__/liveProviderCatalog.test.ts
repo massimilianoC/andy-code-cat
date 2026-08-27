@@ -20,13 +20,25 @@ describe("hydrateProviderCatalog", () => {
             createdAt: new Date("2026-01-01T00:00:00.000Z"),
             updatedAt: new Date("2026-01-01T00:00:00.000Z"),
             models: [
+                // Approved by the operator, and still offered by the provider. Discovery no
+                // longer activates anything on its own, so a case about capability inference has
+                // to say which model was approved or it is really a case about activation.
                 {
-                    id: "google/gemma-4-27b-it:free",
+                    id: "google/gemma-4-31b-it:free",
                     provider: "openrouter",
                     role: "dialogue",
                     capabilities: ["chat"],
                     isDefault: true,
                     isFallback: false,
+                    isActive: true,
+                },
+                {
+                    id: "google/gemma-4-27b-it:free",
+                    provider: "openrouter",
+                    role: "dialogue",
+                    capabilities: ["chat"],
+                    isDefault: false,
+                    isFallback: true,
                     isActive: true,
                 },
             ],
@@ -56,9 +68,17 @@ describe("hydrateProviderCatalog", () => {
         expect(hydrated.models[0]?.supportedParameters).toEqual(["response_format"]);
         expect(hydrated.models[1]?.capabilities).toEqual(["image_generation"]);
         expect(hydrated.models[2]?.capabilities).toEqual(["chat"]);
+        // The stored entry the provider stopped listing is carried over and flagged, not dropped.
+        expect(hydrated.models[2]?.availability).toBe("deprecated");
+        // The one model discovery returned that nobody approved stays off.
+        expect(hydrated.models[1]?.isActive).toBe(false);
     });
 
-    describe("operator-curated deactivation", () => {
+    /**
+     * Activation is the operator's decision and only the operator's decision. Discovery reports
+     * what a provider offers; it does not get a vote on what this platform will spend money on.
+     */
+    describe("operator-curated activation", () => {
         function catalogWith(models: LlmProviderCatalog["models"]): LlmProviderCatalog {
             return {
                 provider: "openrouter",
@@ -94,7 +114,7 @@ describe("hydrateProviderCatalog", () => {
             }));
         }
 
-        it("keeps a model the operator switched off out of the catalog even when the provider still lists it", async () => {
+        it("keeps a model the operator switched off, marked off rather than removed", async () => {
             stubDiscovery(["keep/allowed", "banned/expensive", "never/seen-before"]);
 
             const hydrated = await hydrateProviderCatalog(
@@ -105,11 +125,15 @@ describe("hydrateProviderCatalog", () => {
                 "test-key",
             );
 
-            expect(hydrated.models.map((m) => m.id)).not.toContain("banned/expensive");
-            expect(hydrated.models.map((m) => m.id)).toEqual(["keep/allowed", "never/seen-before"]);
+            // It used to be dropped here, which meant a model switched off in /admin/models
+            // disappeared from the admin list too and could never be switched back on.
+            const banned = hydrated.models.find((m) => m.id === "banned/expensive");
+            expect(banned).toBeDefined();
+            expect(banned?.isActive).toBe(false);
+            expect(hydrated.models.find((m) => m.id === "keep/allowed")?.isActive).toBe(true);
         });
 
-        it("still promotes a default when the operator deactivated the discovered first entry", async () => {
+        it("does not nominate an unapproved model as the default", async () => {
             stubDiscovery(["banned/first", "keep/second"]);
 
             const hydrated = await hydrateProviderCatalog(
@@ -117,32 +141,52 @@ describe("hydrateProviderCatalog", () => {
                 "test-key",
             );
 
-            expect(hydrated.models.map((m) => m.id)).toEqual(["keep/second"]);
-            expect(hydrated.models.filter((m) => m.isDefault)).toHaveLength(1);
-            expect(hydrated.models[0]?.isDefault).toBe(true);
+            expect(hydrated.models.map((m) => m.id)).toEqual(["banned/first", "keep/second"]);
+            // "First discovered" is no longer a stand-in for "the one to use": nothing here has
+            // been approved, so nothing here is the default.
+            expect(hydrated.models.filter((m) => m.isDefault)).toHaveLength(0);
         });
 
-        it("yields an empty model list when the operator deactivated every discovered model", async () => {
-            stubDiscovery(["banned/one", "banned/two"]);
-
-            const hydrated = await hydrateProviderCatalog(
-                catalogWith([
-                    model("banned/one", { isActive: false }),
-                    model("banned/two", { isActive: false }),
-                ]),
-                "test-key",
-            );
-
-            expect(hydrated.models).toEqual([]);
-        });
-
-        it("leaves models the operator never touched active", async () => {
+        it("a model the operator has never ruled on arrives INACTIVE", async () => {
             stubDiscovery(["untouched/model"]);
 
             const hydrated = await hydrateProviderCatalog(catalogWith([]), "test-key");
 
+            // The platform spends the account owner's money. A provider adding models to its
+            // listing must not silently make them spendable — the operator enables what they use.
             expect(hydrated.models.map((m) => m.id)).toEqual(["untouched/model"]);
-            expect(hydrated.models[0]?.isActive).toBe(true);
+            expect(hydrated.models[0]?.isActive).toBe(false);
+        });
+
+        it("an explicit activation survives rediscovery", async () => {
+            stubDiscovery(["chosen/model", "other/model"]);
+
+            const hydrated = await hydrateProviderCatalog(
+                catalogWith([model("chosen/model", { isActive: true })]),
+                "test-key",
+            );
+
+            expect(hydrated.models.find((m) => m.id === "chosen/model")?.isActive).toBe(true);
+            expect(hydrated.models.find((m) => m.id === "other/model")?.isActive).toBe(false);
+        });
+
+        it("a stored model the provider no longer lists is kept and flagged, not dropped", async () => {
+            stubDiscovery(["still/offered"]);
+
+            const hydrated = await hydrateProviderCatalog(
+                catalogWith([
+                    model("still/offered", { isActive: true }),
+                    model("retired/model", { isActive: true }),
+                ]),
+                "test-key",
+            );
+
+            const retired = hydrated.models.find((m) => m.id === "retired/model");
+            // Its id may already be referenced by a stored model lock, an execution log entry or
+            // a published build. Deleting the row turns every one of those into a dangling string.
+            expect(retired).toBeDefined();
+            expect(retired?.availability).toBe("deprecated");
+            expect(hydrated.models.find((m) => m.id === "still/offered")?.availability).toBeUndefined();
         });
     });
 });

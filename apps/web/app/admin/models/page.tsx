@@ -9,6 +9,7 @@ import {
     seedAdminLlmRegistry,
     updateAdminLlmModel,
     deleteAdminLlmModel,
+    setAdminLlmModelsActive,
     type AdminLlmModelDto,
     type AdminLlmProviderDto,
 } from "@/lib/api/admin";
@@ -17,7 +18,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MonacoCodeEditor } from "@/components/admin/MonacoCodeEditor";
-import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
+import { ProviderModelPicker, familyLabel } from "@/components/llm/ProviderModelPicker";
 
 const LIVE_MODEL_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -61,6 +62,7 @@ export default function AdminModelsPage() {
     const [providers, setProviders] = useState<AdminLlmProviderDto[]>([]);
     const [selectedProvider, setSelectedProvider] = useState("siliconflow");
     const [draft, setDraft] = useState<AdminLlmModelDto>(EMPTY_MODEL);
+    const [activating, setActivating] = useState<string | null>(null);
 
     useEffect(() => {
         const token = getToken();
@@ -94,6 +96,56 @@ export default function AdminModelsPage() {
         () => providers.find((provider) => provider.provider === selectedProvider) ?? null,
         [providers, selectedProvider],
     );
+
+    /**
+     * Models of the selected provider, grouped by author. Granularity stays per model — this is
+     * only how they are laid out, because a provider that lists two hundred models is unusable as
+     * a flat list, and "everything from this author" is the decision an operator actually makes.
+     */
+    const modelGroups = useMemo(() => {
+        const groups = new Map<string, AdminLlmModelDto[]>();
+        for (const model of activeProvider?.models ?? []) {
+            const family = familyLabel(model.id);
+            const bucket = groups.get(family);
+            if (bucket) bucket.push(model);
+            else groups.set(family, [model]);
+        }
+        return [...groups.entries()]
+            .map(([family, models]) => ({
+                family,
+                models: [...models].sort((left, right) => left.id.localeCompare(right.id)),
+                activeCount: models.filter((model) => model.isActive).length,
+                deprecatedCount: models.filter((model) => model.availability === "deprecated").length,
+            }))
+            .sort((left, right) => left.family.localeCompare(right.family));
+    }, [activeProvider]);
+
+    const providerActiveCount = (activeProvider?.models ?? []).filter((model) => model.isActive).length;
+    const providerTotalCount = (activeProvider?.models ?? []).length;
+
+    /**
+     * One request per decision, whatever its size: a single model, an author group, or the whole
+     * provider. The response carries the refreshed registry, so what is rendered afterwards is
+     * what was persisted rather than an optimistic guess that a failed write would leave lying.
+     */
+    async function applyActivation(scope: string, modelIds: string[], isActive: boolean) {
+        const token = getToken();
+        if (!token || modelIds.length === 0) return;
+        setActivating(scope);
+        setError(null);
+        try {
+            const result = await setAdminLlmModelsActive(token, selectedProvider, modelIds, isActive);
+            setProviders(result.providers ?? []);
+            setSource(result.source ?? "env");
+            if (result.unknown?.length) {
+                setError(`${result.unknown.length} model(s) no longer offered by the provider were skipped.`);
+            }
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Could not change model activation");
+        } finally {
+            setActivating(null);
+        }
+    }
 
     async function loadRegistry(token: string) {
         setLoading(true);
@@ -311,31 +363,126 @@ export default function AdminModelsPage() {
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            {(activeProvider?.models ?? []).map((model) => (
-                                <Button
-                                    key={model.id}
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => selectProviderModel(selectedProvider, model.id)}
-                                    className="w-full h-auto justify-start rounded-lg px-3 py-2 text-left"
-                                >
-                                    <div className="w-full">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="text-sm font-medium text-foreground truncate">
-                                                {model.displayName || model.id}
-                                            </span>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${model.isActive ? "border-green-500/40 text-green-400" : "border-border text-muted-foreground"}`}>
-                                                {model.isActive ? "live" : "off"}
-                                            </span>
-                                        </div>
-                                        <div className="text-[11px] text-muted-foreground mt-1 truncate">
-                                            {model.id}
+                        <div className="space-y-3">
+                            {/* Whole-provider switch. A new model arrives off, so this is the
+                                "I trust this provider" shortcut - and the way back out of it. */}
+                            {providerTotalCount > 0 ? (
+                                <div className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
+                                    <div className="min-w-0">
+                                        <div className="text-sm font-medium text-foreground truncate">{selectedProvider}</div>
+                                        <div className="text-[11px] text-muted-foreground">
+                                            {providerActiveCount} of {providerTotalCount} active
                                         </div>
                                     </div>
-                                </Button>
+                                    <div className="flex gap-1 shrink-0">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={activating !== null || providerActiveCount === providerTotalCount}
+                                            onClick={() => applyActivation(
+                                                "provider",
+                                                (activeProvider?.models ?? []).map((model) => model.id),
+                                                true,
+                                            )}
+                                        >
+                                            {activating === "provider" ? "…" : "All on"}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={activating !== null || providerActiveCount === 0}
+                                            onClick={() => applyActivation(
+                                                "provider",
+                                                (activeProvider?.models ?? []).map((model) => model.id),
+                                                false,
+                                            )}
+                                        >
+                                            All off
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {modelGroups.map((group) => (
+                                <div key={group.family} className="rounded-lg border border-border">
+                                    <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-semibold text-foreground truncate">{group.family}</div>
+                                            <div className="text-[10px] text-muted-foreground">
+                                                {group.activeCount}/{group.models.length} active
+                                                {group.deprecatedCount > 0 ? " · " + group.deprecatedCount + " deprecated" : ""}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-1 shrink-0">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 px-2 text-[10px]"
+                                                disabled={activating !== null || group.activeCount === group.models.length}
+                                                onClick={() => applyActivation(
+                                                    "family:" + group.family,
+                                                    group.models.map((model) => model.id),
+                                                    true,
+                                                )}
+                                            >
+                                                {activating === "family:" + group.family ? "…" : "on"}
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 px-2 text-[10px]"
+                                                disabled={activating !== null || group.activeCount === 0}
+                                                onClick={() => applyActivation(
+                                                    "family:" + group.family,
+                                                    group.models.map((model) => model.id),
+                                                    false,
+                                                )}
+                                            >
+                                                off
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <div className="divide-y divide-border">
+                                        {group.models.map((model) => (
+                                            <div key={model.id} className="flex items-center gap-2 px-3 py-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => selectProviderModel(selectedProvider, model.id)}
+                                                    className="min-w-0 flex-1 text-left"
+                                                >
+                                                    <div className="text-sm font-medium text-foreground truncate">
+                                                        {model.displayName || model.id}
+                                                    </div>
+                                                    <div className="text-[11px] text-muted-foreground truncate">
+                                                        {model.id}
+                                                        {model.availability === "deprecated" ? " · no longer offered" : ""}
+                                                    </div>
+                                                </button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-6 shrink-0 px-2 text-[10px]"
+                                                    disabled={activating !== null}
+                                                    onClick={() => applyActivation("model:" + model.id, [model.id], !model.isActive)}
+                                                    title={model.isActive ? "Deactivate" : "Activate"}
+                                                >
+                                                    {activating === "model:" + model.id
+                                                        ? "…"
+                                                        : model.isActive ? "on" : "off"}
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             ))}
-                            {(activeProvider?.models ?? []).length === 0 ? (
+
+                            {providerTotalCount === 0 ? (
                                 <p className="text-xs text-muted-foreground">No models found for this provider yet.</p>
                             ) : null}
                         </div>
