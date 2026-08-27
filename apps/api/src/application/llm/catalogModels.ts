@@ -66,11 +66,19 @@ export interface ComposerCascadeResult {
     providerCatalog?: LlmProviderCatalog;
     /** Deduped active models of the resolved provider; empty when no provider resolved. */
     providerModels: CatalogModel[];
-    /**
-     * `undefined` is a legal outcome: the caller may still honour an unvalidated model override
-     * on an openai-compatible provider, and otherwise fails with "no active model".
-     */
+    /** `undefined` when the catalog offers no active model at all for this provider. */
     roleModel?: CatalogModel;
+    /**
+     * A specific model was asked for and the catalog does not offer it as active.
+     *
+     * Reported rather than absorbed. The cascade below would otherwise fall through to a default
+     * and answer with a model nobody asked for — the request would succeed, the cost record would
+     * name a different model than the caller chose, and nothing would say so. Whether that is an
+     * error or a silent substitution is the caller's decision to make explicitly.
+     */
+    requestedModelUnavailable: boolean;
+    /** Same, for the provider: it was named, and it is not an active provider. */
+    requestedProviderUnavailable: boolean;
 }
 
 /**
@@ -92,8 +100,17 @@ export function resolveComposerCascade(input: ResolveComposerCascadeInput): Comp
         input.providers.find((p) => p.provider === input.envDefaultProvider) ??
         input.providers[0];
 
+    const requestedProviderUnavailable = Boolean(input.requestedProvider)
+        && !input.providers.some((p) => p.provider === input.requestedProvider && p.isActive);
+
     if (!providerCatalog) {
-        return { providerCatalog: undefined, providerModels: [], roleModel: undefined };
+        return {
+            providerCatalog: undefined,
+            providerModels: [],
+            roleModel: undefined,
+            requestedModelUnavailable: Boolean(input.requestedModel),
+            requestedProviderUnavailable,
+        };
     }
 
     const providerModels = dedupeModelsById(providerCatalog.models);
@@ -112,5 +129,15 @@ export function resolveComposerCascade(input: ResolveComposerCascadeInput): Comp
         providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
         providerModels.find((m) => m.isActive);
 
-    return { providerCatalog, providerModels, roleModel };
+    return {
+        providerCatalog,
+        providerModels,
+        roleModel,
+        // providerModels is the deduped ACTIVE list, so "asked for it and did not find it" covers
+        // both an id that does not exist and one an operator has switched off. The catalog in
+        // Mongo is the source of truth for what may be spent on; a value the caller supplies is
+        // a request, not an authority.
+        requestedModelUnavailable: Boolean(input.requestedModel) && !explicitModel,
+        requestedProviderUnavailable,
+    };
 }

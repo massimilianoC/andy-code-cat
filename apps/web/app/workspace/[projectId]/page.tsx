@@ -53,7 +53,7 @@ import {
     type SuggestProjectImageIdeaResult,
     type StockImageProviderStatus,
 } from "../../../lib/api";
-import { ARTIFACT_BASE_STALE, type CreatePreviewSnapshotRequest } from "@andy-code-cat/contracts";
+import { ARTIFACT_BASE_STALE, MODEL_NOT_AVAILABLE, type CreatePreviewSnapshotRequest } from "@andy-code-cat/contracts";
 import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
 import { getProjectCostSummary } from "../../../lib/api/cost";
@@ -2612,6 +2612,19 @@ function WorkspacePageContent() {
                 status: "error",
                 message: msg,
             });
+
+            // The catalog is the source of truth for what may be dispatched, and this tab may be
+            // holding a list from before an operator switched something off. Re-read it and let
+            // the selector fall back to something that is actually available, rather than leaving
+            // the user to press send again on the same dead model.
+            if (err instanceof ApiError && err.code === MODEL_NOT_AVAILABLE && token) {
+                try {
+                    const refreshed = await getLlmProviders(token);
+                    setProvidersCatalog(refreshed.providers.filter((provider) => provider.isActive));
+                } catch {
+                    // Leave the stale list rather than blanking the selector on a second failure.
+                }
+            }
 
             if (token && trackedConversationId) {
                 try {

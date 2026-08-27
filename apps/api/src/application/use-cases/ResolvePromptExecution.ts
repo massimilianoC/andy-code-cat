@@ -1,4 +1,5 @@
 import type { LlmFocusContext } from "@andy-code-cat/contracts";
+import { MODEL_NOT_AVAILABLE } from "@andy-code-cat/contracts";
 import { HttpError } from "../../presentation/http/errors/httpError";
 import { PRESET_MAP, withStaticViewportFallback } from "../../domain/entities/ProjectPreset";
 import {
@@ -284,6 +285,33 @@ export class ResolvePromptExecution {
                 throw new Error("No active LLM provider catalog found");
             }
 
+            // The catalog is the source of truth for what may be dispatched, so it is verified,
+            // not consulted. This branch used to return `input.model` verbatim for any
+            // openai-compatible provider — "trust the requested id directly" — which meant an
+            // operator switching a model off governed what the UI offered but not what the API
+            // accepted. Every other resolution path in the codebase already filters on isActive;
+            // this one opted out, and an SSOT that one path opts out of is not a source of truth.
+            //
+            // The original justification was propagation lag: a freshly discovered id might not
+            // be in the hydrated list yet. That reason is void now that discovery no longer
+            // activates anything — a model nobody has approved is not usable regardless of how
+            // fresh it is.
+            if (cascade.requestedProviderUnavailable || cascade.requestedModelUnavailable) {
+                throw new HttpError(
+                    `Requested model ${input.provider ?? "?"}/${input.model ?? "?"} is not available in the catalog.`,
+                    {
+                        statusCode: 409,
+                        code: MODEL_NOT_AVAILABLE,
+                        userMessage: "Il modello selezionato non e piu disponibile. Ricarica l'elenco e scegline un altro.",
+                        details: {
+                            requestedProvider: input.provider,
+                            requestedModel: input.model,
+                            reason: cascade.requestedProviderUnavailable ? "provider-inactive" : "model-inactive-or-unknown",
+                        },
+                    },
+                );
+            }
+
             providerCatalog = cascade.providerCatalog;
             providerModels = cascade.providerModels;
             roleModel = cascade.roleModel;
@@ -392,25 +420,6 @@ export class ResolvePromptExecution {
             layers: composedLayers.layers,
             totalChars: systemPrompt.length,
         });
-
-        // For openai-compatible providers with an explicit model request, trust the
-        // requested id directly. The catalog is already live-hydrated (GetLlmCatalog →
-        // hydrateProviderCatalog), but this keeps the call safe even if a freshly
-        // discovered id has not yet propagated into this provider's hydrated list.
-        // Skipped when a PipelineRun lock governed dispatch above: that path already resolved
-        // and validated `roleModel` against the live catalog, so trusting an unvalidated
-        // override here would defeat the whole point of the lock.
-        if (!pipelineRunLocked && input.model && providerCatalog.apiType === "openai-compatible") {
-            return {
-                providerCatalog: { ...providerCatalog, models: providerModels },
-                modelId: input.model,
-                projectPresetId: project?.presetId,
-                promptConfigId: promptConfig.id,
-                prePromptTemplate: effectivePrePromptTemplate || undefined,
-                systemPrompt,
-                promptLayers: composedLayers.layers,
-            };
-        }
 
         if (!roleModel) {
             throw new Error("No active model available for requested role");

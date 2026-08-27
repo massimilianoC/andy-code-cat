@@ -157,3 +157,98 @@ describe("resolveComposerCascade — model resolution order", () => {
         expect(result.roleModel).toBeUndefined();
     });
 });
+
+/**
+ * The catalog is the source of truth for what may be dispatched. These pin the difference
+ * between "the caller asked for nothing" and "the caller asked for something the catalog does
+ * not offer" — a distinction the cascade used to absorb by quietly falling through to a default,
+ * and which ResolvePromptExecution used to sidestep entirely by returning the requested id
+ * verbatim for any openai-compatible provider.
+ */
+describe("resolveComposerCascade — an unhonoured request is reported, not absorbed", () => {
+    const acme = provider({
+        provider: "acme",
+        models: [
+            model({ id: "acme/on", isDefault: true }),
+            model({ id: "acme/off", isActive: false }),
+        ],
+    });
+
+    it("reports nothing unavailable when no specific model was asked for", () => {
+        const result = resolveComposerCascade({
+            providers: [acme],
+            envDefaultProvider: "acme",
+        });
+
+        expect(result.requestedModelUnavailable).toBe(false);
+        expect(result.requestedProviderUnavailable).toBe(false);
+        expect(result.roleModel?.id).toBe("acme/on");
+    });
+
+    it("honours a request for an active model", () => {
+        const result = resolveComposerCascade({
+            providers: [acme],
+            requestedProvider: "acme",
+            requestedModel: "acme/on",
+            envDefaultProvider: "acme",
+        });
+
+        expect(result.requestedModelUnavailable).toBe(false);
+        expect(result.roleModel?.id).toBe("acme/on");
+    });
+
+    it("reports a model an operator switched off", () => {
+        const result = resolveComposerCascade({
+            providers: [acme],
+            requestedProvider: "acme",
+            requestedModel: "acme/off",
+            envDefaultProvider: "acme",
+        });
+
+        // The cascade still produces a usable roleModel — that is its job — but the caller can
+        // now see that it is NOT the one that was asked for, instead of dispatching to a
+        // different model and recording its cost under a request nobody made.
+        expect(result.requestedModelUnavailable).toBe(true);
+        expect(result.roleModel?.id).toBe("acme/on");
+    });
+
+    it("reports a model that does not exist at all", () => {
+        const result = resolveComposerCascade({
+            providers: [acme],
+            requestedProvider: "acme",
+            requestedModel: "acme/never-existed",
+            envDefaultProvider: "acme",
+        });
+
+        expect(result.requestedModelUnavailable).toBe(true);
+    });
+
+    it("reports a provider that is not active", () => {
+        const parked = provider({ provider: "parked", isActive: false, models: [model({ id: "parked/one" })] });
+
+        const result = resolveComposerCascade({
+            providers: [acme, parked],
+            requestedProvider: "parked",
+            requestedModel: "parked/one",
+            envDefaultProvider: "acme",
+        });
+
+        expect(result.requestedProviderUnavailable).toBe(true);
+        // Resolution fell to another provider entirely — exactly the silent substitution the
+        // flag exists to make visible.
+        expect(result.providerCatalog?.provider).toBe("acme");
+    });
+
+    it("reports unavailability even when the catalog is empty", () => {
+        const result = resolveComposerCascade({
+            providers: [],
+            requestedProvider: "acme",
+            requestedModel: "acme/on",
+            envDefaultProvider: "acme",
+        });
+
+        expect(result.requestedModelUnavailable).toBe(true);
+        expect(result.requestedProviderUnavailable).toBe(true);
+        expect(result.providerCatalog).toBeUndefined();
+    });
+});

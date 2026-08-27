@@ -77,6 +77,49 @@ values.
 When the code and that document disagree, the document wins: restore the documented behaviour
 rather than codifying whatever the code happens to do (AL-034).
 
+## Rule Zero's corollary — a source of truth is verified, not trusted
+
+Rule Zero says there is one path. This says there is one *authority*, and that consulting it is
+not optional on any path.
+
+1. **If something is the source of truth for a decision, every path that makes that decision
+   verifies against it.** Not "reads it when convenient" — verifies. One path that accepts a
+   caller-supplied value instead is enough to make the authority advisory, and an advisory source
+   of truth is not one.
+2. **A value that arrives in a request is a request, not an authority.** Ids, hashes, model names,
+   version pointers: the server resolves them against the store before acting on them. "The UI
+   only sends valid values" describes the UI, not the system — a cached bundle, a script, or a
+   second client are all normal, and none of them are attacks.
+3. **A gap in enforcement is a defect, not a backlog item.** It may not be recorded as "open" and
+   left behind while other work continues. Either close it in the same change, or stop and report
+   it as blocking. Writing it down accurately is not the same as handling it.
+4. **Refuse, do not substitute.** When a supplied value does not resolve, answer with a distinct
+   error code the client can act on, and re-synchronise. Silently falling back to something valid
+   produces a result nobody asked for and a record that misattributes it — this is Rule Zero's
+   "never fail silently" applied to identity rather than to output.
+
+Current authorities, and what they are authoritative for:
+
+| Source of truth | Authoritative for | Verified by |
+|---|---|---|
+| `llm_providers` (Mongo) | which provider/model may be dispatched to | `resolveComposerCascade`; refusal code `MODEL_NOT_AVAILABLE` |
+| `preview_snapshots` (Mongo) | which artifact version an edit may be based on | `CreatePreviewSnapshot`; refusal code `ARTIFACT_BASE_STALE` |
+| `packages/contracts` | the shape of every request and stored record | zod, at the HTTP boundary |
+| `PipelineRun.modelLock` | the model a run's first generation uses | `ResolvePipelineModelLock` |
+| `PipelineRun.canonicalBrief` | the text a run certifies | `contentHash` |
+
+### Why this rule is written this way
+
+`ResolvePromptExecution` carried a branch that returned the caller's model id verbatim for any
+openai-compatible provider — the comment said "trust the requested id directly". Every other
+resolution path in the codebase filtered on `isActive`; this one opted out. The effect was that an
+operator switching a model off governed what the interface offered but not what the API accepted,
+so the catalog was authoritative by convention and not by construction.
+
+It was found, written up as a known gap, and left for later — which is the failure this rule
+exists to prevent. The gap was a dozen lines wide and had no test; describing it accurately did
+not make it any less of a hole.
+
 ## Non-Negotiable Rules
 
 1. Never bypass security middleware in protected routes.
@@ -86,13 +129,22 @@ rather than codifying whatever the code happens to do (AL-034).
 5. Never hardcode secrets in code.
 6. Never break workspace contract paths without updating docs index.
 7. Never introduce a second execution path for an existing behaviour — see Rule Zero.
+8. Never act on a caller-supplied id, hash or name without resolving it against its source of
+   truth — see Rule Zero's second corollary. Leaving such a check "for later" is not allowed.
 
 ## Source Of Truth
 
 - API validation contracts: packages/contracts
+- Dispatchable providers and models: the `llm_providers` collection — discovery reports what a
+  provider offers, it does not decide what this platform may spend money on
+- Artifact versions and their lineage: the `preview_snapshots` collection
 - Runtime topology: docker-compose.yml
 - Environment contract: .env.example and apps/api/src/config.ts
 - Documentation index: docs/INDEX.md
+
+Each entry above is authoritative, which per Rule Zero's second corollary means every path that
+depends on it verifies against it. Adding a row here without adding the verification adds a claim,
+not an authority.
 - Agent navigation docs: docs/agents/CODE_AGENT_INDEX.md
 - Artifact lifecycle (binding, AL-NNN): docs/specs/ARTIFACT_LIFECYCLE_SPEC.md
 - Prompting pipeline guardrails: docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md

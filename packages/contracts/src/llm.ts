@@ -38,6 +38,15 @@ export const llmHistoryMessageSchema = z.object({
     content: z.string().max(50000), // backend truncates at LLM_HISTORY_MESSAGE_MAX_CHARS (default 2000)
 });
 
+/**
+ * The requested provider/model is not an active entry in the catalog.
+ *
+ * The catalog in Mongo is the source of truth for what may be dispatched, and a model id in a
+ * request is a request, not an authority. The client re-reads the catalog and asks the user to
+ * choose again; it must not retry with the same id, and it must not silently substitute one.
+ */
+export const MODEL_NOT_AVAILABLE = "MODEL_NOT_AVAILABLE";
+
 export const llmFocusContextSchema = z.object({
     mode: z.enum(["project", "preview-element", "code-selection"]),
     targetType: z.enum(["html", "css", "js", "component", "section"]),
