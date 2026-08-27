@@ -238,21 +238,22 @@ Assessed against the code and against 195 stored snapshots on the local stack.
 |---|---|---|
 | AL-003/004 one engine, all entries | ✅ implemented 2026-08-26 | the guided wizard was a second legacy path until commit `227609f` |
 | AL-007 every mutation versions | ⚠️ partial | AL-019 hole: `currentArtifactsSource` prefers `editorHtml` over the active version |
-| AL-008/009 equipollent, source not render | ❌ violated | WYSIWYG save persists the rendered DOM: one artifact went 10.703 → 131.884 chars, 107.725 of base64; 30 snapshots affected, 19.6 MB |
+| AL-008/009 equipollent, source not render | ⚠️ partial, 2026-08-27 | Asset inlining reversed on save: verified live, 0 data URIs, 131.884 → 24.266 chars. Remaining: the preview's injected `<style>` blocks (10.813 chars) are still serialised into the artifact — same rule, smaller instance |
 | AL-010 no version from failure | ✅ implemented | frontend guard plus `generationParseError` |
-| AL-011 numbering from the chain | ❌ not implemented | `SnapshotHistoryPanel` uses `snapshots.length - i` |
+| AL-011 numbering from the chain | ✅ 2026-08-27 | `buildVersionIndex` walks `parentSnapshotId`; legacy roots fall back to `createdAt` for display only. Verified live |
 | AL-012 seed is the active version | ✅ implemented 2026-08-26 | server-side default in `CreatePreviewSnapshot`; previously 158/195 roots |
-| AL-013/014 branching | ❌ not implemented, not surfaced | no branch concept in code or UI |
-| AL-015 delete preserves the chain | ❌ not implemented | `DeletePreviewSnapshot` deletes without re-linking; currently 0 orphans, latent |
+| AL-013/014 branching | ✅ 2026-08-27 | Verified live: activating v7 seeded the next version from v7 and the composer stated the branch and that v9 stays reachable |
+| AL-015 delete preserves the chain | ✅ 2026-08-27 | `relinkChildren` runs before the delete; children of a deleted root become roots rather than being pinned to an invented ancestor |
 | AL-016/017/018 activation | ✅ implemented | `activateForProject`, `activeBaselineSnapshot` |
 | AL-021/022/024 publication records the version | ✅ storage present | `site_deployments` and `publish_history` carry `snapshotId`, `userId`, `action`, timestamps |
-| AL-023 published version visible | ❌ not implemented | history panel has origin badges, none for published |
-| AL-025 export scope | ❌ inconsistent | `ExportLayer1Zip` resolves active at conversation scope; `PublishProject` at project scope |
-| AL-026/027/028 prompt linkage | ❌ not implemented | `promptExecutionId` absent from all 195 snapshots |
+| AL-023 published version visible | ✅ 2026-08-27 | Verified live with published ≠ active: badge on the live row and "live: v9 · stai lavorando su v7" in the panel header |
+| AL-025 export scope | ✅ 2026-08-27 | Export resolves the active version with `getActiveForProject`, matching publication; `conversationId` now only feeds the README |
+| AL-026 execution id stored | ✅ 2026-08-27 | `metadata.promptExecutionId` in the contract and passed at the LLM call site. Unit-tested; not yet observed on a live generation |
+| AL-027/028 execution id shared and resolved | ❌ not implemented | assistant message and cost record do not yet share the id; the Prompt tab still resolves the latest execution |
 | AL-039…AL-043 version certification | ❌ not implemented | no content hash on versions, no base declared on writes, no server-side base check |
 | AL-044 recovery by activation | ✅ available | versions are additive; activating the last good version already restores it |
 | AL-045 no-op writes create no version | ❌ not implemented | 4 snapshots on 2026-08-26 carry byte-identical html of 10.702 chars |
-| AL-029 focused edit target recorded | ❌ not implemented | `focusContext` populated on 0 of 195 snapshots |
+| AL-029 focused edit target recorded | ✅ 2026-08-27 | `focusContext` now sent at the generation call site. One edge case open: a retry that drops focus context can still record the originally attempted target |
 | AL-030 project-wide compacted history | ❌ not implemented | — |
 
 ---
