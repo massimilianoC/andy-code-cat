@@ -180,17 +180,65 @@ the snapshot records the element that was targeted.
 
 ---
 
-## Integrator step (not delegated)
+## Batch C — version certification (after A and B)
 
-After both batches land and are verified live: add the **AL-037** guard to
-`CreatePreviewSnapshot.execute()` — reject a snapshot introducing data URIs that are not present in
-its parent. The parent is already fetched there, so the comparison is free.
+**Rules:** AL-039…AL-045, spec section 11. Runs after A and B because it touches the same write
+path both of them modify.
 
-Deliberate limit: compare against the parent only. A version inheriting data URIs from its parent is
-contamination already recorded, not new contamination; blocking it would make existing projects
-unusable.
+This is the structural guarantee, and it supersedes AL-037 in importance: rejecting a version for
+containing data URIs cures one symptom, while certifying the base of every write catches the class.
 
-This lands last because shipping it before B1 would break WYSIWYG saves outright.
+**The primitive already exists in this codebase.** `CanonicalBriefEnvelope.contentHash`
+(`buildCanonicalGenerationBrief.ts:37`) certifies that the text a `PipelineRun` froze is the text
+that reaches the model. Batch C applies the same sha256-over-content pattern to the artifact. No new
+collection, no new subsystem — a hash in metadata and two fields on a request.
+
+### C1 · AL-039 — every version carries a content hash
+
+Computed server-side in `CreatePreviewSnapshot.execute()` from the persisted artifacts, stored in
+`metadata.contentHash` beside `promptExecutionId` (added by A1). Server-side because a hash the
+client supplies certifies nothing.
+
+### C2 · AL-040 / AL-041 — writes declare their base and the server verifies it
+
+The write already carries `parentSnapshotId`; what is missing is the hash and the check.
+
+- add `baseContentHash` to `createPreviewSnapshotSchema`
+- in `CreatePreviewSnapshot.execute()`: when a base is declared, verify it exists, that it is the
+  currently active version (AL-016) or the one explicitly selected, and that its stored
+  `metadata.contentHash` equals the declared one
+- on mismatch reject with a distinct code (e.g. `ARTIFACT_BASE_STALE`) and a message that says which
+  version the server believes is current
+
+Backwards compatibility: versions stored before C1 have no `contentHash`. Treat a missing stored
+hash as "cannot verify" and accept, logging it — do not lock users out of their own history.
+
+### C3 · AL-042 / AL-043 — the client declares what it loaded
+
+When an editor loads an artifact it records the snapshot id and hash it loaded and carries them into
+the write. All four editing modes — chat, focused edit, WYSIWYG, code editor — declare the **same**
+base: switching mode does not re-base.
+
+On `ARTIFACT_BASE_STALE` the client re-synchronises and tells the user which version is current. It
+does not retry blindly and it does not overwrite.
+
+### C4 · AL-045 — a no-op creates no version
+
+If the computed hash equals the base hash, return the base instead of creating a version. Four
+snapshots recorded on 2026-08-26 carry byte-identical html of 10.702 characters; they are noise that
+makes the real changes harder to find.
+
+### AL-037, demoted
+
+Optional, and only where it stays cheap: reject a version introducing data URIs its base did not
+have. The parent is already fetched in `CreatePreviewSnapshot`, so the comparison costs nothing —
+but it is a content check on one known failure, not a substitute for C1–C4, and it must land after
+B1 or WYSIWYG saves break outright.
+
+**Acceptance for Batch C:** a write declaring a stale base is refused with the distinct code and the
+client recovers by re-syncing; a write declaring the current base succeeds; a write against a
+pre-C1 version without a stored hash succeeds and is logged; an edit that changes nothing creates no
+version; switching editing mode does not change the declared base.
 
 ---
 

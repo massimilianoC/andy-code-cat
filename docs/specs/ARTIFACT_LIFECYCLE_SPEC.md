@@ -153,6 +153,8 @@ model content that exists in no version breaks the 1:1 correspondence in section
 
 **AL-020** — Selecting a version in the history activates it. If activation fails, selection must
 fail visibly rather than leaving the interface showing one version while the system uses another.
+The certification rules in section 11 are what make this reliable across the frontend/backend
+boundary.
 
 ---
 
@@ -247,6 +249,9 @@ Assessed against the code and against 195 stored snapshots on the local stack.
 | AL-023 published version visible | ❌ not implemented | history panel has origin badges, none for published |
 | AL-025 export scope | ❌ inconsistent | `ExportLayer1Zip` resolves active at conversation scope; `PublishProject` at project scope |
 | AL-026/027/028 prompt linkage | ❌ not implemented | `promptExecutionId` absent from all 195 snapshots |
+| AL-039…AL-043 version certification | ❌ not implemented | no content hash on versions, no base declared on writes, no server-side base check |
+| AL-044 recovery by activation | ✅ available | versions are additive; activating the last good version already restores it |
+| AL-045 no-op writes create no version | ❌ not implemented | 4 snapshots on 2026-08-26 carry byte-identical html of 10.702 chars |
 | AL-029 focused edit target recorded | ❌ not implemented | `focusContext` populated on 0 of 195 snapshots |
 | AL-030 project-wide compacted history | ❌ not implemented | — |
 
@@ -271,7 +276,54 @@ that moves to ✅ without a test that pins it has not moved.
 
 ---
 
-## 11. Related documents
+## 11. Version certification — the frontend/backend contract
+
+Sections 3 to 6 say what the states are. This section says how the two sides stay in agreement
+about them, which is what makes the rest trustworthy rather than merely intended.
+
+The primitive is not new. `CanonicalBriefEnvelope.contentHash` already certifies that the text a
+`PipelineRun` froze is the text that reaches the model: same idea, applied to the object that needs
+it most.
+
+**AL-039** — Every version carries a **content hash** of its artifacts, computed server-side at
+creation. It lives in metadata beside the other execution facts; it is not a new structure.
+
+**AL-040** — Every mutation **declares the base it was derived from**: the version id and that
+version's content hash. A client does not simply "save"; it states what it was looking at when it
+made the change.
+
+**AL-041** — The server **verifies the declared base before accepting**. The base must exist, must
+be the version currently active (AL-016) or the one the user explicitly selected, and its stored
+hash must match the declared one. On mismatch the write is refused with a distinct code and the
+client re-synchronises and tells the user. It does not retry blindly, and it does not write on top
+of a state that is not what it believed.
+
+**AL-042** — The interface **never loads an uncertified state into an editor**. Loading an artifact
+means loading a persisted version, and recording which id and hash were loaded so the eventual write
+can declare them (AL-040). Content that corresponds to no version is not editable, because a change
+to it cannot be based on anything.
+
+**AL-043** — All editing modes share one base. Moving between chat, focused edit, WYSIWYG and the
+code editor does not re-base: each operates on the same certified version. A mode switch that
+silently changes the base is a defect, and it is the mechanism by which edits get applied to
+something other than what the user was looking at.
+
+**AL-044** — A failed or malformed result **never replaces a good one**. Because versions are
+additive and the previous one is untouched, recovery is always "activate the last good version".
+This is the reason versioning is a safety mechanism and not merely a history: when the model
+produces an invalid first artifact, the corrective request produces a new version and the user
+proceeds from there, with the broken one still on record rather than having overwritten anything.
+
+**AL-045** — A mutation whose result is identical to its base **creates no version**. Four snapshots
+recorded on 2026-08-26 (`e29137b8`, `2c2095c9`, `77521a5f`, `85c09fbd`) carry byte-identical html of
+10.702 characters: no-op versions that inflate the history and make the real changes harder to find.
+
+**AL-037 is subordinate to this section.** Rejecting a version because it introduces data URIs its
+base did not have is a content check on one known failure; AL-039 to AL-043 are the structural
+guarantee that catches the class. Implement AL-037 only where it stays cheap, and never in place of
+this section.
+
+## 12. Related documents
 
 - `AGENTS.md` — Rule Zero, one execution path per user action
 - `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md` — the `PP-NNN` model this document follows
