@@ -62,6 +62,21 @@ used. The flag intended to protect the deploy is what made the system unknowable
 **Treat this rule as absolute. Do not weigh it against convenience, risk appetite, or delivery
 pressure, and do not ask for an exception — there isn't one.**
 
+## Rule Zero's corollary — the artifact lifecycle is architecture
+
+The artifact system is the product; everything else exists to produce and refine artifacts. Its
+rules are binding and written down in **`docs/specs/ARTIFACT_LIFECYCLE_SPEC.md`** (`AL-NNN`).
+
+Read it before changing anything that creates, activates, publishes, exports or deletes a version.
+In particular, AL-031: introducing a new save path, a new precedence between existing paths, or a
+new way of persisting or activating an artifact is an architectural change. It may not be made as
+an incidental part of another task — it has to be proposed and argued first, stating which rule it
+alters and what value it delivers that the current design does not. "Simpler" and "faster" are not
+values.
+
+When the code and that document disagree, the document wins: restore the documented behaviour
+rather than codifying whatever the code happens to do (AL-034).
+
 ## Non-Negotiable Rules
 
 1. Never bypass security middleware in protected routes.
@@ -79,13 +94,14 @@ pressure, and do not ask for an exception — there isn't one.**
 - Environment contract: .env.example and apps/api/src/config.ts
 - Documentation index: docs/INDEX.md
 - Agent navigation docs: docs/agents/CODE_AGENT_INDEX.md
+- Artifact lifecycle (binding, AL-NNN): docs/specs/ARTIFACT_LIFECYCLE_SPEC.md
 - Prompting pipeline guardrails: docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md
 
 When conflicts exist, apply this priority:
 
 1. AGENTS.md
 2. docs/INDEX.md and docs/agents/CODE_AGENT_INDEX.md
-3. technical specs under docs/specs/ (especially SPEC.md, DB_PLATFORM_SPEC.md, and WORKFLOWS.md)
+3. technical specs under docs/specs/ (especially ARTIFACT_LIFECYCLE_SPEC.md, SPEC.md, DB_PLATFORM_SPEC.md, and WORKFLOWS.md)
 
 ## Documentation Layout Rules
 
