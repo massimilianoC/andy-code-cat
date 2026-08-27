@@ -4,7 +4,7 @@ import type { ConversationRepository } from "../../domain/repositories/Conversat
 import type { MediaResolutionTraceRepository } from "../../domain/repositories/MediaResolutionTraceRepository";
 import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
 import { HttpError } from "../../presentation/http/errors/httpError";
-import { computeArtifactContentHash } from "../artifacts/artifactContentHash";
+import { canonicaliseArtifacts, computeArtifactContentHash } from "../artifacts/artifactContentHash";
 import { extractMediaPlaceholderKeys } from "../media/replaceMediaPlaceholders";
 
 export interface CreatePreviewSnapshotResult {
@@ -80,7 +80,8 @@ export class CreatePreviewSnapshot {
 
         // AL-039 — computed here, over the artifacts as they will be stored, and never taken
         // from the request: a hash the writer chooses certifies nothing.
-        const contentHash = computeArtifactContentHash(input.artifacts);
+        const artifacts = canonicaliseArtifacts(input.artifacts);
+        const contentHash = computeArtifactContentHash(artifacts);
 
         // AL-045 — an edit that changed nothing is not a version. The base's own hash is
         // computed on the fly when it predates AL-039, so this also collapses the identical
@@ -99,6 +100,7 @@ export class CreatePreviewSnapshot {
 
         const snapshot = await this.previewSnapshotRepository.create({
             ...input,
+            artifacts,
             // Never parent a snapshot to itself, and never invent a parent that no longer exists.
             parentSnapshotId: parentSnapshot?.id,
             // Focused edits and WYSIWYG commits do not regenerate a manifest. Preserve the

@@ -558,3 +558,42 @@ describe("CreatePreviewSnapshot — AL-039…AL-045 version certification", () =
         expect(repo.activateForProject).toHaveBeenCalledWith("p1", inactive.id);
     });
 });
+
+describe("CreatePreviewSnapshot — AL-045 line endings are not content", () => {
+    function makeUseCase() {
+        const repo = new MemoryPreviewSnapshotRepository();
+        return { repo, useCase: new CreatePreviewSnapshot(repo as never) };
+    }
+
+    it("a CRLF round-trip of the same artifact creates no version", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        // Stored as the pipeline writes it.
+        const base = await useCase.execute({
+            projectId: "p1", conversationId: "c1", activate: true,
+            artifacts: { html: "<main>\n  <h1>hi</h1>\n</main>", css: "a{\n  color: red;\n}", js: "" },
+        });
+
+        // Handed back by a Windows editor, untouched by the user.
+        const again = await useCase.execute({
+            projectId: "p1", conversationId: "c1", activate: true,
+            artifacts: { html: "<main>\r\n  <h1>hi</h1>\r\n</main>", css: "a{\r\n  color: red;\r\n}", js: "" },
+            parentSnapshotId: base.snapshot.id,
+        });
+
+        expect(again.created).toBe(false);
+        expect(repo.snapshots).toHaveLength(1);
+    });
+
+    it("the stored artifact is the canonical one, so the hash certifies what is on disk", async () => {
+        const { useCase } = makeUseCase();
+
+        const { snapshot } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", activate: true,
+            artifacts: { html: "<p>a</p>\r\n<p>b</p>", css: "", js: "let x = 1;\r\n" },
+        });
+
+        expect(snapshot.artifacts.html).not.toContain("\r");
+        expect(snapshot.artifacts.js).not.toContain("\r");
+    });
+});

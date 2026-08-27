@@ -27,3 +27,23 @@ export function computeArtifactContentHash(artifacts: PreviewSnapshotArtifacts):
     }
     return hash.digest("hex");
 }
+
+/**
+ * AL-045 — the line-ending form of an artifact is not content.
+ *
+ * A browser textarea and Monaco both hand back CRLF on Windows, so an artifact saved from
+ * the code editor without a single keystroke differed from the stored one by nothing but
+ * `\r`. That was enough to change its hash, which made every first save after opening the
+ * editor look like a real change and added a version nobody asked for. Observed live:
+ * an unedited "Salva versione" answered 201 instead of 200.
+ *
+ * Canonicalised on the way in, so the stored artifact and the hash that certifies it agree
+ * and a later save of that same artifact compares equal.
+ */
+export function canonicaliseArtifacts(artifacts: PreviewSnapshotArtifacts): PreviewSnapshotArtifacts {
+    return {
+        html: (artifacts.html ?? "").replace(/\r\n/g, "\n"),
+        css: (artifacts.css ?? "").replace(/\r\n/g, "\n"),
+        js: (artifacts.js ?? "").replace(/\r\n/g, "\n"),
+    };
+}

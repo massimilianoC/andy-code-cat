@@ -233,6 +233,7 @@ behaviour is genuinely wrong, that is an AL-032 proposal.
 ## 9. Conformance as of 2026-08-27
 
 Assessed against the code and against 195 stored snapshots on the local stack.
+Rows marked ✅ with a date were verified live against the running stack, not only unit-tested.
 
 | Rule | State | Evidence |
 |---|---|---|
@@ -248,13 +249,17 @@ Assessed against the code and against 195 stored snapshots on the local stack.
 | AL-021/022/024 publication records the version | ✅ storage present | `site_deployments` and `publish_history` carry `snapshotId`, `userId`, `action`, timestamps |
 | AL-023 published version visible | ✅ 2026-08-27 | Verified live with published ≠ active: badge on the live row and "live: v9 · stai lavorando su v7" in the panel header |
 | AL-025 export scope | ✅ 2026-08-27 | Export resolves the active version with `getActiveForProject`, matching publication; `conversationId` now only feeds the README |
-| AL-026 execution id stored | ✅ 2026-08-27 | `metadata.promptExecutionId` in the contract and passed at the LLM call site. Unit-tested; not yet observed on a live generation |
+| AL-026 execution id stored | ✅ 2026-08-27 | `metadata.promptExecutionId` in the contract and passed at the LLM call site. Verified live: a write carrying it round-trips intact |
 | AL-027/028 execution id shared and resolved | ❌ not implemented | assistant message and cost record do not yet share the id; the Prompt tab still resolves the latest execution |
-| AL-039…AL-043 version certification | ❌ not implemented | no content hash on versions, no base declared on writes, no server-side base check |
+| AL-039 content hash on every version | ✅ 2026-08-27 | `computeArtifactContentHash` in `CreatePreviewSnapshot`, over the canonical artifacts. Live: a client-supplied hash is ignored |
+| AL-040/041 declared base, verified server-side | ✅ 2026-08-27 | `baseContentHash` on the write; a stale base is refused `409 ARTIFACT_BASE_STALE` naming the current version. Live: refused on mismatch, on a deleted base, and accepted on a match; a write that declares nothing still works |
+| AL-042/043 one base across all editing modes | ✅ 2026-08-27 | `commitArtifactVersion` is the single client write path, so chat, focused edit, WYSIWYG and Monaco declare the same base by construction. The WYSIWYG session commit declares it too. On refusal the client re-reads history and does not retry |
 | AL-044 recovery by activation | ✅ available | versions are additive; activating the last good version already restores it |
-| AL-045 no-op writes create no version | ❌ not implemented | 4 snapshots on 2026-08-26 carry byte-identical html of 10.702 chars |
+| AL-045 no-op writes create no version | ✅ 2026-08-27 | Identical content returns the base with `created: false` and HTTP 200; the base is still activated if asked for. The base's hash is computed on the fly when it predates AL-039, so it also covers the duplicates already in history |
 | AL-029 focused edit target recorded | ✅ 2026-08-27 | `focusContext` now sent at the generation call site. One edge case open: a retry that drops focus context can still record the originally attempted target |
 | AL-030 project-wide compacted history | ❌ not implemented | — |
+| AL-046 the artifact shape is declared once | ✅ 2026-08-27 | Was declared four times and had drifted: the web client sent `promptingTrace.promptConfigId`, which the schema never declared, so zod stripped it from every write. One schema now, everything else infers. Live: the field survives a write |
+| AL-047 one write path | ✅ 2026-08-27 | `CommitWysiwygSession` called the repository directly and produced versions with no hash, no no-op suppression, and two metadata keys smuggled past the contract by an `as` cast. It goes through `CreatePreviewSnapshot` now |
 
 ---
 
@@ -275,6 +280,20 @@ rejected at the application boundary, so AL-009 cannot regress silently.
 **AL-038** — The conformance table in section 9 is updated whenever a rule's state changes. A rule
 that moves to ✅ without a test that pins it has not moved.
 
+**AL-046** — The shape of an artifact version is **declared in exactly one place**: the schema in
+`packages/contracts`. The API domain entity, the HTTP response type and every client type are
+derived from it, never restated. A shape written down more than once is a shape that will be wrong
+in all but one of them — and it already was: the web client declared and sent
+`promptingTrace.promptConfigId`, which the schema never declared, so zod stripped it from every
+write and no stored version carries it. Adding a second declaration is an architectural change
+under AL-031.
+
+**AL-047** — There is **exactly one code path that persists a version**. Everything that produces a
+version — chat, focused edit, WYSIWYG (session and degraded), the code editor, media application —
+goes through it, so a rule added there applies everywhere by construction rather than by every call
+site remembering. A second path is how AL-039 and AL-045 came to be true of most versions instead
+of all of them.
+
 ---
 
 ## 11. Version certification — the frontend/backend contract
@@ -293,11 +312,19 @@ creation. It lives in metadata beside the other execution facts; it is not a new
 version's content hash. A client does not simply "save"; it states what it was looking at when it
 made the change.
 
-**AL-041** — The server **verifies the declared base before accepting**. The base must exist, must
-be the version currently active (AL-016) or the one the user explicitly selected, and its stored
-hash must match the declared one. On mismatch the write is refused with a distinct code and the
-client re-synchronises and tells the user. It does not retry blindly, and it does not write on top
-of a state that is not what it believed.
+**AL-041** — The server **verifies the declared base before accepting**. The base must exist and its
+stored hash must match the declared one. On mismatch the write is refused with a distinct code and
+the client re-synchronises and tells the user. It does not retry blindly, and it does not write on
+top of a state that is not what it believed.
+
+The check is deliberately *not* "the base must be the currently active version". Editing from an
+explicitly selected older version is branching (AL-013), not staleness, and refusing it would break
+the behaviour section 4 requires. What matters is that the base is still the thing the client read.
+
+A base stored before AL-039 has no hash to compare against. That write is **accepted and recorded as
+unverifiable**, not refused: the history predates the rule, and locking users out of their own
+versions is a larger harm than an uncertified write. The event is logged so the shrinking set of
+unverifiable writes stays findable.
 
 **AL-042** — The interface **never loads an uncertified state into an editor**. Loading an artifact
 means loading a persisted version, and recording which id and hash were loaded so the eventual write
@@ -318,6 +345,10 @@ proceeds from there, with the broken one still on record rather than having over
 **AL-045** — A mutation whose result is identical to its base **creates no version**. Four snapshots
 recorded on 2026-08-26 (`e29137b8`, `2c2095c9`, `77521a5f`, `85c09fbd`) carry byte-identical html of
 10.702 characters: no-op versions that inflate the history and make the real changes harder to find.
+
+Suppressing the version does not suppress the activation. "Make this the live version" is a separate
+intent from "record a new version", and refusing the first because the second turned out to be
+unnecessary would leave the user looking at something they did not select.
 
 **AL-037 is subordinate to this section.** Rejecting a version because it introduces data URIs its
 base did not have is a content check on one known failure; AL-039 to AL-043 are the structural
