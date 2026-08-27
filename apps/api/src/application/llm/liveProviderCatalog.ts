@@ -377,6 +377,10 @@ export async function hydrateProviderCatalog(
                     provider: providerCatalog.provider,
                     isDefault: false,
                     availability: "deprecated" as const,
+                    // Off, for the same reason reconciliation switches it off in storage: an
+                    // offer the provider will not honour must not be selectable. This is the
+                    // read-time view for the window before reconciliation has run.
+                    isActive: false,
                 }));
 
         localDiscoveryFailures.delete(cacheKey);

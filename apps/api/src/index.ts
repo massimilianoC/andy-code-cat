@@ -57,7 +57,14 @@ async function reconcileCatalogAvailability(): Promise<void> {
             new GetEffectiveLlmCatalog(getLlmCatalog),
         ).execute();
         for (const provider of result.providers) {
-            console.log(`[llm-catalog] ${provider.provider}: ${provider.live} live, ${provider.deprecated} deprecated`);
+            // These count STORED rows, not what the provider offers. "0 still offered" on a
+            // provider serving seven models means the seven were never stored — not that the
+            // provider is empty. Saying so in the line itself, because the short version read as
+            // the opposite and was reported as such once already.
+            console.log(
+                `[llm-catalog] ${provider.provider}: stored rows — ${provider.live} still offered, `
+                + `${provider.deprecated} deprecated and switched off`,
+            );
         }
     } catch (error) {
         console.warn("[llm-catalog] availability reconciliation skipped", error);

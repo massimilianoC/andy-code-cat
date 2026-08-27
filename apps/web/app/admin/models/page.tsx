@@ -111,17 +111,28 @@ export default function AdminModelsPage() {
             else groups.set(family, [model]);
         }
         return [...groups.entries()]
-            .map(([family, models]) => ({
-                family,
-                models: [...models].sort((left, right) => left.id.localeCompare(right.id)),
-                activeCount: models.filter((model) => model.isActive).length,
-                deprecatedCount: models.filter((model) => model.availability === "deprecated").length,
-            }))
+            .map(([family, models]) => {
+                // A model the provider dropped cannot be switched back on, so it is not part of
+                // what "activate this group" means. Counting it as activatable would leave the
+                // button enabled with nothing left for it to do.
+                const activatable = models.filter((model) => model.availability !== "deprecated");
+                return {
+                    family,
+                    models: [...models].sort((left, right) => left.id.localeCompare(right.id)),
+                    activatableIds: activatable.map((model) => model.id),
+                    activeCount: models.filter((model) => model.isActive).length,
+                    activatableCount: activatable.length,
+                    deprecatedCount: models.length - activatable.length,
+                };
+            })
             .sort((left, right) => left.family.localeCompare(right.family));
     }, [activeProvider]);
 
     const providerActiveCount = (activeProvider?.models ?? []).filter((model) => model.isActive).length;
     const providerTotalCount = (activeProvider?.models ?? []).length;
+    const providerActivatableIds = (activeProvider?.models ?? [])
+        .filter((model) => model.availability !== "deprecated")
+        .map((model) => model.id);
 
     /**
      * One request per decision, whatever its size: a single model, an author group, or the whole
@@ -137,8 +148,9 @@ export default function AdminModelsPage() {
             const result = await setAdminLlmModelsActive(token, selectedProvider, modelIds, isActive);
             setProviders(result.providers ?? []);
             setSource(result.source ?? "env");
-            if (result.unknown?.length) {
-                setError(`${result.unknown.length} model(s) no longer offered by the provider were skipped.`);
+            const skipped = (result.unknown?.length ?? 0) + (result.deprecated?.length ?? 0);
+            if (skipped > 0) {
+                setError(`${skipped} model(s) skipped: the provider no longer offers them.`);
             }
         } catch (e) {
             setError(e instanceof Error ? e.message : "Could not change model activation");
@@ -371,7 +383,10 @@ export default function AdminModelsPage() {
                                     <div className="min-w-0">
                                         <div className="text-sm font-medium text-foreground truncate">{selectedProvider}</div>
                                         <div className="text-[11px] text-muted-foreground">
-                                            {providerActiveCount} of {providerTotalCount} active
+                                            {providerActiveCount} of {providerActivatableIds.length} active
+                                            {providerTotalCount > providerActivatableIds.length
+                                                ? ` · ${providerTotalCount - providerActivatableIds.length} deprecated`
+                                                : ""}
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -379,12 +394,8 @@ export default function AdminModelsPage() {
                                             type="button"
                                             size="sm"
                                             variant="outline"
-                                            disabled={activating !== null || providerActiveCount === providerTotalCount}
-                                            onClick={() => applyActivation(
-                                                "provider",
-                                                (activeProvider?.models ?? []).map((model) => model.id),
-                                                true,
-                                            )}
+                                            disabled={activating !== null || providerActiveCount === providerActivatableIds.length}
+                                            onClick={() => applyActivation("provider", providerActivatableIds, true)}
                                         >
                                             {activating === "provider" ? "…" : "All on"}
                                         </Button>
@@ -411,7 +422,7 @@ export default function AdminModelsPage() {
                                         <div className="min-w-0">
                                             <div className="text-xs font-semibold text-foreground truncate">{group.family}</div>
                                             <div className="text-[10px] text-muted-foreground">
-                                                {group.activeCount}/{group.models.length} active
+                                                {group.activeCount}/{group.activatableCount} active
                                                 {group.deprecatedCount > 0 ? " · " + group.deprecatedCount + " deprecated" : ""}
                                             </div>
                                         </div>
@@ -421,10 +432,10 @@ export default function AdminModelsPage() {
                                                 size="sm"
                                                 variant="ghost"
                                                 className="h-6 px-2 text-[10px]"
-                                                disabled={activating !== null || group.activeCount === group.models.length}
+                                                disabled={activating !== null || group.activeCount === group.activatableCount}
                                                 onClick={() => applyActivation(
                                                     "family:" + group.family,
-                                                    group.models.map((model) => model.id),
+                                                    group.activatableIds,
                                                     true,
                                                 )}
                                             >
@@ -468,13 +479,16 @@ export default function AdminModelsPage() {
                                                     size="sm"
                                                     variant="outline"
                                                     className="h-6 shrink-0 px-2 text-[10px]"
-                                                    disabled={activating !== null}
+                                                    disabled={activating !== null || (model.availability === "deprecated" && !model.isActive)}
                                                     onClick={() => applyActivation("model:" + model.id, [model.id], !model.isActive)}
-                                                    title={model.isActive ? "Deactivate" : "Activate"}
+                                                    title={model.availability === "deprecated"
+                                                        ? "The provider no longer offers this model"
+                                                        : model.isActive ? "Deactivate" : "Activate"}
                                                 >
                                                     {activating === "model:" + model.id
                                                         ? "…"
-                                                        : model.isActive ? "on" : "off"}
+                                                        : model.availability === "deprecated" ? "gone"
+                                                            : model.isActive ? "on" : "off"}
                                                 </Button>
                                             </div>
                                         ))}

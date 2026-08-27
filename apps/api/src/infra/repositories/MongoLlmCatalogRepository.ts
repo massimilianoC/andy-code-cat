@@ -260,6 +260,13 @@ export class MongoLlmCatalogRepository implements LlmCatalogRepository {
                 ...model,
                 availability: stillOffered ? ("live" as const) : ("deprecated" as const),
                 availabilityCheckedAt: input.checkedAt,
+                // Deprecation switches the model off. An active model the provider no longer
+                // serves is an offer this platform cannot honour: it stays selectable, gets
+                // picked, and fails at dispatch with a provider error instead of being absent.
+                // The row itself is kept — the id is still referenced by stored model locks and
+                // published builds — but it stops being something anyone can choose.
+                isActive: stillOffered ? model.isActive : false,
+                isDefault: stillOffered ? model.isDefault : false,
             };
         });
 

@@ -186,6 +186,9 @@ describe("hydrateProviderCatalog", () => {
             // a published build. Deleting the row turns every one of those into a dangling string.
             expect(retired).toBeDefined();
             expect(retired?.availability).toBe("deprecated");
+            // Deprecation switches it off: an offer the provider will not honour must not stay
+            // selectable, or it gets picked and fails at dispatch instead of being absent.
+            expect(retired?.isActive).toBe(false);
             expect(hydrated.models.find((m) => m.id === "still/offered")?.availability).toBeUndefined();
         });
     });

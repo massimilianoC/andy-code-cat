@@ -440,7 +440,7 @@ export function setAdminLlmModelsActive(
     provider: string,
     modelIds: string[],
     isActive: boolean,
-): Promise<AdminLlmRegistryDto & { ok: boolean; applied: string[]; unknown: string[] }> {
+): Promise<AdminLlmRegistryDto & { ok: boolean; applied: string[]; unknown: string[]; deprecated: string[] }> {
     return call(
         "POST",
         `/v1/admin/llm-registry/providers/${encodeURIComponent(provider)}/models/activation`,

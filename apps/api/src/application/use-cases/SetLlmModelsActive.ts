@@ -8,6 +8,14 @@ export interface SetLlmModelsActiveResult {
     applied: string[];
     /** Ids the provider does not offer and that are not stored either. Reported, not guessed at. */
     unknown: string[];
+    /**
+     * Ids skipped because the provider no longer offers them. Activating one would put a model
+     * back on the menu that cannot be served — reconciliation would switch it off again on the
+     * next restart anyway, so the refusal is immediate and explained rather than delayed and
+     * mysterious. If the provider re-lists it, reconciliation marks it live and it becomes
+     * activatable again with no further action.
+     */
+    deprecated: string[];
 }
 
 /**
@@ -36,7 +44,7 @@ export class SetLlmModelsActive {
     }): Promise<SetLlmModelsActiveResult> {
         const requested = [...new Set(input.modelIds.filter((id) => id.trim().length > 0))];
         if (requested.length === 0) {
-            return { provider: input.provider, isActive: input.isActive, applied: [], unknown: [] };
+            return { provider: input.provider, isActive: input.isActive, applied: [], unknown: [], deprecated: [] };
         }
 
         const catalog = await this.getEffectiveLlmCatalog.execute();
@@ -48,9 +56,20 @@ export class SetLlmModelsActive {
         }
 
         const byId = new Map(providerCatalog.models.map((model) => [model.id, model]));
-        const models = requested.map((id) => byId.get(id)).filter((model) => model !== undefined);
-        const applied = models.map((model) => model.id);
         const unknown = requested.filter((id) => !byId.has(id));
+
+        // A model the provider dropped can always be switched OFF — that is how a group
+        // deactivation tidies up — but never switched back ON.
+        const deprecated = input.isActive
+            ? requested.filter((id) => byId.get(id)?.availability === "deprecated")
+            : [];
+        const skip = new Set([...unknown, ...deprecated]);
+
+        const models = requested
+            .filter((id) => !skip.has(id))
+            .map((id) => byId.get(id))
+            .filter((model) => model !== undefined);
+        const applied = models.map((model) => model.id);
 
         if (models.length > 0) {
             await this.repository.setModelsActive({
@@ -60,6 +79,6 @@ export class SetLlmModelsActive {
             });
         }
 
-        return { provider: input.provider, isActive: input.isActive, applied, unknown };
+        return { provider: input.provider, isActive: input.isActive, applied, unknown, deprecated };
     }
 }

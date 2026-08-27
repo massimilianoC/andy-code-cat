@@ -136,3 +136,52 @@ describe("SetLlmModelsActive", () => {
         })).rejects.toMatchObject({ statusCode: 404 });
     });
 });
+
+describe("SetLlmModelsActive — a model the provider dropped cannot be switched back on", () => {
+    it("refuses to activate a deprecated model and says so", async () => {
+        const { repository, useCase } = harness([
+            model("still/offered"),
+            model("retired/model", { availability: "deprecated" }),
+        ]);
+
+        const result = await useCase.execute({
+            provider: "siliconflow",
+            modelIds: ["still/offered", "retired/model"],
+            isActive: true,
+        });
+
+        expect(result.applied).toEqual(["still/offered"]);
+        expect(result.deprecated).toEqual(["retired/model"]);
+        const written = repository.setModelsActive.mock.calls[0]![0];
+        expect(written.models.map((entry) => entry.id)).toEqual(["still/offered"]);
+    });
+
+    it("still allows switching a deprecated model OFF, so a group cleanup completes", async () => {
+        const { repository, useCase } = harness([
+            model("retired/model", { availability: "deprecated", isActive: true }),
+        ]);
+
+        const result = await useCase.execute({
+            provider: "siliconflow",
+            modelIds: ["retired/model"],
+            isActive: false,
+        });
+
+        expect(result.applied).toEqual(["retired/model"]);
+        expect(result.deprecated).toEqual([]);
+        expect(repository.setModelsActive).toHaveBeenCalledTimes(1);
+    });
+
+    it("writes nothing when every requested id is deprecated", async () => {
+        const { repository, useCase } = harness([model("retired/model", { availability: "deprecated" })]);
+
+        const result = await useCase.execute({
+            provider: "siliconflow",
+            modelIds: ["retired/model"],
+            isActive: true,
+        });
+
+        expect(result.applied).toEqual([]);
+        expect(repository.setModelsActive).not.toHaveBeenCalled();
+    });
+});
