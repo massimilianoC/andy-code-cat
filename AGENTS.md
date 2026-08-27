@@ -274,6 +274,64 @@ Non-negotiable rules for agents:
 
 6. NEVER run `docker compose down` during a live session without explicit user confirmation.
 
+## Resource Discipline
+
+This runs on the owner's machine and the owner's provider accounts. Both are finite, and an agent
+that treats them as free will exhaust them long before it notices.
+
+### Builds
+
+1. **One build per image at a time.** Before starting a build, check that no build of the same
+   target is already running:
+
+   ```
+   docker ps --format '{{.Names}}'                 # what is up
+   ```
+   ```powershell
+   Get-CimInstance Win32_Process -Filter "Name='docker.exe'" |
+     Select-Object ProcessId, CommandLine          # what is building
+   ```
+
+   Two concurrent builds of the same image do not go faster. They contend for the same layer
+   cache and the same CPU, and the loser's output is thrown away.
+
+2. **Never launch a rebuild "to be safe" while one is in flight.** If you are unsure whether a
+   build is progressing, look at the process and the image timestamp before concluding it is
+   stuck. A Next build that prints nothing for six minutes is normal; buffered output is not
+   evidence of a hang.
+
+3. **`--no-cache` requires a stated reason.** It rebuilds every layer from scratch, costs minutes
+   and gigabytes, and is justified only by a diagnosed cache problem — not by uncertainty about
+   whether a change was picked up. To check that, compare the image timestamp with the edit.
+
+4. **Verify that a stopped build actually stopped.** Stopping a background task kills the wrapper
+   shell; the `docker` CLI child can survive it and keep the build running. Confirm no orphan
+   remains before starting anything else.
+
+5. **Do not poll.** Background work reports when it finishes. Waking up every few seconds to ask
+   burns turns and tells you nothing the notification will not.
+
+### Providers and paid APIs
+
+6. **Live model calls spend the owner's money.** Only models listed in
+   `tests/config/authorized-test-models.json` may be called without asking, and the run's cost is
+   reported afterwards. Model quality is never a reason to reach outside that list.
+
+7. **Discovery is a network call per provider.** Force-refreshing the catalog belongs at startup
+   and on an explicit operator refresh — never in a loop, and never on a read path.
+
+8. **Prefer one batched request to many small ones**, for providers and for the local API alike.
+   A single decision that arrives as two hundred requests can half-fail, and leaves state nobody
+   chose.
+
+### Why this section exists
+
+Two builds of the same web image ran concurrently, one of them `--no-cache`, because a rebuild
+was launched while an earlier one was still going and neither was checked for. Separately, the
+Docker engine had already crashed mid-build once that session, taking host port forwarding with
+it — so the machine was being asked to compile the same target twice while it was still
+recovering. The owner noticed before the agent did.
+
 ## Frontend UI Framework (apps/web)
 
 ### Stack
@@ -370,6 +428,39 @@ Local models (LM Studio) carry no metered cost, but use only the ones LM Studio 
 - Use meaningful names; avoid abbreviations that hide intent.
 - Add concise comments only where intent is non-obvious.
 
+## Proportional Spec-First Delivery — No Parallel Process
+
+This policy strengthens the existing specs, roadmap, runbooks and PR flow. It does **not** create a
+second requirements registry, execution tracker, ADR ritual or agent workflow.
+
+1. **Name the owning contract.** A non-trivial behaviour change must identify the existing spec
+   and any applicable stable rule IDs (`AL-*`, `PP-*`, or another domain family). If no ID exists,
+   cite the owning document and heading. Update the nearest existing spec instead of creating a
+   parallel source of truth.
+2. **State observable acceptance before implementation.** Record the intended outcome and how a
+   reviewer can observe success. Add negative, boundary, security, tenant-isolation, cost or
+   failure cases only when they are relevant. Typos and isolated mechanical edits are exempt.
+3. **Use three risk tiers:**
+   - `routine`: reversible, local, and no change to user behaviour, contracts, security, persisted
+     data or prompt execution; run the smallest relevant check.
+   - `material`: changes observable behaviour, a shared contract, persistence, dependencies or a
+     prompt layer; add targeted tests plus the relevant type, lint or build checks.
+   - `critical`: affects auth/authorization, tenant isolation, secrets, paid provider calls,
+     irreversible data, artifact lifecycle, publish/export, or prompt/model authority; add the
+     relevant negative/security/integration or E2E evidence and obtain an explicit human decision
+     for unresolved outcome or risk trade-offs.
+4. **Ask humans for decisions, not ceremony.** Agents execute routine, reversible work within the
+   approved scope. Ask one focused question only when the answer changes product intent,
+   architecture, security/privacy, external spending, compliance or an irreversible commitment.
+   Record durable decisions in the owning spec or focused proposal, not only in chat.
+5. **Keep documentation states knowable.** Binding contracts and current specs win over dated
+   reports, plans and proposals. When live documents conflict, resolve the conflict in the same
+   change by updating, superseding or moving the stale document under `docs/archive/`; do not leave
+   two documents appearing current.
+6. **Close with evidence.** The PR records the owning spec/rules, risk tier, observable acceptance,
+   commands or manual evidence, and any justified skipped check. `N/A` with a one-line reason is
+   valid; empty ritual checklists are not.
+
 ## Documentation Rules
 
 Any structural change must be reflected in:
@@ -377,6 +468,9 @@ Any structural change must be reflected in:
 - docs/INDEX.md
 - docs/architecture/BOOTSTRAP_ARCHITECTURE.md
 - docs/runbooks/TESTABLE_STEPS.md
+
+New, moved, superseded or archived documentation must be reflected in `docs/INDEX.md` in the same
+change. Do not duplicate a canonical contract merely to satisfy a template.
 
 ## Stepwise Delivery Protocol
 
