@@ -109,6 +109,7 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
+| [docs/specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md](specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md) | **Proposed, not implemented** — why the first generation feels silent, and an incremental plan for real progress events and an inspector panel |
 | [docs/specs/I18N_ARTIFACTS_SPEC.md](specs/I18N_ARTIFACTS_SPEC.md) | Multilingual support for LLM-generated artifact websites — post-publication translation pipeline |
 | [docs/specs/UX_REVIEW_AND_PUBLISH_SPEC.md](specs/UX_REVIEW_AND_PUBLISH_SPEC.md) | Review workspace and publish flow |
 | [docs/specs/WYSIWYG_EDIT_MODE_SPEC.md](specs/WYSIWYG_EDIT_MODE_SPEC.md) | WYSIWYG editor architecture and milestones |
@@ -210,6 +211,8 @@ pattern proven in this codebase.
 
 | Document | Description |
 | --- | --- |
+| [AGENTS.md](../AGENTS.md) | Binding project and agent contract, including Rule Zero and proportional spec-first delivery |
+| [.github/PULL_REQUEST_TEMPLATE.md](../.github/PULL_REQUEST_TEMPLATE.md) | Lightweight capture of owning contract, observable acceptance, risk tier, and verification evidence |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Product-level prompt, injection, and runtime governance model |
 | [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](specs/FIRST_INSTALL_SETUP_SPEC.md) | First-install wizard and initial platform configuration |
 | [docs/governance/PLATFORM_GOVERNANCE_POLICY.md](governance/PLATFORM_GOVERNANCE_POLICY.md) | Governance ownership, approval flow, and audit expectations |
