@@ -63,7 +63,7 @@ The brief was submitted as `autoPrompt`, the LLM generated a complete HTML landi
 **Steps:**
 1. Navigate to `/launch/[projectId]` after project creation
 2. Verify drag-and-drop zone renders with "Allega documenti di contesto" label
-3. Upload test file `.playwright-mcp/test-dcl-document.txt` via click-to-browse
+3. Upload a plain-text test document via click-to-browse (this run used a scratch file created for the session)
 4. Verify upload completes (asset visible in asset list)
 
 **Result:** PASS (after fix — see BUG-03)
@@ -179,7 +179,7 @@ Finish reason: `stop`
 
 **Symptom:** `File access denied: d:\tmp\test-dcl-document.txt is outside allowed roots`.  
 **Root cause:** Playwright MCP file upload sandbox restricts paths to the project directory.  
-**Fix:** Created test file at `.playwright-mcp/test-dcl-document.txt` inside the repository root.
+**Fix:** Created a scratch test file inside the repository root. That scratch directory is no longer tracked; recreate an equivalent file locally when reproducing this run.
 
 ---
 

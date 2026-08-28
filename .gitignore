@@ -44,9 +44,34 @@ test-results/
 tests/test-results/
 tests/e2e/report/
 
+# ─── Test outputs from MCP-driven browser sessions ───────────────────────────
+# Accessibility dumps written by the Playwright MCP server. 56 of these were once
+# committed; they are session scratch, never a deliverable.
+.playwright-mcp/
+
 # ─── Debug / scratch ─────────────────────────────────────────────────────────
-debug/sample/
+# The whole folder, not just debug/sample/. AGENTS.md has always told contributors
+# that debug/ is ignored; until now only the sample/ subfolder actually was.
+debug/
 health_test.json
+
+# ─── Build artifacts ─────────────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ─── Editor and one-off backups ──────────────────────────────────────────────
+*.bak
+*.orig
+*.rej
+*~
+
+# ─── Screenshots at the repository root ──────────────────────────────────────
+# Documentation images belong in docs/. A PNG in the root is a leftover from a
+# manual verification run, and six of them shipped to the public repo.
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
 
 # ─── OS / IDE ─────────────────────────────────────────────────────────────────
 .DS_Store
