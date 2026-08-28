@@ -13,11 +13,9 @@ vi.mock("../../../config", () => ({
         COST_POLICY_VIDEO_EUR_PER_ASSET: 0.2,
         COST_POLICY_USD_TO_EUR_RATE: 0.92,
         COST_POLICY_PROVIDER_MARKUP_FACTOR: 1.2,
-        pipelineRunEnabled: true,
     },
 }));
 
-import { env } from "../../../config";
 import { OptimizeUserPrompt } from "../OptimizeUserPrompt";
 
 function streamResponse(lines: string[]) {
@@ -153,7 +151,6 @@ describe("OptimizeUserPrompt", () => {
     afterEach(() => {
         vi.unstubAllGlobals();
         vi.useRealTimers();
-        env.pipelineRunEnabled = true;
     });
 
     it("uses streamed reasoning text as the optimized prompt when content chunks are empty", async () => {
@@ -503,26 +500,4 @@ describe("OptimizeUserPrompt", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("PIPELINE_RUN_ENABLED=false: falls back to the legacy cascade even when pipelineRunId is set (master rollback lever)", async () => {
-        env.pipelineRunEnabled = false;
-        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
-            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
-            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-        }), { status: 200, headers: { "Content-Type": "application/json" } }));
-        vi.stubGlobal("fetch", fetchMock);
-
-        const resolvePipelineModelLock = { dispatch: vi.fn(), createRun: vi.fn() };
-        const { useCase } = createUseCase(null, { resolvePipelineModelLock });
-
-        await useCase.execute({
-            projectId: "project-1",
-            userId: "user-1",
-            rawPrompt: "Landing page",
-            pipelineRunId: "run-1",
-        });
-
-        expect(resolvePipelineModelLock.dispatch).not.toHaveBeenCalled();
-        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M2.5");
-    });
 });

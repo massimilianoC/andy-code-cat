@@ -38,6 +38,29 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+describe("publish inline script hardening", () => {
+    it("extracts ordinary inline scripts while preserving external and Tailwind configuration tags", async () => {
+        const { extractInlineJs } = await import("../PublishProject");
+        const result = extractInlineJs([
+            '<script src="https://cdn.example.test/runtime.js"></script>',
+            "<script>window.ready = true;</script>",
+            "<script>tailwind.config = { theme: {} };</script>",
+        ].join("\n"));
+
+        expect(result.extracted).toBe("window.ready = true;");
+        expect(result.html).toContain('src="https://cdn.example.test/runtime.js"');
+        expect(result.html).toContain("tailwind.config = { theme: {} };");
+        expect(result.html).not.toContain("window.ready = true;");
+    });
+
+    it("refuses nested markup that recreates a script tag after one replacement pass", async () => {
+        const { extractInlineJs } = await import("../PublishProject");
+        const nested = "<scrip<script>is removed</script>t>alert(123)</script>";
+
+        expect(() => extractInlineJs(nested)).toThrowError("Artifact contains ambiguous inline script markup");
+    });
+});
+
 describe("publish/export unresolved media guardrails", () => {
     it("repairs a legacy utility-only snapshot before publishing it", async () => {
         const { PublishProject } = await import("../PublishProject");

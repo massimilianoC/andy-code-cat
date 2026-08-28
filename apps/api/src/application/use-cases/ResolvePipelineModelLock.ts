@@ -130,7 +130,7 @@ export class ResolvePipelineModelLock {
         }
 
         const modelLock: PipelineModelLock = {
-            policy: "legacy",
+            policy: decision.policy,
             requested: {
                 providerId: input.requestedProviderId ?? decision.effective.provider,
                 modelId: input.requestedModelId ?? decision.effective.model,

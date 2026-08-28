@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { createPipelineRunSchema, type PipelineRunDto } from "@andy-code-cat/contracts";
 import { env } from "../../../config";
 import { authMiddleware } from "../middlewares/authMiddleware";
@@ -21,13 +22,8 @@ function toDto(run: PipelineRun): PipelineRunDto {
 }
 
 /**
- * I7 of the SSOT program — see docs/SSOT_REFACTOR_PROGRESS.md.
- *
- * Gated behind `PIPELINE_RUN_ENABLED` (default false): the master rollback lever. When
- * disabled, every route below responds 404 as if it did not exist, and no existing route or
- * frontend code calls any of these — creating/listing/reading a PipelineRun here has zero
- * effect on the legacy Vibe/GodMode dispatch paths still in production use. This is additive
- * infrastructure for later increments (I9+), not a live cutover.
+ * I7 of the SSOT program — see docs/SSOT_REFACTOR_PROGRESS.md. These routes are the only
+ * persisted PipelineRun surface; rollback is a code revert and redeploy, not a runtime branch.
  */
 export function createPipelineRunRoutes(): Router {
     const router = Router();
@@ -36,6 +32,12 @@ export function createPipelineRunRoutes(): Router {
     const pipelineRunRepository = new MongoPipelineRunRepository();
     const llmCatalogRepository = new MongoLlmCatalogRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
+    const pipelineRunLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        limit: 60,
+        standardHeaders: true,
+        legacyHeaders: false,
+    });
 
     const getLlmCatalog = new GetLlmCatalog(
         env.LLM_CATALOG_SOURCE,
@@ -49,21 +51,10 @@ export function createPipelineRunRoutes(): Router {
     );
     const resolvePipelineModelLock = new ResolvePipelineModelLock(pipelineRunRepository, getLlmCatalog);
 
-    router.use(authMiddleware);
-
-    // Scoped to this router's own paths only — NOT a blanket router.use(), which would
-    // intercept every "/v1/*" request mounted after this router in app.ts and 404 them
-    // whenever the flag is off. Each handler checks the flag itself instead.
-    router.use("/projects/:projectId/pipeline-runs", (_req, res, next) => {
-        if (!env.pipelineRunEnabled) {
-            res.status(404).json({ error: "Not found" });
-            return;
-        }
-        next();
-    });
-
     router.post(
         "/projects/:projectId/pipeline-runs",
+        pipelineRunLimiter,
+        authMiddleware,
         sandboxMiddleware,
         async (req: RequestWithContext, res, next) => {
             try {
@@ -88,6 +79,8 @@ export function createPipelineRunRoutes(): Router {
 
     router.get(
         "/projects/:projectId/pipeline-runs",
+        pipelineRunLimiter,
+        authMiddleware,
         sandboxMiddleware,
         async (req: RequestWithContext, res, next) => {
             try {
@@ -101,6 +94,8 @@ export function createPipelineRunRoutes(): Router {
 
     router.get(
         "/projects/:projectId/pipeline-runs/:runId",
+        pipelineRunLimiter,
+        authMiddleware,
         sandboxMiddleware,
         async (req: RequestWithContext, res, next) => {
             try {

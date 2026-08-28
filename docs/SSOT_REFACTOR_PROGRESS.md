@@ -1,14 +1,15 @@
 # SSOT Refactor — Progress and Resume Point
 
 **Status:** I0–I17 implemented and merged to `develop`; I18–I20 remain  
-**Last updated:** 2026-08-25  
+**Last updated:** 2026-08-28
 **Resume authority:** [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md)
 
 **2026-08-19 scope note:** the "deferred past the demo" framing below (2026-08-18) was explicitly
 overridden the next day — no increment in this program is gated on the September 2026 demo
 calendar. The only legitimate gate on any remaining increment (I15–I20) is technical readiness.
 The `PipelineRun` aggregate this section originally called "not started" has since been built and
-is live (behind `PIPELINE_RUN_ENABLED`, default off) with real dispatch call sites wired in I12–I14.
+is the only live guided-launch path, with real dispatch call sites wired in I12–I14. The temporary
+runtime rollback flags were removed on 2026-08-28 under Rule Zero; rollback is now revert + redeploy.
 
 ## Progress update — 2026-08-18
 
@@ -61,12 +62,11 @@ increments and their `develop` merge commits are:
   of real generation traffic, so a locked/blocked model now genuinely cannot dispatch — a strict
   Kimi K3 lock cannot silently fall back to MiniMax or DeepSeek, and an unavailable locked model
   fails (409) before any provider call, in every strict-dispatch call site that exists.
-- **I14.1 hardening** (this PR): fixed 4 issues an independent review found in I7–I14 — a
+- **I14.1 hardening:** fixed 4 issues an independent review found in I7–I14 — a
   blocked→blocked dispatch retry throwing 500 instead of 409, a fabricated fallback model being
   written into the audit journal when strict dispatch blocked, missing project-scoping on
-  `dispatch()`, and `PIPELINE_RUN_ENABLED` not gating the dispatch call sites themselves (only the
-  routes that create/list runs) — the last of which meant the flag's "15-second full rollback"
-  guarantee wasn't actually airtight at the backend.
+  `dispatch()`, and incomplete strict-dispatch coverage. The later Rule Zero cutover removed the
+  runtime flag itself and the legacy fallback it could reactivate.
 
 ## Current state
 
@@ -75,10 +75,9 @@ increments and their `develop` merge commits are:
 - [x] `PipelineRun` aggregate built, persisted, and wired into real dispatch call sites (I7–I14).
 - [x] Strict-dispatch invariant (never silently substitute a locked model) holds at every call
   site that currently exists — verified by an independent coherence review, hardened in I14.1.
-- [x] Frontend run-based handoff landed (I15, PR #74) — scoped to the one-click AI launch flow;
-  the manual review-then-continue path stays on the legacy handoff. Gated behind
-  `NEXT_PUBLIC_PIPELINE_RUN_UI` (frontend) and `PIPELINE_RUN_ENABLED` (backend, default off), so
-  the strict chain is reachable by real traffic only once both flags are on.
+- [x] Frontend run-based handoff landed (I15, PR #74), then became the sole guided-launch path.
+  The frontend/backend flags and the legacy handoff were removed on 2026-08-28; every launch now
+  creates a PipelineRun and uses the server-owned strict chain.
 - [x] Workshop pure server projection + persisted run notifications landed (I16–I17, PR #75).
 - [ ] I18–I20 (typed POST preflight + Layer-E nested segments, Kimi K3 E2E acceptance test,
   legacy call-site removal) not started.

@@ -112,8 +112,8 @@ export function previewCanonicalBrief(
 
 /**
  * I15 of the SSOT program — server-owned Workspace launch (see `LaunchWorkspacePipeline` on the
- * API side). Behind `PIPELINE_RUN_ENABLED` on the backend; 404s if that flag is off. This is the
- * only guided-launch entry point. The legacy client function and the three routes behind it
+ * API side). This is the only guided-launch entry point. The legacy client function and the
+ * three routes behind it
  * (/pipelines/guided and its aliases) were removed on 2026-08-27: they launched without creating
  * a PipelineRun, so the same user action could run certified or uncertified depending on the URL.
  */

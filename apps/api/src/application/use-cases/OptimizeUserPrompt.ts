@@ -444,17 +444,14 @@ export class OptimizeUserPrompt {
         let modelId: string | undefined;
 
         // I13 strict cutover wave 1: a PipelineRun's frozen modelLock governs dispatch instead of
-        // the legacy cascade. dispatch() re-validates the lock against the live catalog and never
+        // the cascade. dispatch() re-validates the lock against the live catalog and never
         // substitutes a different model — a stale/deactivated lock blocks (409) rather than
-        // silently falling back. Gated on PIPELINE_RUN_ENABLED too, not just the presence of
-        // pipelineRunId: this is the master rollback lever's whole point — flipping the flag off
-        // must revert EVERY call site to legacy behavior, even one that (incorrectly, or from a
-        // stale client) still sends a pipelineRunId.
+        // silently falling back. There is no runtime switch back to an uncertified path.
         //
         // Single-use, same rule as the generate stage: once the run has dispatched, lockApplies
         // is false and the cascade honours the user's own selection.
         let lockedSelection: { providerId: string; modelId: string } | null = null;
-        if (input.pipelineRunId && env.pipelineRunEnabled) {
+        if (input.pipelineRunId) {
             const { run, blocked, lockApplies } = await this.resolvePipelineModelLock.dispatch({
                 runId: input.pipelineRunId,
                 ownerUserId: input.userId,

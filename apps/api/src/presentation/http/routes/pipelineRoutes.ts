@@ -1,4 +1,5 @@
 import { Router, type Response, type NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import {
     type GenerationWorkspaceDto,
     launchWorkspacePipelineSchema,
@@ -57,6 +58,18 @@ export function createPipelineRoutes(): Router {
     const pipelineRunRepository = new MongoPipelineRunRepository();
     const llmCatalogRepository = new MongoLlmCatalogRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
+    const pipelineReadLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        limit: 120,
+        standardHeaders: true,
+        legacyHeaders: false,
+    });
+    const pipelineWriteLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        limit: 30,
+        standardHeaders: true,
+        legacyHeaders: false,
+    });
 
     const prepareGenerationWorkspace = new PrepareGenerationWorkspace(
         assetRepository,
@@ -87,8 +100,6 @@ export function createPipelineRoutes(): Router {
         resolvePipelineModelLock,
         pipelineRunRepository,
     );
-
-    router.use(authMiddleware);
 
     // The guided launch has exactly one HTTP entry point: POST /pipeline/launch-workspace,
     // below. Three more used to reach the same handler without creating a PipelineRun —
@@ -132,6 +143,8 @@ export function createPipelineRoutes(): Router {
 
     router.get(
         "/projects/:projectId/pipelines/guided/config",
+        pipelineReadLimiter,
+        authMiddleware,
         sandboxMiddleware,
         getGuidedPipelineConfig,
     );
@@ -139,9 +152,8 @@ export function createPipelineRoutes(): Router {
     /**
      * I12 of the SSOT program — server-owned Workspace launch that freezes a `PipelineModelLock`
      * and attaches the canonical brief to a real `PipelineRun` up front (see
-     * `LaunchWorkspacePipeline`). Gated behind the same `PIPELINE_RUN_ENABLED` master rollback
-     * lever as `pipelineRunRoutes.ts` since it persists a `PipelineRun`. Since 2026-08-27 this
-     * is the only route that launches a project.
+     * `LaunchWorkspacePipeline`). Since 2026-08-27 this is the only route that launches a
+     * project; rollback is a code revert and redeploy, never a parallel runtime path.
      *
      * Named "Workspace" (not "GodMode") since 2026-08-19, matching the product-owner-approved
      * rename in PR #58; see `pipelineEntryModeSchema`'s doc comment in
@@ -149,14 +161,11 @@ export function createPipelineRoutes(): Router {
      */
     router.post(
         "/projects/:projectId/pipeline/launch-workspace",
+        pipelineWriteLimiter,
+        authMiddleware,
         sandboxMiddleware,
         async (req: RequestWithContext, res: Response, next: NextFunction) => {
             try {
-                if (!env.pipelineRunEnabled) {
-                    res.status(404).json({ error: "Not found" });
-                    return;
-                }
-
                 const intake = launchWorkspacePipelineSchema.parse(req.body);
 
                 if (intake.presetId || intake.outputLanguage) {
@@ -220,6 +229,8 @@ export function createPipelineRoutes(): Router {
      */
     router.post(
         "/projects/:projectId/pipeline/brief-preview",
+        pipelineWriteLimiter,
+        authMiddleware,
         sandboxMiddleware,
         async (req: RequestWithContext, res: Response, next: NextFunction) => {
             try {

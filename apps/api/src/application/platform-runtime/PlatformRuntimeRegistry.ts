@@ -57,9 +57,18 @@ function safeConfigSource(config: Record<string, unknown>): string {
     return `;window.PageForgeRuntime.configure(${json});`;
 }
 
+export function assertInlineScriptContent(content: string): string {
+    if (/<\/script/i.test(content)) {
+        throw Object.assign(new Error("Platform runtime module contains a closing script tag"), {
+            statusCode: 422,
+            code: "UNSAFE_INLINE_RUNTIME_MODULE",
+        });
+    }
+    return content;
+}
+
 function inlineTag(asset: RuntimeAssetV1, content: string): string {
-    const safe = content.replace(/<\/script/gi, "<\\/script");
-    return `<script data-pf-runtime-module='${asset.id}' data-pf-runtime-sha256='${asset.sha256}'>${safe}</script>`;
+    return `<script data-pf-runtime-module='${asset.id}' data-pf-runtime-sha256='${asset.sha256}'>${assertInlineScriptContent(content)}</script>`;
 }
 
 function externalTag(asset: RuntimeAssetV1): string {
