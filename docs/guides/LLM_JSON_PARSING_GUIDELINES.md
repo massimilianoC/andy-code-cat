@@ -1,44 +1,44 @@
-# LLM JSON Parsing — Linee Guida e Tecniche
+# LLM JSON Parsing — Guidelines and Techniques
 
 Guida pratica e riusabile per gestire risposte JSON generate da LLM nei sistemi di produzione.
-Estratta e generalizzata dalla pipeline `llmParser.ts` di questo progetto.
+Extracted and generalised from this project's `llmParser.ts` pipeline.
 
 ---
 
-## Indice
+## Contents
 
-1. [Il problema](#il-problema)
-2. [Architettura generale](#architettura-generale)
-3. [Fase 1 — Pulizia pre-parsing](#fase-1--pulizia-pre-parsing)
-4. [Fase 2 — Estrazione candidati](#fase-2--estrazione-candidati)
-5. [Fase 3 — Catena di repair strategies](#fase-3--catena-di-repair-strategies)
-6. [Fase 4 — Selezione risultato migliore](#fase-4--selezione-risultato-migliore)
-7. [Fase 5 — Post-parse normalizzazione](#fase-5--post-parse-normalizzazione)
-8. [Validazione strutturale dei campi](#validazione-strutturale-dei-campi)
+1. [The problem](#the-problem)
+2. [Overall architecture](#overall-architecture)
+3. [Phase 1 — Pre-parsing cleanup](#phase-1--pre-parsing-cleanup)
+4. [Phase 2 — Candidate extraction](#phase-2--candidate-extraction)
+5. [Phase 3 — Repair strategy chain](#phase-3--repair-strategy-chain)
+6. [Phase 4 — Selecting the best result](#phase-4--selecting-the-best-result)
+7. [Phase 5 — Post-parse normalisation](#phase-5--post-parse-normalisation)
+8. [Structural field validation](#structural-field-validation)
 9. [Naming conventions](#naming-conventions)
-10. [Tabella dei bug LLM coperti](#tabella-dei-bug-llm-coperti)
-11. [Pitfall comuni](#pitfall-comuni)
-12. [Sequenza di applicazione raccomandata](#sequenza-di-applicazione-raccomandata)
+10. [Table of LLM bugs covered](#table-of-llm-bugs-covered)
+11. [Common pitfalls](#common-pitfalls)
+12. [Recommended order of application](#recommended-order-of-application)
 
 ---
 
-## Il problema
+## The problem
 
-I modelli LLM producono JSON che occasionalmente fallisce `JSON.parse()` per motivi ricorrenti:
+LLM output produces JSON that occasionally fails `JSON.parse()` for a recurring set of reasons:
 
 - Fence markdown (`\`\`\`json ... \`\`\``) inseriti intorno all'output
 - Caratteri di controllo non escapati dentro stringhe (`\n`, `\r`, `\t` letterali)
 - Escape invalidi (`\>`, `\`, ecc.) non riconosciuti dallo standard JSON
-- Terminazione prematura di stringa: una `"` non preceduta da `\` ma non in posizione di chiusura valida
-- Risposta troncata a causa del limite `max_tokens` con oggetti/array non chiusi
+- Premature string termination: a `"` not preceded by `\` but not in a valid closing position
+- Response truncated by the `max_tokens` limit, leaving objects and arrays unclosed
 - Doppio encoding HTML (`lang=\"it\"` invece di `lang="it"`)
 - Tag HTML malformati nel valore HTML (`<h11>`, `</>`)
-- Stringhe vuote o wrapper `<style>`/`<script>` nelle sezioni CSS/JS
+- Empty strings, or `<style>`/`<script>` wrappers, in the CSS/JS sections
 - Token spuri tra campi JSON (es. modello Hunyuan: `>",` tra due field)
 
 ---
 
-## Architettura generale
+## Overall architecture
 
 ```
 rawLlmOutput
@@ -50,7 +50,7 @@ rawLlmOutput
 [2] Generazione candidati multipli (stripped, fenced, extracted, pre-repaired...)
     │
     ▼
-[3] Per ogni candidato → catena di repair strategies
+[3] For each candidate → chain of repair strategies
     │   ├─ Direct JSON.parse
     │   ├─ repairInvalidJsonEscapes
     │   ├─ triple-pass (escape + premature-termination + escape)
@@ -58,7 +58,7 @@ rawLlmOutput
     │   └─ jsonrepair (last resort)
     │
     ▼
-[4] Selezione del risultato con score più alto
+[4] Select the highest-scoring result
     │
     ▼
 [5] Post-parse normalizzazione (HTML, CSS/JS, campi duplicati)
@@ -69,11 +69,11 @@ Risultato canonico validato
 
 ---
 
-## Fase 1 — Pulizia pre-parsing
+## Phase 1 — Pre-parsing cleanup
 
 ### 1.1 Strip markdown fence
 
-Rimuovere i delimitatori \`\`\`json ... \`\`\` con string operations (più robusto di regex quando il contenuto è enorme):
+Strip the \`\`\`json ... \`\`\` delimiters with string operations (more robust than a regex when the content is huge):
 
 ```ts
 let stripped = trimmed;
@@ -82,17 +82,17 @@ if (stripped.startsWith("```")) {
     const lastFence = stripped.lastIndexOf("```");
     if (lastFence > 0) stripped = stripped.slice(0, lastFence).trim();
 }
-// Fallback con regex per fences embedded nel testo
+// Regex fallback for fences embedded in the text
 const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/is);
 ```
 
-**Regola:** applicare SEMPRE prima di qualsiasi altro repair. Mai affidarsi a JSON.parse sul raw.
+**Rule:** ALWAYS apply this before any other repair. Never rely on JSON.parse against the raw text.
 
-### 1.2 Pre-repair prima dell'estrazione
+### 1.2 Pre-repair before extraction
 
-Alcuni modelli (es. gemma) terminano prematuramente una stringa con `"` non escaped. Questo fa sì che `extractFirstJsonObject` conti erroneamente le parentesi graffe dentro l'HTML e restituisca un oggetto troncato.
+Some models (gemma, for instance) terminate a string prematurely with an unescaped `"`. That makes `extractFirstJsonObject` miscount the braces inside the HTML and return a truncated object.
 
-Soluzione: applicare il repair delle escape e delle terminazioni premature PRIMA di estrarre il primo oggetto:
+Solution: apply the escape and premature-termination repairs BEFORE extracting the first object:
 
 ```ts
 const preRepaired = repairInvalidJsonEscapes(
@@ -102,9 +102,9 @@ const preRepaired = repairInvalidJsonEscapes(
 
 ---
 
-## Fase 2 — Estrazione candidati
+## Phase 2 — Candidate extraction
 
-Generare più versioni candidate dello stesso input e deduplicarle:
+Generate several candidate versions of the same input and deduplicate them:
 
 ```ts
 const rawCandidates = [
@@ -121,7 +121,7 @@ const seen = new Set<string>();
 const candidates = rawCandidates.filter(c => c && !seen.has(c) && seen.add(c));
 ```
 
-### extractFirstJsonObject — state machine brace-depth
+### extractFirstJsonObject — brace-depth state machine
 
 ```ts
 function extractFirstJsonObject(text: string): string | null {
@@ -144,13 +144,13 @@ function extractFirstJsonObject(text: string): string | null {
 }
 ```
 
-**Regola critica:** l'estrazione deve usare una state machine che rispetti `inString + escaped`. Mai usare `indexOf("{")` / `lastIndexOf("}")` senza tracking delle stringhe — ogni `{` dentro HTML conta come depth.
+**Critical rule:** extraction must use a state machine that honours `inString + escaped`. Never use `indexOf("{")` / `lastIndexOf("}")` without string tracking - every `{` inside HTML counts towards depth.
 
 ---
 
-## Fase 3 — Catena di repair strategies
+## Phase 3 — Repair strategy chain
 
-Applicare in ordine dal meno al più invasivo. Fermarsi al primo successo per candidato, poi confrontare i punteggi.
+Apply them in order, least to most invasive. Stop at the first success per candidate, then compare scores.
 
 ### Strategy 1 — Direct parse
 
@@ -165,8 +165,8 @@ Corregge due classi di errori dentro stringhe JSON:
 **a) Escape sequences invalide** (`\>`, `\`, ecc.):
 
 ```ts
-// Se il carattere dopo \ non è uno dei validi JSON (\", \\, \/, \b, \f, \n, \r, \t, \u)
-// → sostituire con \\ + char (mantiene il backslash letterale)
+// If the character after \ is not a valid JSON escape (\", \\, \/, \b, \f, \n, \r, \t, \u)
+// → replace with \\ + char (keeps the literal backslash)
 out += "\\\\";
 out += ch;
 ```
@@ -179,7 +179,7 @@ if (code === 0x0d) { out += "\\r"; continue; }  // carriage return
 if (code === 0x09) { out += "\\t"; continue; }  // tab
 ```
 
-Pattern base della state machine (uguale in tutte le funzioni di repair):
+The state machine's base pattern (identical across every repair function):
 
 ```ts
 let inString = false, escaped = false;
@@ -193,7 +193,7 @@ for (let i = 0; i < input.length; i++) {
     if (escaped) { escaped = false; /* processa ch */ continue; }
     if (ch === "\\") { escaped = true; out += ch; continue; }
     if (ch === '"') { inString = false; out += ch; continue; }
-    // → qui siamo dentro una stringa, non in escape
+    // → at this point we are inside a string, not in an escape
 }
 ```
 
@@ -207,18 +207,18 @@ repairInvalidJsonEscapes(
 )
 ```
 
-**Perché triple:** alcuni modelli emettono `\"` corretti per aprire attributi HTML ma li chiudono con una `"` senza backslash. Il primo pass di `repairInvalidJsonEscapes` non tocca le `"` (non sono escape sequence), quindi serve `repairPrematureStringTermination` a riconoscere le chiusure premature, poi un secondo pass di escape repair.
+**Why three passes:** some models emit correct `\"` to open HTML attributes but close them with a `"` carrying no backslash. The first `repairInvalidJsonEscapes` pass leaves `"` alone (they are not escape sequences), so `repairPrematureStringTermination` is needed to recognise the premature closes, followed by a second escape-repair pass.
 
 ### `repairPrematureStringTermination`
 
-Logica: quando si incontra una `"` dentro una stringa, fare lookahead (skippa whitespace) e verificare se il carattere successivo è un valido terminatore di valore JSON:
+Logic: on encountering a `"` inside a string, look ahead (skipping whitespace) and check whether the next character is a valid JSON value terminator:
 
 ```ts
 if (ch === '"') {
     let j = i + 1;
     while (j < input.length && /\s/.test(input[j])) j++;
     const nextCh = j < input.length ? input[j] : "";
-    // ":" è necessario per le chiavi JSON — senza, ogni key verrebbe "interna"
+    // ":" is required for JSON keys - without it, every key would look "internal"
     if (nextCh === "," || nextCh === "}" || nextCh === "]" || nextCh === ":" || nextCh === "") {
         out += '"';
         inString = false;
@@ -229,11 +229,11 @@ if (ch === '"') {
 }
 ```
 
-**Pitfall critico:** senza `":"` tra i caratteri validi, **ogni chiave JSON** (`"key":`) viene interpretata come terminazione prematura, corrompendo tutto il documento. Il `":"` è il separatore chiave-valore — la `"` che chiude una chiave è sempre seguita da `:`.
+**Critical pitfall:** without `":"` among the valid characters, **every JSON key** (`"key":`) is read as a premature termination, corrupting the whole document. The `":"` is the key-value separator - the `"` closing a key is always followed by `:`.
 
 ### Strategy 4 — `repairTruncatedJson`
 
-Usato quando il modello ha colpito il limite `max_tokens` e la risposta finisce nel mezzo di una stringa o con oggetti/array aperti.
+Used when the model hit the `max_tokens` limit and the response ends mid-string or with open objects or arrays.
 
 ```ts
 function repairTruncatedJson(input: string): string {
@@ -248,7 +248,7 @@ function repairTruncatedJson(input: string): string {
 }
 ```
 
-**Nota:** il risultato è un JSON parziale — il contenuto dell'ultimo campo può essere troncato. Per questo si usa lo scoring per preferire risultati completi.
+**Note:** the result is partial JSON - the last field's content may be truncated. That is precisely why scoring is used, to prefer complete results.
 
 ### Strategy 5 — `jsonrepair` (library)
 
@@ -257,11 +257,11 @@ import { jsonrepair } from "jsonrepair";
 JSON.parse(jsonrepair(candidate));
 ```
 
-Last resort. Copre pattern non previsti ma può introdurre trasformazioni non desiderate. Applicare solo se tutte le strategie precedenti falliscono.
+Last resort. It covers unforeseen patterns but can introduce unwanted transformations. Apply it only when every preceding strategy has failed.
 
-### Repair aggiuntivo — `repairStrayGtBetweenFields` (Hunyuan-A13B)
+### Additional repair — `repairStrayGtBetweenFields` (Hunyuan-A13B)
 
-Alcuni modelli emettono un token `>",` spurio tra campi JSON (residuo del `>` finale dell'HTML che "sfugge" fuori dalla stringa):
+Some models emit a spurious `>",` token between JSON fields (the trailing `>` of the HTML "escaping" out of the string):
 
 ```
 "html": "...</html>",
@@ -269,7 +269,7 @@ Alcuni modelli emettono un token `>",` spurio tra campi JSON (residuo del `>` fi
 "css": "..."
 ```
 
-Soluzione: detectare `>` fuori da stringa seguito da `"` opzionale + `,` opzionale, verificare che il prossimo carattere significativo sia `"` (nuovo field), e saltare la sequenza spuria:
+Solution: detect a `>` outside a string followed by an optional `"` and an optional `,`, confirm the next significant character is a `"` (a new field), and skip the spurious sequence:
 
 ```ts
 if (ch === ">") {
@@ -289,11 +289,11 @@ if (ch === ">") {
 
 ---
 
-## Fase 4 — Selezione risultato migliore
+## Phase 4 — Selecting the best result
 
-Quando più candidati parsano con successo, scegliere quello con **score più alto** — non il primo. Questo evita che un repair `repairTruncatedJson` su un candidato degradato "vinca" su un parse diretto completo di un candidato migliore.
+When several candidates parse successfully, choose the one with the **highest score** - not the first. This stops a `repairTruncatedJson` result on a degraded candidate from "beating" a clean, complete parse of a better one.
 
-### Funzione di scoring
+### Scoring function
 
 ```ts
 function scoreResult(r: ParsedResult): number {
@@ -313,15 +313,15 @@ function scoreResult(r: ParsedResult): number {
 }
 ```
 
-**Principio:** un parse troncato ha sempre HTML più corto e manca di `</html>` → score basso → viene scartato se esiste un parse completo.
+**Principle:** a truncated parse always has shorter HTML and lacks `</html>` → low score → discarded whenever a complete parse exists.
 
 ---
 
-## Fase 5 — Post-parse normalizzazione
+## Phase 5 — Post-parse normalisation
 
 ### 5.1 `unescapeDoubleEncodedHtml`
 
-Alcuni modelli double-encodano gli attributi HTML nel JSON (`lang=\"it\"` → nel valore HTML diventa `lang=\"it\"` invece di `lang="it"`):
+Some models double-encode HTML attributes inside the JSON (`lang=\"it\"` reaches the HTML value as `lang=\"it\"` instead of `lang="it"`):
 
 ```ts
 function unescapeDoubleEncodedHtml(html: string): string {
@@ -334,7 +334,7 @@ function unescapeDoubleEncodedHtml(html: string): string {
 }
 ```
 
-**Regola:** applicare SOLO se il pattern `=\"` è presente — evita trasformazioni indesiderate su HTML normale.
+**Rule:** apply this ONLY when the `=\"` pattern is present - it avoids unwanted transformations of normal HTML.
 
 ### 5.2 `normalizeHtmlArtifact`
 
@@ -353,7 +353,7 @@ function normalizeHtmlArtifact(html: string): string {
 
 ### 5.3 `normalizeArtifactCssJs`
 
-Alcuni modelli avvolgono CSS/JS con i rispettivi tag nonostante le istruzioni contrarie:
+Some models wrap CSS and JS in their respective tags despite instructions to the contrary:
 
 ```ts
 function normalizeArtifactCssJs(content: string, kind: "css" | "js"): string {
@@ -368,28 +368,28 @@ function normalizeArtifactCssJs(content: string, kind: "css" | "js"): string {
 }
 ```
 
-### 5.4 Fallback: estrazione CSS/JS dall'HTML
+### 5.4 Fallback: extracting CSS/JS from the HTML
 
-Quando `artifacts.css` e `artifacts.js` sono vuoti ma il modello ha inserito tutto inline nell'HTML:
+When `artifacts.css` and `artifacts.js` are empty but the model inlined everything into the HTML:
 
 ```ts
 function extractArtifactsFromHtml(html: string): { css: string; js: string } {
     const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
     const css = styleMatch?.[1]?.trim() ?? "";
-    // Solo script senza src= (esclude CDN esterni)
+    // Only scripts without src= (excludes external CDNs)
     const scriptMatch = html.match(/<script(?![^>]*\bsrc\b)[^>]*>([\s\S]*?)<\/script>/i);
     const js = scriptMatch?.[1]?.trim() ?? "";
     return { css, js };
 }
 ```
 
-**Regola:** applicare il fallback solo se il campo è vuoto dopo `normalizeArtifactCssJs`.
+**Rule:** apply the fallback only when the field is empty after `normalizeArtifactCssJs`.
 
 ---
 
-## Validazione strutturale dei campi
+## Structural field validation
 
-Dopo il parsing, validare ogni campo opzionale in modo esplicito prima di accettarlo:
+After parsing, validate every optional field explicitly before accepting it:
 
 ```ts
 function extractFocusPatch(parsed: Partial<LlmResponse>): FocusPatch | undefined {
@@ -397,9 +397,9 @@ function extractFocusPatch(parsed: Partial<LlmResponse>): FocusPatch | undefined
     if (!fp) return undefined;
     // Enum check
     if (!["html", "css", "js"].includes(fp.targetType)) return undefined;
-    // Campo opzionale: se presente deve essere stringa non vuota
+    // Optional field: when present it must be a non-empty string
     if (fp.anchor !== undefined && (typeof fp.anchor !== "string" || !fp.anchor.trim())) return undefined;
-    // Campo obbligatorio: stringa non vuota
+    // Required field: non-empty string
     if (typeof fp.replacement !== "string" || !fp.replacement.trim()) return undefined;
     return fp;
 }
@@ -407,12 +407,12 @@ function extractFocusPatch(parsed: Partial<LlmResponse>): FocusPatch | undefined
 
 **Principi:**
 
-- Distinguere tra campi **opzionali** (`!== undefined` prima del type check) e **obbligatori**
-- Usare `trim()` per evitare stringhe di soli spazi
-- I controlli enum devono essere espliciti, non affidarsi al type system a runtime
-- Restituire `undefined` (non `null`) per campi opzionali assenti
+- Distinguish **optional** fields (`!== undefined` before the type check) from **required** ones
+- Use `trim()` to reject whitespace-only strings
+- Enum checks must be explicit; do not rely on the type system at runtime
+- Return `undefined` (not `null`) for absent optional fields
 
-### Assemblaggio canonico con defaults
+### Canonical assembly with defaults
 
 ```ts
 function assembleResult(parsed: Partial<LlmResponse>): LlmResponse | null {
@@ -431,9 +431,9 @@ function assembleResult(parsed: Partial<LlmResponse>): LlmResponse | null {
 
 **Regole:**
 
-- `String(value ?? "")` per i campi stringa obbligatori — mai assumere che un campo sia già stringa
-- `Array.isArray(arr) ? arr.map(String) : []` per array — mai assumere il tipo degli elementi
-- Centralizzare l'assemblaggio in una funzione — non duplicarlo in ogni branch try-catch
+- `String(value ?? "")` for required string fields - never assume a field is already a string
+- `Array.isArray(arr) ? arr.map(String) : []` for arrays - never assume the element type
+- Centralise assembly in one function - do not duplicate it in every try-catch branch
 
 ---
 
@@ -441,107 +441,107 @@ function assembleResult(parsed: Partial<LlmResponse>): LlmResponse | null {
 
 | Pattern | Snake_case | camelCase | Significato |
 |---|---|---|---|
-| Funzione di repair | — | `repairXxx` | Trasforma una stringa, non modifica lo stato |
-| Funzione di normalizzazione | — | `normalizeXxx` | Pulisce/uniforma un valore già parsato |
-| Funzione di estrazione | — | `extractXxx` | Ricava un sottoinsieme da un valore più grande |
-| Funzione di validazione campo | — | `extractXxx` | Valida + restituisce il campo o undefined |
+| Repair function | - | `repairXxx` | Transforms a string; does not mutate state |
+| Normalisation function | - | `normalizeXxx` | Cleans and harmonises an already-parsed value |
+| Extraction function | - | `extractXxx` | Derives a subset from a larger value |
+| Field validation function | — | `extractXxx` | Validates and returns the field, or undefined |
 | Funzione di assemblaggio | — | `assembleXxx` | Costruisce il risultato canonico finale |
-| Funzione di scoring | — | `scoreXxx` | Calcola il punteggio qualitativo di un risultato |
+| Scoring function | - | `scoreXxx` | Computes the quality score of a result |
 | Funzione di parsing pubblica | — | `tryParseXxx` | Entry point pubblica, restituisce `{ result, valid }` |
 
 **Regole di naming:**
 
-- `repair*` non lancia eccezioni — restituisce sempre una stringa
+- `repair*` never throws - it always returns a string
 - `try*` cattura le eccezioni internamente — restituisce `null` o `{ valid: false }` in caso di fallimento
-- `assemble*` restituisce `null` se i campi obbligatori sono assenti
-- I nomi dei repair descrivono **cosa correggono**, non il modello che li causa (es. `repairPrematureStringTermination` non `repairGemmaDoubleQuoteBug`)
+- `assemble*` returns `null` when required fields are missing
+- Repair names describe **what they fix**, not the model that caused it (`repairPrematureStringTermination`, not `repairGemmaDoubleQuoteBug`)
 
 ---
 
-## Tabella dei bug LLM coperti
+## Table of LLM bugs covered
 
 | Bug | Modelli noti | Funzione di repair |
 |---|---|---|
 | Fence markdown `\`\`\`json` attorno alla risposta | quasi tutti | fence stripping (fase 1) |
 | Escape sequence invalide (`\>`, `\`) | vari | `repairInvalidJsonEscapes` |
 | Newline/tab letterali dentro stringhe JSON | vari | `repairInvalidJsonEscapes` |
-| Terminazione prematura di stringa con `"` non escaped | gemma, phi | `repairPrematureStringTermination` |
+| Premature string termination with an unescaped `"` | gemma, phi | `repairPrematureStringTermination` |
 | Risposta troncata per `max_tokens` | tutti | `repairTruncatedJson` |
 | Doppio encoding HTML `lang=\"it\"` | qwen, mistral | `unescapeDoubleEncodedHtml` |
 | Tag heading duplicati `<h11>` | vari | `normalizeHtmlArtifact` |
 | Tag chiusura vuoti `</>` | vari | `normalizeHtmlArtifact` |
 | CSS/JS avvolti in `<style>`/`<script>` | vari | `normalizeArtifactCssJs` |
-| CSS/JS vuoti ma inline nell'HTML | vari | `extractArtifactsFromHtml` |
+| CSS/JS empty but inlined in the HTML | various | `extractArtifactsFromHtml` |
 | Token spurio `>",` tra campi JSON | Hunyuan-A13B | `repairStrayGtBetweenFields` |
 
 ---
 
-## Pitfall comuni
+## Common pitfalls
 
-### ❌ Repair che non rispetta le boundaries delle stringhe
+### ❌ A repair that does not respect string boundaries
 
 ```ts
-// SBAGLIATO: regexp globale sulla stringa raw — colpisce anche i valori HTML
+// WRONG: global regex over the raw string - it also hits HTML values
 json.replace(/\n/g, "\\n")
 
 // CORRETTO: state machine che traccia inString + escaped
 ```
 
-### ❌ `repairPrematureStringTermination` senza il caso `":"`
+### ❌ `repairPrematureStringTermination` without the `":"` case
 
 ```ts
-// SBAGLIATO: manca ":" → ogni chiave JSON viene "tenuta aperta"
+// WRONG: missing ":" → every JSON key is "held open"
 if (nextCh === "," || nextCh === "}" || nextCh === "]" || nextCh === "") {
 
 // CORRETTO
 if (nextCh === "," || nextCh === "}" || nextCh === "]" || nextCh === ":" || nextCh === "") {
 ```
 
-### ❌ Prendere il primo parse riuscito invece del migliore
+### ❌ Taking the first successful parse instead of the best one
 
 ```ts
 // SBAGLIATO: repairTruncatedJson su un candidato degradato "vince"
 for (const candidate of candidates) {
     const result = tryParseWithRepairs(candidate);
-    if (result) return result;  // ← primo successo, può essere troncato
+    if (result) return result;  // ← first success, and it may be truncated
 }
 
-// CORRETTO: raccogliere tutti i successi, restituire il migliore per score
+// CORRECT: collect every success, return the best by score
 ```
 
-### ❌ Applicare `unescapeDoubleEncodedHtml` sempre
+### ❌ Applying `unescapeDoubleEncodedHtml` unconditionally
 
 ```ts
-// SBAGLIATO: trasforma HTML normale che non ne ha bisogno
+// WRONG: transforms normal HTML that does not need it
 const html = unescapeDoubleEncodedHtml(rawHtml);
 
 // CORRETTO: fast path con check preventivo
 if (!html.includes('=\\"')) return html;
 ```
 
-### ❌ Duplicare la logica di assemblaggio in ogni branch
+### ❌ Duplicating assembly logic in every branch
 
 ```ts
-// SBAGLIATO: ogni catch/else riassembla il risultato a modo suo
-// CORRETTO: una sola funzione assembleResult() chiamata da tutte le branch
+// WRONG: every catch/else reassembles the result its own way
+// CORRECT: a single assembleResult() function called from every branch
 ```
 
-### ❌ Usare `"` standard negli attributi HTML all'interno di JSON
+### ❌ Using standard `"` in HTML attributes inside JSON
 
-Quando il prompt istruisce un LLM a generare HTML dentro JSON, imporre **virgolette singole** per tutti gli attributi HTML:
+When the prompt instructs an LLM to generate HTML inside JSON, mandate **single quotes** for every HTML attribute:
 
 ```
-// Nel system prompt al LLM:
+// In the system prompt sent to the LLM:
 Use single quotes for ALL HTML attributes.
 WRONG: <html lang="it">
 RIGHT: <html lang='it'>
 ```
 
-Questo elimina alla radice il 90% dei problemi di escape HTML-in-JSON.
+This eliminates 90% of HTML-in-JSON escaping problems at the root.
 
 ---
 
-## Sequenza di applicazione raccomandata
+## Recommended order of application
 
 ```
 Input raw LLM
@@ -556,7 +556,7 @@ Input raw LLM
     │       extractFirstJsonObject(preRepaired), extractFirstJsonObject(stripped),
     │       gtRepaired, extractFirstJsonObject(gtRepaired) ]
     │
-    ├─ Per ogni candidato, applica strategies:
+    ├─ For each candidate, apply the strategies:
     │     1. JSON.parse(candidate)
     │     2. JSON.parse(repairInvalidJsonEscapes(candidate))
     │     3. JSON.parse(repairInvalidJsonEscapes(repairPrematureStringTermination(repairInvalidJsonEscapes(candidate))))
@@ -577,8 +577,8 @@ Input raw LLM
 
 ---
 
-## Riferimento implementativo
+## Implementation reference
 
 File sorgente nel progetto: `apps/api/src/application/llm/llmParser.ts`
 
-Dipendenza esterna: [`jsonrepair`](https://www.npmjs.com/package/jsonrepair) — usata come last resort nella strategy 5.
+External dependency: [`jsonrepair`](https://www.npmjs.com/package/jsonrepair) - used as the last resort in strategy 5.

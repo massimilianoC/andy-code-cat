@@ -1,44 +1,44 @@
-# Multi-Provider LLM — Best Practices Riusabili
+# Multi-Provider LLM — Reusable Best Practices
 
-Guida pratica estratta dall'implementazione di questo progetto.
+A practical guide drawn from this project's implementation.
 Copre: catalogo provider, routing, token budget, costi, background tasks, image gen, streaming SSE, local dev.
-Applicabile a qualsiasi sistema Node.js/TypeScript che integra modelli da OpenAI-compatible, SiliconFlow, OpenRouter, LM Studio o altri provider eterogenei.
+Applicable to any Node.js/TypeScript system integrating models from OpenAI-compatible services, SiliconFlow, OpenRouter, LM Studio or other heterogeneous providers.
 
 ---
 
-## Indice
+## Contents
 
-1. [Principio fondamentale: provider-agnostic by design](#1-principio-fondamentale-provider-agnostic-by-design)
-2. [Architettura del catalogo multi-provider](#2-architettura-del-catalogo-multi-provider)
-3. [Modello dati: entità canoniche](#3-modello-dati-entità-canoniche)
-4. [Ruoli modello — tassonomia riusabile](#4-ruoli-modello--tassonomia-riusabile)
+1. [Founding principle: provider-agnostic by design](#1-founding-principle-provider-agnostic-by-design)
+2. [Multi-provider catalog architecture](#2-multi-provider-catalog-architecture)
+3. [Data model: canonical entities](#3-data-model-canonical-entities)
+4. [Model roles — a reusable taxonomy](#4-model-roles--a-reusable-taxonomy)
 5. [Auth routing: api-key / bearer / none](#5-auth-routing-api-key--bearer--none)
-6. [Config validation al bootstrap (Zod pattern)](#6-config-validation-al-bootstrap-zod-pattern)
+6. [Config validation at bootstrap (the Zod pattern)](#6-config-validation-at-bootstrap-the-zod-pattern)
 7. [Dual-source catalog: env vs MongoDB](#7-dual-source-catalog-env-vs-mongodb)
-8. [Provider key routing sicuro](#8-provider-key-routing-sicuro)
+8. [Safe provider key routing](#8-safe-provider-key-routing)
 9. [Context budget management](#9-context-budget-management)
 10. [History pruning — token-safe](#10-history-pruning--token-safe)
-11. [Output budget policy nel system prompt](#11-output-budget-policy-nel-system-prompt)
+11. [Output budget policy in the system prompt](#11-output-budget-policy-in-the-system-prompt)
 12. [Cost tracking dual-source (provider-reported vs flat-rate)](#12-cost-tracking-dual-source-provider-reported-vs-flat-rate)
-13. [Streaming SSE da LLM al client](#13-streaming-sse-da-llm-al-client)
-14. [Background tasks pattern (image gen, pipeline lenta)](#14-background-tasks-pattern-image-gen-pipeline-lenta)
-15. [Image generation: polling e timeout](#15-image-generation-polling-e-timeout)
-16. [Deduplication modelli nel catalogo](#16-deduplication-modelli-nel-catalogo)
-17. [LM Studio come provider locale (dev/offline)](#17-lm-studio-come-provider-locale-devoffline)
+13. [SSE streaming from the LLM to the client](#13-sse-streaming-from-the-llm-to-the-client)
+14. [Background task pattern (image generation, slow pipelines)](#14-background-task-pattern-image-generation-slow-pipelines)
+15. [Image generation: polling and timeouts](#15-image-generation-polling-and-timeouts)
+16. [Model deduplication in the catalog](#16-model-deduplication-in-the-catalog)
+17. [LM Studio as a local provider (dev/offline)](#17-lm-studio-as-a-local-provider-devoffline)
 18. [Model-specific prompt templates](#18-model-specific-prompt-templates)
-19. [Pricing lookup table per provider](#19-pricing-lookup-table-per-provider)
-20. [Errori provider: codici normalizzati](#20-errori-provider-codici-normalizzati)
-21. [Checklist per nuovo progetto multi-provider](#21-checklist-per-nuovo-progetto-multi-provider)
+19. [Per-provider pricing lookup table](#19-per-provider-pricing-lookup-table)
+20. [Provider errors: normalised codes](#20-provider-errors-normalised-codes)
+21. [Checklist for a new multi-provider project](#21-checklist-for-a-new-multi-provider-project)
 
 ---
 
-## 1. Principio fondamentale: provider-agnostic by design
+## 1. Founding principle: provider-agnostic by design
 
-**Tutti i provider compatibili OpenAI condividono lo stesso schema API:**
+**Every OpenAI-compatible provider shares the same API schema:**
 
 ```
 POST {baseUrl}/chat/completions
-Authorization: Bearer {apiKey}     ← oppure nessun header se authType === "none"
+Authorization: Bearer {apiKey}     ← or no header at all when authType === "none"
 Content-Type: application/json
 
 {
@@ -49,16 +49,16 @@ Content-Type: application/json
 }
 ```
 
-Questo vale per: **OpenAI, SiliconFlow, OpenRouter, LM Studio, Ollama, Together.ai, Groq, Parasail, Azure OpenAI** e decine di altri.
+This holds for **OpenAI, SiliconFlow, OpenRouter, LM Studio, Ollama, Together.ai, Groq, Parasail, Azure OpenAI** and dozens of others.
 
-**Pattern chiave**: non scrivere codice specifico per provider. Usa sempre:
+**Key pattern**: do not write provider-specific code. Always use:
 - `baseUrl` risolto dal catalogo
 - `apiKey` risolto dalla mappa provider→chiave
 - `model` risolto dal ruolo richiesto
 
 ---
 
-## 2. Architettura del catalogo multi-provider
+## 2. Multi-provider catalog architecture
 
 ```
 domain/
@@ -82,11 +82,11 @@ infra/
     MongoLlmCatalogRepository.ts   ← implementazione concreta
 ```
 
-**Regola**: la presentation layer vede solo `LlmProviderCatalog[]` — non sa niente di endpoint o chiavi specifiche.
+**Rule**: the presentation layer sees only `LlmProviderCatalog[]` — it knows nothing about specific endpoints or keys.
 
 ---
 
-## 3. Modello dati: entità canoniche
+## 3. Data model: canonical entities
 
 ```typescript
 export type PipelineModelRole =
@@ -98,19 +98,19 @@ export type PipelineModelRole =
     | "embeddings";
 
 export interface LlmModel {
-    id: string;                  // ID reale del provider (es. "Qwen/Qwen3-32B")
+    id: string;                  // the provider's real ID (e.g. "Qwen/Qwen3-32B")
     provider: string;            // chiave logica (es. "siliconflow")
     role: PipelineModelRole;
     capabilities: string[];      // ["chat"] | ["vision","chat"] | ["image_generation"]
-    isDefault: boolean;          // modello primario per quel ruolo
-    isFallback: boolean;         // alternativa se il default fallisce
+    isDefault: boolean;          // primary model for that role
+    isFallback: boolean;         // alternative used when the default fails
     isActive: boolean;
     displayName?: string;        // etichetta UI
     description?: string;        // note operative
-    promptTemplate?: string;     // istruzioni specifiche per questo modello
+    promptTemplate?: string;     // instructions specific to this model
     focusPromptTemplate?: string;// istruzioni in modalità focused-edit
     priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
-    priceInputUsdPerM?: number;  // USD per milione di token in input
+    priceInputUsdPerM?: number;  // USD per million input tokens
     priceOutputUsdPerM?: number;
 }
 
@@ -126,16 +126,16 @@ export interface LlmProviderCatalog {
 }
 ```
 
-**Perché separare `isDefault` da `isFallback`?**
-- `isDefault=true`: preferito dal sistema — usato nella selezione automatica per ruolo.
-- `isFallback=true`: attivato solo quando il default è irraggiungibile o restituisce errore.
-- Un modello può essere entrambi `isDefault=false, isFallback=true` (presente, ma non il primary choice).
+**Why separate `isDefault` from `isFallback`?**
+- `isDefault=true`: preferred by the system — used by automatic per-role selection.
+- `isFallback=true`: engaged only when the default is unreachable or returns an error.
+- A model may be both `isDefault=false, isFallback=true` (available, but not the primary choice).
 
 ---
 
-## 4. Ruoli modello — tassonomia riusabile
+## 4. Model roles — a reusable taxonomy
 
-Usare ruoli semantici invece di ID modello hardcoded permette di cambiare modello senza toccare la logica applicativa.
+Using semantic roles instead of hardcoded model IDs allows the model to change without touching application logic.
 
 | Ruolo | Uso tipico | Capability |
 |---|---|---|
@@ -161,13 +161,13 @@ function resolveModelForRole(
     const provider = providers.find(p => p.provider === providerKey && p.isActive);
     if (!provider) return undefined;
 
-    // 1. default attivo per quel ruolo
+    // 1. active default for that role
     const defaultModel = provider.models.find(
         m => m.role === role && m.isDefault && m.isActive
     );
     if (defaultModel) return defaultModel;
 
-    // 2. qualsiasi attivo per quel ruolo
+    // 2. any active model for that role
     return provider.models.find(m => m.role === role && m.isActive);
 }
 ```
@@ -176,7 +176,7 @@ function resolveModelForRole(
 
 ## 5. Auth routing: api-key / bearer / none
 
-Ogni provider ha un proprio regime di autenticazione. Centralizzare la logica in un mapper evita `if (provider === "siliconflow")` sparsi.
+Every provider has its own authentication regime. Centralising the logic in a mapper avoids `if (provider === "siliconflow")` scattered through the code.
 
 ```typescript
 type AuthType = "api-key" | "bearer" | "none";
@@ -189,7 +189,7 @@ function buildAuthHeaders(
     if (!authType || authType === "none") return {};
     if (!apiKey) throw new Error("API key required but not configured");
 
-    // Sia "bearer" che "api-key" usano Authorization: Bearer in OpenAI-compat
+    // Both "bearer" and "api-key" use Authorization: Bearer under OpenAI-compat
     return { Authorization: `Bearer ${apiKey}` };
 }
 
@@ -202,15 +202,15 @@ const headers = buildAuthHeaders(
 
 **Note pratiche:**
 - LM Studio locale → `authType: "none"` (nessun header)
-- SiliconFlow, OpenRouter → `authType: "bearer"` (token nella porta API)
-- OpenAI diretto → `authType: "api-key"` (Bearer, ma semanticamente diverso)
+- SiliconFlow, OpenRouter → `authType: "bearer"` (token carried in the API port)
+- OpenAI directly → `authType: "api-key"` (Bearer, but semantically different)
 - Anthropic → `authType: "api-key"` + header `x-api-key` (richiede adapter dedicato)
 
 ---
 
-## 6. Config validation al bootstrap (Zod pattern)
+## 6. Config validation at bootstrap (the Zod pattern)
 
-Tutti gli env critici validati con Zod all'avvio. Il processo si ferma con errore leggibile se manca qualcosa.
+All critical environment variables are validated with Zod at startup. The process stops with a readable error when something is missing.
 
 ```typescript
 import { z } from "zod";
@@ -228,7 +228,7 @@ const envSchema = z.object({
     OPENROUTER_BASE_URL: z.string().url().default("https://openrouter.ai/api/v1"),
     OPEN_ROUTER_API_KEY: z.string().optional(),
 
-    // Chiavi aggiuntive come JSON per provider arbitrari
+    // Additional keys as JSON, for arbitrary providers
     LLM_PROVIDER_API_KEYS_JSON: z.string().optional(),
 });
 
@@ -238,7 +238,7 @@ if (!parsed.success) {
     process.exit(1);
 }
 
-// Derivare booleani e mappe da env → non spargerli nel codice
+// Derive booleans and maps from the environment → do not scatter them through the code
 export const env = {
     ...parsed.data,
     hasSiliconFlowApiKey: Boolean(parsed.data.SILICONFLOW_API_KEY?.trim()),
@@ -247,7 +247,7 @@ export const env = {
 };
 ```
 
-**Pattern `LLM_PROVIDER_API_KEYS_JSON`** — per supportare provider arbitrari senza aggiungere env var dedicate:
+**The `LLM_PROVIDER_API_KEYS_JSON` pattern** — supports arbitrary providers without adding dedicated environment variables:
 
 ```env
 # .env
@@ -276,13 +276,13 @@ function buildProviderKeyMap(data: EnvData): Record<string, string> {
 
 ## 7. Dual-source catalog: env vs MongoDB
 
-**Problema**: in sviluppo vuoi un catalogo sempre disponibile senza DB. In produzione vuoi editarlo da UI admin senza rebuild.
+**Problem**: in development you want a catalog that is always available without a database. In production you want to edit it from the admin UI without a rebuild.
 
-**Soluzione**: due sorgenti con stessa interfaccia di output.
+**Solution**: two sources behind the same output interface.
 
 ```typescript
 // LLM_CATALOG_SOURCE=env  → catalogo statico hardcoded nei file defaultXxxCatalog.ts
-// LLM_CATALOG_SOURCE=mongo → MongoDB con fallback al catalogo statico se vuoto
+// LLM_CATALOG_SOURCE=mongo → MongoDB, falling back to the static catalog when empty
 
 class GetLlmCatalog {
     async execute(): Promise<{ source: "env" | "mongo"; providers: LlmProviderCatalog[] }> {
@@ -310,7 +310,7 @@ class GetLlmCatalog {
 **Seed idempotente al bootstrap** (solo in `LLM_CATALOG_SOURCE=mongo`):
 
 ```typescript
-// SeedLlmCatalog.execute() usa upsert, non insert — sicuro da rieseguire ogni startup
+// SeedLlmCatalog.execute() uses upsert, not insert — safe to re-run on every startup
 if (env.LLM_CATALOG_SOURCE === "mongo" && env.llmAutoSeedOnStartup) {
     await seedLlmCatalog.execute();
 }
@@ -318,9 +318,9 @@ if (env.LLM_CATALOG_SOURCE === "mongo" && env.llmAutoSeedOnStartup) {
 
 ---
 
-## 8. Provider key routing sicuro
+## 8. Safe provider key routing
 
-Mai esporre la chiave al frontend. Mai hardcodare nel codice. Il backend la inietta solo al momento della chiamata.
+Never expose the key to the frontend. Never hardcode it. The backend injects it only at call time.
 
 ```typescript
 // ❌ Mai fare
@@ -328,7 +328,7 @@ const response = await fetch(url, {
     headers: { Authorization: `Bearer ${process.env.SILICONFLOW_API_KEY}` }
 });
 
-// ✅ Sempre risolvere dalla mappa centralizzata
+// ✅ Always resolve from the centralised map
 const apiKey = env.providerApiKeys[context.providerCatalog.provider];
 if (!apiKey && context.providerCatalog.authType !== "none") {
     throw new HttpError(`Missing API key for provider ${context.providerCatalog.provider}`, {
@@ -338,7 +338,7 @@ if (!apiKey && context.providerCatalog.authType !== "none") {
 }
 ```
 
-**Hint per UI admin**: salvare nell'env l'hint del nome variabile per ogni provider, così l'admin sa cosa configurare:
+**Hint for the admin UI**: store the variable-name hint for each provider in the environment, so the administrator knows what to configure:
 
 ```typescript
 const PROVIDER_KEY_ENV_HINTS: Record<string, string> = {
@@ -352,23 +352,23 @@ const PROVIDER_KEY_ENV_HINTS: Record<string, string> = {
 
 ## 9. Context budget management
 
-I modelli hanno finestre di contesto finite. Gestire il budget in modo esplicito previene errori `context_length_exceeded` in produzione.
+Models have finite context windows. Managing the budget explicitly prevents `context_length_exceeded` errors in production.
 
 ```typescript
-// Costanti da env (tunable senza rebuild)
+// Constants from the environment (tunable without a rebuild)
 const MAX_CONTEXT_CHARS = env.LLM_CONTEXT_MAX_CHARS;          // 64000 default
 const MAX_ARTIFACT_CHARS = env.LLM_ARTIFACT_CONTEXT_MAX_CHARS; // 16000 default
 const MAX_HISTORY_MESSAGES = env.LLM_MAX_HISTORY_MESSAGES;     // 12 default
 const MAX_HISTORY_MESSAGE_CHARS = env.LLM_HISTORY_MESSAGE_MAX_CHARS; // 2000 default
 const MAX_HISTORY_CHARS = env.LLM_HISTORY_MAX_CHARS;           // 7000 default
 
-// Troncare il contesto artifact prima di inviarlo
+// Truncate the artifact context before sending it
 function truncateArtifact(html: string, maxChars: number): string {
     if (html.length <= maxChars) return html;
     return html.slice(0, maxChars) + "\n<!-- [TRUNCATED FOR CONTEXT BUDGET] -->";
 }
 
-// Ogni messaggio storico viene troncato individualmente
+// Each historical message is truncated individually
 function truncateMessage(content: string, maxChars: number): string {
     return content.length > maxChars
         ? content.slice(0, maxChars) + " [...]"
@@ -376,7 +376,7 @@ function truncateMessage(content: string, maxChars: number): string {
 }
 ```
 
-**Regola pratica**: usa caratteri, non token, per la stima del budget (1 token ≈ 3–4 caratteri per testi misti). Questo evita dipendenze dal tokenizer specifico del modello.
+**Rule of thumb**: use characters, not tokens, to estimate the budget (1 token ≈ 3–4 characters for mixed text). This avoids depending on a specific model's tokenizer.
 
 ---
 
@@ -410,15 +410,15 @@ function pruneHistory(
 
 ```typescript
 // LLM_FOCUS_HISTORY_MODE=none  → nessuna storia (max risparmio)
-// LLM_FOCUS_HISTORY_MODE=user_only → solo messaggi utente (rimuove HTML artifacts dall'assistant)
+// LLM_FOCUS_HISTORY_MODE=user_only → user messages only (strips assistant HTML artifacts)
 // LLM_FOCUS_HISTORY_MODE=full  → storia completa (default chat)
 ```
 
 ---
 
-## 11. Output budget policy nel system prompt
+## 11. Output budget policy in the system prompt
 
-Includere una sezione esplicita nel system prompt istruisce il modello a rispettare i limiti.
+Including an explicit section in the system prompt instructs the model to respect the limits.
 
 ```typescript
 function buildOutputBudgetPolicy(maxTokens: number): string {
@@ -442,7 +442,7 @@ function buildOutputBudgetPolicy(maxTokens: number): string {
 
 ## 12. Cost tracking dual-source (provider-reported vs flat-rate)
 
-Alcuni provider (es. **OpenRouter**) restituiscono il costo reale in USD nel campo `usage.cost`. Questo è sempre più preciso della stima flat-rate.
+Some providers (**OpenRouter**, for example) return the actual cost in USD in the `usage.cost` field. This is always more accurate than a flat-rate estimate.
 
 ```typescript
 interface CostPolicyInput {
@@ -466,7 +466,7 @@ function estimateCost(input: CostPolicyInput, cfg: CostPolicyConfig): CostEstima
 }
 ```
 
-**Per SiliconFlow**: costruire una price lookup table `Record<modelId, SfModelPrice>` con prezzi hardcoded aggiornati periodicamente. Calcolare il costo reale moltiplicando token usati × prezzo per M.
+**For SiliconFlow**: build a `Record<modelId, SfModelPrice>` price lookup table with hardcoded prices, refreshed periodically. Compute the real cost as tokens used × price per M.
 
 ```typescript
 function resolveProviderCostUsd(
@@ -479,11 +479,11 @@ function resolveProviderCostUsd(
 }
 ```
 
-**Price tier derivati da percentile** (per UI): categorizzare i modelli in tier `free/€/€€/€€€/€€€€` basandosi su percentili della distribuzione dei prezzi nel catalogo, con unità omogenee (evitare di mescolare `per_m_tokens` con `per_image`).
+**Price tiers derived from percentiles** (for the UI): categorise models into `free/€/€€/€€€/€€€€` tiers based on percentiles of the price distribution in the catalog, using homogeneous units (never mix `per_m_tokens` with `per_image`).
 
 ---
 
-## 13. Streaming SSE da LLM al client
+## 13. SSE streaming from the LLM to the client
 
 ```typescript
 // Setup SSE su Express
@@ -500,7 +500,7 @@ router.get("/llm/stream", (req, res) => {
 
     sendSse({ type: "start", provider: context.providerCatalog.provider });
 
-    // Chiama il provider con stream: true
+    // Call the provider with stream: true
     const stream = await callProviderStream(context, messages);
 
     for await (const chunk of stream) {
@@ -513,15 +513,15 @@ router.get("/llm/stream", (req, res) => {
 });
 ```
 
-**Attenzione**: non tutti i provider OpenAI-compatible supportano `stream: true` in modo identico. LM Studio lo supporta, SiliconFlow sì, OpenRouter sì. Verificare la documentazione per campi edge (`finish_reason`, `usage` nello stream).
+**Caution**: not every OpenAI-compatible provider supports `stream: true` identically. LM Studio supports it, SiliconFlow does, OpenRouter does. Check the documentation for edge fields (`finish_reason`, `usage` inside the stream).
 
 ---
 
-## 14. Background tasks pattern (image gen, pipeline lenta)
+## 14. Background task pattern (image generation, slow pipelines)
 
-Per operazioni che richiedono > 2–3 secondi, rispondere immediatamente con un task ID e aggiornare il record in background.
+For operations taking more than 2–3 seconds, respond immediately with a task ID and update the record in the background.
 
-### Entità
+### Entities
 
 ```typescript
 interface BackgroundTask {
@@ -539,7 +539,7 @@ interface BackgroundTask {
 }
 ```
 
-### Flusso
+### Flow
 
 ```typescript
 // 1. Rispondere subito con task pending
@@ -550,7 +550,7 @@ const task = await conversationRepo.addBackgroundTask(conversationId, {
 });
 res.json({ taskId: task.id, status: "pending" });
 
-// 2. Eseguire in background (non await nella response chain)
+// 2. Run in the background (do not await inside the response chain)
 setImmediate(async () => {
     try {
         await conversationRepo.updateBackgroundTask(conversationId, task.id, { status: "running" });
@@ -570,10 +570,10 @@ setImmediate(async () => {
 });
 ```
 
-### Polling dal client (se non puoi usare WebSocket)
+### Client-side polling (when WebSockets are not an option)
 
 ```typescript
-// Frontend: poll ogni 2s fino a completamento o timeout (30s)
+// Frontend: poll every 2s until completion or timeout (30s)
 async function pollTaskStatus(taskId: string, maxMs = 30_000): Promise<TaskResult> {
     const deadline = Date.now() + maxMs;
     while (Date.now() < deadline) {
@@ -586,11 +586,11 @@ async function pollTaskStatus(taskId: string, maxMs = 30_000): Promise<TaskResul
 }
 ```
 
-**Perché non 1 secondo?** SiliconFlow FLUX.1 richiede ~4–6s. Un singolo refresh a 1.8s lascia gli asset bloccati in `pending`. Usare poll interrompibile con back-off progressivo per task che possono durare > 10s.
+**Why not one second?** SiliconFlow FLUX.1 takes roughly 4–6s. A single refresh at 1.8s leaves assets stuck in `pending`. Use interruptible polling with progressive back-off for tasks that can exceed 10s.
 
 ---
 
-## 15. Image generation: polling e timeout
+## 15. Image generation: polling and timeouts
 
 SiliconFlow usa l'endpoint `/images/generations` (OpenAI-compatible image gen):
 
@@ -647,15 +647,15 @@ async function generateImageWithSiliconFlow(opts: {
 ```
 
 **Pitfall**:
-- Il campo `data[0].url` può essere una URL temporanea con scadenza. Scaricare e salvare subito, non salvare la URL.
-- `num_inference_steps` default = 20, ma `FLUX.1-schnell` funziona bene con 4 step (molto più veloce, quasi identico per uso generale).
-- Calcolare `providerCostUsd` dalla price lookup table in base al modello, non dall'API (SiliconFlow non restituisce `usage.cost`).
+- The `data[0].url` field may be a temporary URL with an expiry. Download and store the bytes immediately; do not store the URL.
+- `num_inference_steps` defaults to 20, but `FLUX.1-schnell` works well with 4 steps (much faster, near-identical for general use).
+- Compute `providerCostUsd` from the price lookup table for the model, not from the API (SiliconFlow does not return `usage.cost`).
 
 ---
 
-## 16. Deduplication modelli nel catalogo
+## 16. Model deduplication in the catalog
 
-Provider come OpenRouter possono restituire lo stesso modello con ruoli diversi (es. `gpt-4o-mini` per `dialogue` e `dialogue_fast`). Deduplicare per ID mantenendo la priorità `isDefault`.
+Providers such as OpenRouter may return the same model under different roles (`gpt-4o-mini` for both `dialogue` and `dialogue_fast`, for instance). Deduplicate by ID, keeping `isDefault` priority.
 
 ```typescript
 function dedupeModelsById(models: LlmModel[]): LlmModel[] {
@@ -667,7 +667,7 @@ function dedupeModelsById(models: LlmModel[]): LlmModel[] {
             byId.set(model.id, model);
             continue;
         }
-        // Preferire il modello marcato come default
+        // Prefer the model marked as default
         const prev = byId.get(model.id)!;
         if (model.isDefault && !prev.isDefault) {
             byId.set(model.id, model);
@@ -678,11 +678,11 @@ function dedupeModelsById(models: LlmModel[]): LlmModel[] {
 }
 ```
 
-**Quando applicare**: solo nella risposta al frontend (`/llm/providers`). Il catalogo interno può contenere duplicati per ruolo — serve per la logica di fallback per ruolo.
+**When to apply it**: only in the response to the frontend (`/llm/providers`). The internal catalog may hold duplicates per role — that is what per-role fallback logic needs.
 
 ---
 
-## 17. LM Studio come provider locale (dev/offline)
+## 17. LM Studio as a local provider (dev/offline)
 
 LM Studio espone un server OpenAI-compatible su `http://localhost:1234/v1` (o indirizzo LAN in Docker).
 
@@ -710,19 +710,19 @@ export function buildDefaultLmStudioCatalog(baseUrl: string): LlmProviderCatalog
 }
 ```
 
-**In Docker**: usare `host.docker.internal:1234` invece di `localhost`.
+**Under Docker**: use `host.docker.internal:1234` instead of `localhost`.
 
 ```env
 LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
 ```
 
-**Uso consigliato**: fallback offline, test senza spendere crediti, sviluppo locale di nuovi flow prima di connettere provider cloud.
+**Recommended use**: offline fallback, testing without spending credits, local development of new flows before connecting a cloud provider.
 
 ---
 
 ## 18. Model-specific prompt templates
 
-Modelli diversi reagiscono meglio a stili di istruzione diversi. Centralizzare le note per ruolo in un file dedicato (`modelRegistryPresets.ts`) invece di spargerle nel codice.
+Different models respond better to different instruction styles. Centralise per-role notes in a dedicated file (`modelRegistryPresets.ts`) instead of scattering them through the code.
 
 ```typescript
 const ROLE_PROMPT_TEMPLATES: Record<PipelineModelRole, string> = {
@@ -733,7 +733,7 @@ const ROLE_PROMPT_TEMPLATES: Record<PipelineModelRole, string> = {
     // ...
 };
 
-// Decorare i modelli al momento della build del catalogo
+// Decorate the models when the catalog is built
 function decorateSeedModel(base: Partial<LlmModel>): LlmModel {
     const role = base.role!;
     return {
@@ -747,9 +747,9 @@ function decorateSeedModel(base: Partial<LlmModel>): LlmModel {
 
 ---
 
-## 19. Pricing lookup table per provider
+## 19. Per-provider pricing lookup table
 
-Mantenere una `Record<modelId, { input: number; output: number; priceUnit: string }>` per ogni provider che non restituisce `usage.cost`.
+Maintain a `Record<modelId, { input: number; output: number; priceUnit: string }>` for every provider that does not return `usage.cost`.
 
 ```typescript
 // siliconflowPricing.ts
@@ -763,13 +763,13 @@ export const SILICONFLOW_MODEL_PRICES: Readonly<Record<string, SfModelPrice>> = 
 };
 ```
 
-**Aggiornamento**: tenere il file sincronizzato con la pagina prezzi del provider. Utile aggiungere un commento con data ultimo aggiornamento + URL fonte.
+**Updating**: keep the file in sync with the provider's pricing page. Adding a comment with the last-updated date and the source URL is worthwhile.
 
 ---
 
-## 20. Errori provider: codici normalizzati
+## 20. Provider errors: normalised codes
 
-Normalizzare gli errori HTTP del provider in codici interni prima di propagarli al client.
+Normalise the provider's HTTP errors into internal codes before propagating them to the client.
 
 ```typescript
 // HTTP 401 → API key non valida
@@ -805,17 +805,17 @@ function normalizeProviderError(
 }
 ```
 
-**Suggerimento**: loggare sempre `{ provider, model, durationMs, code }` per ogni chiamata fallita. È fondamentale per debugging in produzione.
+**Tip**: always log `{ provider, model, durationMs, code }` for every failed call. It is essential for debugging in production.
 
 ---
 
-## 21. Checklist per nuovo progetto multi-provider
+## 21. Checklist for a new multi-provider project
 
-### Struttura minima
+### Minimum structure
 
 - [ ] `domain/entities/LlmCatalog.ts` — tipi `LlmModel`, `LlmProviderCatalog`, `PipelineModelRole`
 - [ ] `domain/repositories/LlmCatalogRepository.ts` — interfaccia pura
-- [ ] `application/llm/defaultXxxCatalog.ts` — uno per provider, con `buildDefaultXxxCatalog(baseUrl)`
+- [ ] `application/llm/defaultXxxCatalog.ts` — one per provider, exposing `buildDefaultXxxCatalog(baseUrl)`
 - [ ] `application/use-cases/GetLlmCatalog.ts` — dual-source (env/mongo)
 - [ ] `application/use-cases/SeedLlmCatalog.ts` — idempotente
 - [ ] `application/llm/modelRegistryPresets.ts` — `decorateSeedModel()`
@@ -823,7 +823,7 @@ function normalizeProviderError(
 
 ### Config
 
-- [ ] Env validati con Zod al bootstrap
+- [ ] Environment validated with Zod at bootstrap
 - [ ] `LLM_CATALOG_SOURCE=env` come default sicuro
 - [ ] `providerApiKeys: Record<string, string>` derivato da env al bootstrap
 - [ ] `buildAuthHeaders()` centralizzato, non sparso
@@ -831,35 +831,35 @@ function normalizeProviderError(
 
 ### Context management
 
-- [ ] Costanti budget da env (tunabili senza rebuild)
+- [ ] Budget constants from the environment (tunable without a rebuild)
 - [ ] Troncamento history per messaggio + totale
-- [ ] Troncamento artifact prima di inviare al LLM
+- [ ] Artifact truncation before sending to the LLM
 - [ ] Output budget policy nel system prompt
 
-### Operazioni lente (> 3s)
+### Slow operations (> 3s)
 
 - [ ] Background task con `status: "pending" | "running" | "completed" | "failed"`
 - [ ] Risposta HTTP immediata con `taskId`
-- [ ] Polling client ogni 2–3s (non 1s)
-- [ ] Timeout con `AbortController` su tutte le chiamate provider
+- [ ] Client polling every 2–3s (not 1s)
+- [ ] Timeout with `AbortController` on every provider call
 
 ### Image generation
 
 - [ ] Endpoint separato da chat completions
 - [ ] `num_inference_steps` configurabile (default 4 per fast, 20 per quality)
-- [ ] Download e bufferizzazione dell'immagine subito (non salvare URL temporanee)
+- [ ] Download and buffer the image immediately (never store temporary URLs)
 - [ ] Costo da lookup table (SiliconFlow non restituisce `usage.cost`)
 
-### Qualità e debugging
+### Quality and debugging
 
-- [ ] Log strutturato per ogni chiamata: `{ provider, model, durationMs, tokenUsage, costEstimate, error? }`
+- [ ] Structured log for every call: `{ provider, model, durationMs, tokenUsage, costEstimate, error? }`
 - [ ] Codici errore normalizzati (`LLM_PROVIDER_AUTH_FAILED`, `LLM_PROVIDER_RATE_LIMIT`, ecc.)
-- [ ] Deduplication modelli per ID prima di rispondere al frontend
+- [ ] Model deduplication by ID before responding to the frontend
 - [ ] Separare `isDefault` da `isFallback` nel modello dati
 
 ---
 
-## Riferimenti interni
+## Internal references
 
 | File | Cosa contiene |
 |---|---|

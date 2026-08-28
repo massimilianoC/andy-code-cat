@@ -49,32 +49,32 @@ Coverage: backend (Node.js / Express, Clean Architecture) and frontend (Next.js 
 ## 2. Required environment variables
 
 ```env
-# URL base dell'API (non cambia)
+# API base URL (does not change)
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
-# Chiave API (opzionale per i modelli :free, obbligatoria per i modelli paid)
+# API key (optional for :free models, required for paid models)
 OPEN_ROUTER_API_KEY=sk-or-v1-...
 
-# Sorgente del catalog LLM: "env" = statico da codice, "mongo" = persistito su DB
+# LLM catalog source: "env" = static from code, "mongo" = persisted in the DB
 LLM_CATALOG_SOURCE=env
 
-# Seed automatico su startup (popola MongoDB col catalog statico)
+# Automatic seed on startup (populates MongoDB with the static catalog)
 LLM_AUTO_SEED_ON_STARTUP=true
 
-# Provider di default quando il client non specifica
+# Default provider when the client does not specify one
 LLM_DEFAULT_PROVIDER=openrouter
 
-# Cost policy (USD → EUR conversione)
+# Cost policy (USD → EUR conversion)
 COST_POLICY_USD_TO_EUR_RATE=0.92
 COST_POLICY_PROVIDER_MARKUP_FACTOR=1.1
 
-# Fallback flat-rate (usato solo se il provider non riporta usage.cost)
+# Flat-rate fallback (used only when the provider does not report usage.cost)
 COST_POLICY_TEXT_EUR_PER_1K_TOKENS=0.2
 ```
 
-> **Sicurezza**: la chiave `OPEN_ROUTER_API_KEY` non deve mai essere esposta al frontend. Il backend la inietta nell'header `Authorization: Bearer <key>` al momento della chiamata.
+> **Security**: the `OPEN_ROUTER_API_KEY` must never be exposed to the frontend. The backend injects it into the `Authorization: Bearer <key>` header at call time.
 
-Il config del backend valida le env con **Zod** al startup e deriva `env.hasOpenRouterApiKey` come booleano:
+The backend config validates the environment with **Zod** at startup and derives `env.hasOpenRouterApiKey` as a boolean:
 
 ```typescript
 // apps/api/src/config.ts
@@ -82,15 +82,15 @@ OPEN_ROUTER_API_KEY: z.string().optional(),
 // ...
 hasOpenRouterApiKey: Boolean(parsed.data.OPEN_ROUTER_API_KEY?.trim()),
 providerApiKeys: {
-    openrouter: "sk-or-v1-...",  // popolato se la key è presente
+    openrouter: "sk-or-v1-...",  // populated when the key is present
 },
 ```
 
 ---
 
-## 3. Architettura del catalog multi-provider
+## 3. Multi-provider catalog architecture
 
-Il sistema supporta **provider multipli in parallelo** (SiliconFlow, LM Studio locale, OpenRouter) con un'astrazione comune.
+The system supports **multiple providers in parallel** (SiliconFlow, local LM Studio, OpenRouter) behind a common abstraction.
 
 ```
 domain/
@@ -101,7 +101,7 @@ domain/
 
 application/
   llm/
-    defaultOpenRouterCatalog.ts  ← catalog statico con modelli free+paid
+    defaultOpenRouterCatalog.ts  ← static catalog with free and paid models
     defaultSiliconFlowCatalog.ts ← catalog statico SiliconFlow
     defaultLmStudioCatalog.ts    ← catalog statico LM Studio locale
     costPolicy.ts                ← stima costo EUR (dual-source)
@@ -125,11 +125,11 @@ presentation → application → domain
 infra → domain
 ```
 
-Il dominio non conosce MongoDB né Express. I catalog builder vivono in `application/llm/` e dipendono solo dalle entity di dominio.
+The domain knows nothing about MongoDB or Express. The catalog builders live in `application/llm/` and depend only on domain entities.
 
 ---
 
-## 4. Struttura dati: entità di dominio
+## 4. Data structure: domain entities
 
 ```typescript
 // apps/api/src/domain/entities/LlmCatalog.ts
@@ -147,10 +147,10 @@ export interface LlmModel {
     provider: string;        // "openrouter"
     role: PipelineModelRole;
     capabilities: string[];  // ["chat"] | ["vision", "chat"]
-    isDefault: boolean;      // primo candidato per questo role
-    isFallback: boolean;     // usato se il default non è disponibile
+    isDefault: boolean;      // first candidate for this role
+    isFallback: boolean;     // used when the default is unavailable
     isActive: boolean;
-    priceTier?: "free" | "low" | "mid" | "high";  // calcolato, non persistito
+    priceTier?: "free" | "low" | "mid" | "high";  // computed, not persisted
 }
 
 export interface LlmProviderCatalog {
@@ -165,13 +165,13 @@ export interface LlmProviderCatalog {
 }
 ```
 
-> `priceTier` è un campo **computato a runtime** (non salvato su DB). Viene derivato dal payload `/models` di OpenRouter al momento della discovery e aggiunto alla risposta dell'endpoint `/llm/providers`.
+> `priceTier` is a field **computed at runtime** (not stored in the DB). It is derived from OpenRouter's `/models` payload during discovery and added to the `/llm/providers` response.
 
 ---
 
-## 5. Catalog statico di default (seed)
+## 5. Default static catalog (seed)
 
-Il file `defaultOpenRouterCatalog.ts` definisce i modelli di bootstrap:
+The `defaultOpenRouterCatalog.ts` file defines the bootstrap models:
 
 ```typescript
 // Modelli gratuiti (suffisso :free) — nessuna spesa, rate-limited
@@ -184,7 +184,7 @@ const FREE_DEFAULTS = [
     // ...
 ];
 
-// Modelli paid — usati solo se OPEN_ROUTER_API_KEY è presente
+// Paid models — used only when OPEN_ROUTER_API_KEY is present
 const PAID_DEFAULTS = [
     { id: "openai/gpt-4o-mini",           role: "dialogue",      capabilities: ["vision", "chat"] },
     { id: "anthropic/claude-sonnet-4-5",  role: "coding",        capabilities: ["chat"] },
@@ -206,7 +206,7 @@ export function buildDefaultOpenRouterCatalog(
         PAID_DEFAULTS.forEach(m => models.push({ ...m, isDefault: true, isFallback: false }));
         FREE_DEFAULTS.forEach(m => models.push({ ...m, isDefault: false, isFallback: true }));
     } else {
-        // Solo free: il primo è default, gli altri fallback
+        // Free only: the first is the default, the rest are fallbacks
         FREE_DEFAULTS.forEach((m, i) =>
             models.push({ ...m, isDefault: i === 0, isFallback: i !== 0 })
         );
@@ -217,9 +217,9 @@ export function buildDefaultOpenRouterCatalog(
 
 ---
 
-## 6. Discovery live dei modelli via /models
+## 6. Live model discovery via /models
 
-Quando viene chiamato `GET /v1/llm/providers`, il backend chiama `GET https://openrouter.ai/api/v1/models` per ottenere la lista aggiornata dei modelli disponibili all'account.
+When `GET /v1/llm/providers` is called, the backend calls `GET https://openrouter.ai/api/v1/models` to obtain the current list of models available to the account.
 
 ```typescript
 // In llmRoutes.ts → discoverOpenAiCompatibleModels()
@@ -237,7 +237,7 @@ type OpenRouterModel = {
 const payload = await response.json() as { data?: Array<OpenRouterModel> };
 ```
 
-**Filtro modality — solo modelli con output testo:**
+**Modality filter — text-output models only:**
 
 ```typescript
 // OpenRouter: keep only models with text output
@@ -249,13 +249,13 @@ const textModels = rawModels.filter((m) => {
 });
 ```
 
-Il campo `architecture.modality` è specifico di OpenRouter — altri provider compatibili OpenAI (SiliconFlow) non lo espongono, quindi richiedono un filtro diverso.
+The `architecture.modality` field is specific to OpenRouter — other OpenAI-compatible providers (SiliconFlow) do not expose it, so they need a different filter.
 
 ---
 
-## 7. Price tier — derivazione e thresholds
+## 7. Price tiers — derivation and thresholds
 
-OpenRouter restituisce il pricing in USD **per singolo token** (non per milione):
+OpenRouter returns pricing in USD **per single token** (not per million):
 
 ```json
 {
@@ -267,9 +267,9 @@ OpenRouter restituisce il pricing in USD **per singolo token** (non per milione)
 }
 ```
 
-**Thresholds usati in questo progetto:**
+**Thresholds used in this project:**
 
-| Tier   | Prezzo prompt (USD/token) | Equivalente per milione |
+| Tier   | Prompt price (USD/token) | Per-million equivalent |
 |--------|--------------------------|------------------------|
 | `free` | `== 0`                   | Gratis                 |
 | `low`  | `< 0.000001`             | < $1/M                 |
@@ -284,7 +284,7 @@ else if (pp < 0.000005) priceTier = "mid";
 else                    priceTier = "high";
 ```
 
-> Per i provider che **non** restituiscono pricing nell'endpoint `/models` (es. SiliconFlow), è necessaria una tabella lookup statica mantenuta manualmente.
+> Providers that do **not** return pricing from the `/models` endpoint (SiliconFlow, for example) require a static lookup table maintained by hand.
 
 **Rilevamento modelli free OpenRouter:**
 
@@ -295,13 +295,13 @@ const isFree =
     m.pricing?.completion === "0";
 ```
 
-I modelli con suffisso `:free` hanno pricing a `"0"` nell'API.
+Models with the `:free` suffix are priced at `"0"` in the API.
 
 ---
 
 ## 8. Cost Policy — dual-source (provider vs flat-rate)
 
-OpenRouter espone il costo effettivo della chiamata nella chiave `usage.cost` della risposta di completamento:
+OpenRouter exposes the actual cost of the call under the `usage.cost` key of the completion response:
 
 ```json
 {
@@ -314,7 +314,7 @@ OpenRouter espone il costo effettivo della chiamata nella chiave `usage.cost` de
 }
 ```
 
-Questo valore è in **USD**. Il sistema lo converte in EUR con markup:
+This value is in **USD**. The system converts it to EUR with a markup:
 
 ```typescript
 // apps/api/src/application/llm/costPolicy.ts
@@ -332,7 +332,7 @@ export interface CostPolicyInput {
     tokenUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     imageCount?: number;
     videoCount?: number;
-    providerCostUsd?: number;   // ← campo chiave per OpenRouter
+    providerCostUsd?: number;   // ← the key field for OpenRouter
 }
 
 export function estimateCost(input: CostPolicyInput, cfg: CostPolicyConfig): CostEstimate {
@@ -349,13 +349,13 @@ export function estimateCost(input: CostPolicyInput, cfg: CostPolicyConfig): Cos
         };
     }
 
-    // Priorità 2: stima flat-rate su token count (fallback se il provider non riporta)
+    // Priority 2: flat-rate estimate on token count (fallback when the provider does not report cost)
     const tokenCost = (tokens / 1000) * cfg.textEurPer1kTokens;
     return { source: "flat-rate", amount: tokenCost, ... };
 }
 ```
 
-**Il campo `source` nella risposta:**
+**The `source` field in the response:**
 
 ```typescript
 costEstimate: {
@@ -368,20 +368,20 @@ costEstimate: {
 }
 ```
 
-Il frontend può mostrare il badge "costo reale" vs "stima" in base a `source`.
+The frontend can show an "actual cost" vs "estimate" badge based on `source`.
 
 ---
 
-## 9. Autenticazione e routing delle chiavi
+## 9. Authentication and key routing
 
-Il backend centralizza la gestione delle chiavi. Il frontend non vede mai le chiavi.
+The backend owns key handling. The frontend never sees a key.
 
 ```typescript
 // config.ts
 providerApiKeys: {
     openrouter: process.env.OPEN_ROUTER_API_KEY,
     siliconflow: process.env.SILICONFLOW_API_KEY,
-    // oppure da LLM_PROVIDER_API_KEYS_JSON: '{"openrouter":"sk-...","custom":"sk-..."}'
+    // or from LLM_PROVIDER_API_KEYS_JSON: '{"openrouter":"sk-...","custom":"sk-..."}'
 }
 
 // llmRoutes.ts
@@ -393,37 +393,37 @@ function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" 
 }
 ```
 
-**Compatibilità OpenAI:** OpenRouter usa `Authorization: Bearer sk-or-v1-...` — identico all'API OpenAI. La proprietà `authType: "bearer"` nel catalog è sufficiente.
+**OpenAI compatibility:** OpenRouter uses `Authorization: Bearer sk-or-v1-...` — identical to the OpenAI API. The `authType: "bearer"` property in the catalog is sufficient.
 
 ---
 
-## 10. Route di risoluzione del modello (resolveContext)
+## 10. Model resolution route (resolveContext)
 
-Quando arriva `POST /projects/:id/llm/chat-preview`, la funzione `resolveContext` risolve il modello da usare con questa precedenza:
+When `POST /projects/:id/llm/chat-preview` arrives, `resolveContext` resolves the model to use with this precedence:
 
 ```
-1. Se body.model è esplicito E il provider è openai-compatible
-   → usa il modello direttamente (bypass del catalog DB)
+1. If body.model is explicit AND the provider is openai-compatible
+   → use the model directly (bypasses the DB catalog)
 
-2. Se body.model è nel catalog ED è attivo
+2. If body.model is in the catalog AND is active
    → usa from catalog
 
-3. Se body.capability filtra un modello isDefault
-   → usa quello
+3. If body.capability selects an isDefault model
+   → use it
 
-4. Se body.pipelineRole filtra un modello isDefault
-   → usa quello
+4. If body.pipelineRole selects an isDefault model
+   → use it
 
-5. Fallback al pipelineRole con isFallback=true
-6. Fallback al primo dialogue isDefault
-7. Fallback al primo modello isActive
+5. Fall back to the pipelineRole entry with isFallback=true
+6. Fall back to the first dialogue isDefault model
+7. Fall back to the first isActive model
 ```
 
-Il bypass del catalog per `openai-compatible` (punto 1) è fondamentale per OpenRouter: il catalog seed contiene pochi modelli rappresentativi, ma l'utente può scegliere **qualsiasi** modello dalla lista live dell'endpoint `/models` — il backend lo accetta direttamente senza richiedere un update del catalog.
+Bypassing the catalog for `openai-compatible` (point 1) is essential for OpenRouter: the catalog seed holds only a few representative models, while the user can pick **any** model from the live `/models` list — the backend accepts it directly, without requiring a catalog update.
 
 ---
 
-## 11. Endpoint `/llm/providers` — risposta al frontend
+## 11. Endpoint `/llm/providers` — frontend response
 
 ```typescript
 // GET /v1/llm/providers
@@ -459,7 +459,7 @@ Il bypass del catalog per `openai-compatible` (punto 1) è fondamentale per Open
                     isFallback: true,
                     // ...
                 },
-                // ... (lista live completa da /models se key presente)
+                // ... (full live list from /models when a key is present)
             ]
         },
         // siliconflow, lmstudio...
@@ -469,7 +469,7 @@ Il bypass del catalog per `openai-compatible` (punto 1) è fondamentale per Open
 
 ---
 
-## 12. Frontend: tipi TypeScript e model selector
+## 12. Frontend: TypeScript types and model selector
 
 ```typescript
 // apps/web/lib/api.ts
@@ -499,37 +499,37 @@ export function getLlmProviders(token: string) {
 }
 ```
 
-**Model selector con price tier badge:**
+**Model selector with price tier badge:**
 
 ```typescript
-// Badge costo — prefix sul nome del modello nel <option>
+// Cost badge — prefix on the model name inside the <option>
 function tierBadge(tier: ModelItem["priceTier"]): string {
     if (tier === "low")  return "€ ";
     if (tier === "mid")  return "€€ ";
     if (tier === "high") return "€€€ ";
-    return "";  // "free" → nessun badge (viene separato in un gruppo dedicato)
+    return "";  // "free" → no badge (these are split into their own group)
 }
 
-// Raggruppamento paid/free con <optgroup> per famiglia
+// Paid/free grouping with <optgroup> per family
 function groupedModelOptions(models: ModelItem[]): React.ReactNode {
     const paid = models.filter(m => m.priceTier !== "free");
     const free = models.filter(m => m.priceTier === "free");
-    // paid → gruppi per famiglia, alfabetici
-    // free → separati con divider "── 🆓 Free models ──"
+    // paid → grouped by family, alphabetical
+    // free → separated by a "── 🆓 Free models ──" divider
 }
 ```
 
 **Utility di display:**
 
 ```typescript
-// Estrae la famiglia dal model ID (namespace prima dello slash)
+// Extract the family from the model ID (namespace before the slash)
 function modelFamily(id: string): string {
     if (id.includes("/")) return id.slice(0, id.indexOf("/"));
     const m = id.match(/^([a-zA-Z]+)/);
     return m ? m[1] : "other";
 }
 
-// Nome corto: strip del namespace
+// Short name: strip the namespace
 function modelShortName(id: string): string {
     const slash = id.indexOf("/");
     return slash >= 0 ? id.slice(slash + 1) : id;
@@ -538,15 +538,15 @@ function modelShortName(id: string): string {
 
 ---
 
-## 13. Frontend: visualizzazione del costo nella UI
+## 13. Frontend: showing cost in the UI
 
-La risposta di `POST /llm/chat-preview` include `costEstimate`. Il frontend lo associa al messaggio e può mostrarlo nella conversazione:
+The `POST /llm/chat-preview` response includes `costEstimate`. The frontend attaches it to the message and can show it in the conversation:
 
 ```typescript
 // In workspace/[projectId]/page.tsx
 const llm = await llmChatPreview(token, projectId!, payload);
 
-// Salvataggio costo sul messaggio (per il tracking totale della conversazione)
+// Persist the cost on the message (for total conversation tracking)
 await logBackgroundTask(token, projectId!, convId, assistantMsg.id, {
     type: "llm-call",
     costEstimate: llm.costEstimate,
@@ -560,10 +560,10 @@ setActiveConv(prev => prev ? {
 } : prev);
 ```
 
-**Formattazione per la UI:**
+**Formatting for the UI:**
 
 ```typescript
-// Mostrare il costo con indicatore di fonte
+// Show the cost with an indicator of where it came from
 const cost = message.metadata?.costEstimate;
 if (cost) {
     const label = cost.source === "provider" ? "reale" : "stimato";
@@ -574,18 +574,18 @@ if (cost) {
 
 ---
 
-## 14. Seed script e sorgente mongo vs env
+## 14. Seed script and Mongo vs env source
 
-Il sistema supporta due modalità di catalog:
+The system supports two catalog modes:
 
-**`LLM_CATALOG_SOURCE=env`** (default dev): il catalog è ricostruito dai builder statici ad ogni avvio. Nessun DB necessario per i valori base.
+**`LLM_CATALOG_SOURCE=env`** (dev default): the catalog is rebuilt from the static builders on every startup. No database is needed for the base values.
 
-**`LLM_CATALOG_SOURCE=mongo`**: il catalog è letto da MongoDB (`llm_providers` collection). Necessita di eseguire il seed.
+**`LLM_CATALOG_SOURCE=mongo`**: the catalog is read from MongoDB (the `llm_providers` collection). Requires the seed to have been run.
 
 ```bash
-# Esegui il seed (popola MongoDB con il catalog statico)
+# Run the seed (populates MongoDB with the static catalog)
 npx ts-node apps/api/src/scripts/seed-llm.ts
-# oppure via npm script (se definito)
+# or through the npm script (when defined)
 npm run seed:llm
 ```
 
@@ -616,15 +616,15 @@ await collection.updateOne(
 );
 ```
 
-L'upsert idempotente garantisce che il seed possa essere rieseguito senza duplicati.
+The idempotent upsert guarantees the seed can be re-run without creating duplicates.
 
 ---
 
-## 15. Pattern di fallback e deduplicazione
+## 15. Fallback and deduplication patterns
 
-**Deduplicazione per ID:**
+**Deduplication by ID:**
 
-Quando lo stesso model ID appare sia come `isDefault` che come `isFallback` (es. in cataloghi uniti), il sistema deduplicato preferisce la voce `isDefault`:
+When the same model ID appears both as `isDefault` and as `isFallback` (in merged catalogs, for instance), deduplication prefers the `isDefault` entry:
 
 ```typescript
 function dedupeModelsById(models) {
@@ -639,21 +639,21 @@ function dedupeModelsById(models) {
 }
 ```
 
-**Fallback chain nella selezione del modello:**
+**Fallback chain in model selection:**
 
 ```
-1. modello esplicito da body.model (bypass catalog per openai-compatible)
-2. modello in catalog per body.model
-3. modello isDefault per body.capability
-4. modello isDefault per body.pipelineRole
-5. modello isFallback per body.pipelineRole
-6. modello isDefault per role "dialogue"
+1. explicit model from body.model (catalog bypass for openai-compatible)
+2. model found in the catalog for body.model
+3. isDefault model for body.capability
+4. isDefault model for body.pipelineRole
+5. isFallback model for body.pipelineRole
+6. isDefault model for the "dialogue" role
 7. primo modello isActive
 ```
 
 **Fallback su errori di discovery:**
 
-Se `/models` è irraggiungibile o restituisce errore, il sistema usa il catalog statico di default:
+If `/models` is unreachable or returns an error, the system falls back to the static default catalog:
 
 ```typescript
 try {
@@ -667,48 +667,48 @@ try {
 
 ---
 
-## 16. Checklist per portare questa integrazione in un nuovo progetto
+## 16. Checklist for bringing this integration into a new project
 
 ### Backend
 
-- [ ] **Env schema**: aggiungere `OPENROUTER_BASE_URL`, `OPEN_ROUTER_API_KEY` (opzionale), `COST_POLICY_USD_TO_EUR_RATE`, `COST_POLICY_PROVIDER_MARKUP_FACTOR` con validazione Zod.
-- [ ] **Domain entity**: definire `LlmModel` con campo `priceTier?: "free" | "low" | "mid" | "high"`.
-- [ ] **Catalog builder** (`defaultOpenRouterCatalog.ts`): logica paid-first con modelli free come fallback quando non c'è API key.
-- [ ] **costPolicy.ts**: implementare `estimateCost` con priorità `providerCostUsd` su flat-rate; includere campo `source`.
-- [ ] **discoverOpenAiCompatibleModels**: filtro per `architecture.modality.endsWith("->text")`, derivazione `priceTier` da `pricing.prompt`.
-- [ ] **resolveAuthHeader**: centralizzare la gestione chiavi, injettare `Bearer <key>` per `authType: "bearer"`.
-- [ ] **resolveContext**: bypass del catalog per `openai-compatible` + modello esplicito; fallback chain completa.
-- [ ] **GET /llm/providers**: esporre i modelli arricchiti da discovery live, con `priceTier`, `byokEnabled`, `activeProvider`.
-- [ ] **POST /llm/chat-preview**: estrarre `usage.cost` dalla risposta OpenRouter e passarlo a `estimateCost` come `providerCostUsd`.
-- [ ] **Seed script**: `SeedLlmCatalog` use-case con `upsertProvider` idempotente.
+- [ ] **Env schema**: add `OPENROUTER_BASE_URL`, `OPEN_ROUTER_API_KEY` (optional), `COST_POLICY_USD_TO_EUR_RATE`, `COST_POLICY_PROVIDER_MARKUP_FACTOR`, validated with Zod.
+- [ ] **Domain entity**: define `LlmModel` with a `priceTier?: "free" | "low" | "mid" | "high"` field.
+- [ ] **Catalog builder** (`defaultOpenRouterCatalog.ts`): paid-first logic, with free models as the fallback when no API key is present.
+- [ ] **costPolicy.ts**: implement `estimateCost`, preferring `providerCostUsd` over flat-rate; include the `source` field.
+- [ ] **discoverOpenAiCompatibleModels**: filter on `architecture.modality.endsWith("->text")`, derive `priceTier` from `pricing.prompt`.
+- [ ] **resolveAuthHeader**: centralise key handling, inject `Bearer <key>` for `authType: "bearer"`.
+- [ ] **resolveContext**: catalog bypass for `openai-compatible` plus an explicit model; complete fallback chain.
+- [ ] **GET /llm/providers**: expose the models enriched by live discovery, with `priceTier`, `byokEnabled`, `activeProvider`.
+- [ ] **POST /llm/chat-preview**: extract `usage.cost` from the OpenRouter response and pass it to `estimateCost` as `providerCostUsd`.
+- [ ] **Seed script**: `SeedLlmCatalog` use-case with an idempotent `upsertProvider`.
 - [ ] **`LLM_CATALOG_SOURCE`**: supportare `"env"` (dev) e `"mongo"` (produzione scalabile).
 
 ### Frontend
 
 - [ ] **Tipi**: `ModelItem.priceTier`, `LlmChatPreviewResult.costEstimate.source`, `costEstimate.providerCostUsd`.
 - [ ] **getLlmProviders()**: `GET /v1/llm/providers` autenticato.
-- [ ] **tierBadge()**: prefisso `€` / `€€` / `€€€` per i modelli paid.
-- [ ] **groupedModelOptions()**: paid per famiglia (alphabetical) + sezione free separata con divider.
+- [ ] **tierBadge()**: `€` / `€€` / `€€€` prefix for paid models.
+- [ ] **groupedModelOptions()**: paid grouped by family (alphabetical) plus a separate free section with a divider.
 - [ ] **modelFamily() / modelShortName()**: derivazione display name dal format `namespace/model-id`.
-- [ ] **Tracking costo**: salvare `costEstimate` sul messaggio assistente, accumulare `totalCost` sulla conversazione.
+- [ ] **Cost tracking**: store `costEstimate` on the assistant message, accumulate `totalCost` on the conversation.
 - [ ] **Indicatore fonte**: mostrare "reale" vs "stimato" in base a `costEstimate.source`.
-- [ ] **Selezione provider/model**: `body.provider` e `body.model` opzionali nella richiesta chat-preview; fallback al default del backend.
+- [ ] **Provider/model selection**: `body.provider` and `body.model` optional on the chat-preview request; falls back to the backend default.
 
-### Sicurezza
+### Security
 
-- [ ] Le API key **non devono mai** essere esposte al frontend.
-- [ ] L'endpoint `/llm/providers` deve richiedere autenticazione (JWT).
-- [ ] L'endpoint `/llm/chat-preview` deve verificare il sandbox (user + project ownership).
-- [ ] Il costo stimato non deve essere usato per billing critico senza validazione server-side aggiuntiva.
+- [ ] API keys **must never** be exposed to the frontend.
+- [ ] The `/llm/providers` endpoint must require authentication (JWT).
+- [ ] The `/llm/chat-preview` endpoint must enforce the sandbox (user + project ownership).
+- [ ] The estimated cost must not be used for critical billing without additional server-side validation.
 
 ---
 
-## Note sull'aggiornamento dei modelli free
+## Notes on keeping the free model list current
 
-I modelli gratuiti di OpenRouter (suffisso `:free`) cambiano periodicamente. La strategia adottata:
+OpenRouter's free models (the `:free` suffix) change from time to time. The strategy adopted here:
 
-1. **Catalog statico** in `defaultOpenRouterCatalog.ts` = bootstrap garantito, sempre funzionante.
-2. **Discovery live** da `/models` all'avvio = sostituisce il catalog con la lista aggiornata quando la key è presente.
-3. **Bypass catalog** per richieste con `model` esplicito: l'utente può scegliere qualsiasi modello dalla lista live senza dover aggiornare il codice.
+1. **Static catalog** in `defaultOpenRouterCatalog.ts` = guaranteed bootstrap, always working.
+2. **Live discovery** from `/models` at startup = replaces the catalog with the current list when a key is present.
+3. **Catalog bypass** for requests carrying an explicit `model`: the user can pick any model from the live list without a code change.
 
-Questo significa che i modelli nel catalog statico possono diventare stale senza causare downtime: il fallback chain garantisce che ci sia sempre un modello valido.
+This means the models in the static catalog can go stale without causing downtime: the fallback chain guarantees a valid model is always available.
