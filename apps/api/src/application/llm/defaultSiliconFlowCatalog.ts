@@ -47,6 +47,9 @@ const SUPPLEMENTAL_MODELS: Array<{ id: string; capabilities: string[] }> = [
     { id: "deepseek-ai/DeepSeek-R1", capabilities: ["chat"] },
     // Moonshot / Kimi — extra large
     { id: "moonshotai/Kimi-K2.6", capabilities: ["chat"] },
+    // Approved Vibe prefill default. The operator explicitly selected it after MiniMax-M3
+    // stopped early and returned only 5 of the 17 required brief fields.
+    { id: "moonshotai/Kimi-K3", capabilities: ["chat"] },
     // Tencent Hunyuan
     { id: "tencent/Hunyuan-A13B-Instruct", capabilities: ["chat"] },
     // Current high-capacity alternates
