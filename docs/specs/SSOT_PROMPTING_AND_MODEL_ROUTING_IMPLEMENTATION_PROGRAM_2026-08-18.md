@@ -1,171 +1,171 @@
-# Programma Unificato SSOT — Prompt Execution, Model Routing e Feedback UI
+# Unified SSOT Program — Prompt Execution, Model Routing and Feedback UI
 
-**Stato:** priorità immediata di implementazione e review  
-**Data:** 2026-08-18  
-**Decisione:** questo documento unifica e ordina i due refactor attivi: [Prompt Execution SSOT](PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md) e [Vibe → GodMode Model SSOT](VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md). Per l’implementazione prevale su piani precedenti in conflitto riguardo orchestrazione, fallback, optimizer implicito, handoff browser-owned e modello di pipeline.
+**Status:** immediate implementation and review priority
+**Date:** 2026-08-18
+**Decision:** this document unifies and orders the two active refactors: [Prompt Execution SSOT](PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md) and [Vibe → GodMode Model SSOT](VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md). For implementation it takes precedence over previous conflicting plans regarding orchestration, fallback, implicit optimizer, browser-owned handoff and the pipeline model.
 
 ---
 
-## 1. Outcome unico
+## 1. Single Outcome
 
-Il prodotto deve rendere vera e dimostrabile una sola catena:
+The product must make a single chain true and demonstrable:
 
-    intento e override utente
-      → PipelineRun server-owned
-      → decisione modello centralizzata
-      → brief canonico immutabile
-      → PromptExecution immutabile
+    user intent and override
+      → server-owned PipelineRun
+      → centralized model decision
+      → immutable canonical brief
+      → immutable PromptExecution
       → provider dispatch
-      → messaggio, snapshot, costi e Workshop UI
+      → message, snapshot, costs and Workshop UI
 
-Le due leggi SSOT sono inseparabili:
+The two SSOT laws are inseparable:
 
-1. **Execution SSOT:** ciò che Workshop mostra è il payload safe realmente risolto e inviato dal server.
-2. **Model SSOT:** il modello manualmente selezionato dall’utente vince sempre per il run; nessun task, fallback, preset, query o storage browser può sostituirlo in silenzio.
+1. **Execution SSOT:** what Workshop shows is the safe payload actually resolved and sent by the server.
+2. **Model SSOT:** the model manually selected by the user always wins for the run; no task, fallback, preset, query or browser storage can silently replace it.
 
-PipelineRun e PromptExecution sono aggregate distinti ma correlati: il primo governa intento, lock, brief e stato; il secondo è la prova immutabile di ciascun dispatch LLM. Un costo, un badge o un default amministrativo non sono prova della generazione finale.
+PipelineRun and PromptExecution are distinct but related aggregates: the first governs intent, lock, brief and state; the second is the immutable proof of each LLM dispatch. A cost, a badge or an administrative default are not proof of the final generation.
 
-## 2. Decisioni vincolanti
+## 2. Binding Decisions
 
-### 2.1 Precedenza unica di selezione LLM
+### 2.1 Single LLM Selection Precedence
 
-| Priorità | Fonte | Regola |
+| Priority | Source | Rule |
 | --- | --- | --- |
-| 1 | override manuale dell’utente confermato al submit | crea PipelineRun.modelLock; prevale sempre |
-| 2 | eccezione di capacità esplicitamente confermata | solo se il lock non svolge una capacità dichiarata; visibile e auditata |
-| 3 | policy/configurazione amministrativa per task | default per un **nuovo run senza override**; non riscrive un lock |
-| 4 | catalogo runtime e ruolo/capability | propone e valida il modello prima della creazione del run |
+| 1 | manual user override confirmed at submit | creates PipelineRun.modelLock; always wins |
+| 2 | explicitly confirmed capability exception | only if the lock cannot perform a declared capability; visible and audited |
+| 3 | administrative policy/configuration per task | default for a **new run with no override**; does not overwrite a lock |
+| 4 | runtime catalog and role/capability | proposes and validates the model before the run is created |
 
-Il backend rifiuta (409/422) un dispatch diverso dal lock. Se il modello lockato è indisponibile, il run entra in blocked: non cade su DeepSeek, MiniMax o altro default.
+The backend rejects (409/422) a dispatch that differs from the lock. If the locked model is unavailable, the run enters blocked: it does not fall back to DeepSeek, MiniMax or another default.
 
-### 2.2 Un solo resolver applicativo
+### 2.2 A Single Application Resolver
 
-Introdurre ResolveModelSelectionDecision con due modalità:
+Introduce ResolveModelSelectionDecision with two modes:
 
-- createRun: valida l’override manuale oppure risolve un default amministrativo e congela decisione, catalog revision e motivazione.
-- dispatchRun: legge esclusivamente la decisione immutabile del run, valida disponibilità/capacità e produce provider/model effettivi oppure un errore fail-closed.
+- createRun: validates the manual override, or resolves an administrative default, and freezes the decision, catalog revision and rationale.
+- dispatchRun: reads exclusively the run's immutable decision, validates availability/capability, and produces the effective provider/model or a fail-closed error.
 
-Route handler, optimizer, Vibe, Zero Effort e chat-preview non implementano una propria cascata. La UI invia una proposta per creare un run, mai una coppia autoritativa per alterarne uno esistente.
+Route handler, optimizer, Vibe, Zero Effort and chat-preview do not implement their own cascade. The UI sends a proposal to create a run, never an authoritative pair to alter an existing one.
 
-### 2.3 Brief e policy di ottimizzazione
+### 2.3 Brief and Optimization Policy
 
-BuildCanonicalGenerationBrief nell’application layer produce una BriefRevision server-owned: testo, schema version, hash e provenienza. È l’unico messaggio user per il launch automatico GodMode.
+BuildCanonicalGenerationBrief in the application layer produces a server-owned BriefRevision: text, schema version, hash and provenance. It is the only user message for the automatic GodMode launch.
 
-Vibe → Zero Effort → GodMode imposta optimizationPolicy: skip. System prompt e guideline sono composti al dispatch, ma il brief non è riscritto. L’optimizer resta disponibile solo come comando esplicito e crea una nuova revisione/run con relazione di derivazione.
+Vibe → Zero Effort → GodMode sets optimizationPolicy: skip. System prompt and guidelines are composed at dispatch, but the brief is not rewritten. The optimizer remains available only as an explicit command and creates a new revision/run with a derivation relationship.
 
-## 3. Contratti minimi e ownership Clean Architecture
+## 3. Minimal Contracts and Clean Architecture Ownership
 
-packages/contracts è l’autorità condivisa per le forme pubbliche. Il dominio non dipende da provider, route o UI.
+packages/contracts is the shared authority for public shapes. The domain does not depend on provider, route or UI.
 
     ModelSelectionDecision
       - requested: provider, model, source, catalog revision
       - effective: provider, model
       - policy: strict | allow-explicit-capability-exception
       - outcome: exact | explicit-exception | blocked
-      - exception: motivazione e approvazione, se presente
+      - exception: rationale and approval, if present
 
     BriefRevision
       - content, schema version, content hash, provenance
 
-Responsabilità:
+Responsibilities:
 
-- **domain:** invarianti di lock/revisioni/stati e repository interface;
-- **application:** creazione run, brief, risoluzione modello, dispatch e policy optimizer;
-- **infra:** catalogo/provider adapter, Mongo e costi;
-- **presentation:** contratti, double sandbox e read model. Nessuna composizione brief o fallback decisionale.
+- **domain:** lock/revision/state invariants and repository interface;
+- **application:** run creation, brief, model resolution, dispatch and optimizer policy;
+- **infra:** catalog/provider adapter, Mongo and costs;
+- **presentation:** contracts, double sandbox and read model. No brief composition or decisional fallback.
 
-Ogni PromptExecution conserva pipelineRunId, stage, snapshot requested/effective della decisione, canonicalBriefHash, payloadHash, executionId, link a messaggio/snapshot/costo/notifica.
+Every PromptExecution retains pipelineRunId, stage, the decision's requested/effective snapshot, canonicalBriefHash, payloadHash, executionId, and a link to message/snapshot/cost/notification.
 
-## 4. Feedback utente obbligatorio
+## 4. Mandatory User Feedback
 
-Il picker espone un ModelDecisionView server-derived:
+The picker exposes a server-derived ModelDecisionView:
 
-| Stato UI | Contenuto minimo | Azione |
+| UI state | Minimum content | Action |
 | --- | --- | --- |
-| Prima dell’avvio | richiesto, disponibilità, lock strict, capability/stima | conferma o cambia |
-| In esecuzione | stage, modello effettivo, brief hash, optimizer skipped | osserva/cancella |
-| Bloccato | modello richiesto e causa, nessun dispatch alternativo | cambia modello o approva eccezione |
-| Eccezione | richiesto/effettivo, stage, motivazione e approvazione | consenso esplicito |
-| Completato | modello snapshot, Prompt tab e costi per stage | apre prova |
+| Before start | requested, availability, strict lock, capability/estimate | confirm or change |
+| Running | stage, effective model, brief hash, optimizer skipped | observe/cancel |
+| Blocked | requested model and cause, no alternative dispatch | change model or approve exception |
+| Exception | requested/effective, stage, rationale and approval | explicit consent |
+| Completed | model snapshot, Prompt tab and costs per stage | opens proof |
 
-Le notifiche sono eventi persistiti del run, non toast dedotti dal client: MODEL_LOCKED, MODEL_UNAVAILABLE, CAPABILITY_EXCEPTION_REQUIRED, OPTIMIZATION_SKIPPED, BRIEF_REVISION_DISPATCHED, ARTIFACT_GENERATED.
+Notifications are persisted run events, not toasts inferred by the client: MODEL_LOCKED, MODEL_UNAVAILABLE, CAPABILITY_EXCEPTION_REQUIRED, OPTIMIZATION_SKIPPED, BRIEF_REVISION_DISPATCHED, ARTIFACT_GENERATED.
 
-## 5. Sequenza di implementazione e review
+## 5. Implementation and Review Sequence
 
-### U0 — Governance e baseline
+### U0 — Governance and Baseline
 
-- ADR unico per lifecycle, idempotenza, hash, retention, redazioni e policy modello.
-- Matrice documentale active / implemented / deferred / historical.
-- Fixture congelate per Vibe, prefill, GodMode, stream, focused edit e asset.
+- Single ADR for lifecycle, idempotency, hash, retention, redactions and model policy.
+- Document matrix: active / implemented / deferred / historical.
+- Frozen fixtures for Vibe, prefill, GodMode, stream, focused edit and asset.
 
-**Gate:** nessun documento attivo autorizza optimizer implicito, fallback silenzioso o autorità browser.
+**Gate:** no active document authorizes an implicit optimizer, silent fallback or browser authority.
 
-### U1 — Dominio e contratti condivisi
+### U1 — Domain and Shared Contracts
 
-- Contratti PipelineRun, ModelSelectionDecision, CanonicalBriefEnvelope, PromptExecution e DTO UI.
-- PipelineStageExecutionRef per gli stage LLM punta al PromptExecution, senza un secondo journal concorrente.
-- Compatibilità additiva per dati legacy, sempre etichettati non verificati.
+- Contracts for PipelineRun, ModelSelectionDecision, CanonicalBriefEnvelope, PromptExecution and UI DTO.
+- PipelineStageExecutionRef for LLM stages points to PromptExecution, with no second competing journal.
+- Additive compatibility for legacy data, always labeled unverified.
 
-**Gate:** API e web usano un solo vocabolario contrattuale.
+**Gate:** API and web use a single contractual vocabulary.
 
-### U2 — Risoluzione modello server-side unica
+### U2 — Single Server-side Model Resolution
 
-- Estrarre ResolveModelSelectionDecision.
-- Convergere Vibe, Zero Effort, optimizer e GodMode sul resolver.
-- Bloccare prima del dispatch quando il lock non è soddisfatto.
-- Rimuovere come autorità preferredProvider, preferredModel, query, localStorage e selettori locali.
+- Extract ResolveModelSelectionDecision.
+- Converge Vibe, Zero Effort, optimizer and GodMode onto the resolver.
+- Block before dispatch when the lock cannot be satisfied.
+- Remove preferredProvider, preferredModel, query, localStorage and local selectors as authorities.
 
-**Gate:** Kimi selezionato resta Kimi in ogni stage; Kimi assente genera zero chiamate alternative.
+**Gate:** a selected Kimi stays Kimi at every stage; an absent Kimi generates zero alternative calls.
 
-### U3 — Run e brief canonico
+### U3 — Run and Canonical Brief
 
-- Persistire il run al primo submit ed estrarre BuildCanonicalGenerationBrief.
-- Passare a GodMode solo pipelineRunId.
-- optimizationPolicy: skip per il percorso richiesto e endpoint server-owned launch-godmode.
+- Persist the run on the first submit and extract BuildCanonicalGenerationBrief.
+- Pass only pipelineRunId to GodMode.
+- optimizationPolicy: skip for the requested path and the server-owned launch-godmode endpoint.
 
-**Gate:** brief.contentHash coincide con dispatchedUserMessageHash; nessun optimizer nel run skip.
+**Gate:** brief.contentHash matches dispatchedUserMessageHash; no optimizer in a skip run.
 
-### U4 — Prompt execution e journal durevole
+### U4 — Prompt Execution and Durable Journal
 
-- Estrarre ResolvePromptExecution dalla route.
-- Persistire server-side resolved → dispatched → terminal.
-- Collegare execution a run, messaggio, snapshot, log e costo; introdurre idempotency key.
+- Extract ResolvePromptExecution from the route.
+- Persist server-side resolved → dispatched → terminal.
+- Link execution to run, message, snapshot, log and cost; introduce an idempotency key.
 
-**Gate:** refresh/disconnessione non perde la prova; retry non duplica invii.
+**Gate:** refresh/disconnection does not lose the proof; retry does not duplicate sends.
 
-### U5 — UI, notifiche e review E2E
+### U5 — UI, Notifications and E2E Review
 
-- Workshop mostra payload ordinato, layer, brief revision e requested/effective model del snapshot selezionato.
-- Costi raggruppati per pipelineRunId e stage.
-- Docker E2E: Vibe → prefill → brief → GodMode → snapshot → Prompt tab → costi/notifiche.
+- Workshop shows the ordered payload, layer, brief revision and the requested/effective model of the selected snapshot.
+- Costs grouped by pipelineRunId and stage.
+- Docker E2E: Vibe → prefill → brief → GodMode → snapshot → Prompt tab → costs/notifications.
 
-**Gate:** UI e notifiche derivano esclusivamente dal read model server-side.
+**Gate:** UI and notifications derive exclusively from the server-side read model.
 
-## 6. Ordine di roadmap
+## 6. Roadmap Order
 
-1. U0–U3: prossimo lavoro di implementazione.
-2. U4–U5: completamento del gate R2/R3.
-3. Solo dopo: Layer S, nuove capability, BaaS, RAG, Gen AI Media, workflow/node editor, Curiosity/Nerdy e automazioni speculative.
+1. U0–U3: next implementation work.
+2. U4–U5: completion of the R2/R3 gate.
+3. Only after that: Layer S, new capabilities, BaaS, RAG, Gen AI Media, workflow/node editor, Curiosity/Nerdy and speculative automations.
 
-R3 publish hardening non è annullato, ma nessun ampliamento del prompting o nuovo entry flow passa prima dei gate U2–U5.
+R3 publish hardening is not cancelled, but no expansion of prompting or new entry flow goes ahead of the U2–U5 gates.
 
-## 7. Disposizione delle specifiche
+## 7. Disposition of the Specs
 
-| Documento | Nuovo stato |
+| Document | New status |
 | --- | --- |
-| PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md | attivo: prova/payload/Workshop |
-| VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md | attivo: lock/brief/direct handoff |
-| questo programma | autorità di ordinamento e review |
-| ZERO_EFFORT_PREFILL_SPEC.md | implemented baseline, parzialmente sostituito per storage/handoff/fallback |
-| PROMPT_OPTIMIZER_SPEC.md | attivo solo per ottimizzazione esplicita |
-| PROMPTING_SERVICE_PLATFORM_SPEC.md | governance reference; default validi solo senza lock |
-| MULTIMODE_UX_MVP_EXECUTION_SPEC.md | storico: visione utile, delivery sequence superata |
-| DASHBOARD_LOVABLE_CHAT_SPEC.md | storico: UX/design reference |
-| MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md | storico: playbook generico |
-| WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md | futuro differito, non autorità P0 |
+| PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md | active: proof/payload/Workshop |
+| VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md | active: lock/brief/direct handoff |
+| this program | ordering and review authority |
+| ZERO_EFFORT_PREFILL_SPEC.md | implemented baseline, partially superseded for storage/handoff/fallback |
+| PROMPT_OPTIMIZER_SPEC.md | active only for explicit optimization |
+| PROMPTING_SERVICE_PLATFORM_SPEC.md | governance reference; defaults valid only without a lock |
+| MULTIMODE_UX_MVP_EXECUTION_SPEC.md | historical: vision still useful, delivery sequence superseded |
+| DASHBOARD_LOVABLE_CHAT_SPEC.md | historical: UX/design reference |
+| MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md | historical: generic playbook |
+| WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md | deferred future work, not P0 authority |
 
-## 8. Criterio di uscita
+## 8. Exit Criterion
 
-Una E2E ripetibile, sullo stesso pipelineRunId, deve dimostrare: override Kimi K3 lockato; stesso modello per ogni stage testuale o eccezione approvata; brief hash invariato; nessuna ottimizzazione implicita nel percorso skip; snapshot/costi/Prompt tab collegati al dispatch; feedback comprensibile per successo, blocco ed eccezione.
+A repeatable E2E, on the same pipelineRunId, must demonstrate: a locked Kimi K3 override; the same model for every text stage or an approved exception; an unchanged brief hash; no implicit optimization on the skip path; snapshot/costs/Prompt tab linked to the dispatch; understandable feedback for success, block and exception.
 
-Fino a quel punto, ogni feature che aggiunge un resolver LLM, fallback, storage browser del prompt o nuovo handoff viene respinta in review per violazione SSOT/Clean Architecture.
+Until then, any feature that adds an LLM resolver, fallback, browser prompt storage or new handoff is rejected in review for violating SSOT/Clean Architecture.

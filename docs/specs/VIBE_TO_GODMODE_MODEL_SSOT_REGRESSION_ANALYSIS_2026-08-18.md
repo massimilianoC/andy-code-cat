@@ -1,64 +1,64 @@
-# Regressione Vibe → Zero Effort → GodMode — Model SSOT e Brief Canonico
+# Vibe → Zero Effort → GodMode Regression — Model SSOT and Canonical Brief
 
-**Stato:** analisi attiva e piano di correzione P0/P1 — nessuna implementazione è implicita  
-**Data:** 2026-08-18  
-**Autorità di pianificazione:** questa è la specifica vigente per la coerenza di modello, brief e handoff nel percorso Vibe → Zero Effort → GodMode. Integra [PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md), che rimane l’autorità per la tracciabilità dell’esecuzione e per la trasparenza Workshop.  
-**Ambito:** VibeCore, prefill, Zero Effort, prompt optimizer, handoff automatico, Workspace/GodMode, catalogo provider/modelli, `PromptExecutionLog`, conversazioni, snapshot e costi.
+**Status:** active analysis and P0/P1 correction plan — no implementation is implied
+**Date:** 2026-08-18
+**Planning authority:** this is the governing spec for model, brief and handoff consistency in the Vibe → Zero Effort → GodMode path. It complements [PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md), which remains the authority for execution traceability and Workshop transparency.
+**Scope:** VibeCore, prefill, Zero Effort, prompt optimizer, automatic handoff, Workspace/GodMode, provider/model catalog, `PromptExecutionLog`, conversations, snapshots and costs.
 
 ---
 
-## 1. Decisione di prodotto
+## 1. Product Decision
 
-Quando un utente sceglie un modello a partire da Vibe, quella scelta è un **vincolo di esecuzione della pipeline**, non un suggerimento visivo né una preferenza locale del browser.
+When a user chooses a model starting from Vibe, that choice is a **pipeline execution constraint**, not a visual suggestion or a local browser preference.
 
-> Un solo `PipelineRun` server-owned decide provider e modello. Ogni stadio testuale del run usa quella decisione; ogni eccezione di capacità è esplicita, autorizzata, registrata e visibile prima e dopo l’esecuzione. Non è ammesso alcun fallback silenzioso.
+> A single server-owned `PipelineRun` decides provider and model. Every text stage of the run uses that decision; every capability exception is explicit, authorized, logged and visible before and after execution. No silent fallback is allowed.
 
-Per il passaggio **Vibe → Zero Effort → GodMode** richiesto, il comportamento target è:
+For the requested **Vibe → Zero Effort → GodMode** transition, the target behavior is:
 
 ```text
-richiesta utente + modello selezionato
-  → Vibe (classify/prefill con lo stesso modello)
-  → brief canonico completo, persistito dal server
-  → avvio diretto GodMode
-  → system + guideline composti dal prompting system
-  → brief canonico come messaggio user invariato
-  → generazione artefatto con lo stesso modello
+user request + selected model
+  → Vibe (classify/prefill with the same model)
+  → complete canonical brief, persisted by the server
+  → direct GodMode launch
+  → system + guidelines composed by the prompting system
+  → canonical brief as an unchanged user message
+  → artifact generation with the same model
 ```
 
-L’ottimizzazione è **saltata** in questo percorso. Non si riscrive il brief una seconda volta e non si esegue l’auto-optimizer del Workspace. Il briefing ricco prodotto in Zero Effort è il contributo utente autorevole per la generazione GodMode.
+Optimization is **skipped** on this path. The brief is not rewritten a second time and the Workspace auto-optimizer does not run. The rich briefing produced in Zero Effort is the authoritative user contribution for the GodMode generation.
 
-## 2. Evidenza della regressione locale
+## 2. Evidence of the Local Regression
 
-L’analisi è stata svolta in sola lettura sullo stack Docker locale già in esecuzione. Non sono stati riavviati né modificati servizi, database o configurazioni.
+The analysis was performed read-only on the Docker stack already running locally. No services, databases or configurations were restarted or modified.
 
-Per il progetto `GYRO Unicycles`, la cronologia effettiva di un singolo flusso mostra tre decisioni di modello:
+For the `GYRO Unicycles` project, the actual history of a single flow shows three model decisions:
 
-| Stadio osservato | Provider effettivo | Modello effettivo | Evidenza persistita |
+| Observed stage | Effective provider | Effective model | Persisted evidence |
 | --- | --- | --- | --- |
 | `zero_effort_optimize` | OpenRouter | `moonshotai/kimi-k3` | `PromptExecutionLog` |
-| `optimize_user_prompt` | SiliconFlow | `MiniMaxAI/MiniMax-M3` | messaggio conversazione e `PromptExecutionLog` |
-| `chat` / artefatto finale | SiliconFlow | `deepseek-ai/DeepSeek-V3` | messaggio assistant, snapshot, `PromptExecutionLog` e log API |
+| `optimize_user_prompt` | SiliconFlow | `MiniMaxAI/MiniMax-M3` | conversation message and `PromptExecutionLog` |
+| `chat` / final artifact | SiliconFlow | `deepseek-ai/DeepSeek-V3` | assistant message, snapshot, `PromptExecutionLog` and API log |
 
-Il log API del dispatch finale identifica esplicitamente `provider=siliconflow` e `model=deepseek-ai/DeepSeek-V3`. L’artefatto non è quindi una visualizzazione errata: è stato realmente generato da DeepSeek-V3. Il brief completo iniziale misurava circa 11.105 caratteri; `zero_effort_optimize` lo ha ridotto a circa 5.673 (-48,9%) prima del secondo optimizer. Il secondo tentativo MiniMax è terminato con `finishReason: length` ed è ripiegato sull’input: ha consumato risorse senza restituire il brief completo.
+The final dispatch's API log explicitly identifies `provider=siliconflow` and `model=deepseek-ai/DeepSeek-V3`. The artifact is therefore not a display error: it was actually generated by DeepSeek-V3. The initial full brief measured about 11,105 characters; `zero_effort_optimize` reduced it to about 5,673 (-48.9%) before the second optimizer. The second, MiniMax attempt ended with `finishReason: length` and fell back to the input: it consumed resources without returning the complete brief.
 
-Il profilo costi che mostra Kimi e MiniMax descrive correttamente i rispettivi task eseguiti. Non prova, però, il modello dell’artefatto. Il difetto è che la UI e il modello dati non presentano tali esecuzioni come parti distinguibili dello stesso run, né espongono una decisione di modello coerente e verificabile.
+The cost profile showing Kimi and MiniMax correctly describes the tasks they each ran. It does not, however, prove the artifact's model. The defect is that the UI and data model do not present these executions as distinguishable parts of the same run, nor do they expose a coherent, verifiable model decision.
 
-## 3. Qual è oggi la source of truth?
+## 3. What Is Today's Source of Truth?
 
-Non esiste oggi una source of truth unica per il modello dell’intero flusso.
+There is currently no single source of truth for the model of the entire flow.
 
-| Domanda | Fonte effettiva attuale | Limite |
+| Question | Current actual source | Limitation |
 | --- | --- | --- |
-| Quale modello viene invocato in uno specifico task di background? | `promptTaskSettings` risolto da `PlatformConfig`, salvo override nel body | ogni task risolve autonomamente; non c’è un lock di pipeline |
-| Quale modello genera il messaggio/artefatto in Workspace? | `provider` e `model` inviati dal browser; in assenza, catalogo runtime e fallback per ruolo | la scelta è browser-owned e può divergere dal task precedente |
-| Quale modello ha effettivamente prodotto un artefatto già creato? | metadata immutabili del messaggio assistant e dello snapshot, più `PromptExecutionLog` | manca un collegamento unico di pipeline e una proiezione UI coerente |
-| Quale modello è mostrato nei costi? | record di costo/esecuzione per singolo task | non è la verità dell’artefatto né della pipeline |
+| Which model is invoked for a specific background task? | `promptTaskSettings` resolved from `PlatformConfig`, unless overridden in the body | each task resolves independently; there is no pipeline lock |
+| Which model generates the message/artifact in Workspace? | `provider` and `model` sent by the browser; absent those, runtime catalog and role-based fallback | the choice is browser-owned and can diverge from the previous task |
+| Which model actually produced an already-created artifact? | immutable metadata on the assistant message and snapshot, plus `PromptExecutionLog` | there is no single pipeline link and no coherent UI projection |
+| Which model is shown in costs? | per-task cost/execution record | not the truth of the artifact nor of the pipeline |
 
-La gerarchia tecnica corrente è dunque frammentata: override del client, setting di task, catalogo/ruolo e fallback possono decidere indipendentemente. Nell’istanza locale analizzata non è presente una configurazione `PlatformConfig` persistita; perciò i default di codice (tra cui MiniMax per l’optimizer) sono effettivamente entrati in gioco. La regola “se seleziono Kimi 3, tutta la pipeline usa Kimi 3” non è esprimibile né verificabile nel modello attuale.
+The current technical hierarchy is thus fragmented: client override, task setting, catalog/role and fallback can each decide independently. In the local instance analyzed, there is no persisted `PlatformConfig` configuration; so the code defaults (including MiniMax for the optimizer) actually came into play. The rule "if I select Kimi 3, the whole pipeline uses Kimi 3" is neither expressible nor verifiable in the current model.
 
-### Source of truth target
+### Target Source of Truth
 
-La nuova autorità deve essere un record immutabile e server-owned `PipelineRun` (o `ModelSelectionDecision` collegato a un run), creato al primo submit Vibe e referenziato da ogni esecuzione, messaggio e snapshot:
+The new authority must be an immutable, server-owned `PipelineRun` record (or a `ModelSelectionDecision` linked to a run), created on the first Vibe submit and referenced by every execution, message and snapshot:
 
 ```ts
 type PipelineModelLock = {
@@ -81,69 +81,69 @@ type PipelineRun = {
 };
 ```
 
-`PipelineRun.modelLock` è la source of truth per la scelta di esecuzione futura. I metadata di messaggi, execution e snapshot rimangono la fonte di prova immutabile del risultato storico: devono sempre riportare `requested` ed `effective` e il relativo `pipelineRunId`.
+`PipelineRun.modelLock` is the source of truth for future execution choices. Message, execution and snapshot metadata remain the immutable proof of the historical result: they must always report `requested` and `effective` and the corresponding `pipelineRunId`.
 
-## 4. Cause architetturali della regressione
+## 4. Architectural Causes of the Regression
 
-Questa non è la colpa di un singolo provider né di un solo commit recente. È una regressione di
-integrazione: l’optimizer obbligatorio, il routing tramite query, l’handoff con `sessionStorage` e
-il brief ricco sono stati introdotti in momenti diversi. L’espansione del brief ha reso
-inadeguata una riscrittura nata per un input più povero, senza riallineare il contratto end-to-end.
-La correzione deve quindi ristabilire un’unica architettura, non cambiare soltanto il default di
-un modello.
+This is not the fault of a single provider or a single recent commit. It is an integration
+regression: the mandatory optimizer, query-based routing, `sessionStorage` handoff and
+the rich brief were introduced at different times. The brief's expansion made a rewrite
+designed for a smaller input inadequate, without realigning the end-to-end contract.
+The fix must therefore re-establish a single architecture, not just change a
+model's default.
 
-### P0 — tre resolver indipendenti e due proprietà del modello
+### P0 — Three Independent Resolvers and Two Model Ownerships
 
-VibeCore memorizza un override in `localStorage` e lo propaga nell’URL. Zero Effort usa quell’override oppure le configurazioni di task. Il Workspace riparte poi dalla propria coppia `selectedProvider` / `selectedModel`, inizializzata da catalogo, preset e parametri URL. Ogni punto dispone di una propria priorità e di proprie condizioni di validazione.
+VibeCore stores an override in `localStorage` and propagates it in the URL. Zero Effort uses that override or the task configurations. The Workspace then starts over from its own `selectedProvider` / `selectedModel` pair, initialized from catalog, preset and URL parameters. Each point has its own priority and its own validation conditions.
 
-La chiamata finale `chat-preview` accetta la coppia inviata dal browser e può inviare quel modello direttamente a un provider OpenAI-compatible. È questa la decisione che ha prodotto DeepSeek-V3. Essa non è vincolata da `zero_effort_optimize` né da `vibe_mode_generate`.
+The final `chat-preview` call accepts the pair sent by the browser and can send that model directly to an OpenAI-compatible provider. This is the decision that produced DeepSeek-V3. It is not constrained by `zero_effort_optimize` nor by `vibe_mode_generate`.
 
-In più, l’optimizer ha una regola diversa: considera il modello richiesto nel body soltanto per cataloghi `openai-compatible`. Questo gate esiste davvero (`OptimizeUserPrompt.ts`), ma **non spiega** l’incidente osservato: l’entry di catalogo di SiliconFlow — il provider effettivamente coinvolto nella sequenza Kimi → MiniMax → DeepSeek — ha essa stessa `apiType: "openai-compatible"` (vedi `defaultSiliconFlowCatalog.ts`), quindi il gate non si applica mai in questo caso e non blocca alcunché. *(Correzione post-verifica, 2026-08-18: una verifica di sola lettura ha confermato che questa era la spiegazione causale errata nella versione originale di questo paragrafo.)* Il meccanismo reale più probabile è la combinazione di due difetti indipendenti e più semplici, entrambi confermati nel codice: il fallback silenzioso e non segnalato all’utente quando il Workspace non risolve il modello preferito nel catalogo idratato (vedi §4 "fallback e fallimenti di risoluzione sono opachi" più sotto — ora reso visibile via notifica, PR `fix/model-fallback-visibility-and-double-optimize`), e un bug di budget di token deterministico nell’optimizer (`optimize_user_prompt.maxCompletionTokens` era 1200, troppo basso per una riscrittura di brief completa — vedi PR `fix/optimize-user-prompt-token-budget`).
+In addition, the optimizer has a different rule: it only considers the model requested in the body for `openai-compatible` catalogs. This gate really exists (`OptimizeUserPrompt.ts`), but it **does not explain** the observed incident: SiliconFlow's catalog entry — the provider actually involved in the Kimi → MiniMax → DeepSeek sequence — itself has `apiType: "openai-compatible"` (see `defaultSiliconFlowCatalog.ts`), so the gate never applies in this case and blocks nothing. *(Post-verification correction, 2026-08-18: a read-only check confirmed this was the wrong causal explanation in the original version of this paragraph.)* The more likely real mechanism is the combination of two independent, simpler defects, both confirmed in the code: the silent fallback, not surfaced to the user, when the Workspace fails to resolve the preferred model in the hydrated catalog (see §4 "fallback and resolution failures are opaque" below — now made visible via notification, PR `fix/model-fallback-visibility-and-double-optimize`), and a deterministic token-budget bug in the optimizer (`optimize_user_prompt.maxCompletionTokens` was 1200, too low for a full brief rewrite — see PR `fix/optimize-user-prompt-token-budget`).
 
-**Impatto:** una configurazione costo che elenca Kimi/MiniMax può convivere con un artefatto DeepSeek senza errore tecnico locale, ma con una violazione grave della semantica di prodotto.
+**Impact:** a cost configuration listing Kimi/MiniMax can coexist with a DeepSeek artifact with no local technical error, but with a serious violation of product semantics.
 
-### P0 — l’handoff GodMode seleziona il task semanticamente sbagliato
+### P0 — The GodMode Handoff Selects the Semantically Wrong Task
 
-Nel passaggio verso Workspace, la pagina launch privilegia `vibeGenerate` e poi `generate`, invece della configurazione `godModeGenerate`. *(Correzione post-verifica, 2026-08-18: questa conclusione va ammorbidita.)* `vibeGenerate` (task key `vibe_mode_generate` in `PlatformConfig.ts`) è in realtà coerente con l’intento già documentato di quella stessa chiave — il commento del codice recita testualmente: `// Vibe Mode — final generation step (workspace model when arriving from Vibe Mode expert path)`. Il percorso qui descritto (Vibe → Zero Effort → GodMode) **è** l’"expert path" da Vibe Mode a cui quel commento si riferisce, quindi l’uso di `vibeGenerate` non è un instradamento sbagliato per questo specifico percorso. Il percorso di ingresso standalone a GodMode (senza passare da Vibe) usa correttamente `godModeGenerate` già oggi. Il problema reale resta comunque la mancanza di un lock di pipeline unico: percorsi diversi risolvono legittimamente task key diverse, ma nessuna delle due garantisce oggi la coerenza con il modello scelto dall’utente all’inizio del flusso.
+On the way to Workspace, the launch page prioritizes `vibeGenerate` and then `generate`, instead of the `godModeGenerate` configuration. *(Post-verification correction, 2026-08-18: this conclusion needs to be softened.)* `vibeGenerate` (task key `vibe_mode_generate` in `PlatformConfig.ts`) is actually consistent with the already-documented intent of that same key — the code comment literally reads: `// Vibe Mode — final generation step (workspace model when arriving from Vibe Mode expert path)`. The path described here (Vibe → Zero Effort → GodMode) **is** the "expert path" from Vibe Mode that comment refers to, so using `vibeGenerate` is not a wrong routing for this specific path. The standalone entry path to GodMode (without going through Vibe) already correctly uses `godModeGenerate` today. The real problem remains the lack of a single pipeline lock: different paths legitimately resolve different task keys, but neither one today guarantees consistency with the model the user chose at the start of the flow.
 
-### P0 — l’ottimizzazione viene sempre riattivata
+### P0 — Optimization Is Always Re-triggered
 
-`handleGodModeGenerate()` esegue sempre `zero_effort_optimize`. L’URL `skipAutoOptimize=1` sopprime l’optimizer del Workspace solo quando il brief è AI-prefilled; per il percorso manuale la seconda ottimizzazione resta attiva. Il Workspace quindi può creare il passaggio addizionale `optimize_user_prompt`, come osservato con MiniMax-M3.
+`handleGodModeGenerate()` always runs `zero_effort_optimize`. The `skipAutoOptimize=1` URL flag suppresses the Workspace optimizer only when the brief is AI-prefilled; for the manual path the second optimization stays active. The Workspace can therefore create the additional `optimize_user_prompt` step, as observed with MiniMax-M3.
 
-**Impatto:** il flusso richiesto “brief completo → GodMode senza ottimizzazione” è impossibile da ottenere in modo affidabile.
+**Impact:** the requested "complete brief → GodMode with no optimization" flow cannot be reliably achieved.
 
-### P0 — esistono due generatori di brief
+### P0 — There Are Two Brief Generators
 
-Il server `LaunchZeroEffortProject` costruisce e persiste un `normalizedBrief`. La pagina launch ricostruisce però un secondo `buildStructuredBrief()` lato client, con formattazione e fonti parzialmente diverse, e passa quest’ultimo all’optimizer e poi al Workspace.
+The server's `LaunchZeroEffortProject` builds and persists a `normalizedBrief`. The launch page, however, rebuilds a second `buildStructuredBrief()` client-side, with partially different formatting and sources, and passes this second one to the optimizer and then to the Workspace.
 
-**Impatto:** il brief persistito, quello visto nella UI e il prompt effettivamente riscritto possono divergere. Un optimizer può inoltre comprimere o perdere dettagli del brief più ricco, creando il sintomo riportato: “brief zero effort più ricco del prompt zero effort”.
+**Impact:** the persisted brief, the one seen in the UI, and the prompt actually rewritten can diverge. An optimizer can also compress or lose details of the richer brief, creating the reported symptom: "zero effort brief richer than the zero effort prompt".
 
-### P1 — configurazione letta in parallelo alla mutazione del progetto
+### P1 — Configuration Read in Parallel With the Project Mutation
 
-Zero Effort lancia la persistenza del brief/preset e il recupero della configurazione in parallelo. Il recupero può quindi valutare la configurazione sul preset precedente. È una race condition che aggrava la deriva del modello.
+Zero Effort launches brief/preset persistence and configuration retrieval in parallel. The retrieval can therefore evaluate the configuration against the previous preset. This is a race condition that worsens model drift.
 
-### P1 — fallback e fallimenti di risoluzione sono opachi
+### P1 — Fallback and Resolution Failures Are Opaque
 
-Se il modello preferito non viene risolto nel catalogo locale del Workspace, la UI può eliminare l’override e ripiegare sulla selezione predefinita senza un errore bloccante. Anche i task hanno differenti strategie di accettazione dell’override. L’utente non riceve né la causa né la coppia effettiva prima del dispatch.
+If the preferred model is not resolved in the Workspace's local catalog, the UI can drop the override and fall back to the default selection without a blocking error. Tasks also have different override-acceptance strategies. The user receives neither the cause nor the effective pair before dispatch.
 
-### P1 — `sessionStorage` e query URL governano dati canonici
+### P1 — `sessionStorage` and URL Query Govern Canonical Data
 
-Il prompt da inviare e l’identità del modello attraversano il browser tramite `sessionStorage` e parametri URL. Sono meccanismi utili per navigazione effimera, ma non possono essere autorità di un flusso che deve essere ripetibile, auditabile e resistente a refresh/disconnessione.
+The prompt to send and the model's identity travel through the browser via `sessionStorage` and URL parameters. These are useful mechanisms for ephemeral navigation, but they cannot be the authority for a flow that must be repeatable, auditable and resilient to refresh/disconnection.
 
-## 5. Contratto del flusso desiderato
+## 5. Contract for the Desired Flow
 
-### 5.1 Invarianti non negoziabili
+### 5.1 Non-negotiable Invariants
 
-1. La selezione utente viene validata dal server al primo submit e congelata nel `PipelineRun`.
-2. Con policy `strict`, classify, prefill, generazione finale e ogni altro stage LLM testuale usano la stessa coppia provider/modello.
-3. Se il modello non è disponibile o non supporta una capacità obbligatoria, il run è `blocked`: nessun fallback silenzioso. La UI chiede una nuova scelta oppure un’eccezione esplicita.
-4. Il brief canonico è costruito una sola volta dal backend. Ogni rappresentazione UI è una proiezione di quel record.
-5. Il brief canonico viene inviato a GodMode come messaggio `user` invariato; system prompt e guideline sono composti separatamente dai layer di prompting.
-6. Il percorso “avvia da Vibe” imposta `optimizationPolicy: skip`; né `zero_effort_optimize` né `optimize_user_prompt` possono essere invocati per quel run.
-7. Ogni dispatch persiste `pipelineRunId`, stadio, modello richiesto, modello effettivo, motivo di eventuale eccezione e hash del brief/payload.
-8. Workshop mostra il run selezionato: modello scelto, modello effettivo per stadio, brief inviato e payload safe effettivo. Non ricompone né deduce dati nel browser.
+1. The user selection is validated by the server on the first submit and frozen into the `PipelineRun`.
+2. With a `strict` policy, classify, prefill, final generation and every other text LLM stage use the same provider/model pair.
+3. If the model is unavailable or does not support a mandatory capability, the run is `blocked`: no silent fallback. The UI asks for a new choice or an explicit exception.
+4. The canonical brief is built exactly once by the backend. Every UI representation is a projection of that record.
+5. The canonical brief is sent to GodMode as an unchanged `user` message; system prompt and guidelines are composed separately by the prompting layers.
+6. The "start from Vibe" path sets `optimizationPolicy: skip`; neither `zero_effort_optimize` nor `optimize_user_prompt` can be invoked for that run.
+7. Every dispatch persists `pipelineRunId`, stage, requested model, effective model, any exception reason and the brief/payload hash.
+8. Workshop shows the selected run: chosen model, effective model per stage, brief sent and the actual safe payload. It does not recompose or infer data in the browser.
 
-### 5.2 Sequenza target
+### 5.2 Target Sequence
 
 ```text
 POST Vibe start (input, selected provider/model, strict)
@@ -163,96 +163,96 @@ POST pipeline-runs/:id/launch-godmode
   → return PipelineRun projection to UI
 ```
 
-Il primo endpoint può eseguire il launch GodMode direttamente se UX e timeout lo consentono; in entrambi i casi la transizione è server-owned. Il Workspace non deve chiamare un optimizer né ricostruire il messaggio per “completare” il run.
+The first endpoint can execute the GodMode launch directly if UX and timeout allow it; in either case the transition is server-owned. The Workspace must not call an optimizer nor rebuild the message to "complete" the run.
 
-## 6. Design concreto di refactor
+## 6. Concrete Refactor Design
 
-### Fase 0 — fermare l’ambiguità e produrre prova diagnostica (P0)
+### Phase 0 — Stop the Ambiguity and Produce Diagnostic Proof (P0)
 
-- Definire in `packages/contracts` `PipelineRun`, `PipelineModelLock`, `CanonicalBriefEnvelope`, `PipelineStageExecution` e gli errori `MODEL_LOCK_UNAVAILABLE` / `MODEL_LOCK_CAPABILITY_MISMATCH`.
-- Centralizzare la risoluzione in un unico use case, ad esempio `ResolvePipelineModelLock`; eliminare priorità duplicate dai route handler e dalla UI.
-- Aggiungere log strutturati per ogni dispatch: `pipelineRunId`, stage, requested/effective provider-model, origine della decisione, catalog revision, fallback/exception reason. Non registrare chiavi né payload sensibili.
-- Rendere bloccante la mancata risoluzione di un modello lockato. La UI deve mostrare l’errore e non inviare l’artefatto con un modello diverso.
+- Define `PipelineRun`, `PipelineModelLock`, `CanonicalBriefEnvelope`, `PipelineStageExecution` and the errors `MODEL_LOCK_UNAVAILABLE` / `MODEL_LOCK_CAPABILITY_MISMATCH` in `packages/contracts`.
+- Centralize resolution in a single use case, e.g. `ResolvePipelineModelLock`; remove duplicated priorities from route handlers and the UI.
+- Add structured logs for every dispatch: `pipelineRunId`, stage, requested/effective provider-model, decision origin, catalog revision, fallback/exception reason. Do not log keys or sensitive payloads.
+- Make the failure to resolve a locked model blocking. The UI must show the error and must not send the artifact with a different model.
 
-**Accettazione:** un test E2E con Kimi K3 selezionato dimostra lo stesso id in Vibe, brief generation e artifact; un Kimi non disponibile termina in errore esplicito e non produce una chiamata DeepSeek/MiniMax.
+**Acceptance:** an E2E test with Kimi K3 selected shows the same id in Vibe, brief generation and artifact; an unavailable Kimi ends in an explicit error and produces no DeepSeek/MiniMax call.
 
-### Fase 1 — brief canonico e rimozione della doppia ottimizzazione (P0)
+### Phase 1 — Canonical Brief and Removal of the Double Optimization (P0)
 
-- Estrarre `BuildCanonicalGenerationBrief` nell’application layer; rimuovere la costruzione concorrente del brief dalla pagina launch.
-- Salvare testo, schema, hash, campi sorgente e provenienza inferita nel run e nel progetto/moodboard secondo responsabilità; il testo da inviare viene sempre dal run.
-- Sostituire l’handoff `sessionStorage` del prompt con `pipelineRunId`; URL può contenere solo un id non sensibile di navigazione.
-- Introdurre `optimizationPolicy` persistita. Per Vibe → Zero Effort → GodMode: `skip`; il server rifiuta qualunque chiamata optimizer per quel run salvo una futura azione utente esplicita che crei un nuovo run/branch.
-- Recuperare la configurazione soltanto dopo il salvataggio del progetto/preset oppure, preferibilmente, risolverla dal run già creato.
+- Extract `BuildCanonicalGenerationBrief` in the application layer; remove the competing brief construction from the launch page.
+- Save text, schema, hash, source fields and inferred provenance in the run and in the project/moodboard according to responsibility; the text to send always comes from the run.
+- Replace the prompt's `sessionStorage` handoff with `pipelineRunId`; the URL can only contain a non-sensitive navigation id.
+- Introduce a persisted `optimizationPolicy`. For Vibe → Zero Effort → GodMode: `skip`; the server rejects any optimizer call for that run unless a future explicit user action creates a new run/branch.
+- Retrieve the configuration only after the project/preset save, or, preferably, resolve it from the already-created run.
 
-**Accettazione:** il contenuto hash del brief in UI, messaggio user, `PromptExecution` e provider request coincide; nessun record `zero_effort_optimize` o `optimize_user_prompt` è associato al run con policy `skip`.
+**Acceptance:** the brief's content hash matches across UI, user message, `PromptExecution` and provider request; no `zero_effort_optimize` or `optimize_user_prompt` record is associated with a `skip`-policy run.
 
-### Fase 2 — handoff GodMode e trasparenza Workshop (P1)
+### Phase 2 — GodMode Handoff and Workshop Transparency (P1)
 
-- Sostituire i parametri `preferredProvider`/`preferredModel` come autorità con una lettura del run server-side. I parametri possono essere mantenuti solo come proposta iniziale per un nuovo run, non per uno esistente.
-- Usare semanticamente `godModeGenerate` soltanto per le policy di un nuovo run senza lock utente; un lock già creato prevale su qualsiasi task setting.
-- Collegare `PipelineStageExecution`, `PromptExecution`, messaggi, snapshot e cost transactions mediante `pipelineRunId` ed `executionId`.
-- Estendere il read model Workshop: badge “locked”, provider/modello richiesto ed effettivo, stadio, politica di ottimizzazione, hash/preview del brief canonico e collegamento alla request safe realmente inviata.
+- Replace the `preferredProvider`/`preferredModel` parameters as an authority with a server-side read of the run. The parameters can only be kept as an initial proposal for a new run, not for an existing one.
+- Use `godModeGenerate` semantically only for the policy of a new run with no user lock; an already-created lock takes precedence over any task setting.
+- Link `PipelineStageExecution`, `PromptExecution`, messages, snapshots and cost transactions via `pipelineRunId` and `executionId`.
+- Extend the Workshop read model: a "locked" badge, requested and effective provider/model, stage, optimization policy, canonical brief hash/preview, and a link to the safe request actually sent.
 
-**Accettazione:** selezionando uno snapshot in Workshop, la UI mostra il run e la coppia che lo ha effettivamente generato. I costi sono raggruppati per run e distinguono chiaramente costo del brief da costo dell’artefatto.
+**Acceptance:** selecting a snapshot in Workshop, the UI shows the run and the pair that actually generated it. Costs are grouped by run and clearly distinguish the brief's cost from the artifact's cost.
 
-### Fase 3 — eliminazione controllata delle fonti obsolete (P1)
+### Phase 3 — Controlled Removal of Obsolete Sources (P1)
 
-- Rimuovere la persistenza dell’override Vibe in `localStorage` e il trasferimento del prompt canonico in `sessionStorage` dopo la migrazione.
-- Mantenere i task `promptTaskSettings` come default amministrativi per run senza selezione lockata, non come override nascosto di una scelta utente.
-- Aggiungere migration/read compatibility per run e conversazioni storiche; le esecuzioni precedenti devono essere etichettate “legacy / model lock unavailable”, non reinterpretate.
-- Aggiornare le specifiche storiche indicate nella sezione seguente prima di ogni feature che tocchi Vibe, Zero Effort o GodMode.
+- Remove Vibe override persistence from `localStorage` and the canonical prompt transfer from `sessionStorage` after migration.
+- Keep the `promptTaskSettings` tasks as administrative defaults for runs with no locked selection, not as a hidden override of a user choice.
+- Add migration/read compatibility for historical runs and conversations; previous executions must be labeled "legacy / model lock unavailable", not reinterpreted.
+- Update the historical specs listed in the following section before any feature that touches Vibe, Zero Effort or GodMode.
 
-## 7. Gerarchia di configurazione dopo il refactor
+## 7. Configuration Hierarchy After the Refactor
 
-| Priorità | Fonte | Quando si applica | Visibilità |
+| Priority | Source | When it applies | Visibility |
 | --- | --- | --- | --- |
-| 1 | `PipelineRun.modelLock` | run creato da scelta utente | obbligatoria in UI e in tutti i record |
-| 2 | eccezione di capacità esplicitamente approvata nel run | solo capacità dichiarata incompatibile | obbligatoria, con motivazione |
-| 3 | `promptTaskSettings` risolti server-side | nuovo run senza lock utente | mostrata come “default amministrativo” |
-| 4 | catalogo runtime per ruolo/capability | solo fallback iniziale per creare un nuovo run | mostrato prima della conferma |
+| 1 | `PipelineRun.modelLock` | run created from a user choice | mandatory in the UI and in all records |
+| 2 | capability exception explicitly approved in the run | only for a declared incompatible capability | mandatory, with rationale |
+| 3 | `promptTaskSettings` resolved server-side | new run with no user lock | shown as "administrative default" |
+| 4 | runtime catalog for role/capability | initial fallback only, to create a new run | shown before confirmation |
 
-Le preferenze browser non fanno parte della gerarchia di esecuzione. Possono precompilare il picker, ma non modificano un run esistente.
+Browser preferences are not part of the execution hierarchy. They can pre-fill the picker, but they do not modify an existing run.
 
-## 8. Matrice di test obbligatoria
+## 8. Mandatory Test Matrix
 
-| Caso | Setup | Risultato atteso |
+| Case | Setup | Expected result |
 | --- | --- | --- |
-| Kimi K3 lockato | selezione utente Kimi → Vibe → launch automatico | ogni stadio testuale e artefatto riportano Kimi; zero fallback |
-| Modello lockato assente | il catalogo non contiene più Kimi | run bloccato prima del dispatch; UI spiega la condizione |
-| Capacità non supportata | step richiede capacità fuori contratto | richiesta esplicita di eccezione o stop; niente sostituzione invisibile |
-| Vibe con brief ricco | prefill popola tutti i campi | hash e contenuto del brief coincidono fra run, user message e provider payload |
-| Vibe → GodMode skip | policy `skip` | nessun record optimizer; una sola generazione finale |
-| Zero Effort manuale | non prefilled | stessa policy e assenza di doppia ottimizzazione quando scelta dall’utente |
-| Refresh fra launch e Workspace | run già pronto | ripresa dal `pipelineRunId`, senza perdita o riscrittura del brief |
-| Snapshot storico | run legacy | UI dichiara assenza del model lock senza inventare dati |
+| Kimi K3 locked | user selects Kimi → Vibe → automatic launch | every text stage and the artifact report Kimi; zero fallback |
+| Locked model missing | the catalog no longer contains Kimi | run blocked before dispatch; UI explains the condition |
+| Unsupported capability | a step requires a capability outside the contract | explicit exception request or stop; no invisible substitution |
+| Vibe with a rich brief | prefill populates all fields | brief hash and content match across run, user message and provider payload |
+| Vibe → GodMode skip | `skip` policy | no optimizer record; a single final generation |
+| Manual Zero Effort | not prefilled | same policy and no double optimization when chosen by the user |
+| Refresh between launch and Workspace | run already ready | resumes from `pipelineRunId`, with no loss or rewrite of the brief |
+| Historical snapshot | legacy run | UI declares the absence of a model lock without inventing data |
 
-## 9. Stato delle specifiche e prevenzione delle direttive obsolete
+## 9. Spec Status and Prevention of Obsolete Directives
 
-| Documento | Ruolo dopo questa decisione | Regola di precedenza |
+| Document | Role after this decision | Precedence rule |
 | --- | --- | --- |
-| Questa analisi | autorità per model lock, brief canonico e passaggio Vibe/Zero Effort/GodMode | prevale sulle sezioni in conflitto |
-| `PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md` | autorità per esecuzione immutabile e trasparenza del payload | complementare e obbligatorio |
-| `ZERO_EFFORT_PREFILL_SPEC.md` | descrive il dominio di prefill | non autorizza doppio brief, optimizer implicito o handoff client-owned |
-| `MULTIMODE_UX_MVP_EXECUTION_SPEC.md` | visione UX storica/additiva | non è un’autorizzazione a bypassare backend orchestration SSOT |
-| `DASHBOARD_LOVABLE_CHAT_SPEC.md` | riferimento storico per intent classifier | le sue scelte per-task di modelli economici non prevalgono su un user model lock |
-| `PROMPT_OPTIMIZER_SPEC.md` | ottimizzazione esplicita | non abilita optimizer automatico in un run con policy `skip` |
+| This analysis | authority for model lock, canonical brief and the Vibe/Zero Effort/GodMode transition | takes precedence over conflicting sections |
+| `PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md` | authority for immutable execution and payload transparency | complementary and mandatory |
+| `ZERO_EFFORT_PREFILL_SPEC.md` | describes the prefill domain | does not authorize a double brief, an implicit optimizer or a client-owned handoff |
+| `MULTIMODE_UX_MVP_EXECUTION_SPEC.md` | historical/additive UX vision | not an authorization to bypass SSOT backend orchestration |
+| `DASHBOARD_LOVABLE_CHAT_SPEC.md` | historical reference for the intent classifier | its per-task choices of economy models do not override a user model lock |
+| `PROMPT_OPTIMIZER_SPEC.md` | explicit optimization | does not enable an automatic optimizer in a run with a `skip` policy |
 
-Prima di implementare, gli agenti devono leggere prima questo documento e l’analisi Prompt Execution SSOT. Se una specifica più vecchia prescrive un fallback o una ricomposizione client-side incompatibile, va aggiornata oppure marcata storica: non deve essere reintrodotta nel runtime.
+Before implementing, agents must read this document and the Prompt Execution SSOT analysis first. If an older spec prescribes a fallback or a client-side recomposition that is incompatible, it must be updated or marked historical: it must not be reintroduced into the runtime.
 
-## 10. Rischi residui e decisioni aperte
+## 10. Residual Risks and Open Decisions
 
-- **Identificatore Kimi:** il catalogo deve mantenere un id canonico e alias controllati (`moonshotai/kimi-k3` osservato localmente; il nome commerciale “Kimi 3” non è sufficiente come chiave). Provider, catalog revision e model id fanno parte del lock.
-- **Costo/qualità:** un modello unico per tutti gli stadi può aumentare costo e latenza. È una scelta esplicita del prodotto richiesta dall’utente; l’alternativa multi-modello va offerta solo come policy dichiarata e con preview degli stage, mai nascosta.
-- **Run sincrono:** Vibe e la generazione finale possono richiedere un job asincrono. L’eventuale asynchrony non modifica l’autorità: run, lock e brief sono persistiti prima dell’enqueue.
-- **Migrazione:** i dati storici non contengono sempre la decisione iniziale. Devono restare leggibili come legacy, senza inferenze retroattive.
+- **Kimi identifier:** the catalog must maintain a canonical id and controlled aliases (`moonshotai/kimi-k3` observed locally; the commercial name "Kimi 3" is not sufficient as a key). Provider, catalog revision and model id are part of the lock.
+- **Cost/quality:** a single model for all stages can increase cost and latency. This is an explicit product choice requested by the user; the multi-model alternative should only be offered as a declared policy with a stage preview, never hidden.
+- **Synchronous run:** Vibe and the final generation may require an asynchronous job. Any such asynchrony does not change the authority: run, lock and brief are persisted before the enqueue.
+- **Migration:** historical data does not always contain the initial decision. It must remain readable as legacy, with no retroactive inference.
 
-## 11. Ordine consigliato di consegna
+## 11. Recommended Delivery Order
 
-1. Contratti e risolutore server unico, con test di blocco fallback.
-2. Persistenza `PipelineRun` e brief canonico; collegamenti a execution/costi/snapshot.
-3. Endpoint server-owned per launch GodMode con `optimizationPolicy: skip`.
-4. Migrazione della UI: rimuovere prompt/model come autorità in storage e query, mostrare stato del run.
-5. E2E locale Docker completo con Kimi K3, incluse prove di payload, artefatto, snapshot e costi.
-6. Pulizia/annotazione delle specifiche storiche soltanto dopo che i test provano il nuovo contratto.
+1. Contracts and a single server resolver, with fallback-blocking tests.
+2. `PipelineRun` persistence and canonical brief; links to execution/costs/snapshot.
+3. Server-owned endpoint for GodMode launch with `optimizationPolicy: skip`.
+4. UI migration: remove prompt/model as an authority in storage and query, show run status.
+5. Complete local Docker E2E with Kimi K3, including proof of payload, artifact, snapshot and costs.
+6. Cleanup/annotation of historical specs only after tests prove the new contract.
 
-Nessuna fase successiva — inclusi Template Skills, nuove capability o ottimizzazioni UX — deve ampliare il prompting pipeline finché i test P0 non dimostrano che scelta, brief, payload, modello e artefatto rimangono coerenti.
+No later phase — including Template Skills, new capabilities or UX optimizations — must expand the prompting pipeline until the P0 tests prove that choice, brief, payload, model and artifact remain consistent.

@@ -4,40 +4,40 @@
 > authority for user override precedence, fail-closed model locks, notifications and execution
 > proof is [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md).
 
-## 1) Obiettivo
+## 1) Goal
 
-Creare una piattaforma LLM semplice ma estendibile, con:
+Build a simple but extensible LLM platform, with:
 
-- piu provider (es. LM Studio, Ollama, SiliconFlow, OpenAI, Anthropic)
-- piu modelli per provider
-- UI con 2 combo box annidate: Provider -> Model
-- routing runtime della chiamata LLM in base alla selezione utente
-- governance costi con token + crediti astratti
+- multiple providers (e.g. LM Studio, Ollama, SiliconFlow, OpenAI, Anthropic)
+- multiple models per provider
+- UI with 2 nested combo boxes: Provider -> Model
+- runtime routing of the LLM call based on the user's selection
+- cost governance with tokens + abstract credits
 
-## 2) Architettura minima consigliata
+## 2) Recommended Minimal Architecture
 
-Servizi minimi:
+Minimal services:
 
-- API Gateway LLM (core)
-- Database configurazione/catalogo (Mongo o SQL)
-- Frontend/BFF (opzionale ma consigliato)
+- LLM API Gateway (core)
+- Configuration/catalog database (Mongo or SQL)
+- Frontend/BFF (optional but recommended)
 
-Moduli core nel gateway:
+Core modules in the gateway:
 
-- providers_registry: configurazione provider endpoint/auth/status
-- provider_models_catalog: catalogo modelli abilitati
-- provider_adapter_factory: adapter per protocollo provider
-- gateway_router: risolve provider/model e instrada la request
-- usage_metering: conta token e calcola crediti
-- policies: controlli accesso provider/model per tenant/ruolo
+- providers_registry: provider endpoint/auth/status configuration
+- provider_models_catalog: catalog of enabled models
+- provider_adapter_factory: adapter per provider protocol
+- gateway_router: resolves provider/model and routes the request
+- usage_metering: counts tokens and computes credits
+- policies: provider/model access controls per tenant/role
 
-## 3) Modello dati minimo
+## 3) Minimal Data Model
 
 ### providers_registry
 
-Campi minimi:
+Minimal fields:
 
-- providerKey (es. siliconflow)
+- providerKey (e.g. siliconflow)
 - displayName
 - baseUrl
 - apiType (openai-compatible, anthropic-compatible, custom)
@@ -48,33 +48,33 @@ Campi minimi:
 
 ### provider_models_catalog
 
-Campi minimi:
+Minimal fields:
 
 - providerKey
-- modelKey (id reale provider)
+- modelKey (real provider id)
 - displayName
 - capability (chat, embedding, image, rerank)
 - contextWindow
 - maxOutputTokens
 - enabled
-- pricingProfileKey (chiave logica per rating costi)
+- pricingProfileKey (logical key for cost rating)
 
 ### credit_rates
 
-Campi minimi:
+Minimal fields:
 
 - providerKey
 - modelKey
 - capability
 - inputCreditsPer1k
 - outputCreditsPer1k
-- cacheReadCreditsPer1k (opzionale)
-- cacheWriteCreditsPer1k (opzionale)
+- cacheReadCreditsPer1k (optional)
+- cacheWriteCreditsPer1k (optional)
 - active
 
 ### usage_events
 
-Campi minimi:
+Minimal fields:
 
 - organizationId
 - userId
@@ -88,46 +88,46 @@ Campi minimi:
 - status (ok|error|timeout)
 - createdAt
 
-## 4) Flusso UI con due combo box annidate
+## 4) UI Flow With Two Nested Combo Boxes
 
-Regola UX:
+UX rule:
 
-- combo 1 mostra solo provider enabled e accessibili all utente
-- combo 2 mostra solo modelli enabled del provider selezionato
+- combo 1 shows only providers that are enabled and accessible to the user
+- combo 2 shows only enabled models of the selected provider
 
-Flusso:
+Flow:
 
 1. GET /v1/providers
-2. utente seleziona provider
+2. user selects a provider
 3. GET /v1/providers/:providerKey/models
-4. utente seleziona model
-5. POST /v1/chat/completions con provider+model scelti
+4. user selects a model
+5. POST /v1/chat/completions with the chosen provider+model
 
-Payload richiesta chat (esempio):
+Chat request payload (example):
 
 ```json
 {
   "provider": "siliconflow",
   "model": "Qwen/Qwen3-32B",
   "messages": [
-    { "role": "user", "content": "Ciao" }
+    { "role": "user", "content": "Hello" }
   ],
   "temperature": 0.7,
   "max_tokens": 512
 }
 ```
 
-## 5) Routing runtime nel gateway
+## 5) Runtime Routing in the Gateway
 
-Algoritmo semplice:
+Simple algorithm:
 
-1. valida provider esistente e enabled
-2. valida model del provider e enabled
-3. risolve adapter da factory (openai-compatible, anthropic-compatible, ...)
-4. applica token policy (max input/output)
-5. inoltra richiesta al provider corretto
-6. normalizza risposta in schema unificato
-7. salva usage_event e addebita crediti
+1. validate that the provider exists and is enabled
+2. validate that the model belongs to the provider and is enabled
+3. resolve the adapter from the factory (openai-compatible, anthropic-compatible, ...)
+4. apply the token policy (max input/output)
+5. forward the request to the correct provider
+6. normalize the response into a unified schema
+7. save the usage_event and charge credits
 
 Pseudo-code:
 
@@ -148,73 +148,73 @@ await usageRepo.insert({ ...usage, credits })
 return responseNormalizer.toUnified(response)
 ```
 
-## 6) Discovery modelli (bootstrap + on-demand)
+## 6) Model Discovery (Bootstrap + On-demand)
 
-Pattern consigliato:
+Recommended pattern:
 
-- startup sync: alla partenza, ogni provider prova listModels()
-- on-demand sync: endpoint admin POST /admin/providers/:providerKey/sync
-- fallback: se provider non risponde, usa catalogo DB esistente
+- startup sync: on boot, each provider attempts listModels()
+- on-demand sync: admin endpoint POST /admin/providers/:providerKey/sync
+- fallback: if the provider doesn't respond, use the existing DB catalog
 
 Best practice:
 
-- sync idempotente (upsert)
-- non cancellare subito modelli mancanti: marca deprecated prima di disabilitare
-- tieni discoveredAt e source (seed|auto_discovery|manual)
+- idempotent sync (upsert)
+- don't immediately delete missing models: mark them deprecated before disabling
+- keep discoveredAt and source (seed|auto_discovery|manual)
 
-## 7) Strategia token e crediti astratti
+## 7) Abstract Token and Credit Strategy
 
-Obiettivo: nascondere differenze di prezzo reali tra provider dietro una metrica unica interna (crediti).
+Goal: hide real price differences between providers behind a single internal metric (credits).
 
-Formula base consigliata:
+Recommended base formula:
 
 - inputUnits = tokensIn / 1000
 - outputUnits = tokensOut / 1000
-- credits = inputUnits *inputRate + outputUnits* outputRate
+- credits = inputUnits * inputRate + outputUnits * outputRate
 
-Dove rates arrivano da credit_rates per provider/model/capability.
+Where rates come from credit_rates per provider/model/capability.
 
-Estensioni utili:
+Useful extensions:
 
-- moltiplicatore complessita modello (small=0.8, medium=1.0, large=1.4, reasoning=1.8)
-- surcharge latenza bassa (fast lane)
-- sconti per modelli locali/self-hosted
+- model complexity multiplier (small=0.8, medium=1.0, large=1.4, reasoning=1.8)
+- low-latency surcharge (fast lane)
+- discounts for local/self-hosted models
 
-Esempio pratico:
+Practical example:
 
 - tokensIn = 1200
 - tokensOut = 800
-- inputRate = 1.0 crediti/1k
-- outputRate = 2.0 crediti/1k
+- inputRate = 1.0 credits/1k
+- outputRate = 2.0 credits/1k
 
-Calcolo:
+Calculation:
 
 - input = 1.2 * 1.0 = 1.2
 - output = 0.8 * 2.0 = 1.6
-- totale = 2.8 crediti
+- total = 2.8 credits
 
-## 8) Policy semplici di pesatura modelli
+## 8) Simple Model Weighting Policy
 
-Classificazione iniziale (semplificata):
+Initial classification (simplified):
 
-- econo: modelli piccoli/veloci, costo basso
-- standard: bilanciati
-- premium: modelli grandi o reasoning avanzato
+- econo: small/fast models, low cost
+- standard: balanced
+- premium: large models or advanced reasoning
 
-Mappatura suggerita:
+Suggested mapping:
 
 - econo: input 0.6, output 1.0
 - standard: input 1.0, output 2.0
 - premium: input 1.8, output 3.2
 
-Regola pratica:
+Practical rule:
 
-- parti semplice con 3 tier
-- poi rifinisci rates usando usage_events reali (spesa, latenza, soddisfazione)
+- start simple with 3 tiers
+- then refine rates using real usage_events (spend, latency, satisfaction)
 
-## 9) Endpoint minimi API
+## 9) Minimal API Endpoints
 
-Pubblici:
+Public:
 
 - GET /v1/providers
 - GET /v1/providers/:providerKey/models
@@ -226,9 +226,9 @@ Admin:
 - POST /v1/admin/credit-rates
 - PATCH /v1/admin/providers/:providerKey/models/:modelKey/enabled
 
-## 10) Error handling standard
+## 10) Standard Error Handling
 
-Schema uniforme:
+Uniform schema:
 
 - code
 - message
@@ -236,59 +236,59 @@ Schema uniforme:
 - model
 - correlationId
 
-Mappa errori provider -> gateway:
+Provider -> gateway error mapping:
 
-- timeout provider -> PROVIDER_TIMEOUT
-- auth provider -> PROVIDER_AUTH_FAILED
-- model non trovato -> MODEL_NOT_AVAILABLE
-- crediti insufficienti -> INSUFFICIENT_CREDITS
+- provider timeout -> PROVIDER_TIMEOUT
+- provider auth -> PROVIDER_AUTH_FAILED
+- model not found -> MODEL_NOT_AVAILABLE
+- insufficient credits -> INSUFFICIENT_CREDITS
 
-## 11) Rollout progressivo consigliato
+## 11) Recommended Progressive Rollout
 
 Step 1:
 
-- 1 provider + catalogo statico seed
-- doppia combo UI
-- routing base
+- 1 provider + static seed catalog
+- double combo UI
+- basic routing
 
 Step 2:
 
-- 2 provider
-- sync modelli startup + endpoint sync manuale
+- 2 providers
+- startup model sync + manual sync endpoint
 - usage_events
 
 Step 3:
 
-- crediti astratti + wallet organization
-- policy accesso provider/model per tenant
+- abstract credits + organization wallet
+- provider/model access policy per tenant
 
 Step 4:
 
-- fallback provider automatico
-- tuning rates data-driven
+- automatic provider fallback
+- data-driven rate tuning
 
-## 12) Checklist implementazione rapida
+## 12) Quick Implementation Checklist
 
-- [ ] tabella/collection providers_registry
-- [ ] tabella/collection provider_models_catalog
-- [ ] endpoint providers e models
-- [ ] adapter factory per provider protocol
-- [ ] router chat provider/model-aware
-- [ ] doppia combo in UI con fetch dinamico
-- [ ] usage metering (tokens e latency)
-- [ ] credit engine con rates per provider/model
-- [ ] endpoint sync modelli on-demand
-- [ ] logging con correlationId
+- [ ] providers_registry table/collection
+- [ ] provider_models_catalog table/collection
+- [ ] providers and models endpoints
+- [ ] adapter factory for provider protocol
+- [ ] provider/model-aware chat router
+- [ ] double combo in the UI with dynamic fetch
+- [ ] usage metering (tokens and latency)
+- [ ] credit engine with rates per provider/model
+- [ ] on-demand model sync endpoint
+- [ ] logging with correlationId
 
-## 13) Decisioni che evitano regressioni comuni
+## 13) Decisions That Avoid Common Regressions
 
-- non usare limiti bassi hardcoded sui modelli (es. 10)
-- usare 0 come no-limit esplicito
-- pre-warm cache modelli al boot del BFF
-- prevedere fallback su catalogo DB se provider down
-- mantenere sync script manuale per operazioni e incidenti
+- don't use low hardcoded limits on models (e.g. 10)
+- use 0 as an explicit no-limit
+- pre-warm the model cache at BFF boot
+- plan a fallback to the DB catalog if the provider is down
+- keep a manual sync script for operations and incidents
 
-## 14) Template env minimo
+## 14) Minimal Env Template
 
 ```env
 PROVIDERS_AUTO_MODEL_DISCOVERY_ENABLED=true
@@ -301,20 +301,20 @@ TOKEN_POLICY_MAX_COMPLETION_TOKENS=4096
 CREDITS_ENFORCEMENT_ENABLED=true
 ```
 
-## 15) Regola chiave per la UX
+## 15) Key UX Rule
 
-La combo Model deve dipendere sempre dal Provider selezionato e la request API deve includere entrambi i campi (provider + model). Questo elimina ambiguita quando lo stesso modelKey compare su provider diversi.
+The Model combo must always depend on the selected Provider, and the API request must include both fields (provider + model). This removes ambiguity when the same modelKey appears on different providers.
 
-## 16) Snapshot reale da MongoDB (llm_gateway)
+## 16) Real Snapshot From MongoDB (llm_gateway)
 
-Dati estratti dal Mongo locale (collection chiave):
+Data extracted from the local Mongo (key collections):
 
-- providers_registry: 4 documenti
-- provider_models_catalog: 84 documenti
-- org_provider_access: 2 documenti
-- credit_rates: 6 documenti
+- providers_registry: 4 documents
+- provider_models_catalog: 84 documents
+- org_provider_access: 2 documents
+- credit_rates: 6 documents
 
-Provider realmente presenti:
+Providers actually present:
 
 ```json
 [
@@ -345,7 +345,7 @@ Provider realmente presenti:
 ]
 ```
 
-Esempi reali modelli LM Studio:
+Real LM Studio model examples:
 
 ```json
 [
@@ -357,7 +357,7 @@ Esempi reali modelli LM Studio:
 ]
 ```
 
-Esempi reali modelli SiliconFlow:
+Real SiliconFlow model examples:
 
 ```json
 [
@@ -369,7 +369,7 @@ Esempi reali modelli SiliconFlow:
 ]
 ```
 
-Access policy reale per organization (estratto):
+Real per-organization access policy (excerpt):
 
 ```json
 [
@@ -386,9 +386,9 @@ Access policy reale per organization (estratto):
 ]
 ```
 
-## 17) Query Mongo read-only per agenti (copia/incolla)
+## 17) Read-only Mongo Queries for Agents (copy/paste)
 
-Conteggio configurazioni salienti:
+Count of key configurations:
 
 ```javascript
 const cols = ['providers_registry', 'provider_models_catalog', 'org_provider_access', 'credit_rates'];
@@ -397,7 +397,7 @@ for (const c of cols) {
 }
 ```
 
-Lista provider attivi:
+List of active providers:
 
 ```javascript
 db.providers_registry.find(
@@ -406,7 +406,7 @@ db.providers_registry.find(
 ).sort({ providerKey: 1 });
 ```
 
-Modelli per provider (per seconda combo box):
+Models per provider (for the second combo box):
 
 ```javascript
 db.provider_models_catalog.find(
@@ -415,7 +415,7 @@ db.provider_models_catalog.find(
 ).sort({ modelKey: 1 });
 ```
 
-Rate crediti attive:
+Active credit rates:
 
 ```javascript
 db.credit_rates.find(
@@ -424,7 +424,7 @@ db.credit_rates.find(
 ).sort({ providerKey: 1, modelKey: 1 });
 ```
 
-Policy accesso org->provider:
+Org->provider access policy:
 
 ```javascript
 db.org_provider_access.find(
@@ -433,9 +433,9 @@ db.org_provider_access.find(
 ).sort({ providerKey: 1 });
 ```
 
-## 18) Bootstrap veloce multiprovider (LM Studio + SiliconFlow)
+## 18) Quick Multi-provider Bootstrap (LM Studio + SiliconFlow)
 
-### Env minimo
+### Minimal Env
 
 ```env
 LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
@@ -447,7 +447,7 @@ PROVIDERS_AUTO_MODEL_DISCOVERY_ON_STARTUP=true
 GATEWAY_MODELS_LIMIT_PER_PROVIDER=0
 ```
 
-### Seed provider consigliato
+### Recommended Provider Seed
 
 ```json
 {
@@ -472,23 +472,23 @@ GATEWAY_MODELS_LIMIT_PER_PROVIDER=0
 }
 ```
 
-### Sync modelli on-demand
+### On-demand Model Sync
 
 ```bash
 npm run devops:providers:init:siliconflow
 npm run devops:providers:init -- siliconflow lmstudio
 ```
 
-## 19) Snippet codice per agenti di sviluppo
+## 19) Code Snippets for Development Agents
 
-### API per combo 1 (provider)
+### API for combo 1 (provider)
 
 ```ts
 // GET /v1/providers
 return providersRegistryRepository.listEnabledByOrganization(organizationId)
 ```
 
-### API per combo 2 (model annidata al provider)
+### API for combo 2 (model nested under the provider)
 
 ```ts
 // GET /v1/providers/:providerKey/models
@@ -498,7 +498,7 @@ return providerModelsRepository.listEnabledByProvider({
 })
 ```
 
-### Router chat provider/model-aware
+### Provider/model-aware Chat Router
 
 ```ts
 const provider = await providersRegistryRepository.findEnabledByKey(input.provider)
@@ -515,7 +515,7 @@ const response = await adapter.chat({
 })
 ```
 
-### Calcolo crediti astratti da token usage
+### Computing Abstract Credits From Token Usage
 
 ```ts
 const usage = {
@@ -537,12 +537,12 @@ const totalCredits = (inputCredits + outputCredits) * multiplier
 await walletService.chargeCredits({ organizationId: input.organizationId, amount: totalCredits })
 ```
 
-## 20) Checklist operativa per avvio in 15 minuti
+## 20) 15-minute Operational Startup Checklist
 
-1. Configura env di LM Studio e SiliconFlow.
-2. Verifica provider seed in providers_registry.
-3. Esegui sync modelli (startup o script on-demand).
-4. Esponi endpoint provider e models per doppia combo UI.
-5. Instrada POST chat con provider+model obbligatori.
-6. Salva usage_events e addebita crediti da credit_rates.
-7. Metti limit per provider a 0 (no hard cap modelli).
+1. Configure the LM Studio and SiliconFlow env.
+2. Verify the provider seed in providers_registry.
+3. Run model sync (startup or on-demand script).
+4. Expose the provider and models endpoints for the double combo UI.
+5. Route POST chat with provider+model mandatory.
+6. Save usage_events and charge credits from credit_rates.
+7. Set the per-provider limit to 0 (no hard model cap).

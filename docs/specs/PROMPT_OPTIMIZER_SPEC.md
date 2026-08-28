@@ -1,9 +1,9 @@
-# Andy Code Cat — Prompt Optimizer: Specifiche Dettagliate
+# Andy Code Cat — Prompt Optimizer: Detailed Specification
 
-> **Versione:** 1.1.0 — 2026-04-15  
-> **Autore:** architettura di prodotto  
-> **Scope:** UX interattiva e architettura backend per il servizio "Ottimizza Prompt"  
-> **Dipendenze architetturali:** LLM Catalog (✅), UserStyleProfile (✅), ProjectMoodboard (✅), Asset Manager (✅)  
+> **Version:** 1.1.0 — 2026-04-15
+> **Author:** product architecture
+> **Scope:** interactive UX and backend architecture for the "Optimize Prompt" service
+> **Architectural dependencies:** LLM Catalog (✅), UserStyleProfile (✅), ProjectMoodboard (✅), Asset Manager (✅)
 > **Milestone:** R0 — in `docs/DEVELOPMENT_PLAN.md`
 >
 > **Note:** the authoritative English implementation plan for the reusable internal prompting platform is in `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md`.
@@ -22,222 +22,221 @@
 
 ---
 
-## 0. Motivazione e Problema
+## 0. Motivation and Problem
 
-### 0.1 Il Gap Attuale
+### 0.1 The Current Gap
 
-L'utente oggi deve portare **manualmente** il proprio contesto a strumenti AI esterni per ottenere un prompt elaborato:
+Today the user must **manually** bring their own context to external AI tools to get an elaborate prompt:
 
-1. Apre un editor AI esterno (ChatGPT, Claude, Gemini)
-2. Incolla brief, allegati, specifiche del progetto
-3. Chiede "preparami un prompt per generare il sito web"
-4. Copia il risultato nel workspace di Andy Code Cat
-5. Invia al motore di generazione
+1. Opens an external AI editor (ChatGPT, Claude, Gemini)
+2. Pastes brief, attachments, project specs
+3. Asks "prepare me a prompt to generate the website"
+4. Copies the result into the Andy Code Cat workspace
+5. Sends it to the generation engine
 
-Questo flusso è **lento, discontinuo e privo di contesto strutturato** (il profilo utente, il moodboard progetto, e la tipologia di output non vengono passati automaticamente all'AI esterna).
+This flow is **slow, disjointed and lacks structured context** (the user profile, the project moodboard, and the output type are not passed automatically to the external AI).
 
-### 0.2 Obiettivo
+### 0.2 Goal
 
-Internalizzare questa attività nel workspace. Il Prompt Optimizer deve:
+Bring this activity in-house, into the workspace. The Prompt Optimizer must:
 
-1. Leggere l'input grezzo dell'utente (testo libero, breve o lungo)
-2. Leggere il contesto strutturato disponibile: profilo utente + moodboard progetto + allegati
-3. Chiamare un LLM dedicato con istruzioni **esclusivamente contenutistiche**
-4. Restituire un prompt arricchito e strutturato che **sostituisce** il testo dell'utente nella textarea
-5. L'utente può rivedere, editare, e inviare
+1. Read the user's raw input (free text, short or long)
+2. Read the available structured context: user profile + project moodboard + attachments
+3. Call a dedicated LLM with **content-only** instructions
+4. Return an enriched, structured prompt that **replaces** the user's text in the textarea
+5. Let the user review, edit, and submit
 
-### 0.3 Perimetro — Cosa Ottimizza e Cosa No
+### 0.3 Scope — What It Optimizes and What It Doesn't
 
-| Ambito | Incluso nel Prompt Optimizer | Gestito da altro layer |
+| Area | Included in the Prompt Optimizer | Handled by another layer |
 |---|---|---|
-| Obiettivi di business della pagina | ✅ | — |
-| Caratterizzazione del pubblico target | ✅ | — |
-| Messaggio principale e call-to-action | ✅ | — |
-| Struttura e direzione dei contenuti | ✅ | — |
-| Uso di media (immagini, video, icone) | ✅ | — |
-| Tono comunicativo del testo | ✅ | — |
-| Elementi di contenuto da allegati/PDF | ✅ | — |
-| Palette colori, typography, font | ❌ | Layer C (Style Context Block) |
-| Framework CSS (Tailwind, Bootstrap) | ❌ | Layer A (Base Constraints) |
-| Struttura HTML, sezioni tecniche | ❌ | Layer B (Preset Output Module) |
-| Grid layout, breakpoints responsivi | ❌ | Layer A + Layer B |
-| Tipo di output (landing page, A4, slide) | ❌ | Preset selection (Layer B) |
+| Page business goals | ✅ | — |
+| Target audience characterization | ✅ | — |
+| Main message and call-to-action | ✅ | — |
+| Content structure and direction | ✅ | — |
+| Use of media (images, video, icons) | ✅ | — |
+| Communication tone of the text | ✅ | — |
+| Content elements from attachments/PDFs | ✅ | — |
+| Color palette, typography, fonts | ❌ | Layer C (Style Context Block) |
+| CSS framework (Tailwind, Bootstrap) | ❌ | Layer A (Base Constraints) |
+| HTML structure, technical sections | ❌ | Layer B (Preset Output Module) |
+| Grid layout, responsive breakpoints | ❌ | Layer A + Layer B |
+| Output type (landing page, A4, slide) | ❌ | Preset selection (Layer B) |
 
-> **Principio chiave:** il Prompt Optimizer lavora sul **messaggio dell'utente**, non sul system prompt tecnico. Non sa e non deve sapere come verrà prodotto l'output HTML/CSS.
+> **Key principle:** the Prompt Optimizer works on the **user's message**, not on the technical system prompt. It does not know, and does not need to know, how the HTML/CSS output will be produced.
 
 ---
 
-## 1. Posizione Architetturale
+## 1. Architectural Position
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                   Workspace Chat Input                            │
 │                                                                   │
-│  L'utente scrive: "Voglio una pagina per il mio studio legale"   │
-│  [📎 allegati: logo.png, brochure.pdf]                           │
+│  The user writes: "I want a page for my law firm"                │
+│  [📎 attachments: logo.png, brochure.pdf]                        │
 │                                                                   │
-│  [✨ Ottimizza prompt]  ← NUOVO BOTTONE                          │
+│  [✨ Optimize prompt]  ← NEW BUTTON                               │
 │                │                                                  │
 │                ▼                                                  │
 │  ┌─────────────────────────────────────────────────────────┐     │
-│  │  PROMPT OPTIMIZER (nuovo servizio)                       │     │
+│  │  PROMPT OPTIMIZER (new service)                          │     │
 │  │                                                          │     │
 │  │  Input:                                                  │     │
-│  │    • rawPrompt: "Voglio una pagina per lo studio..."     │     │
-│  │    • UserStyleProfile → identità, settore, tono         │     │
-│  │    • ProjectMoodboard → audience, feature, note libere  │     │
-│  │    • Allegati → testo PDF, descrizione immagini         │     │
+│  │    • rawPrompt: "I want a page for the law firm..."      │     │
+│  │    • UserStyleProfile → identity, sector, tone           │     │
+│  │    • ProjectMoodboard → audience, features, free notes   │     │
+│  │    • Attachments → PDF text, image descriptions          │     │
 │  │                                                          │     │
-│  │  LLM ottimizzatore (modello configurabile, content-only) │     │
-│  │  System Instruction: "Sei un content strategist..."      │     │
+│  │  Optimizer LLM (configurable model, content-only)        │     │
+│  │  System Instruction: "You are a content strategist..."   │     │
 │  │                                                          │     │
 │  │  Output:                                                 │     │
-│  │    • enhancedPrompt (sostituisce textarea)               │     │
+│  │    • enhancedPrompt (replaces the textarea)              │     │
 │  └──────────────────────────┬──────────────────────────────┘     │
 │                              │                                    │
-│  Textarea aggiornata con il prompt arricchito                     │
-│  L'utente legge, modifica se vuole → [Invia]                     │
+│  Textarea updated with the enriched prompt                        │
+│  The user reads, edits if desired → [Send]                       │
 └──────────────────────────────┬───────────────────────────────────┘
                                │
                                ▼
           ┌────────────────────────────────────────┐
-          │  Pipeline system prompt esistente        │
+          │  Existing system prompt pipeline         │
           │                                          │
           │  Layer A — Base Architectural Constraints│
           │  Layer B — Preset Output Module          │
           │  Layer C — Style Context Block           │
           │  Layer D — prePromptTemplate             │
           │                                          │
-          │  + enhancedPrompt come USER message      │
+          │  + enhancedPrompt as USER message        │
           └──────────────────────────────────────────┘
 ```
 
-Il Prompt Optimizer opera **sul lato utente** della conversazione, non sul system prompt. Il suo output diventa il messaggio utente che entra nei layer A–D esistenti.
+The Prompt Optimizer operates **on the user side** of the conversation, not on the system prompt. Its output becomes the user message that enters the existing layers A–D.
 
 ---
 
-## 2. UX Flow — "Ottimizza Prompt"
+## 2. UX Flow — "Optimize Prompt"
 
-### 2.1 Stati del Bottone
+### 2.1 Button States
 
-| Stato utente | Comportamento UI |
+| User state | UI behavior |
 |---|---|
-| Textarea vuota | Bottone non visibile |
-| L'utente inizia a digitare (≥ 10 caratteri) | Bottone `[✨ Ottimizza]` appare inline sotto la textarea |
-| L'utente ha allegati senza testo | Bottone visibile con label `[✨ Descrivi con AI]` |
-| Ottimizzazione in corso | Bottone disabilitato, spinner + "Elaborazione…" |
-| Ottimizzazione completata | Textarea aggiornata, bottone torna a stato normale |
-| Errore LLM | Toast di errore, textarea invariata, bottone ripristinato |
+| Empty textarea | Button not visible |
+| The user starts typing (≥ 10 characters) | The `[✨ Optimize]` button appears inline below the textarea |
+| The user has attachments with no text | Button visible with label `[✨ Describe with AI]` |
+| Optimization in progress | Button disabled, spinner + "Processing…" |
+| Optimization completed | Textarea updated, button returns to normal state |
+| LLM error | Error toast, textarea unchanged, button restored |
 
-### 2.2 Flusso Dettagliato
+### 2.2 Detailed Flow
 
 ```
-1. UTENTE SCRIVE
-   Textarea: "vorrei un sito per il mio ristorante, ho il menù e le foto"
-   Allegati: [menu.pdf] [interno.jpg] [piatto-signatura.jpg]
-   
-   ↓ appare [✨ Ottimizza prompt]
+1. USER WRITES
+   Textarea: "I'd like a site for my restaurant, I have the menu and photos"
+   Attachments: [menu.pdf] [interior.jpg] [signature-dish.jpg]
 
-2. UTENTE CLICCA [✨ Ottimizza prompt]
+   ↓ [✨ Optimize prompt] appears
+
+2. USER CLICKS [✨ Optimize prompt]
    → POST /v1/projects/:id/llm/optimize-prompt
-   → Loading indicator + "Arricchisco il tuo prompt…"
-   → Textarea disabilitata durante chiamata
+   → Loading indicator + "Enriching your prompt…"
+   → Textarea disabled during the call
 
 3. BACKEND
-   a. Carica ProjectMoodboard + UserStyleProfile
-   b. Estrae testo da menu.pdf (pdf-parse, max 5000 char)
-   c. Descrive immagini via vision LLM se modello supportato
-      (oppure usa solo filename/metadata se no vision)
-   d. Chiama LLM ottimizzatore con system instruction content-only
-   e. Riceve prompt arricchito
+   a. Loads ProjectMoodboard + UserStyleProfile
+   b. Extracts text from menu.pdf (pdf-parse, max 5000 chars)
+   c. Describes images via vision LLM if the model supports it
+      (otherwise uses only filename/metadata if no vision)
+   d. Calls the optimizer LLM with a content-only system instruction
+   e. Receives the enriched prompt
 
-4. FRONTEND AGGIORNA
-   Textarea sostituita con:
+4. FRONTEND UPDATES
+   Textarea replaced with:
    ────────────────────────────────────────────
-   Crea la pagina web del Ristorante [nome dal PDF/moodboard].
-   
-   Obiettivo principale: attrarre clienti locali e consentire la
-   consultazione del menù online, con una call-to-action per le
-   prenotazioni telefoniche o tramite form.
-   
-   Sezioni chiave da comunicare:
-   - Hero section con immagine appetitosa del piatto signature
-     (usa le foto allegate come riferimento visivo)
-   - Presentazione del menù con sezioni antipasti, primi, secondi,
-     dessert (testo dal menù allegato)
-   - Storytelling del ristorante: atmosfera, storia, valori
-     (tono: caldo, italiano, tradizione con modern twist)
-   - Sezione prenotazioni con numero di telefono e form semplice
-   - Gallery fotografica con 3-4 immagini degli interni e dei piatti
-   
-   Pubblico target: famiglie e coppie locali, turisti in zona,
-   cercatori di ristoranti tradizionali italiani.
-   
-   Contenuti multimediali da includere:
-   - Immagine hero: foto piatto signature (allegata)
-   - Gallery: immagini interni e piatti (allegate)
-   - Icone decorative: posate, stelle, mappa pin per indicazioni
+   Create the web page for [name from PDF/moodboard] Restaurant.
+
+   Main goal: attract local customers and let them browse the menu
+   online, with a call-to-action for phone or form-based reservations.
+
+   Key sections to communicate:
+   - Hero section with an appetizing photo of the signature dish
+     (use the attached photos as a visual reference)
+   - Menu presentation with starters, first courses, main courses,
+     desserts sections (text from the attached menu)
+   - Restaurant storytelling: atmosphere, history, values
+     (tone: warm, Italian, tradition with a modern twist)
+   - Reservations section with a phone number and a simple form
+   - Photo gallery with 3-4 images of the interior and the dishes
+
+   Target audience: local families and couples, tourists in the area,
+   people looking for traditional Italian restaurants.
+
+   Media content to include:
+   - Hero image: photo of the signature dish (attached)
+   - Gallery: interior and dish photos (attached)
+   - Decorative icons: cutlery, stars, map pin for directions
    ────────────────────────────────────────────
 
-5. UTENTE LEGGE, MODIFICA SE NECESSARIO → [Invia]
-   Il prompt arricchito entra nel sistema come USER message.
+5. USER READS, EDITS IF NEEDED → [Send]
+   The enriched prompt enters the system as a USER message.
 ```
 
-### 2.3 Regole UX
+### 2.3 UX Rules
 
-| Regola | Dettaglio |
+| Rule | Detail |
 |---|---|
-| **Non-distruttivo** | Il bottone non sostituisce silenziosamente — l'utente vede sempre il risultato prima di inviare. |
-| **Editabile dopo** | La textarea rimane editabile dopo l'ottimizzazione. L'utente può sempre correggere. |
-| **Annullabile** | Pulsante "Ripristina" (undo) per tornare al testo originale per X secondi dopo la sostituzione. |
-| **Non obbligatorio** | Il flusso normale (scrivi → invia) funziona sempre senza ottimizzazione. |
-| **Allegati preservati** | Gli allegati restano allegati alla sessione anche dopo l'ottimizzazione. |
-| **Iterabile** | L'utente può cliccare di nuovo "Ottimizza" sul prompt già ottimizzato per un'ulteriore passata. |
+| **Non-destructive** | The button never silently replaces — the user always sees the result before sending. |
+| **Editable afterward** | The textarea remains editable after optimization. The user can always correct it. |
+| **Undoable** | A "Restore" (undo) button to revert to the original text, available for X seconds after the replacement. |
+| **Not mandatory** | The normal flow (write → send) always works without optimization. |
+| **Attachments preserved** | Attachments remain attached to the session even after optimization. |
+| **Iterable** | The user can click "Optimize" again on an already-optimized prompt for another pass. |
 
 ---
 
 ## 3. Backend — PromptOptimizer Service
 
-### 3.1 Architettura del Servizio
+### 3.1 Service Architecture
 
 ```
 apps/api/src/
   application/
     llm/
       promptOptimizer/
-        PromptOptimizerService.ts       ← orchestratore principale
-        OptimizerContextBuilder.ts      ← assembla contesto da profilo + allegati
-        OptimizerSystemInstruction.ts   ← genera l'istruzione per l'LLM ottimizzatore
-        OptimizerAttachmentProcessor.ts ← estrae contenuto da allegati per context
-        OptimizerModelResolver.ts       ← risolve il modello da usare
+        PromptOptimizerService.ts       ← main orchestrator
+        OptimizerContextBuilder.ts      ← assembles context from profile + attachments
+        OptimizerSystemInstruction.ts   ← generates the instruction for the optimizer LLM
+        OptimizerAttachmentProcessor.ts ← extracts content from attachments for context
+        OptimizerModelResolver.ts       ← resolves which model to use
 ```
 
-### 3.2 Interfacce
+### 3.2 Interfaces
 
 ```typescript
-// Input al servizio
+// Service input
 interface PromptOptimizerInput {
-  rawPrompt: string;                    // testo grezzo dell'utente (può essere breve)
-  attachmentIds?: string[];             // ID asset da includere come contesto contenuto
-  projectId: string;                    // per caricare moodboard + preset
-  userId: string;                       // per caricare profilo utente
-  modelOverride?: string;               // override modello ottimizzatore a livello chiamata
+  rawPrompt: string;                    // raw user text (can be short)
+  attachmentIds?: string[];             // asset IDs to include as content context
+  projectId: string;                    // to load moodboard + preset
+  userId: string;                       // to load the user profile
+  modelOverride?: string;               // per-call override of the optimizer model
 }
 
-// Output del servizio
+// Service output
 interface PromptOptimizerOutput {
-  enhancedPrompt: string;               // prompt arricchito da mostrare in textarea
-  contentSignals: {                     // meta-info (non mostrato all'utente, utile per debug)
-    detectedObjective?: string;         // obiettivo dedotto dall'input
-    suggestedMediaTypes: string[];      // es. ["hero-image", "gallery", "icon-set"]
-    toneDetected?: string;              // tono dedotto
-    attachmentsProcessed: number;       // quanti allegati sono stati inclusi
-    contextTokensUsed: number;          // token usati per il contesto
+  enhancedPrompt: string;               // enriched prompt to show in the textarea
+  contentSignals: {                     // meta-info (not shown to the user, useful for debugging)
+    detectedObjective?: string;         // objective inferred from the input
+    suggestedMediaTypes: string[];      // e.g. ["hero-image", "gallery", "icon-set"]
+    toneDetected?: string;              // inferred tone
+    attachmentsProcessed: number;       // how many attachments were included
+    contextTokensUsed: number;          // tokens used for context
   };
   processingTimeMs: number;
 }
 
-// Interfaccia pubblica del servizio
+// Public service interface
 interface PromptOptimizerService {
   optimize(input: PromptOptimizerInput): Promise<PromptOptimizerOutput>;
 }
@@ -245,37 +244,37 @@ interface PromptOptimizerService {
 
 ### 3.3 OptimizerContextBuilder
 
-Assembla il contesto strutturato da passare all'LLM ottimizzatore:
+Assembles the structured context to pass to the optimizer LLM:
 
 ```typescript
 interface OptimizerContext {
-  // Identità del progetto (estratta da moodboard + preset)
+  // Project identity (extracted from moodboard + preset)
   project: {
-    type?: string;               // landing_page, mini_site, ecc. (dal preset)
+    type?: string;               // landing_page, mini_site, etc. (from the preset)
     audienceTags?: string[];     // target audience
-    featureTags?: string[];      // componenti desiderati
-    toneTags?: string[];         // stile comunicativo
-    freeNotes?: string;          // note libere del moodboard
-    brief?: string;              // brief del progetto
+    featureTags?: string[];      // desired components
+    toneTags?: string[];         // communication style
+    freeNotes?: string;          // moodboard free notes
+    brief?: string;              // project brief
   };
-  
-  // Identità dell'utente (estratta da UserStyleProfile)
+
+  // User identity (extracted from UserStyleProfile)
   user: {
-    identityTags?: string[];     // chi è (freelancer, agency, ecc.)
-    sectorTags?: string[];       // settore di business
-    freeDescription?: string;    // descrizione libera dell'attività
+    identityTags?: string[];     // who they are (freelancer, agency, etc.)
+    sectorTags?: string[];       // business sector
+    freeDescription?: string;    // free description of the business
   };
-  
-  // Materiale allegato (estratto dall'Asset Manager)
+
+  // Attached material (extracted from the Asset Manager)
   attachments: {
     pdfs: Array<{
       filename: string;
-      extractedText: string;     // max 5000 char per file
+      extractedText: string;     // max 5000 chars per file
       truncated: boolean;
     }>;
     images: Array<{
       filename: string;
-      visualDescription?: string;  // da LLM vision se disponibile
+      visualDescription?: string;  // from LLM vision, if available
     }>;
     other: Array<{
       filename: string;
@@ -285,145 +284,145 @@ interface OptimizerContext {
 }
 ```
 
-**Regole di risoluzione contesto:**
+**Context resolution rules:**
 
 ```
-ProjectMoodboard presente     → usa campi moodboard (override utente)
-ProjectMoodboard assente      → usa UserStyleProfile
-Entrambi assenti              → solo rawPrompt + allegati (contesto minimale)
-Allegati presenti             → processa e includi come contesto contenuto
+ProjectMoodboard present      → use moodboard fields (user override)
+ProjectMoodboard absent       → use UserStyleProfile
+Both absent                   → rawPrompt + attachments only (minimal context)
+Attachments present           → process and include as content context
 ```
 
 ### 3.4 OptimizerAttachmentProcessor
 
 ```typescript
 class OptimizerAttachmentProcessor {
-  
-  // Per PDF: estrae testo con pdf-parse
-  // Limite: 5000 char per file (soft cap — ottimizzato per input al LLM)
-  // Nota: limite ridotto rispetto a PrepromptEngine (50.000 char) perché
-  // il contesto serve solo per identificare il contenuto, non riprodurlo
+
+  // For PDFs: extracts text with pdf-parse
+  // Limit: 5000 chars per file (soft cap — optimized for LLM input)
+  // Note: lower limit than PrepromptEngine (50,000 chars) because
+  // the context is only meant to identify the content, not reproduce it
   async extractPdfContent(assetPath: string): Promise<string> { ... }
-  
-  // Per immagini: usa LLM vision se disponibile nel modello selezionato
-  // Se non disponibile: usa solo filename + EXIF metadata (dimensioni, data, ecc.)
-  // L'obiettivo è capire "cosa c'è nell'immagine" — non descrivere in dettaglio
+
+  // For images: uses LLM vision if available in the selected model
+  // If not available: uses only filename + EXIF metadata (dimensions, date, etc.)
+  // The goal is to understand "what's in the image" — not describe it in detail
   async describeImage(assetPath: string, projectAiConfig: AiConfig): Promise<string> { ... }
-  
-  // Limiti di sicurezza
-  readonly MAX_PDF_FILES = 3;      // max 3 PDF per singola chiamata optimizer
-  readonly MAX_IMAGE_FILES = 6;    // max 6 immagini per singola chiamata optimizer
-  readonly MAX_PDF_CHARS = 5000;   // char per singolo PDF
-  readonly MAX_TOTAL_CONTEXT = 8000;  // char totali contesto allegati
+
+  // Safety limits
+  readonly MAX_PDF_FILES = 3;      // max 3 PDFs per single optimizer call
+  readonly MAX_IMAGE_FILES = 6;    // max 6 images per single optimizer call
+  readonly MAX_PDF_CHARS = 5000;   // chars per single PDF
+  readonly MAX_TOTAL_CONTEXT = 8000;  // total chars of attachment context
 }
 ```
 
 ---
 
-## 4. System Instruction dell'Ottimizzatore
+## 4. Optimizer System Instruction
 
-### 4.1 Principi dell'Istruzione
+### 4.1 Instruction Principles
 
-L'istruzione di sistema per l'LLM ottimizzatore deve:
+The system instruction for the optimizer LLM must:
 
-1. **Limitarsi al contenuto** — nessuna istruzione tecnica (HTML, CSS, framework, layout)
-2. **Essere context-aware** — usare profilo utente + moodboard + allegati
-3. **Produrre un output leggibile** — un prompt in linguaggio naturale, non un JSON
-4. **Includere le tre dimensioni chiave**: obiettivo, contenuto, media
-5. **Rispettare il tono e l'identità** dedotti dal profilo
+1. **Stay content-only** — no technical instructions (HTML, CSS, framework, layout)
+2. **Be context-aware** — use the user profile + moodboard + attachments
+3. **Produce readable output** — a natural-language prompt, not JSON
+4. **Include the three key dimensions**: objective, content, media
+5. **Respect the tone and identity** inferred from the profile
 
-### 4.2 Template dell'Istruzione Sistema (Nunjucks)
+### 4.2 System Instruction Template (Nunjucks)
 
 ```nunjucks
-Sei un content strategist esperto nella creazione di brief per pagine web.
+You are a content strategist expert at writing briefs for web pages.
 
-Il tuo compito è trasformare l'idea grezza dell'utente in un prompt di contenuto
-strutturato e ricco, pronto per essere passato a un generatore di pagine web.
+Your task is to turn the user's raw idea into a structured, rich content
+prompt, ready to be passed to a web page generator.
 
-REGOLE FONDAMENTALI:
-- Scrivi SOLO istruzioni di contenuto: obiettivi, messaggi chiave, sezioni, tono
-- NON includere mai: nomi di framework (Bootstrap, Tailwind), proprietà CSS, tag HTML
-- NON specificare: palette colori hex, font names, breakpoints, grid system
-- NON decidere: il tipo di pagina (landing vs sito vs presentazione) — quel dato è già elsewhere
-- MANTIENI la lingua dell'utente (italiano se scrive in italiano, inglese se in inglese)
-- Lunghezza prompt output: tra 150 e 400 parole — conciso ma completo
+FUNDAMENTAL RULES:
+- Write ONLY content instructions: goals, key messages, sections, tone
+- NEVER include: framework names (Bootstrap, Tailwind), CSS properties, HTML tags
+- NEVER specify: hex color palette, font names, breakpoints, grid system
+- NEVER decide: the page type (landing vs site vs presentation) — that is already set elsewhere
+- KEEP the user's language (Italian if they write in Italian, English if in English)
+- Output prompt length: between 150 and 400 words — concise but complete
 
 {% if project.brief %}
-BRIEF DEL PROGETTO:
+PROJECT BRIEF:
 {{ project.brief }}
 {% endif %}
 
 {% if project.freeNotes %}
-NOTE AGGIUNTIVE DEL PROGETTO:
+ADDITIONAL PROJECT NOTES:
 {{ project.freeNotes }}
 {% endif %}
 
 {% if user.freeDescription %}
-PROFILO DELL'UTENTE (usalo per capire il contesto di business):
+USER PROFILE (use it to understand the business context):
 {{ user.freeDescription }}
 {% endif %}
 
 {% if project.audienceTags.length > 0 or user.identityTags.length > 0 %}
-CONTESTO IDENTITÀ:
-{% if user.identityTags.length > 0 %}- Chi: {{ user.identityTags | join(', ') }}{% endif %}
-{% if user.sectorTags.length > 0 %}- Settore: {{ user.sectorTags | join(', ') }}{% endif %}
-{% if project.audienceTags.length > 0 %}- Pubblico target: {{ project.audienceTags | join(', ') }}{% endif %}
+IDENTITY CONTEXT:
+{% if user.identityTags.length > 0 %}- Who: {{ user.identityTags | join(', ') }}{% endif %}
+{% if user.sectorTags.length > 0 %}- Sector: {{ user.sectorTags | join(', ') }}{% endif %}
+{% if project.audienceTags.length > 0 %}- Target audience: {{ project.audienceTags | join(', ') }}{% endif %}
 {% endif %}
 
 {% if project.toneTags.length > 0 %}
-TONO COMUNICATIVO PREFERITO: {{ project.toneTags | join(', ') }}
+PREFERRED COMMUNICATION TONE: {{ project.toneTags | join(', ') }}
 {% endif %}
 
 {% if attachments.pdfs.length > 0 %}
-DOCUMENTI ALLEGATI (usali per estrarre contenuti chiave):
+ATTACHED DOCUMENTS (use them to extract key content):
 {% for pdf in attachments.pdfs %}
 --- FILE: {{ pdf.filename }} ---
 {{ pdf.extractedText }}
-{% if pdf.truncated %}[... contenuto troncato per brevità]{% endif %}
+{% if pdf.truncated %}[... content truncated for brevity]{% endif %}
 {% endfor %}
 {% endif %}
 
 {% if attachments.images.length > 0 %}
-IMMAGINI ALLEGATE (usale come riferimento per suggerire media):
+ATTACHED IMAGES (use them as a reference to suggest media):
 {% for img in attachments.images %}
 - {{ img.filename }}{% if img.visualDescription %}: {{ img.visualDescription }}{% endif %}
 {% endfor %}
 {% endif %}
 
-STRUTTURA DEL PROMPT DA PRODURRE:
-Il tuo output deve essere un prompt in linguaggio naturale che includa:
-1. Obiettivo principale della pagina (cosa deve ottenere l'utente)
-2. Pubblico target caratterizzato (chi la leggerà, motivazioni, linguaggio atteso)
-3. Contenuti chiave organizzati in sezioni (con indicazioni su cosa dire in ciascuna)
-4. Suggerimenti uso media (quando usare immagini, video, icone — fondamentali per comunicare)
-5. Tono comunicativo (come si deve sentire il visitatore leggendo i testi)
-6. Eventuali riferimenti ai materiali allegati (cosa usare dai documenti/immagini forniti)
+STRUCTURE OF THE PROMPT TO PRODUCE:
+Your output must be a natural-language prompt that includes:
+1. Main goal of the page (what the user needs to achieve)
+2. Characterized target audience (who will read it, motivations, expected language)
+3. Key content organized into sections (with guidance on what to say in each)
+4. Media usage suggestions (when to use images, video, icons — essential for communication)
+5. Communication tone (how the visitor should feel reading the text)
+6. Any references to the attached materials (what to use from the provided documents/images)
 
-NON includere nel tuo output:
-- Parole come "HTML", "CSS", "JavaScript", "React", "div", "section"
-- Specifiche tecniche di layout, colori, font
-- Il tipo di formato (landing page, sito, poster) — è già configurato altrove
+Do NOT include in your output:
+- Words like "HTML", "CSS", "JavaScript", "React", "div", "section"
+- Technical layout, color, or font specifications
+- The output format type (landing page, site, poster) — it is already configured elsewhere
 ```
 
-### 4.3 Configurazione del Modello Ottimizzatore
+### 4.3 Optimizer Model Configuration
 
 ```typescript
 interface OptimizerModelConfig {
-  // Fonte primaria: variabile env dedicata
+  // Primary source: dedicated env variable
   // LLM_OPTIMIZER_MODEL_ID=siliconflow::Qwen/Qwen2.5-7B-Instruct
-  // Se assente: usa il modello di default del progetto (project.aiConfig)
-  // Se anche quello assente: usa il catalog default
+  // If absent: uses the project's default model (project.aiConfig)
+  // If that is also absent: uses the catalog default
   modelId?: string;
-  
-  // Parametri specifici per ottimizzazione
-  maxTokens: number;       // default: 800 (output breve ma ricco)
-  temperature: number;     // default: 0.7 (creativo ma coerente)
+
+  // Optimization-specific parameters
+  maxTokens: number;       // default: 800 (short but rich output)
+  temperature: number;     // default: 0.7 (creative but coherent)
 }
 
-// Risoluzione priorità:
-// 1. modelOverride nel request (override per-chiamata)
-// 2. LLM_OPTIMIZER_MODEL_ID (env, per piattaforma)
-// 3. project.aiConfig.modelId (modello del progetto)
+// Priority resolution:
+// 1. modelOverride in the request (per-call override)
+// 2. LLM_OPTIMIZER_MODEL_ID (env, platform-wide)
+// 3. project.aiConfig.modelId (project's model)
 // 4. catalog default model
 ```
 
@@ -437,19 +436,19 @@ interface OptimizerModelConfig {
 POST /v1/projects/:id/llm/optimize-prompt
 ```
 
-**Autenticazione:** JWT + sandbox check (user + project ownership)
+**Authentication:** JWT + sandbox check (user + project ownership)
 
 ### 5.2 Request Body
 
 ```typescript
 interface OptimizePromptRequest {
   rawPrompt: string;           // required, min 1 char
-  attachmentIds?: string[];    // ID asset già caricati nel progetto
-  modelOverride?: string;      // opzionale: force un modello specifico
+  attachmentIds?: string[];    // asset IDs already uploaded to the project
+  modelOverride?: string;      // optional: force a specific model
 }
 ```
 
-**Validazione Zod** (in `packages/contracts`):
+**Zod validation** (in `packages/contracts`):
 
 ```typescript
 export const OptimizePromptRequestSchema = z.object({
@@ -469,146 +468,146 @@ interface OptimizePromptResponse {
     attachmentsProcessed: number;
     contextTokensUsed: number;
     processingTimeMs: number;
-    modelUsed: string;         // quale modello ha risposto
+    modelUsed: string;         // which model answered
   };
 }
 
-// 400 Bad Request — rawPrompt mancante
-// 401 Unauthorized — JWT assente
-// 403 Forbidden — sandbox check fallito
-// 429 Too Many Requests — rate limit (max 10 ottimizzazioni/ora per utente)
-// 500 Internal Server Error — fallimento LLM
+// 400 Bad Request — missing rawPrompt
+// 401 Unauthorized — missing JWT
+// 403 Forbidden — sandbox check failed
+// 429 Too Many Requests — rate limit (max 10 optimizations/hour per user)
+// 500 Internal Server Error — LLM failure
 ```
 
 ### 5.4 Rate Limiting
 
-Il Prompt Optimizer non contribuisce al usage LLM principale (non è generazione).
-Ha un rate limit separato e permissivo: **10 chiamate/ora per utente**.
-Non viene addebitato al credit system (se implementato in M5) o addebitato a tariffa ridotta.
+The Prompt Optimizer does not count toward the main LLM usage (it is not generation).
+It has a separate, permissive rate limit: **10 calls/hour per user**.
+It is not charged against the credit system (if implemented in M5), or is charged at a reduced rate.
 
 ---
 
-## 6. Integrazione con Pipeline Esistente
+## 6. Integration With the Existing Pipeline
 
-### 6.1 Come il Prompt Ottimizzato Entra nel Flow
+### 6.1 How the Optimized Prompt Enters the Flow
 
-Il prompt ottimizzato non necessita modifiche al sistema di generazione esistente.
-Entra semplicemente come `message.content` nel messaggio utente della conversazione,
-esattamente come se l'utente l'avesse scritto a mano.
+The optimized prompt requires no changes to the existing generation system.
+It simply enters as `message.content` in the conversation's user message,
+exactly as if the user had typed it by hand.
 
 ```typescript
-// Nessuna modifica necessaria a buildMessagesWithHistory()
-// Il prompt ottimizzato è un normale messaggio utente
+// No changes needed to buildMessagesWithHistory()
+// The optimized prompt is a normal user message
 
 // In ConversationService.addMessage():
 await conversation.addUserMessage({
-  content: enhancedPrompt,  // già ottimizzato
-  attachments: [...],       // allegati invariati
+  content: enhancedPrompt,  // already optimized
+  attachments: [...],       // attachments unchanged
   metadata: {
-    optimized: true,        // flag opzionale per analytics
-    originalPrompt: rawPrompt  // conserva originale per audit
+    optimized: true,        // optional flag for analytics
+    originalPrompt: rawPrompt  // keep the original for audit
   }
 });
 ```
 
-### 6.2 Relazione con i Layer A–D (R1)
+### 6.2 Relationship With Layers A–D (R1)
 
-Il Prompt Optimizer è **ortogonale** a R1 (Prompt Architecture Layer):
+The Prompt Optimizer is **orthogonal** to R1 (Prompt Architecture Layer):
 
-| Layer | Cosa controlla | Chi lo scrive |
+| Layer | What it controls | Who writes it |
 |---|---|---|
-| Layer A | Vincoli tecnici architetturali (HTML statico, nginx-ready) | Sistema (statico) |
-| Layer B | Formato output (landing, slide, A4 — dal preset) | Sistema (dal preset) |
-| Layer C | Contesto stilistico (palette, stile, tono — dal profilo) | Sistema (da profilo) |
-| Layer D | Template pre-prompting per-progetto | Sistema (da config) |
-| **User Message** | **Obiettivo contenuto, sezioni, media (dall'utente)** | **Utente (ottimizzato da R0)** |
+| Layer A | Architectural technical constraints (static HTML, nginx-ready) | System (static) |
+| Layer B | Output format (landing, slide, A4 — from the preset) | System (from the preset) |
+| Layer C | Stylistic context (palette, style, tone — from the profile) | System (from the profile) |
+| Layer D | Per-project pre-prompting template | System (from config) |
+| **User Message** | **Content goal, sections, media (from the user)** | **User (optimized by R0)** |
 
-R0 (questo spec) e R1 possono essere sviluppati in parallelo senza conflitti.
+R0 (this spec) and R1 can be developed in parallel with no conflicts.
 
-### 6.3 Conservazione dell'Originale
+### 6.3 Preserving the Original
 
-Il rawPrompt originale viene conservato in due punti:
+The original rawPrompt is preserved in two places:
 
-1. **Metadata del messaggio** — `message.metadata.originalPrompt` (per debug/audit)
-2. **Frontend state** — Undo buffer in memoria per X secondi (nessuna persistenza)
+1. **Message metadata** — `message.metadata.originalPrompt` (for debug/audit)
+2. **Frontend state** — in-memory undo buffer for X seconds (no persistence)
 
 ---
 
-## 7. Gestione Allegati — Dual Strategy
+## 7. Attachment Handling — Dual Strategy
 
-### 7.1 Due Approcci per gli Allegati
+### 7.1 Two Approaches to Attachments
 
-Per il Prompt Optimizer, gli allegati vengono processati diversamente rispetto al PrepromptEngine (Layer 2):
+For the Prompt Optimizer, attachments are processed differently than in the PrepromptEngine (Layer 2):
 
-| Approccio | Quando si usa | Logica |
+| Approach | When used | Logic |
 |---|---|---|
-| **Serializzazione diretta** | File piccoli (PDF < 20KB, immagini con vision) | Contenuto estratto/descritto e passato come testo nel contesto |
-| **Sintesi abbreviata** | File grandi (PDF > 20KB) | Solo prime 5000 char + riassunto automatico |
+| **Direct serialization** | Small files (PDF < 20KB, images with vision) | Content extracted/described and passed as text in the context |
+| **Abbreviated synthesis** | Large files (PDF > 20KB) | Only the first 5000 chars + an automatic summary |
 
-L'obiettivo qui **non** è riprodurre il contenuto del documento nel prompt finale, ma **estrarre segnali** (cosa vende il ristorante, chi è il cliente, quale stile visivo aveva il logo...) per arricchire la direzione di contenuto.
+The goal here is **not** to reproduce the document's content in the final prompt, but to **extract signals** (what the restaurant sells, who the customer is, what visual style the logo had...) to enrich the content direction.
 
-### 7.2 RAG vs Serializzazione — Nota Architetturale
+### 7.2 RAG vs Serialization — Architectural Note
 
-Per i casi futuri con basi documentali ampie (catalogo prodotti, manuale aziendale, portfolio esteso):
+For future cases with large document bases (product catalog, company manual, extensive portfolio):
 
 ```
-Scenario attuale (R0):
-  PDF/immagine allegato → estrazione testo → inject nel context → LLM ottimizzatore
-  Adeguato per: brochure, menù, brief, profilo aziendale (1-5 pagine)
+Current scenario (R0):
+  Attached PDF/image → text extraction → inject into context → optimizer LLM
+  Suitable for: brochures, menus, briefs, company profiles (1-5 pages)
 
-Scenario futuro (milestone successiva, non in scope R0):
-  Corpus di documenti esteso → chunking → embedding → vector DB → RAG retrieval
-  Adeguato per: catalogo 200 prodotti, knowledge base aziendale
+Future scenario (later milestone, not in R0 scope):
+  Large document corpus → chunking → embedding → vector DB → RAG retrieval
+  Suitable for: a 200-product catalog, company knowledge base
 ```
 
-Il modulo `OptimizerAttachmentProcessor` è progettato per essere esteso con RAG
-in futuro senza modificare l'interfaccia pubblica del servizio.
+The `OptimizerAttachmentProcessor` module is designed to be extended with RAG
+in the future without modifying the service's public interface.
 
 ---
 
-## 8. Piano Implementativo — R0
+## 8. Implementation Plan — R0
 
-### R0.1 — Contratto e Servizio Backend
+### R0.1 — Contract and Backend Service
 
 - [ ] `packages/contracts/src/promptOptimizer.ts` — `OptimizePromptRequestSchema`, `OptimizePromptResponseSchema`
-- [ ] `apps/api/src/application/llm/promptOptimizer/PromptOptimizerService.ts` — interfaccia + implementazione
-- [ ] `apps/api/src/application/llm/promptOptimizer/OptimizerContextBuilder.ts` — risolve contesto da profilo + moodboard
-- [ ] `apps/api/src/application/llm/promptOptimizer/OptimizerSystemInstruction.ts` — template Nunjucks + renderer
-- [ ] `apps/api/src/application/llm/promptOptimizer/OptimizerAttachmentProcessor.ts` — estrazione testo + vision
+- [ ] `apps/api/src/application/llm/promptOptimizer/PromptOptimizerService.ts` — interface + implementation
+- [ ] `apps/api/src/application/llm/promptOptimizer/OptimizerContextBuilder.ts` — resolves context from profile + moodboard
+- [ ] `apps/api/src/application/llm/promptOptimizer/OptimizerSystemInstruction.ts` — Nunjucks template + renderer
+- [ ] `apps/api/src/application/llm/promptOptimizer/OptimizerAttachmentProcessor.ts` — text extraction + vision
 
-### R0.2 — Route API
+### R0.2 — API Route
 
-- [ ] `apps/api/src/presentation/http/routes/optimizePromptRoutes.ts` — route POST con sandbox middleware
-- [ ] Registrazione route in `app.ts` sotto `/v1/projects/:id/llm/`
-- [ ] Rate limiter: 10 req/ore/utente su Redis (key: `optimizer:{userId}:hour`)
+- [ ] `apps/api/src/presentation/http/routes/optimizePromptRoutes.ts` — POST route with sandbox middleware
+- [ ] Register the route in `app.ts` under `/v1/projects/:id/llm/`
+- [ ] Rate limiter: 10 req/hour/user on Redis (key: `optimizer:{userId}:hour`)
 
-### R0.3 — Risoluzione Modello
+### R0.3 — Model Resolution
 
 - [ ] `apps/api/src/application/llm/promptOptimizer/OptimizerModelResolver.ts`:
-  - Legge `LLM_OPTIMIZER_MODEL_ID` da env
-  - Fallback su `project.aiConfig.modelId`
-  - Fallback su catalog default
-- [ ] Aggiunte a `.env.example` e `.env.docker`: `LLM_OPTIMIZER_MODEL_ID=`
+  - Reads `LLM_OPTIMIZER_MODEL_ID` from env
+  - Falls back to `project.aiConfig.modelId`
+  - Falls back to the catalog default
+- [ ] Additions to `.env.example` and `.env.docker`: `LLM_OPTIMIZER_MODEL_ID=`
 
-### R0.4 — Frontend: Bottone "Ottimizza Prompt"
+### R0.4 — Frontend: "Optimize Prompt" Button
 
-- [ ] Aggiungere `optimizePrompt(projectId, body)` in `apps/web/lib/api.ts`
-- [ ] Componente `PromptOptimizerButton.tsx` in `apps/web/components/`:
-  - Visibility logic: appare dopo 10+ char in textarea o se allegati presenti
-  - Loading state con spinner
-  - Undo buffer per ripristino originale (5 secondi)
-- [ ] Integrazione nel `WorkspaceChat` component (chat input area)
-- [ ] Toast di errore on failure
+- [ ] Add `optimizePrompt(projectId, body)` in `apps/web/lib/api.ts`
+- [ ] `PromptOptimizerButton.tsx` component in `apps/web/components/`:
+  - Visibility logic: appears after 10+ chars in the textarea, or if attachments are present
+  - Loading state with a spinner
+  - Undo buffer to restore the original (5 seconds)
+- [ ] Integration into the `WorkspaceChat` component (chat input area)
+- [ ] Error toast on failure
 
-### R0.5 — Frontend: Feedback Visivo
+### R0.5 — Frontend: Visual Feedback
 
-- [ ] Indicatore "prompt ottimizzato" nella textarea (es. badge `AI ✨`)
-- [ ] Diff highlight opzionale (mostra cosa è stato modificato) — nice-to-have, non bloccante
-- [ ] Tooltip sul bottone: "Arricchisci il tuo prompt con AI usando il contesto del progetto"
+- [ ] "Prompt optimized" indicator in the textarea (e.g. an `AI ✨` badge)
+- [ ] Optional diff highlight (shows what was changed) — nice-to-have, not blocking
+- [ ] Tooltip on the button: "Enrich your prompt with AI using the project's context"
 
-### R0.6 — Env e Config
+### R0.6 — Env and Config
 
-- [ ] `LLM_OPTIMIZER_MODEL_ID` in `.env.example` e `.env.docker` (empty = usa model di progetto)
+- [ ] `LLM_OPTIMIZER_MODEL_ID` in `.env.example` and `.env.docker` (empty = use the project's model)
 - [ ] `LLM_OPTIMIZER_RATE_LIMIT_PER_HOUR` in `.env.example` (default: 10)
 
 ---
@@ -616,93 +615,93 @@ in futuro senza modificare l'interfaccia pubblica del servizio.
 ## 9. Testable Steps
 
 ```
-Test 1 — Backend base (senza attachments, senza profilo)
+Test 1 — Basic backend (no attachments, no profile)
   POST /v1/projects/:id/llm/optimize-prompt
-  body: { rawPrompt: "voglio un sito per il mio ristorante" }
-  → 200 OK, enhancedPrompt contiene obiettivo + sezioni + media suggeriti
-  → enhancedPrompt NON contiene parole "HTML", "CSS", "Tailwind", "div", "section"
+  body: { rawPrompt: "I want a site for my restaurant" }
+  → 200 OK, enhancedPrompt contains goal + sections + suggested media
+  → enhancedPrompt does NOT contain the words "HTML", "CSS", "Tailwind", "div", "section"
 
-Test 2 — Contesto profilo utente
-  Utente con sectorTags: ["sector:food-beverage"], toneTags: ["tone:friendly-casual"]
-  → enhancedPrompt riflette settore food e tono friendly
-  → "pizzeria", "osteria", "trattoria" appare naturalmente se nel profilo
+Test 2 — User profile context
+  User with sectorTags: ["sector:food-beverage"], toneTags: ["tone:friendly-casual"]
+  → enhancedPrompt reflects the food sector and friendly tone
+  → "pizzeria", "trattoria", "osteria" appears naturally if present in the profile
 
-Test 3 — Contesto moodboard progetto
-  ProjectMoodboard con brief: "Studio fotografico di moda"
-  → enhancedPrompt menziona portfolio, galleria, shooting, clienti fashion
-  → override su identità utente generica
+Test 3 — Project moodboard context
+  ProjectMoodboard with brief: "Fashion photography studio"
+  → enhancedPrompt mentions portfolio, gallery, shoots, fashion clients
+  → overrides the generic user identity
 
-Test 4 — Allegato PDF
-  Allegato: menu.pdf con antipasti, primi, secondi
-  → enhancedPrompt include istruzioni su presentare il menù con sezioni reali
-  → Non copia verbatim il PDF, ma estrae struttura
+Test 4 — PDF attachment
+  Attachment: menu.pdf with starters, first courses, main courses
+  → enhancedPrompt includes instructions to present the menu with real sections
+  → does not copy the PDF verbatim, but extracts its structure
 
-Test 5 — Allegato immagine (vision disponibile)
-  Allegato: logo.jpg + interior.jpg
-  → enhancedPrompt menziona di usare le immagini allegate per hero e gallery
+Test 5 — Image attachment (vision available)
+  Attachment: logo.jpg + interior.jpg
+  → enhancedPrompt mentions using the attached images for hero and gallery
 
-Test 6 — Nessun modello vision disponibile
-  Modello ottimizzatore senza vision
-  → Processo non fallisce — skip descrizione immagine, usa solo filename
+Test 6 — No vision model available
+  Optimizer model without vision
+  → the process does not fail — skips the image description, uses only the filename
 
 Test 7 — Sandbox check
-  JWT di utente_B → /v1/projects/:id (owned by utente_A)
+  user_B's JWT → /v1/projects/:id (owned by user_A)
   → 403 Forbidden
 
 Test 8 — Rate limit
-  11 chiamate in 1 ora dallo stesso utente
-  → 429 Too Many Requests alla chiamata 11
+  11 calls in 1 hour from the same user
+  → 429 Too Many Requests on call 11
 
-Test 9 — Integration flow completo
-  Usa enhancedPrompt come input → invia chat-preview → verifica che Layer A-D
-  si componga correttamente (nessun conflitto tra prompt ottimizzato e system prompt)
+Test 9 — Full integration flow
+  Use enhancedPrompt as input → send chat-preview → verify that Layers A-D
+  compose correctly (no conflict between the optimized prompt and the system prompt)
 
 Test 10 — Frontend: undo
-  Ottimizza → textarea aggiornata → clicca "Ripristina" entro 5 secondi
-  → textarea torna al testo originale
+  Optimize → textarea updated → click "Restore" within 5 seconds
+  → textarea reverts to the original text
 ```
 
 ---
 
-## 10. Domande Aperte e Decisioni Future
+## 10. Open Questions and Future Decisions
 
-| Domanda | Default suggerito | Note |
+| Question | Suggested default | Notes |
 |---|---|---|
-| Il prompt ottimizzato va salvato come snapshot separato? | No (solo metadata del messaggio) | Aggiunge complessità senza valore immediato |
-| L'utente può vedere la chiamata costare crediti? | No per ora (R0) | In M5 (Credit System) si può decidere un costo ridotto o zero |
-| Il bottone deve essere presente nel Refine mode (non solo prima generazione)? | Sì, anche in refine | L'utente può ottimizzare anche modifiche successive |
-| Gestire rate limit per piano commerciale free vs pro? | In M5 con Credit System | Per R0: rate limit flat per tutti |
-| Supportare streaming del prompt ottimizzato (effetto typing)? | Nice-to-have R0.5 | Migliora UX ma non bloccante per rilascio |
-| Il modello optimizer può essere configurato per-progetto (non solo env)? | Roadmap futura | Aggiungere a `project.aiConfig` in milestone successiva |
+| Should the optimized prompt be saved as a separate snapshot? | No (message metadata only) | Adds complexity with no immediate value |
+| Can the user see that the call costs credits? | Not for now (R0) | In M5 (Credit System) a reduced or zero cost can be decided |
+| Should the button be present in Refine mode (not just first generation)? | Yes, in refine too | The user can also optimize later edits |
+| Handle rate limit differently for free vs pro plans? | In M5 with the Credit System | For R0: a flat rate limit for everyone |
+| Support streaming of the optimized prompt (typing effect)? | Nice-to-have R0.5 | Improves UX but not blocking for release |
+| Can the optimizer model be configured per-project (not just via env)? | Future roadmap | Add to `project.aiConfig` in a later milestone |
 
 ---
 
-## 11. Note di Integrazione nella Pipeline Prompt
+## 11. Integration Notes in the Prompt Pipeline
 
-Riepilogo del flusso completo con R0 integrato:
+Summary of the full flow with R0 integrated:
 
 ```
 User input area
   │
-  ├─ rawPrompt (opzionale: 1 char min)
-  ├─ attachments (opzionale)
-  └─ [✨ Ottimizza Prompt] → PromptOptimizerService → enhancedPrompt
-                                 └─ legge: UserStyleProfile
+  ├─ rawPrompt (optional: 1 char min)
+  ├─ attachments (optional)
+  └─ [✨ Optimize Prompt] → PromptOptimizerService → enhancedPrompt
+                                 └─ reads: UserStyleProfile
                                           ProjectMoodboard
-                                          Allegati (PDF text + image desc)
+                                          Attachments (PDF text + image desc)
   │
   ▼
-enhancedPrompt → messaggio utente → Chat Preview API
+enhancedPrompt → user message → Chat Preview API
                                          │
-                              System Message composto da:
-                              [Layer A: vincoli architetturali]
+                              System Message composed of:
+                              [Layer A: architectural constraints]
                               [Layer B: preset output spec]
                               [Layer C: style context block]
                               [Layer D: prePromptTemplate]
                                          │
                                          ▼
-                                    LLM generatore
+                                    Generator LLM
                                     → HTML + CSS + JS
 ```
 
-Il Prompt Optimizer è un **acceleratore di qualità contenutistica** che si inserisce come step opzionale tra il pensiero dell'utente e la generazione tecnica, senza accoppiamento forte con nessun altro componente del sistema.
+The Prompt Optimizer is a **content-quality accelerator** that inserts itself as an optional step between the user's thinking and the technical generation, with no tight coupling to any other system component.
