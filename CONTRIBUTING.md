@@ -137,11 +137,15 @@ git checkout -b feat/my-feature upstream/develop
 - Comments only where intent is non-obvious.
 - No inline styles in UI components — Tailwind utilities only.
 - Use `Input`, `Button`, `Label` from `components/ui/` — never raw HTML elements.
+- **Write in English** — code, comments, documentation, commit messages and PR
+  descriptions. Product strings shown to users belong in `apps/web/i18n/` and may
+  be in any language; everything else in this repository is English.
 
 ### 4. Tests
 
 - Add or update tests for changed behaviour.
 - Run `npm run test` before pushing.
+- Run `npm run hygiene:guard` — it fails on scratch files and non-English docs.
 - For E2E, see `playwright.config.ts`.
 
 ### 5. Submit

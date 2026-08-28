@@ -219,18 +219,50 @@ Any new Radix/shadcn package requires:
 
 ## Repository Hygiene — Keep the Root Clean for Contributors
 
-This project is open-source and regularly visited by external contributors ("ospiti") who clone, run, and explore the codebase. A clean root is a non-negotiable courtesy.
+This project is open-source and regularly visited by external contributors who clone, run, and explore the codebase. A clean root is a non-negotiable courtesy.
 
 ### Rules
 
 1. **Never place temporary scripts, debug files, or one-off test files at the repository root.** Root-level files must be permanent fixtures: Docker configs, package manifests, documented specs, README, AGENTS.md.
 2. **All test code belongs under `tests/`.** This includes manual debug scripts, Playwright feature tests, and integration helpers.
-3. **All generated test artifacts are gitignored.** Playwright outputs go to `tests/test-results/` and `tests/e2e/report/` — both are in `.gitignore` and must never be committed.
-4. **Scratch files and debug samples belong under `debug/`.** That folder is gitignored; use it for exploratory work that should not reach the repo.
+3. **All generated test artifacts are gitignored.** Playwright outputs go to `tests/test-results/`, `tests/e2e/report/` and `.playwright-mcp/` — all three are in `.gitignore` and must never be committed.
+4. **Scratch files and debug samples belong under `debug/`.** The whole folder is gitignored; use it for exploratory work that should not reach the repo.
 5. **`health_test.json` and similarly named probe files are gitignored.** Do not let throwaway validation files accumulate at the root.
 6. **When you finish a task, delete any temporary helper files you created.** Leave the tree in the same (or better) shape you found it.
+7. **`npm run hygiene:guard` decides, not judgement.** It reads what git actually tracks and fails on anything the rules above forbid. Run it before opening a PR; if it passes for the wrong reason, fix the guard rather than working around it.
 
 > A contributor who clones this repo should see a self-explanatory, navigable structure — not a graveyard of experiments.
+
+## Language — English is the Repository's Working Language
+
+This repository is public. Everything tracked in it is read by people who do not
+speak Italian, and a document they cannot read is worse than one that does not
+exist: it looks like an answer.
+
+### Rules
+
+1. **Every tracked `.md` file is written in English.** Specs, guides, runbooks,
+   reports, archived material — the archive is public too.
+2. **Code comments, identifiers, commit messages, branch names and PR
+   descriptions are English.** These are read by contributors, not by users.
+3. **Product strings are not covered by this rule, and must not be "cleaned up".**
+   UI copy, prompt modules and seeded content are behaviour: translating a prompt
+   changes what the model does, and translating an Italian preset breaks it for
+   the users it was written for. Those belong to the localisation layer.
+4. **Hardcoded user-facing strings in any language are a defect** — they belong
+   in `apps/web/i18n/`. The files still carrying them are listed as explicit
+   exceptions in `scripts/repo-hygiene-guard.mjs`, each with its reason. That
+   list may shrink; it may not grow silently.
+5. **Working notes in Italian are fine while they are working notes.** They are
+   not fine once committed. Translate before the commit, not before the release.
+
+### Why this rule exists
+
+Twenty-eight tracked documents were partly Italian, including three contributor
+guides and the vision document. None of it was deliberate: each began as a note
+to the maintainer and was committed without anyone deciding it had become
+documentation. No rule said otherwise, so nothing stopped it — which is why the
+rule is now checked by `npm run hygiene:guard` instead of being merely stated.
 
 ## Coding Rules
 

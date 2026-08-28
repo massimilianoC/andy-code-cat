@@ -14,6 +14,7 @@
     "release:version:validate": "node scripts/release-version.mjs validate",
     "release:version:set": "node scripts/release-version.mjs set",
     "gitflow:guard": "node scripts/gitflow-guard.mjs",
+    "hygiene:guard": "node scripts/repo-hygiene-guard.mjs",
     "_comment_local_dev": "--- LOCAL DEV (docker-compose.yml) — hot-reload, bind mounts ---",
     "local:dev": "docker compose up --build",
     "local:dev:up": "docker compose up --build -d",
