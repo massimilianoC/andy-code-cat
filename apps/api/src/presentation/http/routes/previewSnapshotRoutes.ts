@@ -183,11 +183,13 @@ export function createPreviewSnapshotRoutes(): Router {
                 });
                 const runtimeArtifacts = compiledForms.artifacts;
 
-                const snapshot = await createPreviewSnapshot.execute({
+                const { snapshot, created, baseVerification } = await createPreviewSnapshot.execute({
                     projectId: req.sandbox!.projectId,
                     conversationId: body.conversationId,
                     sourceMessageId: body.sourceMessageId,
                     parentSnapshotId: body.parentSnapshotId,
+                    // AL-040 — forwarded verbatim; the use case is where the claim is checked.
+                    baseContentHash: body.baseContentHash,
                     artifacts,
                     serviceManifest: body.serviceManifest,
                     focusContext: body.focusContext,
@@ -196,12 +198,31 @@ export function createPreviewSnapshotRoutes(): Router {
                 });
 
                 // ── Execution log (fire-and-forget) ──────────────────────────
+                if (baseVerification === "unverifiable") {
+                    // AL-041 — accepted without certification because the base predates AL-039.
+                    // Rare and shrinking, but the one case where the guarantee does not hold, so
+                    // it has to be findable rather than silent.
+                    ExecutionLogger.instance.emit({
+                        projectId: req.sandbox!.projectId,
+                        conversationId: body.conversationId,
+                        snapshotId: body.parentSnapshotId,
+                        domain: "snapshot",
+                        eventType: "artifact_base_unverifiable",
+                        level: "warn",
+                        status: "success",
+                        metadata: {
+                            baseSnapshotId: body.parentSnapshotId,
+                            declaredContentHash: body.baseContentHash,
+                            reason: "base carries no stored contentHash",
+                        },
+                    });
+                }
                 ExecutionLogger.instance.emit({
                     projectId: req.sandbox!.projectId,
                     conversationId: body.conversationId,
                     snapshotId: snapshot.id,
                     domain: "snapshot",
-                    eventType: "snapshot_created",
+                    eventType: created ? "snapshot_created" : "snapshot_noop_skipped",
                     level: "info",
                     status: "success",
                     metadata: {
@@ -209,6 +230,9 @@ export function createPreviewSnapshotRoutes(): Router {
                         parentSnapshotId: body.parentSnapshotId,
                         sourceMessageId: body.sourceMessageId,
                         activated: body.activate,
+                        // AL-045 — false means the base was returned unchanged, no version added.
+                        created,
+                        contentHash: snapshot.metadata?.contentHash,
                         htmlBytes: artifacts.html?.length ?? 0,
                         finishReason: body.metadata?.finishReason,
                         model: body.metadata?.model,
@@ -230,7 +254,7 @@ export function createPreviewSnapshotRoutes(): Router {
                 // ── end execution log ─────────────────────────────────────────
 
                 // ── Background thumbnail job (fire-and-forget) ────────────────
-                if (body.activate && runtimeArtifacts.html) {
+                if (body.activate && runtimeArtifacts.html && (created || !snapshot.thumbnailPath)) {
                     SnapshotThumbnailJob.schedule(
                         req.sandbox!.projectId,
                         snapshot.id,
@@ -240,8 +264,14 @@ export function createPreviewSnapshotRoutes(): Router {
                 }
                 // ── end thumbnail job ─────────────────────────────────────────
 
-                res.status(201).json({
-                    snapshot: { ...snapshot, artifacts: runtimeArtifacts, runtimePlan: compiledForms.runtimePlan },
+                // AL-045 — a no-op write is not a creation. 200 says "here is the version you
+                // are on"; 201 says "here is the version you just made". The client shows a
+                // different message for each, so the distinction has to survive the response.
+                res.status(created ? 201 : 200).json({
+                    created,
+                    snapshot: created
+                        ? { ...snapshot, artifacts: runtimeArtifacts, runtimePlan: compiledForms.runtimePlan }
+                        : withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms),
                 });
             } catch (error) {
                 next(error);

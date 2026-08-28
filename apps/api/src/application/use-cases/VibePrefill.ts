@@ -13,6 +13,7 @@ import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset"
 import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
 import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
 import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
+import { ExecutionLogger } from "../services/ExecutionLogger";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -28,8 +29,25 @@ const MAX_PROMPT_CHARS = 2000;
 //   ceiling   ~23,200 chars ~5,800 tok  (every field at its schema cap)
 // The old 2048 ceiling sat below the realistic case, so the nine expressive fields —
 // written last by design (see the field-order rule below) — were silently truncated away.
+//
+// That budget counts OUTPUT TEXT ONLY, and this is where it broke a second time. A
+// reasoning model spends the same max_tokens allowance on its chain of thought before
+// emitting the first character of JSON, so a 6,000-token cap that is generous for
+// Qwen3-32B (1,951 completion tokens, all 19 fields) is exhausted by DeepSeek-V4-Pro and
+// MiniMax-M3 mid-brief: both hit finish_reason=length at 6,000 and delivered 5 to 8
+// fields. The ceiling therefore has to cover reasoning + the full brief, not the brief
+// alone. Measured: reasoning models need roughly 6-8k of thinking before ~2k of JSON.
+//
+// Why 24k default under a 32k ceiling, and not more: this budget is COMPLETION tokens, so
+// it does not need to grow with the number of attachments — attachments inflate the prompt
+// side (8,603 tokens in the run that failed), while the brief's own length is bounded by
+// the schema caps at ~5,800 tokens. 24k therefore leaves ~18k of thinking room in front of
+// a maximal brief, which is well past anything measured. The remaining headroom to 32k is
+// left to operator config rather than spent by default: the catalog does not record
+// per-model output limits, so a max_tokens above what a model accepts can be rejected by
+// the provider, and a default nobody needs is a default that can only cost us.
 const MIN_TOKENS = 4000;
-const MAX_TOKENS = 8000;
+const MAX_TOKENS = 32000;
 
 // All valid preset IDs from the catalog — kept in sync at startup.
 const VALID_PRESET_IDS: Set<string> = new Set(PRESET_CATALOG.map((p) => p.id));
@@ -520,6 +538,65 @@ export class VibePrefill {
         private readonly getLlmCatalog: GetLlmCatalog,
     ) { }
 
+    /**
+     * Every failure path in this use case returns HTTP 200 with a default draft, because a
+     * half-filled wizard is better than a dead end. That is a deliberate product choice — what
+     * was NOT deliberate is that it happened invisibly: no execution log, no journal entry, no
+     * warning to the user, and no record of the provider's answer. Success and failure were
+     * distinguishable only by the byte size of the response.
+     *
+     * This funnels all of them through one place that records what happened and returns a
+     * user-visible warning. `reason` is a stable machine code for querying; `detail` carries the
+     * provider status and a body excerpt — the thing you actually need when a model that worked
+     * yesterday stops working today.
+     */
+    private fallback(input: {
+        prompt: string;
+        outputLanguage: string;
+        resolvedMode: "website" | "data_dashboard";
+        attachmentMeta?: AttachmentMeta[];
+        echoProject: { projectId?: string };
+        reason:
+        | "task-disabled"
+        | "no-active-provider"
+        | "missing-api-key"
+        | "provider-http-error"
+        | "provider-exception"
+        | "requested-model-unavailable";
+        userMessage: string;
+        detail?: Record<string, unknown>;
+    }): VibePrefillResponse {
+        // Console first: this survives even when the project scope is unknown (no projectId) or
+        // Mongo is unreachable, which are exactly the situations worth seeing in `docker logs`.
+        console.error(
+            `[VibePrefill] fallback reason=${input.reason}`,
+            JSON.stringify({ ...input.detail, projectId: input.echoProject.projectId ?? null }),
+        );
+
+        if (input.echoProject.projectId) {
+            ExecutionLogger.instance.emit({
+                projectId: input.echoProject.projectId,
+                domain: "llm",
+                eventType: "vibe_prefill_fallback",
+                level: "warn",
+                status: "failure",
+                metadata: { taskKey: TASK_KEY, reason: input.reason, ...input.detail },
+            });
+        }
+
+        return {
+            draft: defaultDraft(input.prompt, input.outputLanguage),
+            dataDashboardDraft: input.resolvedMode === "data_dashboard"
+                ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta)
+                : undefined,
+            resolvedMode: input.resolvedMode,
+            confidence: 0,
+            skipped: true,
+            warnings: [input.userMessage],
+            ...input.echoProject,
+        };
+    }
+
     async execute(input: VibePrefillInput): Promise<VibePrefillResponse> {
         const echoProject = input.projectId ? { projectId: input.projectId } : {};
         const platformConfig = await this.platformConfigRepository.get().catch(() => null);
@@ -531,14 +608,16 @@ export class VibePrefill {
         const resolvedUiLanguage = normalizeLang(input.uiLanguage);
 
         if (!env.vibeClassifierEnabled || !taskSettings.enabled) {
-            return {
-                draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
                 resolvedMode,
-                confidence: 0,
-                skipped: true,
-                ...echoProject,
-            };
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "task-disabled",
+                userMessage: "Compilazione automatica disattivata: il modulo va compilato manualmente.",
+                detail: { vibeClassifierEnabled: env.vibeClassifierEnabled, taskEnabled: taskSettings.enabled },
+            });
         }
 
         const catalog = await this.getLlmCatalog.execute();
@@ -557,22 +636,53 @@ export class VibePrefill {
             hardcodedFallbackModel: FALLBACK_MODEL,
             requireOverrideInCatalog: true,
             gateOverrideOnOpenAiCompatible: false,
-            policy: "legacy",
+            // Same rule as the pipeline lock: a model the caller named is a decision, and under
+            // "legacy" an unresolvable one is walked past in silence. The prefill is part of the
+            // flow the user's selection is supposed to govern, so it must not quietly answer on
+            // a different model than the run will use — that is the two-parallel-lines problem,
+            // not a graceful degradation. With no explicit request there is nothing to honour
+            // and the background task cascades from its own settings exactly as before.
+            policy: (input.provider || input.model) ? "strict" : "legacy",
         };
         const decision = resolveModelSelection(selectionInput);
+
+        // Refuse, do not substitute — but degrade the way this use case already degrades. Every
+        // failure here returns 200 with a manual draft and a visible warning (see fallback's
+        // doc comment); throwing a 409 instead would be a second, contradictory answer to the
+        // same question, so the refusal travels through the existing channel.
+        if (decision.blocked) {
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
+                resolvedMode,
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "requested-model-unavailable",
+                userMessage: `Il modello selezionato (${input.provider ?? "?"}/${input.model ?? "?"}) non è attivo nel catalogo: `
+                    + `attivalo dal pannello admin o scegline un altro. Il brief non è stato precompilato.`,
+                detail: {
+                    requestedProvider: input.provider,
+                    requestedModel: input.model,
+                    blockedCode: decision.blocked.code,
+                    blockedReason: decision.blocked.reason,
+                },
+            });
+        }
         if (input.projectId) {
             observeModelSelectionShadow(selectionInput, decision, { projectId: input.projectId, taskKey: TASK_KEY });
         }
 
         if (!decision.providerCatalog) {
-            return {
-                draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
                 resolvedMode,
-                confidence: 0,
-                skipped: true,
-                ...echoProject,
-            };
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "no-active-provider",
+                userMessage: "Nessun provider LLM disponibile per la compilazione automatica: il modulo va compilato manualmente.",
+                detail: { requestedProvider: input.provider, requestedModel: input.model },
+            });
         }
 
         const providerCatalog = decision.providerCatalog;
@@ -580,14 +690,16 @@ export class VibePrefill {
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
-            return {
-                draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
                 resolvedMode,
-                confidence: 0,
-                skipped: true,
-                ...echoProject,
-            };
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "missing-api-key",
+                userMessage: "Chiave API mancante per il provider selezionato: il modulo va compilato manualmente.",
+                detail: { provider: providerCatalog.provider, authType: providerCatalog.authType },
+            });
         }
 
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta, input.templateId, input.formatHint);
@@ -636,14 +748,26 @@ export class VibePrefill {
             });
 
             if (!response.ok) {
-                return {
-                    draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                    dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+                // The provider's own words are the only thing that explains a model that worked
+                // yesterday and fails today (rate limit, context overflow, decommissioned id).
+                // Read it before discarding the response — without this the failure is unknowable.
+                const errorBody = await response.text().catch(() => "<body non leggibile>");
+                return this.fallback({
+                    prompt: input.prompt,
+                    outputLanguage: resolvedUiLanguage,
                     resolvedMode,
-                    confidence: 0,
-                    skipped: true,
-                    ...echoProject,
-                };
+                    attachmentMeta: input.attachmentMeta,
+                    echoProject,
+                    reason: "provider-http-error",
+                    userMessage: `Il modello ${providerCatalog.provider}/${modelId} ha rifiutato la richiesta (HTTP ${response.status}): il modulo va compilato manualmente o riprovato con un altro modello.`,
+                    detail: {
+                        provider: providerCatalog.provider,
+                        model: modelId,
+                        providerStatus: response.status,
+                        providerStatusText: response.statusText,
+                        providerBody: errorBody.slice(0, 2000),
+                    },
+                });
             }
 
             const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -707,9 +831,29 @@ export class VibePrefill {
                         provider: providerCatalog.provider,
                         finishReason,
                         filledOptionalFields,
+                        // Without this the cost record shows 6,000 completion tokens for a
+                        // five-field brief and no way to tell that thinking ate the budget.
+                        reasoningTokens: Number(
+                            (usage as { completion_tokens_details?: { reasoning_tokens?: number } } | undefined)
+                                ?.completion_tokens_details?.reasoning_tokens ?? 0,
+                        ),
+                        maxCompletionTokens: Math.min(Math.max(taskSettings.maxCompletionTokens, MIN_TOKENS), MAX_TOKENS),
                     },
                 });
             }
+
+            // A partial brief must never leave here looking like a complete one. This bug has
+            // now shipped four times (max_tokens 768 -> 2048 -> 6000 -> 16000), and every time
+            // it reached the user as "the form only filled two sections" rather than as a
+            // model that ran out of room — because `warnings` was populated only when the
+            // prefill was skipped outright, never when it came back truncated.
+            const truncated = finishReason === "length";
+            const truncationWarning = truncated
+                ? `Il modello ${providerCatalog.provider}/${modelId} ha esaurito lo spazio di risposta `
+                  + `(${filledOptionalFields} campi su 17 compilati): il brief è parziale. `
+                  + `I modelli con ragionamento esteso consumano il budget prima di scrivere il brief — `
+                  + `completa i campi mancanti a mano o riprova con un modello senza reasoning.`
+                : undefined;
 
             return {
                 draft: websitePrefill.draft,
@@ -717,17 +861,32 @@ export class VibePrefill {
                 resolvedMode,
                 confidence,
                 skipped: false,
+                ...(truncationWarning ? { warnings: [truncationWarning] } : {}),
                 ...echoProject,
             };
-        } catch {
-            return {
-                draft: defaultDraft(input.prompt, resolvedUiLanguage),
-                dataDashboardDraft: resolvedMode === "data_dashboard" ? defaultDataDashboardDraft(input.prompt, input.attachmentMeta) : undefined,
+        } catch (error) {
+            // Was an empty `catch {}`. An abort after the 4.5-minute timeout, a DNS failure and a
+            // malformed provider payload all produced the identical silent default draft.
+            const aborted = providerAbort.signal.aborted;
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
                 resolvedMode,
-                confidence: 0,
-                skipped: true,
-                ...echoProject,
-            };
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "provider-exception",
+                userMessage: aborted
+                    ? `Il modello ${providerCatalog.provider}/${modelId} non ha risposto entro il tempo massimo: riprova o scegli un altro modello.`
+                    : `Errore di comunicazione con ${providerCatalog.provider}/${modelId}: il modulo va compilato manualmente.`,
+                detail: {
+                    provider: providerCatalog.provider,
+                    model: modelId,
+                    aborted,
+                    errorName: error instanceof Error ? error.name : typeof error,
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                    errorCause: error instanceof Error && error.cause ? String(error.cause) : undefined,
+                },
+            });
         } finally {
             clearTimeout(providerTimeout);
         }

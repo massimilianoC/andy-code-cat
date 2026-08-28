@@ -53,14 +53,18 @@ export class LaunchGuidedProject {
             ...(styleNotes ? { styleNotes } : {}),
         });
 
+        // The conversation starts EMPTY on purpose. The brief reaches the model as the first
+        // user message sent by the workspace, from `PipelineRun.canonicalBrief` — the copy whose
+        // contentHash the run certifies. Seeding the same text here as well put the identical
+        // 2 591-character brief in the conversation twice: once written by the launch, once by
+        // the send. The user saw their brief duplicated before the assistant's reply.
+        //
+        // It was invisible before the strict cutover only because the legacy path sent an
+        // *optimized* rewrite as the second message, so the two looked like different steps.
         const conversation = await this.conversationRepository.create({
             projectId: input.projectId,
             userId: input.userId,
             title: `Guided Mode · ${input.intake.businessName}`,
-            firstMessage: {
-                role: "user",
-                content: normalizedBrief,
-            },
         });
 
         const jobId = randomUUID();

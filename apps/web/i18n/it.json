@@ -260,8 +260,8 @@
     },
     "session": {
         "expired": "Sessione scaduta",
-        "requiresLogin": "La tua sessione \u00e8 scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
-        "tokenExpired": "La tua sessione \u00e8 scaduta. Effettua di nuovo il login per continuare.",
+        "requiresLogin": "La tua sessione è scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
+        "tokenExpired": "La tua sessione è scaduta. Effettua di nuovo il login per continuare.",
         "logout": "Esci"
     },
     "security": {
@@ -317,7 +317,7 @@
             "slideshow": "Slideshow",
             "keynote": "Keynote visiva",
             "videogame": "Videogioco",
-      "freerunner": "Runner infinito",
+            "freerunner": "Runner infinito",
             "seriousgame": "Serious Game",
             "game3d": "Gioco 3D",
             "vr-aframe": "Esperienza VR A-Frame",
@@ -366,8 +366,7 @@
         },
         "phase": {
             "review": "Pronto per la generazione",
-            "optimizing": "Ottimizzazione prompt...",
-            "optimized": "Prompt ottimizzato — continua in Guided Mode per generare"
+            "launching": "Creo la run e apro il workspace…"
         },
         "brief": {
             "title": "BRIEF DI PROGETTO — {{brand}}",
@@ -464,7 +463,8 @@
             "readySuffix": "per generare il sito con salvataggio completo dell'artefatto, preview e strumenti di modifica.",
             "dashboard": "Dashboard",
             "backToDashboard": "Torna alla dashboard",
-            "continueInWorkspace": "Continua nel workspace"
+            "continueInWorkspace": "Continua nel workspace",
+            "launching": "Avvio…"
         },
         "workspaceModeBadge": "Workspace",
         "openWorkspace": "Apri Workspace",
@@ -737,7 +737,11 @@
                 "activatedLabel": "Versione attivata",
                 "activated": "Snapshot selezionato come versione attiva.",
                 "newVersionLabel": "Nuova versione salvata",
-                "newVersionMessage": "Snapshot salvato e attivato dal backend."
+                "newVersionMessage": "Snapshot salvato e attivato dal backend.",
+                "staleBaseLabel": "Versione non aggiornata",
+                "staleBase": "Questa modifica parte da una versione che nel frattempo è cambiata. La versione corrente è stata ricaricata — riapplica la modifica su quella.",
+                "noChangeLabel": "Nessuna modifica",
+                "noChange": "Il contenuto è identico alla versione corrente: nessuna nuova versione creata."
             },
             "llm": {
                 "label": "Generazione AI",
@@ -886,6 +890,9 @@
             "unpublish": "Rimuovi",
             "staleVersion": "⚠ online v{{published}}, attiva v{{current}}",
             "updatePublish": "Aggiorna",
+            "snapshotPanelLiveLine": "🌐 live: v{{live}} · stai lavorando su v{{current}}",
+            "snapshotPanelLiveBadge": "🌐 live",
+            "branchNotice": "⎘ Stai lavorando su v{{active}}, non l'ultima versione (v{{latest}}): la prossima modifica creerà un nuovo ramo da qui. v{{latest}} resta raggiungibile nello storico.",
             "slugPlaceholder": "es. mia-pizzeria",
             "slugChecking": "⏳ Verifica…",
             "slugAvailable": "✓ Disponibile",
@@ -1043,7 +1050,9 @@
                 "copied": "Copiato",
                 "copyError": "Errore",
                 "copyTitle": "Copia messaggio",
-                "nextSteps": "Prossimi passi"
+                "nextSteps": "Prossimi passi",
+                "errorBadge": "Errore",
+                "errorHint": "Nessuna versione salvata — il progetto non è stato modificato."
             }
         }
     },

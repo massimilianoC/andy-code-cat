@@ -72,7 +72,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.5,
-        maxCompletionTokens: 14000,
+        maxCompletionTokens: 64000,
         systemTemplate: "",
     },
     // Document Context Layer (DCL) enrichment tasks
@@ -110,7 +110,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.3,
-        maxCompletionTokens: 6000,
+        maxCompletionTokens: 32000,
         systemTemplate: "",
     },
     // Vibe Mode — final generation step (workspace model when arriving from Vibe Mode expert path)
@@ -119,7 +119,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.5,
-        maxCompletionTokens: 14000,
+        maxCompletionTokens: 64000,
         systemTemplate: "",
     },
     // Project Mode — default model for standalone Workspace generation.
@@ -129,7 +129,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.5,
-        maxCompletionTokens: 14000,
+        maxCompletionTokens: 64000,
         systemTemplate: "",
     },
     didactic_knowledge_generate: {

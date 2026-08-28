@@ -92,10 +92,13 @@ Read in this order before making changes:
 | [docs/specs/PROVIDER_SPEC.md](specs/PROVIDER_SPEC.md) | Multi-provider LLM integration contract |
 | [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | ⚠️ Partially historical PrepromptEngine reference; live prompt composition follows the registry/SSOT documentation |
 | [docs/specs/PROMPT_LAYER_SSOT_SPEC.md](specs/PROMPT_LAYER_SSOT_SPEC.md) | Prompt Layer SSOT — canonical layer registry, MongoDB override chain, self-describing markers, persisted trace, 1:1 superadmin/sent/stored/displayed correspondence |
+| [docs/specs/PROMPT_LAYER_COMPACTION_SPEC.md](specs/PROMPT_LAYER_COMPACTION_SPEC.md) | ⏸️ Specified, not implemented — Layer K context compaction: binary threshold on the composed system prompt, contract/evidence layers preserved, deferred with measured evidence |
 | [docs/specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md](specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md) | Historical implementation record for the first Prompt Layer SSOT wave; **not** an executable plan for new work |
 | [docs/specs/WORKFLOWS.md](specs/WORKFLOWS.md) | Automated workflow definitions WF-01 to WF-10 |
 | [docs/specs/UX_SPEC.md](specs/UX_SPEC.md) | End-to-end UX and product screen map |
 | [docs/specs/EXECUTION_LOG_SPEC.md](specs/EXECUTION_LOG_SPEC.md) | Structured operational audit logging |
+| [docs/specs/ARTIFACT_LIFECYCLE_EXECUTION_PLAN.md](specs/ARTIFACT_LIFECYCLE_EXECUTION_PLAN.md) | Wave-by-wave plan to close the `AL-NNN` conformance gaps |
+| [docs/specs/ARTIFACT_LIFECYCLE_SPEC.md](specs/ARTIFACT_LIFECYCLE_SPEC.md) | **Binding** — artifact versioning, seed/branching, activation, publication, traceability (`AL-NNN`) |
 | [docs/specs/FOCUSED_EDIT_SPEC.md](specs/FOCUSED_EDIT_SPEC.md) | Focused editing behavior and constraints |
 | [docs/specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md](specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md) | Output language control — Layer L, per-mode resolution chain, contract changes, UI selector, Workspace fallback |
 
@@ -106,6 +109,7 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
+| [docs/specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md](specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md) | **Proposed, not implemented** — why the first generation feels silent, and an incremental plan for real progress events and an inspector panel |
 | [docs/specs/I18N_ARTIFACTS_SPEC.md](specs/I18N_ARTIFACTS_SPEC.md) | Multilingual support for LLM-generated artifact websites — post-publication translation pipeline |
 | [docs/specs/UX_REVIEW_AND_PUBLISH_SPEC.md](specs/UX_REVIEW_AND_PUBLISH_SPEC.md) | Review workspace and publish flow |
 | [docs/specs/WYSIWYG_EDIT_MODE_SPEC.md](specs/WYSIWYG_EDIT_MODE_SPEC.md) | WYSIWYG editor architecture and milestones |
@@ -207,6 +211,8 @@ pattern proven in this codebase.
 
 | Document | Description |
 | --- | --- |
+| [AGENTS.md](../AGENTS.md) | Binding project and agent contract, including Rule Zero and proportional spec-first delivery |
+| [.github/PULL_REQUEST_TEMPLATE.md](../.github/PULL_REQUEST_TEMPLATE.md) | Lightweight capture of owning contract, observable acceptance, risk tier, and verification evidence |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Product-level prompt, injection, and runtime governance model |
 | [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](specs/FIRST_INSTALL_SETUP_SPEC.md) | First-install wizard and initial platform configuration |
 | [docs/governance/PLATFORM_GOVERNANCE_POLICY.md](governance/PLATFORM_GOVERNANCE_POLICY.md) | Governance ownership, approval flow, and audit expectations |

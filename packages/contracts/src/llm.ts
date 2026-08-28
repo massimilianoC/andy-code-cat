@@ -38,6 +38,15 @@ export const llmHistoryMessageSchema = z.object({
     content: z.string().max(50000), // backend truncates at LLM_HISTORY_MESSAGE_MAX_CHARS (default 2000)
 });
 
+/**
+ * The requested provider/model is not an active entry in the catalog.
+ *
+ * The catalog in Mongo is the source of truth for what may be dispatched, and a model id in a
+ * request is a request, not an authority. The client re-reads the catalog and asks the user to
+ * choose again; it must not retry with the same id, and it must not silently substitute one.
+ */
+export const MODEL_NOT_AVAILABLE = "MODEL_NOT_AVAILABLE";
+
 export const llmFocusContextSchema = z.object({
     mode: z.enum(["project", "preview-element", "code-selection"]),
     targetType: z.enum(["html", "css", "js", "component", "section"]),
@@ -133,6 +142,20 @@ export const optimizePromptSchema = z.object({
      * Omitted: 100% unchanged legacy behavior.
      */
     pipelineRunId: z.string().min(1).max(120).optional(),
+    /**
+     * What kind of text is being optimized — the two cases need opposite amounts of context.
+     *
+     * "initial"   — an opening project brief. Enrich it with the full project context (moodboard,
+     *               style profile, document knowledge): nothing else has established that context yet.
+     *
+     * "follow-up" — a revision instruction inside a conversation that already produced an artifact.
+     *               The chat history and the system prompt re-inject the project context on every
+     *               send, so doing it here too makes the optimizer restate the whole brief and
+     *               discard what the user actually asked for. Expand the instruction's wording only.
+     *
+     * Defaults to "initial" so existing callers keep their exact behavior.
+     */
+    optimizeMode: z.enum(["initial", "follow-up"]).default("initial"),
 });
 
 export type LlmChatPreviewInput = z.infer<typeof llmChatPreviewSchema>;

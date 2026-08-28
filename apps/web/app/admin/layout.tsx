@@ -9,7 +9,11 @@ const NAV_LINKS = [
     { href: "/admin/users", label: "Users" },
     { href: "/admin/projects", label: "Projects" },
     { href: "/admin/config", label: "Config" },
-    { href: "/admin/presets", label: "Template Models" },
+    // The page existed and was reachable only by typing the URL. "Template Models" below points
+    // at project presets, not at LLM models, so the one label that looked like this one led
+    // somewhere else entirely — renamed to "Presets" for the same reason.
+    { href: "/admin/models", label: "LLM Models" },
+    { href: "/admin/presets", label: "Presets" },
     { href: "/admin/governance", label: "Preprompting" },
     { href: "/admin/integrations", label: "Integrations" },
     { href: "/admin/guided-mode", label: "Guided Mode" },

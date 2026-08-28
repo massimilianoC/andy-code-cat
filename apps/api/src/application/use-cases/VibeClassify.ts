@@ -202,11 +202,30 @@ export class VibeClassify {
             hardcodedFallbackModel: FALLBACK_MODEL,
             requireOverrideInCatalog: true,
             gateOverrideOnOpenAiCompatible: false,
-            policy: "legacy",
+            // See the same line in VibePrefill and ResolvePipelineModelLock: one selection, one
+            // rule. Classification is the first step of the flow the user's model choice
+            // governs, so answering it on a substitute would mean the template was picked by a
+            // model they never selected.
+            policy: (input.provider || input.model) ? "strict" : "legacy",
         };
         const decision = resolveModelSelection(selectionInput);
         if (input.projectId) {
             observeModelSelectionShadow(selectionInput, decision, { projectId: input.projectId, taskKey: TASK_KEY });
+        }
+
+        if (decision.blocked) {
+            return {
+                templateId: null,
+                formatHint: null,
+                confidence: 0,
+                reasoning: `requested model unavailable: ${decision.blocked.reason}`,
+                skipped: true,
+                warnings: [
+                    `Il modello selezionato (${input.provider ?? "?"}/${input.model ?? "?"}) non è attivo nel catalogo: `
+                    + `attivalo dal pannello admin o scegline un altro.`,
+                ],
+                ...echoProject,
+            };
         }
 
         if (!decision.providerCatalog) {

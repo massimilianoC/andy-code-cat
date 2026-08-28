@@ -53,6 +53,7 @@ import {
     type SuggestProjectImageIdeaResult,
     type StockImageProviderStatus,
 } from "../../../lib/api";
+import { ARTIFACT_BASE_STALE, MODEL_NOT_AVAILABLE, type CreatePreviewSnapshotRequest } from "@andy-code-cat/contracts";
 import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
 import { getProjectCostSummary } from "../../../lib/api/cost";
@@ -73,6 +74,7 @@ import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { buildPreviewDoc } from "@/lib/preview/buildPreviewDoc";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import PromptLayersView from "@/components/PromptLayersView";
+import PromptTranscriptView from "@/components/PromptTranscriptView";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
 import { DidacticPanel } from "../../../components/didactic/DidacticPanel";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
@@ -107,7 +109,9 @@ import {
 import {
     parseProtectedAssetDownloadUrl,
     resolvePreviewAssetUrls,
+    reversePreviewAssetReplacements,
 } from "../features/preview/resolvePreviewAssetUrls";
+import { buildVersionIndex } from "../features/versions/versionNumbering";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
     ssr: false,
@@ -352,6 +356,9 @@ function WorkspacePageContent() {
         sourceCss: string;
         html: string;
         css: string;
+        // AL-009 — original-URL -> data-URI map, kept so handleCommitEditVersion can reverse
+        // the substitution before persisting what WYSIWYG reads back from the iframe DOM.
+        replacements: Map<string, string>;
     } | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const assetPreviewUrlCacheRef = useRef<Map<string, string>>(new Map());
@@ -395,6 +402,9 @@ function WorkspacePageContent() {
     // search param. We pre-fill the prompt and auto-trigger generation once the
     // conversation and providers are both ready.
     const autoPromptFiredRef = useRef(false);
+    // The text the run handoff dropped into the composer. Kept so a refresh that finds the brief
+    // already dispatched can clear the composer without touching anything the user typed.
+    const handoffPromptRef = useRef<string | null>(null);
     const [autoPromptPending, setAutoPromptPending] = useState(false);
     const [editSessionId, setEditSessionId] = useState<string | null>(null);
     const [isSavingEditVersion, setIsSavingEditVersion] = useState(false);
@@ -598,7 +608,21 @@ function WorkspacePageContent() {
         void getPipelineRun(authToken, projectId, runId)
             .then(({ run }) => {
                 if (cancelled) return;
+                // The run's optimizationPolicy is authoritative — the workspace must not decide
+                // this for itself. "skip" means the brief arriving here IS the optimized artifact
+                // of the guided flow: re-optimizing it rewrites the very text whose contentHash
+                // is frozen on the run, so what reaches the model stops matching the run's own
+                // record of what was supposed to reach it.
+                //
+                // Written to the ref (not just state) because this runs inside an async .then():
+                // the auto-send below reads it during the same tick and would otherwise still see
+                // the mount-time default of "optimize".
+                if (run.optimizationPolicy === "skip") {
+                    autoOptimizeSuppressedByHandoffRef.current = true;
+                    setAutoOptimize(false);
+                }
                 if (run.canonicalBrief?.content) {
+                    handoffPromptRef.current = run.canonicalBrief.content;
                     setPrompt(run.canonicalBrief.content);
                     setAutoPromptPending(true);
                 }
@@ -654,12 +678,25 @@ function WorkspacePageContent() {
         if (autoPromptFiredRef.current) return;
         if (!preferredModelResolutionComplete) return;
         if (conversationLoading || !selectedModel || sending || !token) return;
+        // A reload re-runs this effect with the same pipelineRunId still in the URL, and the ref
+        // above is fresh on every mount — so without a stored signal the brief would be sent
+        // again on every refresh. The conversation itself is that signal: LaunchGuidedProject
+        // creates it EMPTY on purpose (see its comment), so "no messages yet" is the precise,
+        // server-owned answer to "has this brief already been dispatched?".
+        if ((activeConv?.messages.length ?? 0) > 0) {
+            autoPromptFiredRef.current = true;
+            setAutoPromptPending(false);
+            // Drop the pre-filled brief so the composer doesn't come back holding a 7 000-character
+            // prompt the user never typed and has already sent. Anything else is left alone.
+            setPrompt((current) => (current === handoffPromptRef.current ? "" : current));
+            return;
+        }
         autoPromptFiredRef.current = true;
         setAutoPromptPending(false);
         // Trigger send with a fake FormEvent — handleSend will read the current prompt state.
         void handleSend({ preventDefault: () => {} } as React.FormEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [autoPromptPending, conversationLoading, preferredModelResolutionComplete, selectedModel, sending, token]);
+    }, [activeConv, autoPromptPending, conversationLoading, preferredModelResolutionComplete, selectedModel, sending, token]);
 
     useEffect(() => {
         if (!selectedProvider) return;
@@ -846,6 +883,70 @@ function WorkspacePageContent() {
     useEffect(() => {
         selectedBackendSnapshotIdRef.current = selectedBackendSnapshotId;
     }, [selectedBackendSnapshotId]);
+
+    // AL-042 — the versions as the server described them, readable from inside callbacks.
+    // The certification a write declares is read from here, never recomputed from what the
+    // editor happens to be holding.
+    const previewSnapshotsRef = useRef<PreviewSnapshot[]>([]);
+    useEffect(() => { previewSnapshotsRef.current = previewSnapshots; }, [previewSnapshots]);
+
+    /**
+     * AL-042/043 — the single client write path for an artifact version.
+     *
+     * Every editing mode goes through here, so every mode declares the same base: the version
+     * the user has selected, plus the contentHash the server issued for it. Four call sites
+     * each assembling their own declaration is exactly how they came to disagree — one of them
+     * used to omit the parent entirely and silently start a second root.
+     *
+     * The hash is echoed, never recomputed. What the API returns has been compiled for the
+     * preview runtime (forms, inline assets) and legitimately differs from the canonical
+     * artifacts the hash certifies, so a locally computed one would never match.
+     *
+     * When the base predates AL-039 there is no hash to declare; the server accepts the write
+     * and records it as unverifiable rather than locking the user out of their own history.
+     */
+    const certifiedHashOf = useCallback((snapshotId: string | null | undefined): string | undefined => {
+        if (!snapshotId) return undefined;
+        return previewSnapshotsRef.current.find((snapshot) => snapshot.id === snapshotId)?.metadata?.contentHash;
+    }, []);
+
+    const commitArtifactVersion = useCallback(async (
+        authToken: string,
+        input: Omit<CreatePreviewSnapshotRequest, "parentSnapshotId" | "baseContentHash">,
+    ) => {
+        const baseId = selectedBackendSnapshotIdRef.current ?? undefined;
+        const result = await createPreviewSnapshot(authToken, projectId, {
+            ...input,
+            parentSnapshotId: baseId,
+            baseContentHash: certifiedHashOf(baseId),
+        });
+        // Keep the certification current without waiting for the list to reload, so a second
+        // save in the same interaction declares the version the first one just produced.
+        previewSnapshotsRef.current = [
+            result.snapshot,
+            ...previewSnapshotsRef.current.filter((snapshot) => snapshot.id !== result.snapshot.id),
+        ];
+        return result;
+    }, [projectId, certifiedHashOf]);
+
+    /**
+     * AL-042 — the server refused the write because its base is no longer current. Re-read the
+     * history and say so; do not retry. Retrying would send an edit built on something that is
+     * not there any more, which is the overwrite this rule exists to prevent.
+     *
+     * Returns true when it handled the error, so callers can fall through to their own
+     * handling for everything else.
+     */
+    const handleStaleArtifactBase = useCallback(async (err: unknown): Promise<boolean> => {
+        if (!(err instanceof ApiError) || err.code !== ARTIFACT_BASE_STALE) return false;
+        if (token) await loadSnapshots(token);
+        addNotification({
+            label: t("workspace.notifications.snapshot.staleBaseLabel"),
+            status: "error",
+            message: err.userMessage ?? t("workspace.notifications.snapshot.staleBase"),
+        });
+        return true;
+    }, [token, loadSnapshots, addNotification]);
 
     useEffect(() => { editorHtmlRef.current = editorHtml; }, [editorHtml]);
     useEffect(() => { editorCssRef.current = editorCss; }, [editorCss]);
@@ -1109,19 +1210,20 @@ function WorkspacePageContent() {
 
             if (!conversationId) return false;
 
-            const result = await createPreviewSnapshot(token, projectId, {
+            const result = await commitArtifactVersion(token, {
                 conversationId,
-                parentSnapshotId: selectedBackendSnapshotIdRef.current ?? undefined,
                 artifacts: { html, css: editorCssRef.current, js: editorJsRef.current },
                 metadata: { finishReason },
                 activate: true,
             });
             await persistWorkspaceSnapshot(result.snapshot.id, { html, css: editorCssRef.current, js: editorJsRef.current }, options);
             return true;
-        } catch {
+        } catch (err) {
+            // AL-042 — a refused base is a real answer, not a failed save to swallow silently.
+            await handleStaleArtifactBase(err);
             return false;
         }
-    }, [token, activeConvId, projectId, persistWorkspaceSnapshot]);
+    }, [token, activeConvId, projectId, persistWorkspaceSnapshot, handleStaleArtifactBase]);
 
     const handleApplyAsset = useCallback(async (asset: ProjectAssetDto) => {
         if (!token || !selectedElement) return;
@@ -1500,7 +1602,7 @@ function WorkspacePageContent() {
         if (!token || !activeConvId) return;
         setIsSavingEditorSnapshot(true);
         try {
-            const result = await createPreviewSnapshot(token, projectId, {
+            const result = await commitArtifactVersion(token, {
                 conversationId: activeConvId,
                 artifacts: { html: editorHtml, css: editorCss, js: editorJs },
                 metadata: { finishReason: "manual-save" },
@@ -1510,15 +1612,20 @@ function WorkspacePageContent() {
             incrementSnapCount(projectId);
             await loadSnapshots(token);
             setSelectedBackendSnapshotId(result.snapshot.id);
-            addNotification({ label: t("workspace.notifications.snapshot.savedLabel"), status: "done", message: t("workspace.notifications.snapshot.saved") });
+            // AL-045 — say which of the two things happened. Reporting "version saved" when
+            // the content was identical teaches the user to distrust the history panel.
+            addNotification(result.created
+                ? { label: t("workspace.notifications.snapshot.savedLabel"), status: "done", message: t("workspace.notifications.snapshot.saved") }
+                : { label: t("workspace.notifications.snapshot.noChangeLabel"), status: "done", message: t("workspace.notifications.snapshot.noChange") });
         } catch (err) {
+            if (await handleStaleArtifactBase(err)) return;
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
             }
         } finally {
             setIsSavingEditorSnapshot(false);
         }
-    }, [token, projectId, activeConvId, editorHtml, editorCss, editorJs, loadSnapshots, addNotification]);
+    }, [token, projectId, activeConvId, editorHtml, editorCss, editorJs, loadSnapshots, addNotification, handleStaleArtifactBase]);
 
     // Receive element selections + EDIT mode messages from the sandboxed preview iframe
     useEffect(() => {
@@ -1654,45 +1761,60 @@ function WorkspacePageContent() {
     const handleCommitEditVersion = useCallback(async (html: string) => {
         if (!token || !activeConvId) return;
         setIsSavingEditVersion(true);
+        let editProducedVersion = true;
         try {
+            // AL-009 — `html` is read back from the sandboxed preview DOM, which had project
+            // asset URLs inlined as base64 data URIs so the sandbox could render them without
+            // an auth header (see resolvePreviewAssetUrls). Undo that here so the persisted
+            // version stores the source URLs, not the render: one measured save otherwise went
+            // 10.703 -> 131.884 characters. Both branches below persist, so both need it.
+            const sourceHtml = reversePreviewAssetReplacements(html, previewAssetResolved?.replacements ?? new Map());
             if (editSessionId) {
                 // Autosave current state first, then commit via session
                 await saveWysiwygEditState(token, projectId, editSessionId, {
-                    html,
+                    html: sourceHtml,
                     css: editorCss,
                     js: editorJs,
                 });
                 const res = await commitWysiwygSession(token, projectId, editSessionId, {
                     description: "EDIT Light",
+                    // AL-043 — the session pinned its origin when it opened; the certification
+                    // travels at commit, which is the moment the base could have moved.
+                    baseContentHash: certifiedHashOf(selectedBackendSnapshotIdRef.current),
                 });
-                saveThumbnail(projectId, { html, css: editorCss, js: editorJs });
+                saveThumbnail(projectId, { html: sourceHtml, css: editorCss, js: editorJs });
                 incrementSnapCount(projectId);
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
                 setEditSessionId(null);
+                editProducedVersion = res.created;
             } else {
                 // Degraded mode: session was not created, save directly as PreviewSnapshot
-                const res = await createPreviewSnapshot(token, projectId, {
+                const res = await commitArtifactVersion(token, {
                     conversationId: activeConvId,
-                    artifacts: { html, css: editorCss, js: editorJs },
+                    artifacts: { html: sourceHtml, css: editorCss, js: editorJs },
                     metadata: { finishReason: "wysiwyg-edit-light" },
                     activate: true,
                 });
-                saveThumbnail(projectId, { html, css: editorCss, js: editorJs });
+                saveThumbnail(projectId, { html: sourceHtml, css: editorCss, js: editorJs });
                 incrementSnapCount(projectId);
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
+                editProducedVersion = res.created;
             }
-            addNotification({ label: t("workspace.notifications.snapshot.editSavedLabel"), status: "done", message: t("workspace.notifications.snapshot.editSaved") });
+            addNotification(editProducedVersion
+                ? { label: t("workspace.notifications.snapshot.editSavedLabel"), status: "done", message: t("workspace.notifications.snapshot.editSaved") }
+                : { label: t("workspace.notifications.snapshot.noChangeLabel"), status: "done", message: t("workspace.notifications.snapshot.noChange") });
             setEditMode(false);
         } catch (err) {
+            if (await handleStaleArtifactBase(err)) return;
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
             }
         } finally {
             setIsSavingEditVersion(false);
         }
-    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification]);
+    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification, previewAssetResolved, commitArtifactVersion, certifiedHashOf, handleStaleArtifactBase]);
     handleCommitEditVersionRef.current = handleCommitEditVersion;
 
     // ── Derived values ──────────────────────────────────────────────────────
@@ -1742,15 +1864,24 @@ function WorkspacePageContent() {
     // snapshot with actual content to prevent sending blank context to the LLM.
     const activeMarked = previewSnapshots.find((s) => s.isActive);
 
+    // AL-011 — number = depth along the seed chain, not list position (see
+    // versionNumbering.ts). Shared by the Live banner below and SnapshotHistoryPanel so the
+    // two never disagree about which version a given badge refers to.
+    const versionIndex = useMemo(() => buildVersionIndex(previewSnapshots), [previewSnapshots]);
+
     // Published version tracking — for the Live banner stale warning.
-    const publishedSnapshotIdx = publishDeployment
-        ? previewSnapshots.findIndex((s) => s.id === publishDeployment.snapshotId)
-        : -1;
-    const publishedVersionNumber = publishedSnapshotIdx !== -1
-        ? previewSnapshots.length - publishedSnapshotIdx
+    const publishedVersionNumber = publishDeployment
+        ? versionIndex.get(publishDeployment.snapshotId) ?? null
         : null;
-    const activeMarkedIdx = previewSnapshots.findIndex((s) => s.isActive);
-    const activeVersionNumber = activeMarkedIdx !== -1 ? previewSnapshots.length - activeMarkedIdx : null;
+    const activeVersionNumber = activeMarked ? versionIndex.get(activeMarked.id) ?? null : null;
+
+    // AL-014 — branch notice near the composer. previewSnapshots is newest-first (backend
+    // sorts createdAt desc), so index 0 is whatever was created most recently, independent of
+    // its chain depth. The seed of the next edit is the active version (AL-012); if that isn't
+    // the newest snapshot, the next change branches rather than continuing the tip.
+    const newestSnapshot = previewSnapshots[0] ?? null;
+    const willBranchOnNextEdit = !!activeMarked && !!newestSnapshot && activeMarked.id !== newestSnapshot.id;
+    const newestVersionNumberForBranchNotice = newestSnapshot ? versionIndex.get(newestSnapshot.id) ?? null : null;
     const isPublishStale =
         publishDeployment?.status === "live" &&
         !!activeMarked &&
@@ -1805,6 +1936,7 @@ function WorkspacePageContent() {
                 sourceCss: editorCss,
                 html: resolved.html,
                 css: resolved.css,
+                replacements: resolved.replacements,
             });
         });
 
@@ -1932,7 +2064,9 @@ function WorkspacePageContent() {
         if (!content || !token || sending || conversationLoading || optimizingPrompt) return;
 
         // Auto-optimize pipeline: run optimizer first, then send with the result.
-        if (autoOptimize) {
+        // The ref wins over the state: a handoff that arrives asynchronously (the I15 run fetch)
+        // sets it after this component has already rendered with autoOptimize = true.
+        if (autoOptimize && !autoOptimizeSuppressedByHandoffRef.current) {
             const optimized = await runOptimizeAsync(content);
             if (optimized === null) return; // aborted or failed — don't send
             content = optimized;
@@ -2230,8 +2364,12 @@ function WorkspacePageContent() {
                 || llm.structured?.chat?.summary?.trim()
                 || "Risposta AI generata senza testo visibile.").slice(0, 50000);
 
+            // A generation whose JSON could not be parsed is a failure, not a reply. Storing it
+            // as "assistant" is what made it render like a normal turn and, worse, fed its
+            // empty artifacts back as conversation history on the next request. Role "error"
+            // is already excluded from the history window built above.
             const assistantSaved = await addMessage(token, projectId, convId, {
-                role: "assistant",
+                role: llm.generationParseError ? "error" : "assistant",
                 content: assistantContent,
                 metadata: {
                     model: llm.model,
@@ -2283,10 +2421,9 @@ function WorkspacePageContent() {
             if (llm.structured?.artifacts && llm.structured.artifacts.html && convId
                 && llm.focusPatchApplied !== false && llm.generationParseError !== true) {
                 try {
-                    const snap = await createPreviewSnapshot(token, projectId, {
+                    const snap = await commitArtifactVersion(token, {
                         conversationId: convId,
                         sourceMessageId: assistantSaved.message.id,
-                        parentSnapshotId: selectedBackendSnapshotIdRef.current ?? undefined,
                         artifacts: {
                             html: llm.structured.artifacts.html ?? "",
                             css: llm.structured.artifacts.css ?? "",
@@ -2298,6 +2435,10 @@ function WorkspacePageContent() {
                         // structured.artifacts. Sending rawResponse here would cause the
                         // snapshot route to overwrite the correct merged HTML with empty.
                         rawLlmResponse: llm.focusPatchApplied ? undefined : (llm.rawResponse ?? undefined),
+                        // AL-029 — records which element (or code selection) this generation
+                        // targeted, on the version it produced. 0 of 195 stored snapshots carry
+                        // this today because no client call site ever sent it.
+                        focusContext,
                         metadata: {
                             model: llm.model,
                             provider: llm.provider,
@@ -2307,6 +2448,11 @@ function WorkspacePageContent() {
                             tokenUsage: llm.usage,
                             promptingTrace: llm.promptingTrace,
                             mediaResolution: llm.mediaResolution,
+                            // AL-026 — the durable PromptExecutionLog id this response was
+                            // persisted under (packages/contracts llm.ts:332). The contract
+                            // field on the snapshot side (preview.ts) is landing in a parallel
+                            // change; until it does, the backend simply drops this key.
+                            promptExecutionId: llm.promptExecutionId,
                         },
                         activate: true,
                     });
@@ -2370,8 +2516,12 @@ function WorkspacePageContent() {
                         setPreviewRefreshing(false);
                     }, 3000);
                     previewVersionSaved = true;
-                } catch {
-                    // non-blocking — UI works without snapshot persistence
+                } catch (err) {
+                    // AL-042 — a refused base is not "snapshot persistence is optional": the
+                    // model produced a version that could not be attached to what the user is
+                    // looking at, and they need to know before they build on it.
+                    await handleStaleArtifactBase(err);
+                    // Anything else stays non-blocking — the chat works without the snapshot.
                 }
             }
 
@@ -2463,6 +2613,19 @@ function WorkspacePageContent() {
                 message: msg,
             });
 
+            // The catalog is the source of truth for what may be dispatched, and this tab may be
+            // holding a list from before an operator switched something off. Re-read it and let
+            // the selector fall back to something that is actually available, rather than leaving
+            // the user to press send again on the same dead model.
+            if (err instanceof ApiError && err.code === MODEL_NOT_AVAILABLE && token) {
+                try {
+                    const refreshed = await getLlmProviders(token);
+                    setProvidersCatalog(refreshed.providers.filter((provider) => provider.isActive));
+                } catch {
+                    // Leave the stale list rather than blanking the selector on a second failure.
+                }
+            }
+
             if (token && trackedConversationId) {
                 try {
                     const errorSaved = await addMessage(token, projectId, trackedConversationId, {
@@ -2503,6 +2666,14 @@ function WorkspacePageContent() {
     // Does NOT set prompt state; callers decide what to do with the result.
     async function runOptimizeAsync(original: string): Promise<string | null> {
         if (!token || !original || optimizingPrompt || conversationLoading) return null;
+
+        // An empty conversation means this is the opening brief and the optimizer should enrich
+        // it with the full project context. Anything else is a revision instruction: the history
+        // and the system prompt layers already carry that context on every send, so enriching it
+        // again here turns "add some text, the contrast is poor" into a fresh project brief and
+        // the user's actual request never reaches the model.
+        const optimizeMode: "initial" | "follow-up" =
+            (activeConv?.messages.length ?? 0) > 0 ? "follow-up" : "initial";
 
         let trackedConversationId: string | null = activeConvId;
         let trackedUserMessageId: string | null = null;
@@ -2558,6 +2729,7 @@ function WorkspacePageContent() {
                     provider: selectedProvider || undefined,
                     model: selectedModel || undefined,
                     pipelineRunId: pipelineRunIdRef.current || undefined,
+                    optimizeMode,
                 },
                 (event) => {
                     if (event.type === "thinking") { setThinkingText((prev) => prev + event.content); return; }
@@ -3051,37 +3223,19 @@ function WorkspacePageContent() {
                             layers={lastSentTrace.layers ?? []}
                             defaultRaw={!lastSentTrace.layers?.length}
                         />
-                        {/* I16: render every non-system message in the trace (user AND assistant
-                            history turns), not just role:user — a multi-turn conversation's
-                            prior assistant replies are part of what was actually sent to the
-                            LLM and were being silently dropped from this view before. */}
-                        {lastSentMessages
-                            .filter((msg) => msg.role === "user" || msg.role === "assistant")
-                            .map((msg, i) => (
-                                <div key={`sent-msg-${i}`} style={{ marginTop: "1rem" }}>
-                                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: msg.role === "assistant" ? "#a78bfa" : "#7dd3fc", marginBottom: "0.35rem" }}>
-                                        {msg.role === "assistant"
-                                            ? t("workspace.ui.promptPanelAssistantMessage", "Messaggio assistant (cronologia)")
-                                            : t("workspace.ui.promptPanelUserMessage", "Messaggio utente")}
-                                    </div>
-                                    <pre
-                                        style={{
-                                            margin: 0,
-                                            padding: "0.75rem 1rem",
-                                            background: "#080e1a",
-                                            color: "#94a3b8",
-                                            fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                                            fontSize: "0.78rem",
-                                            lineHeight: 1.65,
-                                            whiteSpace: "pre-wrap",
-                                            wordBreak: "break-word",
-                                            overflowX: "auto",
-                                        }}
-                                    >
-                                        {msg.content}
-                                    </pre>
-                                </div>
-                            ))}
+                        {/* I16: every non-system message in the trace (user AND assistant history
+                            turns), not just role:user — prior assistant replies are part of what
+                            was actually sent and were being dropped from this view before.
+                            Folded: once an artifact exists each turn carries the full generated
+                            markup, which used to bury the conversation under thousands of lines. */}
+                        <PromptTranscriptView
+                            messages={lastSentMessages}
+                            labels={{
+                                user: t("workspace.ui.promptPanelUserMessage", "Messaggio utente"),
+                                assistant: t("workspace.ui.promptPanelAssistantMessage", "Messaggio assistant (cronologia)"),
+                                system: "System",
+                            }}
+                        />
                     </>
                 ) : promptPreview ? (
                     <>
@@ -3275,6 +3429,27 @@ function WorkspacePageContent() {
                     aria-orientation="horizontal"
                     aria-label={t("workspace.ui.resizeChat")}
                 />
+                {/* AL-014 — the seed of the next version is already the active one (enforced
+                    server-side); this only makes that fact visible. Without it, going back to
+                    an old version and editing silently starts a branch the user cannot see
+                    forming, and the newer versions it leaves behind look lost even though they
+                    stay reachable in the history panel. */}
+                {willBranchOnNextEdit && (
+                    <div
+                        style={{
+                            padding: "0.3rem 0.7rem",
+                            fontSize: "0.72rem",
+                            color: "#f59e0b",
+                            background: "rgba(245,158,11,0.07)",
+                            borderTop: "1px solid rgba(245,158,11,0.20)",
+                        }}
+                    >
+                        {t("workspace.ui.branchNotice", {
+                            active: activeVersionNumber ?? "?",
+                            latest: newestVersionNumberForBranchNotice ?? "?",
+                        })}
+                    </div>
+                )}
                 <form
                     onSubmit={(e) => void handleSend(e)}
                     className="workspace-input-form relative"
@@ -3797,6 +3972,7 @@ function WorkspacePageContent() {
                                     snapshots={previewSnapshots}
                                     selectedId={selectedBackendSnapshotId}
                                     loading={loadingSnapshots}
+                                    publishDeployment={publishDeployment}
                                     onSelect={(id) => {
                                         const snap = previewSnapshots.find((s) => s.id === id);
                                         if (snap?.artifacts) {
@@ -5047,7 +5223,11 @@ function MessageBubble({ message }: { message: MessageDto }) {
     const { t } = useTranslation();
     const [copyLabel, setCopyLabel] = useState(() => t("workspace.ui.messageBubble.copy"));
     const isUser = message.role === "user";
-    const isError = message.role === "error";
+    // A failed generation is an error even when the HTTP call succeeded: the model answered,
+    // the answer could not be parsed, and nothing was saved. Rendering that as an ordinary reply
+    // is what made "nessuna versione salvata" read like a normal chat turn. `structuredParseValid`
+    // is stored truth, so conversations written before this fix render correctly too.
+    const isError = message.role === "error" || message.metadata?.structuredParseValid === false;
     const operation = message.metadata?.operation;
 
     const chatStructured = message.metadata?.chatStructured ?? (!isUser && !isError ? parseChatFromContent(message.content) : null);
@@ -5058,13 +5238,19 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 className="message-bubble-content"
                 style={{
                     maxWidth: "92%",
-                    background: isUser ? "var(--accent)" : isError ? "rgba(239,68,68,0.12)" : "var(--surface)",
-                    border: isUser ? "none" : `1px solid ${isError ? "rgba(239,68,68,0.3)" : "var(--border)"}`,
+                    background: isUser ? "var(--accent)" : isError ? "rgba(239,68,68,0.10)" : "var(--surface)",
+                    border: isUser ? "none" : `1px solid ${isError ? "var(--danger)" : "var(--border)"}`,
+                    // The left rule is what makes a failure scannable in a long transcript: the
+                    // tint alone reads as decoration, an unbroken red edge does not.
+                    borderLeft: isError ? "3px solid var(--danger)" : undefined,
+                    boxShadow: isError ? "0 0 0 1px rgba(239,68,68,0.18)" : undefined,
                     borderRadius: "var(--radius)",
                     padding: "0.55rem 0.75rem",
                     fontSize: "0.86rem",
                     lineHeight: 1.48,
-                    color: isError ? "var(--danger)" : "var(--text)",
+                    // Body stays readable; the badge and the border carry the red. All-red prose
+                    // at 0.86rem is harder to read precisely when it matters most.
+                    color: "var(--text)",
                     wordBreak: "break-word",
                 }}
             >
@@ -5086,6 +5272,28 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 >
                     {copyLabel}
                 </button>
+                {isError && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.4rem", flexWrap: "wrap" }}>
+                        <span
+                            style={{
+                                fontSize: "0.66rem",
+                                fontWeight: 700,
+                                letterSpacing: "0.04em",
+                                textTransform: "uppercase",
+                                padding: "0.12rem 0.4rem",
+                                borderRadius: "999px",
+                                background: "rgba(239,68,68,0.16)",
+                                color: "var(--danger)",
+                                border: "1px solid rgba(239,68,68,0.45)",
+                            }}
+                        >
+                            ⚠ {t("workspace.ui.messageBubble.errorBadge")}
+                        </span>
+                        <span style={{ fontSize: "0.66rem", color: "var(--text-muted)" }}>
+                            {t("workspace.ui.messageBubble.errorHint")}
+                        </span>
+                    </div>
+                )}
                 {operation && (
                     <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.45rem", flexWrap: "wrap" }}>
                         <span
@@ -5135,7 +5343,10 @@ function MessageBubble({ message }: { message: MessageDto }) {
             <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.18rem" }}>
                 {operation?.label ? `${message.role} · ${operation.label}` : message.role}
             </span>
-            {!isUser && !isError && <RequestMetaInfo message={message} />}
+            {/* Failures keep their meta strip: a run that burned tokens and produced nothing is
+                exactly when "which model, how long, what did it cost" matters most. Messages with
+                no metadata (a transport error) render nothing — RequestMetaInfo bails out. */}
+            {!isUser && <RequestMetaInfo message={message} />}
         </div>
     );
 }

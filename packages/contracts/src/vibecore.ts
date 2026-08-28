@@ -63,6 +63,13 @@ export interface VibeClassifyResponse {
      * Optional only for backward compatibility with pre-cost-attribution clients.
      */
     projectId?: string;
+    /**
+     * Human-readable notices for the user, merged by the route with its own attachment
+     * warnings. Populated when the classification could not run as asked — a model the caller
+     * selected that the operator has not activated, for instance — so a skipped classification
+     * is visible rather than silently answered by a different model.
+     */
+    warnings?: string[];
 }
 
 // ── Guided Mode LLM Prefill ────────────────────────────────────────────────────
@@ -128,6 +135,12 @@ export interface VibePrefillResponse {
      * Optional only for backward compatibility with pre-cost-attribution clients.
      */
     projectId?: string;
+    /**
+     * Human-readable notices for the user. Populated when `skipped` is true so a failed
+     * automatic prefill is visible instead of presenting an empty wizard with no explanation.
+     * The route merges these with its own attachment warnings.
+     */
+    warnings?: string[];
 }
 
 export interface VibeConfigResponse {

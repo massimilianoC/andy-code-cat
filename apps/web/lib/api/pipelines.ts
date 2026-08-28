@@ -1,10 +1,11 @@
 import { call } from "./call";
 import type {
+    CanonicalBriefEnvelope,
     GenerationWorkspaceDto,
-    GuidedLaunchResultDto,
     LaunchWorkspacePipelineInput,
     LaunchWorkspacePipelineResultDto,
     PipelineRunDto,
+    PreviewCanonicalBriefInput,
 } from "@andy-code-cat/contracts";
 
 export interface GuidedLaunchInput {
@@ -77,22 +78,6 @@ export interface GuidedPipelineConfig {
     };
 }
 
-export function launchGuided(
-    token: string,
-    projectId: string,
-    input: GuidedLaunchInput,
-) {
-    return call<GuidedLaunchResultDto>(
-        "POST",
-        `/v1/projects/${projectId}/pipelines/guided`,
-        input,
-        {
-            Authorization: `Bearer ${token}`,
-            "x-project-id": projectId,
-        },
-    );
-}
-
 export function getGuidedPipelineConfig(token: string, projectId: string) {
     return call<GuidedPipelineConfig>(
         "GET",
@@ -106,9 +91,31 @@ export function getGuidedPipelineConfig(token: string, projectId: string) {
 }
 
 /**
+ * Side-effect-free canonical brief, for the wizard's review step. Creates nothing: the launch
+ * below is the only call that writes.
+ */
+export function previewCanonicalBrief(
+    token: string,
+    projectId: string,
+    input: PreviewCanonicalBriefInput,
+) {
+    return call<{ brief: CanonicalBriefEnvelope }>(
+        "POST",
+        `/v1/projects/${projectId}/pipeline/brief-preview`,
+        input,
+        {
+            Authorization: `Bearer ${token}`,
+            "x-project-id": projectId,
+        },
+    );
+}
+
+/**
  * I15 of the SSOT program — server-owned Workspace launch (see `LaunchWorkspacePipeline` on the
- * API side). Behind `PIPELINE_RUN_ENABLED` on the backend and `NEXT_PUBLIC_PIPELINE_RUN_UI` on
- * this side; 404s if the backend flag is off.
+ * API side). Behind `PIPELINE_RUN_ENABLED` on the backend; 404s if that flag is off. This is the
+ * only guided-launch entry point. The legacy client function and the three routes behind it
+ * (/pipelines/guided and its aliases) were removed on 2026-08-27: they launched without creating
+ * a PipelineRun, so the same user action could run certified or uncertified depending on the URL.
  */
 export function launchWorkspacePipeline(
     token: string,
