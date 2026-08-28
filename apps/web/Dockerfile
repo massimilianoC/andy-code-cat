@@ -19,6 +19,10 @@ COPY . .
 # Pass via docker-compose.droplet.yml build.args → --env-file .env.droplet
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Same RELEASE_VERSION the API bakes in — NEXT_PUBLIC_ so the header can render it in the
+# browser and compare it against what /v1/version reports.
+ARG RELEASE_VERSION=unknown
+ENV NEXT_PUBLIC_RELEASE_VERSION=$RELEASE_VERSION
 RUN npm install
 RUN npm run build -w packages/contracts && npm run build -w apps/web
 

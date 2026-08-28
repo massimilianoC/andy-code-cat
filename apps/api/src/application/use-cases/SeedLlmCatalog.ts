@@ -13,40 +13,47 @@ export class SeedLlmCatalog {
     ) { }
 
     async execute(): Promise<{ providersUpserted: number; modelsUpserted: number }> {
-        const siliconFlowCatalog = buildDefaultSiliconFlowCatalog(this.siliconFlowBaseUrl);
-        const lmStudioCatalog = buildDefaultLmStudioCatalog(this.lmStudioBaseUrl);
-        const openRouterCatalog = buildDefaultOpenRouterCatalog(this.openRouterBaseUrl, this.hasOpenRouterApiKey);
+        const defaults = [
+            buildDefaultSiliconFlowCatalog(this.siliconFlowBaseUrl),
+            buildDefaultLmStudioCatalog(this.lmStudioBaseUrl),
+            buildDefaultOpenRouterCatalog(this.openRouterBaseUrl, this.hasOpenRouterApiKey),
+        ];
+        const existingByProvider = new Map(
+            (await this.repository.listAllProviders()).map((provider) => [provider.provider, provider]),
+        );
 
-        await this.repository.upsertProvider({
-            provider: siliconFlowCatalog.provider,
-            baseUrl: siliconFlowCatalog.baseUrl,
-            apiType: siliconFlowCatalog.apiType,
-            authType: siliconFlowCatalog.authType,
-            isActive: siliconFlowCatalog.isActive,
-            models: siliconFlowCatalog.models
-        });
+        for (const catalog of defaults) {
+            const existing = existingByProvider.get(catalog.provider);
+            const existingModelsById = new Map((existing?.models ?? []).map((model) => [model.id, model]));
+            const defaultIds = new Set(catalog.models.map((model) => model.id));
 
-        await this.repository.upsertProvider({
-            provider: lmStudioCatalog.provider,
-            baseUrl: lmStudioCatalog.baseUrl,
-            apiType: lmStudioCatalog.apiType,
-            authType: lmStudioCatalog.authType,
-            isActive: lmStudioCatalog.isActive,
-            models: lmStudioCatalog.models
-        });
+            // Seed supplies missing defaults and current endpoint metadata. An existing row is
+            // an operator decision: never turn it on/off or replace its role, name, prompts or
+            // default status merely because someone pressed "Sync seed → Mongo".
+            const models = [
+                ...catalog.models.map((model) => ({
+                    ...model,
+                    ...(existingModelsById.get(model.id) ?? {}),
+                    provider: catalog.provider,
+                })),
+                // Keep manually added and provider-discovered models too. Removing one would
+                // break stored model locks and make an operator's explicit activation vanish.
+                ...(existing?.models ?? []).filter((model) => !defaultIds.has(model.id)),
+            ];
 
-        await this.repository.upsertProvider({
-            provider: openRouterCatalog.provider,
-            baseUrl: openRouterCatalog.baseUrl,
-            apiType: openRouterCatalog.apiType,
-            authType: openRouterCatalog.authType,
-            isActive: openRouterCatalog.isActive,
-            models: openRouterCatalog.models
-        });
+            await this.repository.upsertProvider({
+                provider: catalog.provider,
+                baseUrl: catalog.baseUrl,
+                apiType: catalog.apiType,
+                authType: catalog.authType,
+                isActive: existing?.isActive ?? catalog.isActive,
+                models,
+            });
+        }
 
         return {
             providersUpserted: 3,
-            modelsUpserted: siliconFlowCatalog.models.length + lmStudioCatalog.models.length + openRouterCatalog.models.length
+            modelsUpserted: defaults.reduce((total, catalog) => total + catalog.models.length, 0),
         };
     }
 }

@@ -54,5 +54,9 @@ COPY --from=build /workspace/apps/api/dist ./apps/api/dist
 COPY --from=build /workspace/packages/contracts/package.json ./packages/contracts/package.json
 COPY --from=build /workspace/packages/contracts/dist ./packages/contracts/dist
 COPY --from=build /workspace/docs/skills/template-skills ./docs/skills/template-skills
+# Baked at build time from the repo-root RELEASE_VERSION (SSOT, see CLAUDE.md). A running
+# container reports the version of the code inside it, so API and web cannot silently drift.
+ARG RELEASE_VERSION=unknown
+ENV RELEASE_VERSION=$RELEASE_VERSION
 EXPOSE 4000
 CMD ["node", "apps/api/dist/index.js"]
