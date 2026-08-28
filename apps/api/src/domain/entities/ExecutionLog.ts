@@ -21,6 +21,7 @@ export type LogStatus = "success" | "failure" | "partial";
  *
  * llm:
  *   "llm_generation_complete" | "llm_generation_failed" | "llm_generation_interrupted"
+ *   | "llm_generation_parse_failed"  — completion returned but unparseable; no snapshot created
  *
  * focus_patch:
  *   "focus_patch_applied"  — all strategies tried, one succeeded

@@ -40,6 +40,7 @@ export class GetPlatformConfig {
                                 temperature: task.temperature ?? 0.7,
                                 maxCompletionTokens: task.maxCompletionTokens ?? 1200,
                                 systemTemplate: task.systemTemplate ?? "",
+                                systemTemplateBaselineHash: task.systemTemplateBaselineHash,
                             },
                         ]),
                     ),

@@ -1,7 +1,14 @@
 import { call } from "./call";
-import type { GenerationWorkspaceDto, ZeroEffortLaunchResultDto } from "@andy-code-cat/contracts";
+import type {
+    CanonicalBriefEnvelope,
+    GenerationWorkspaceDto,
+    LaunchWorkspacePipelineInput,
+    LaunchWorkspacePipelineResultDto,
+    PipelineRunDto,
+    PreviewCanonicalBriefInput,
+} from "@andy-code-cat/contracts";
 
-export interface ZeroEffortLaunchInput {
+export interface GuidedLaunchInput {
     businessName: string;
     /** PRESET_CATALOG id (e.g. "slideshow", "landing", "website", "videogame"). */
     presetId: string;
@@ -10,14 +17,26 @@ export interface ZeroEffortLaunchInput {
     tone?: string;
     primaryCta?: string;
     styleHint?: string;
+    sourceRequest?: string;
+    projectSummary?: string;
+    contentStructure?: string;
+    contentRequirements?: string;
+    functionalRequirements?: string;
+    interactionModel?: string;
+    visualDirection?: string;
+    successCriteria?: string;
+    constraints?: string;
+    mustAvoid?: string;
     contactInfo?: Array<{ key: string; value: string }>;
     styleAttributes?: string[];
     /** BCP-47 output language directive (e.g. "it", "en", "fr"). */
     outputLanguage?: string;
+    /** Filenames of documents attached during intake, included in the server-built canonical brief. */
+    attachmentNames?: string[];
 }
 
 export interface ProjectPipelineRunSummary {
-    mode: "zero-effort";
+    mode: "guided";
     status: "prepared";
     projectId: string;
     conversationId: string;
@@ -27,7 +46,7 @@ export interface ProjectPipelineRunSummary {
     workspace: GenerationWorkspaceDto;
 }
 
-export interface ZeroEffortTaskConfig {
+export interface GuidedTaskConfig {
     enabled: boolean;
     provider: string;
     model: string;
@@ -36,11 +55,17 @@ export interface ZeroEffortTaskConfig {
     systemTemplate: string;
 }
 
-export interface ZeroEffortPipelineConfig {
-    optimize: ZeroEffortTaskConfig;
-    generate: ZeroEffortTaskConfig;
-    vibeGenerate: ZeroEffortTaskConfig;
-    godModeGenerate: ZeroEffortTaskConfig;
+export interface GuidedPipelineConfig {
+    optimize: GuidedTaskConfig;
+    generate: GuidedTaskConfig;
+    vibeGenerate: GuidedTaskConfig;
+    /**
+     * The API dual-emits this alongside the legacy `godModeGenerate` field for one release
+     * (see apps/api/src/presentation/http/routes/pipelineRoutes.ts) — prefer this field.
+     */
+    projectModeGenerate: GuidedTaskConfig;
+    /** @deprecated use projectModeGenerate — kept for one release for cached-bundle safety. */
+    godModeGenerate?: GuidedTaskConfig;
     attachmentPolicy?: {
         maxAttachmentsPerPrompt: number;
         maxFileSizeBytes: number;
@@ -53,14 +78,30 @@ export interface ZeroEffortPipelineConfig {
     };
 }
 
-export function launchZeroEffort(
+export function getGuidedPipelineConfig(token: string, projectId: string) {
+    return call<GuidedPipelineConfig>(
+        "GET",
+        `/v1/projects/${projectId}/pipelines/guided/config`,
+        undefined,
+        {
+            Authorization: `Bearer ${token}`,
+            "x-project-id": projectId,
+        },
+    );
+}
+
+/**
+ * Side-effect-free canonical brief, for the wizard's review step. Creates nothing: the launch
+ * below is the only call that writes.
+ */
+export function previewCanonicalBrief(
     token: string,
     projectId: string,
-    input: ZeroEffortLaunchInput,
+    input: PreviewCanonicalBriefInput,
 ) {
-    return call<ZeroEffortLaunchResultDto>(
+    return call<{ brief: CanonicalBriefEnvelope }>(
         "POST",
-        `/v1/projects/${projectId}/pipelines/zero-effort`,
+        `/v1/projects/${projectId}/pipeline/brief-preview`,
         input,
         {
             Authorization: `Bearer ${token}`,
@@ -69,10 +110,34 @@ export function launchZeroEffort(
     );
 }
 
-export function getZeroEffortConfig(token: string, projectId: string) {
-    return call<ZeroEffortPipelineConfig>(
+/**
+ * I15 of the SSOT program — server-owned Workspace launch (see `LaunchWorkspacePipeline` on the
+ * API side). This is the only guided-launch entry point. The legacy client function and the
+ * three routes behind it
+ * (/pipelines/guided and its aliases) were removed on 2026-08-27: they launched without creating
+ * a PipelineRun, so the same user action could run certified or uncertified depending on the URL.
+ */
+export function launchWorkspacePipeline(
+    token: string,
+    projectId: string,
+    input: LaunchWorkspacePipelineInput,
+) {
+    return call<LaunchWorkspacePipelineResultDto>(
+        "POST",
+        `/v1/projects/${projectId}/pipeline/launch-workspace`,
+        input,
+        {
+            Authorization: `Bearer ${token}`,
+            "x-project-id": projectId,
+        },
+    );
+}
+
+/** I15 — reads back the PipelineRun a `launchWorkspacePipeline()` call created (I7's route). */
+export function getPipelineRun(token: string, projectId: string, runId: string) {
+    return call<{ run: PipelineRunDto }>(
         "GET",
-        `/v1/projects/${projectId}/pipelines/zero-effort/config`,
+        `/v1/projects/${projectId}/pipeline-runs/${runId}`,
         undefined,
         {
             Authorization: `Bearer ${token}`,

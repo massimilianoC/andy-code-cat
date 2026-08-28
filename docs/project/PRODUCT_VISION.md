@@ -1,7 +1,7 @@
 # Andy Code Cat - Product Vision
 
 > Status: current product vision  
-> Last aligned: 2026-07-08  
+> Last aligned: 2026-07-15
 > Supersedes: historical vision archived at `docs/archive/vision/TARGET-VISION_2026-05-14.md`
 
 Andy Code Cat is evolving from an AI website builder into a no-code / low-code artifact
@@ -23,7 +23,7 @@ The current platform already includes the foundations needed for this vision:
 
 - authenticated multi-project usage with double sandbox isolation
 - preset-aware and layered prompt composition
-- VibeCore / Zero Effort intake with intent classification and guided handoff
+- VibeCore / Guided Mode intake with intent classification and guided handoff
 - document and media context through `enrichmentTrace` and Layer D
 - user style profile, moodboard, and global brand identity layers
 - WYSIWYG and code editing over generated HTML/CSS/JS artifacts
@@ -33,8 +33,8 @@ The current platform already includes the foundations needed for this vision:
 
 The product should now be understood as an artifact platform with multiple front doors:
 
-- **VibeCore / Zero Effort** for fast guided generation
-- **GodMode / Workspace** for expert iterative control
+- **VibeCore / Guided Mode** for fast guided generation
+- **Workspace / Workspace** for expert iterative control
 - **Didactic Mode** for understanding what the AI produced and why
 - **Admin / Governance** for templates, prompt layers, model routing, and platform policy
 
@@ -82,9 +82,11 @@ Andy Code Cat should remain frontend-artifact-first for now.
 When dynamic behavior is needed, the recommended direction is a shared declarative BaaS layer,
 not generated per-artifact backend code and not one database instance per generated app.
 
-Generated artifacts should declare service needs through a `serviceManifest` and call only
-approved client SDK APIs, for example forms, catalog, webhook, payments, Telegram, or future
-RAG widgets. The real backend stays inside Andy Code Cat and enforces:
+Generated artifacts should declare service needs through a `serviceManifest` and declarative DOM
+markers. Versioned, platform-owned runtime modules—not LLM-generated handlers—call approved
+capability APIs for forms, catalog, payments or future widgets. Email, Telegram, CRM and webhook
+actions originate from validated server-side events rather than generic anonymous trigger APIs.
+The real backend stays inside Andy Code Cat and enforces:
 
 - project public key resolution
 - origin allowlist from publish state
@@ -93,6 +95,12 @@ RAG widgets. The real backend stays inside Andy Code Cat and enforces:
 - user/project ownership for management APIs
 - envelope encryption for BYOK secrets
 - execution logging and abuse monitoring
+
+Persistent capabilities use shared domain collections with mandatory
+`ownerUserId + projectId + capabilityInstanceId` scope in every repository query. A physical
+database/cluster per tenant is an optional enterprise isolation tier, not the default, and a
+collection per tenant in one database is explicitly rejected. The current decision and rollout
+order live in [PLATFORM_CAPABILITY_RUNTIME.md](../architecture/PLATFORM_CAPABILITY_RUNTIME.md).
 
 This keeps the artifact portable while giving it safe dynamic capabilities.
 

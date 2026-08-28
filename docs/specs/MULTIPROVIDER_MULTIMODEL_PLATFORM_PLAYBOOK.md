@@ -1,5 +1,9 @@
 # Multi-Provider Multi-Model Platform Playbook (Simple)
 
+> **Status: historical generic playbook.** It is not the product routing contract. The active
+> authority for user override precedence, fail-closed model locks, notifications and execution
+> proof is [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md).
+
 ## 1) Obiettivo
 
 Creare una piattaforma LLM semplice ma estendibile, con:

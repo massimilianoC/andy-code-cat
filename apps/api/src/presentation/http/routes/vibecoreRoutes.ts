@@ -3,7 +3,7 @@
  *
  * Route map:
  *   POST /v1/vibecore/classify  → classify prompt + attachments, returns VibeClassifyResponse
- *   POST /v1/vibecore/prefill   → LLM-powered zero-effort form prefill, returns VibePrefillResponse
+ *   POST /v1/vibecore/prefill   → LLM-powered Guided Mode form prefill, returns VibePrefillResponse
  */
 
 import { Router, type RequestHandler } from "express";
@@ -432,7 +432,15 @@ export function createVibecoreRoutes(): Router {
                     result.draft.attachedDocuments = layerDocNames;
                 }
 
-                res.json({ ...result, projectId, warnings, attachmentPolicy });
+                // Merge, don't overwrite: `warnings` here are attachment-policy notices, while
+                // the use case adds its own when the automatic prefill fell back. Spreading
+                // `result` first and then assigning `warnings` used to drop the latter silently.
+                res.json({
+                    ...result,
+                    projectId,
+                    warnings: [...warnings, ...(result.warnings ?? [])],
+                    attachmentPolicy,
+                });
             } catch (error) {
                 next(error);
             }

@@ -6,12 +6,15 @@ import { getToken } from "@/lib/token-store";
 import {
     getAdminConfig,
     getAdminLlmRegistry,
+    getAdminPromptRegistry,
     updateProductGovernance,
     type ProductGovernanceDto,
     type PlatformConfigDto,
     type CookieBannerLocaleText,
     type PromptTaskSettingDto,
     type AdminLlmProviderDto,
+    type ProductAttachmentPolicyDto,
+    type ProductDocumentContextPolicyDto,
 } from "@/lib/api/admin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,15 +30,23 @@ const DEFAULT_PRODUCT_KEY = "default";
 const DEFAULT_PROMPT_TASK_KEY = "optimize_user_prompt";
 const TEMPLATE_DRAFT_TASK_KEY = "draft_template_model";
 const NGINX_RUNTIME_ENABLED = false;
-const DEFAULT_ATTACHMENT_POLICY = {
-    maxAttachmentsPerPrompt: 10,
-    maxFileSizeBytes: 10 * 1024 * 1024,
-    maxTotalBytes: 100 * 1024 * 1024,
-    warningThresholdBytes: 80 * 1024 * 1024,
+// Attachment/document-context policy defaults are NOT hardcoded here — they are fetched at
+// runtime from GET /v1/admin/prompt-registry (`policyDefaults`), which echoes the real
+// backend constants (DEFAULT_PRODUCT_ATTACHMENT_POLICY / DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY
+// in PlatformConfig.ts). A prior hardcoded mirror here (10 attachments / 10MB) silently
+// disagreed with the real backend default (12 attachments / 20MB) — see `policyDefaults`
+// state below and the useEffect that loads it. These zero placeholders are only ever used
+// for the few milliseconds before that fetch resolves — the page stays on a loading state
+// until then, so they are never rendered or saved.
+const PLACEHOLDER_ATTACHMENT_POLICY: ProductAttachmentPolicyDto = {
+    maxAttachmentsPerPrompt: 0,
+    maxFileSizeBytes: 0,
+    maxTotalBytes: 0,
+    warningThresholdBytes: 0,
 };
-const DEFAULT_DOCUMENT_CONTEXT_POLICY = {
-    maxAssetsPerPrompt: 10,
-    fallbackInlineExtractionMaxAssets: 10,
+const PLACEHOLDER_DOCUMENT_CONTEXT_POLICY: ProductDocumentContextPolicyDto = {
+    maxAssetsPerPrompt: 0,
+    fallbackInlineExtractionMaxAssets: 0,
 };
 
 const PROMPT_TASK_DEFAULTS: Record<string, PromptTaskSettingDto> = {
@@ -121,12 +132,8 @@ const EMPTY_GOVERNANCE: ProductGovernanceDto = {
         clientMaxBodySizeMb: 20,
         extraServerDirectives: "",
     },
-    attachmentPolicy: {
-        ...DEFAULT_ATTACHMENT_POLICY,
-    },
-    documentContextPolicy: {
-        ...DEFAULT_DOCUMENT_CONTEXT_POLICY,
-    },
+    // attachmentPolicy / documentContextPolicy are intentionally omitted here — they are
+    // filled in at runtime from the fetched policy registry defaults (see mergeWithEmpty).
 };
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
@@ -203,41 +210,18 @@ const LAYER_SOURCE_META: Record<LayerSource, { label: string; bg: string; color:
     editable: { label: "✏️ Configurable here", bg: "rgba(99,102,241,0.12)", color: "var(--accent-hover)", border: "1px solid rgba(99,102,241,0.3)" },
 };
 
-/** Static representative content for hardcoded pipeline layers (shown read-only). */
-const HARDCODED_LAYER_CONTENT: Record<string, string> = {
-    A: `You are Andy Code Cat Builder, a specialised AI agent for generating production-ready HTML web pages.
-
-Platform constraints (hardcoded — cannot be overridden by any layer below):
-
-• Produce valid, complete HTML5 — never partial fragments.
-• Never insert placeholder text (lorem ipsum, [YOUR TEXT HERE], TBD, etc.).
-• Never include HTML comments in the rendered output.
-• All <img> elements must carry a descriptive alt attribute.
-• Output is a single self-contained document; inline styles are allowed, external CDN links are not unless the preset explicitly requires them.
-• Do not include <script> tags unless the project type requires interactivity.
-• The MANIFEST.json block must always be emitted in full at the end of the response.`,
-
-    "⚙": `<!-- Runtime-computed — injected at call time, not stored in governance -->
-
-Target output: complete HTML document within token budget.
-Max completion tokens: [resolved from plan limits at runtime]
-
-Guidelines applied:
-• Prioritise content density — reduce the number of sections rather than truncating sections.
-• The MANIFEST.json block must always be emitted in full; never truncate it.
-• If approaching the token limit, omit decorative sections before omitting structural ones.
-• Do not summarise or abbreviate section content to fit the budget — reduce scope instead.`,
-
-    "→": `<!-- Per-call metadata — ephemeral, injected last, never stored -->
-
-request_id:         [uuid generated per request]
-response_format:    structured_html_with_manifest
-strict_mode:        true
-pipeline_version:   [resolved at runtime]
-
-This layer is invisible to end users. It is used internally for request tracing and
-response-format enforcement. Its content changes on every call and is never persisted.`,
-};
+/**
+ * Honest note shown for hardcoded/runtime layers instead of fabricated example content.
+ * A prior version of this page shipped a hand-written "Layer A" text block presented as if
+ * it were the real backend prompt; it shared no text with the actual layer builder
+ * (apps/api/src/application/llm/systemPromptComposer.ts) and drifted silently. Rather than
+ * re-embed another mirror that can drift again, point operators at the one place this text
+ * can never be stale: the live composed prompt for an actual project.
+ */
+const HARDCODED_LAYER_NOTE =
+    "This layer's content is fixed in backend code and is not mirrored here to avoid another " +
+    "stale-text mismatch. To see the real, currently-composed text for any project, open that " +
+    "project's Workspace → \"Prompt\" tab (live view, always in sync with the backend).";
 
 /** Descriptive info shown for dynamic (preset / per-project) layers when opened. */
 const DYNAMIC_LAYER_INFO: Record<string, string> = {
@@ -293,9 +277,9 @@ function LayerRow({ letter, name, source, description, children, isLast, initial
     const [isOpen, setIsOpen] = useState(initialOpen ?? false);
     const meta = LAYER_SOURCE_META[source];
 
-    const staticContent = HARDCODED_LAYER_CONTENT[letter];
     const dynamicInfo = DYNAMIC_LAYER_INFO[letter];
-    const hasBody = children != null || staticContent != null || dynamicInfo != null;
+    const showHardcodedNote = source === "hardcoded";
+    const hasBody = children != null || dynamicInfo != null || showHardcodedNote;
 
     return (
         <div style={{ display: "flex", gap: "14px" }}>
@@ -347,18 +331,23 @@ function LayerRow({ letter, name, source, description, children, isLast, initial
                         {/* Editable layer: writable Monaco */}
                         {children}
 
-                        {/* Hardcoded layer: read-only Monaco with static content */}
-                        {!children && staticContent != null && (
-                            <MonacoCodeEditor
-                                language="markdown"
-                                value={staticContent}
-                                readOnly
-                                height="160px"
-                            />
+                        {/* Hardcoded layer: honest note instead of a fabricated text mirror */}
+                        {!children && showHardcodedNote && (
+                            <div style={{
+                                padding: "10px 14px",
+                                borderRadius: "6px",
+                                background: "rgba(100,100,110,0.08)",
+                                border: "1px solid var(--border)",
+                                fontSize: "0.78rem",
+                                color: "var(--text-muted)",
+                                lineHeight: 1.65,
+                            }}>
+                                {HARDCODED_LAYER_NOTE}
+                            </div>
                         )}
 
                         {/* Dynamic (preset / per-project) layer: info block */}
-                        {!children && staticContent == null && dynamicInfo != null && (
+                        {!children && !showHardcodedNote && dynamicInfo != null && (
                             <div style={{
                                 padding: "10px 14px",
                                 borderRadius: "6px",
@@ -395,6 +384,14 @@ export default function AdminGovernancePage() {
     const [activeProductKey, setActiveProductKey] = useState(DEFAULT_PRODUCT_KEY);
     const [governance, setGovernance] = useState<ProductGovernanceDto>(EMPTY_GOVERNANCE);
     const [providers, setProviders] = useState<AdminLlmProviderDto[]>([]);
+    // Real backend defaults for the attachment/document-context policy, fetched from the
+    // prompt registry endpoint. Null until loaded; mergeWithEmpty falls back to obvious
+    // placeholder zeros (never rendered — gated by `loading`) rather than ever guessing at
+    // real-looking numbers here.
+    const [policyDefaults, setPolicyDefaults] = useState<{
+        attachmentPolicy: ProductAttachmentPolicyDto;
+        documentContextPolicy: ProductDocumentContextPolicyDto;
+    } | null>(null);
 
     function normalizeVisiblePromptTasks(nextGovernance: ProductGovernanceDto, nextProviders: AdminLlmProviderDto[]) {
         return {
@@ -419,18 +416,29 @@ export default function AdminGovernancePage() {
         const token = getToken();
         if (!token) { router.replace("/login"); return; }
 
-        Promise.all([getAdminConfig(token), getAdminLlmRegistry(token)])
-            .then(([nextConfig, registry]) => {
+        Promise.all([getAdminConfig(token), getAdminLlmRegistry(token), getAdminPromptRegistry(token)])
+            .then(([nextConfig, registry, promptRegistry]) => {
                 setConfig(nextConfig);
                 setProviders(registry.providers ?? []);
+                setPolicyDefaults(promptRegistry.policyDefaults);
                 const selected = nextConfig.governanceByProduct?.[DEFAULT_PRODUCT_KEY] ?? EMPTY_GOVERNANCE;
-                setGovernance(normalizeVisiblePromptTasks(mergeWithEmpty(selected), registry.providers ?? []));
+                setGovernance(normalizeVisiblePromptTasks(
+                    mergeWithEmpty(selected, promptRegistry.policyDefaults),
+                    registry.providers ?? [],
+                ));
             })
             .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load governance config"))
             .finally(() => setLoading(false));
     }, [router]);
 
-    function mergeWithEmpty(src: Partial<ProductGovernanceDto>): ProductGovernanceDto {
+    function mergeWithEmpty(
+        src: Partial<ProductGovernanceDto>,
+        defaults?: { attachmentPolicy: ProductAttachmentPolicyDto; documentContextPolicy: ProductDocumentContextPolicyDto } | null,
+    ): ProductGovernanceDto {
+        const resolvedDefaults = defaults ?? policyDefaults ?? {
+            attachmentPolicy: PLACEHOLDER_ATTACHMENT_POLICY,
+            documentContextPolicy: PLACEHOLDER_DOCUMENT_CONTEXT_POLICY,
+        };
         return {
             promptTemplates: { ...EMPTY_GOVERNANCE.promptTemplates, ...src.promptTemplates },
             promptTaskSettings: Object.fromEntries(
@@ -446,8 +454,8 @@ export default function AdminGovernancePage() {
             cookieBanner: { ...EMPTY_GOVERNANCE.cookieBanner, ...src.cookieBanner },
             legal: { ...EMPTY_GOVERNANCE.legal, ...src.legal },
             nginx: { ...EMPTY_GOVERNANCE.nginx, ...src.nginx },
-            attachmentPolicy: { ...DEFAULT_ATTACHMENT_POLICY, ...(src.attachmentPolicy ?? {}) },
-            documentContextPolicy: { ...DEFAULT_DOCUMENT_CONTEXT_POLICY, ...(src.documentContextPolicy ?? {}) },
+            attachmentPolicy: { ...resolvedDefaults.attachmentPolicy, ...(src.attachmentPolicy ?? {}) },
+            documentContextPolicy: { ...resolvedDefaults.documentContextPolicy, ...(src.documentContextPolicy ?? {}) },
         };
     }
 
@@ -526,7 +534,7 @@ export default function AdminGovernancePage() {
     ) {
         setGovernance((prev) => ({
             ...prev,
-            attachmentPolicy: { ...DEFAULT_ATTACHMENT_POLICY, ...(prev.attachmentPolicy ?? {}), [key]: value },
+            attachmentPolicy: { ...(policyDefaults?.attachmentPolicy ?? PLACEHOLDER_ATTACHMENT_POLICY), ...(prev.attachmentPolicy ?? {}), [key]: value },
         }));
     }
 
@@ -536,7 +544,7 @@ export default function AdminGovernancePage() {
     ) {
         setGovernance((prev) => ({
             ...prev,
-            documentContextPolicy: { ...DEFAULT_DOCUMENT_CONTEXT_POLICY, ...(prev.documentContextPolicy ?? {}), [key]: value },
+            documentContextPolicy: { ...(policyDefaults?.documentContextPolicy ?? PLACEHOLDER_DOCUMENT_CONTEXT_POLICY), ...(prev.documentContextPolicy ?? {}), [key]: value },
         }));
     }
 
@@ -568,12 +576,12 @@ export default function AdminGovernancePage() {
 
     // ── Render ────────────────────────────────────────────────────────────────
 
-    if (loading) return <p className="text-sm text-muted-foreground">Loading governance…</p>;
+    if (loading || !policyDefaults) return <p className="text-sm text-muted-foreground">Loading governance…</p>;
 
     const cookieBanner = governance.cookieBanner ?? EMPTY_GOVERNANCE.cookieBanner!;
     const legal = governance.legal ?? EMPTY_GOVERNANCE.legal!;
-    const attachmentPolicy = governance.attachmentPolicy ?? DEFAULT_ATTACHMENT_POLICY;
-    const documentContextPolicy = governance.documentContextPolicy ?? DEFAULT_DOCUMENT_CONTEXT_POLICY;
+    const attachmentPolicy = governance.attachmentPolicy ?? policyDefaults.attachmentPolicy;
+    const documentContextPolicy = governance.documentContextPolicy ?? policyDefaults.documentContextPolicy;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>

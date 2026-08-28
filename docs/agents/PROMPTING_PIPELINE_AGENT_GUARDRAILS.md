@@ -6,6 +6,14 @@
 > **Rule IDs** (format `PP-NNN`) are stable identifiers. Cite them in commit messages and PR descriptions to prove compliance. Example: `fix(llm): remove duplicated budget section — PP-006`.
 >
 > **Language policy:** This document is in English. All additions must be in English.
+>
+> **Current planning status (2026-08-18):** registry-driven composition and the Prompt-tab
+> foundation are implemented. For server-owned persistence, complete provider-payload
+> transparency, snapshot linkage and application-layer extraction, follow
+> `docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md`. Do not use the historical
+> `PROMPT_LAYER_SSOT_EXECUTION_PLAN.md` as a new implementation checklist. For Vibe, Zero Effort,
+> model routing, optimization policy or GodMode handoff, also follow
+> `docs/specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md`.
 
 ---
 
@@ -18,12 +26,13 @@ The Layer 1 (chat-preview) pipeline composes the system prompt in the following 
 |---|---|---|---|
 | **A** | `buildBaseConstraintsLayer()` in `systemPromptLayers.ts` | **Architecture** (human maintainer or architecture agent) | Immutable **technical** floor: 1+1+1 output format, CDN-only, no framework, JS exclusively in artifacts.js, HTML compactness, visibility-without-JS, canvas/engine container safety, accessibility baseline, **completeness & ship-readiness contract** (every output a complete, publish-ready, fully-functional POC/MVP — never a skeleton or deferred-to-next-steps stub; token efficiency never reduces scope). **No layout/viewport/document-structure directives** (those belong to Layer B). Responsiveness is stated only as a soft, overridable default. |
 | **B** | `buildPresetLayerFromPreset()` in `systemPromptLayers.ts` | **Preset agent** | `outputSpec.systemPromptModule` + `cssConstraints` + the deterministic **VIEWPORT MODE** block derived from `outputSpec.viewportModel` (`buildViewportModeBlock`). Owns all layout/viewport/document-structure framing — never free text |
+| **V** | `buildServiceContractLayer()` in `systemPromptLayers.ts` | **Service-contract agent** | Non-editable, deterministic structural protocols for enabled artifact services: versioned JSON envelope, slots, limits and forbidden executable/configuration values. |
 | **S** | `resolveFilesystemTemplateSkills()` in `templateSkillsLayer.ts`, passed as `skillsLayer` to `composeSystemPromptWithLayers()` | **Template skills agent** | Curated Markdown manuals selected by current `ProjectPreset.id` from `docs/skills/template-skills/by-template/<presetId>/*.md`. Owns template-specific craft, UX, style, interaction, and review guidance. Must stay budget-capped and file-backed. |
 | **C** | `buildStyleContextBlock()` in `styleContextBuilder.ts` | **Style / moodboard agent** | Visual tags, palette, typography, layout, tone — no technical rules |
-| **D** | `buildProjectKnowledgeLayer()` *(to be implemented)* in `systemPromptLayers.ts` | **Context / embed agent** | Asset enrichment traces, document briefs, fetched resource snippets — pure content, no technical rules |
+| **D** | `buildProjectKnowledgeLayer()` in `systemPromptLayers.ts`, supplied by `buildProjectLayerDContext()` | **Context / embed agent** | Asset enrichment traces, document briefs, fetched resource snippets — pure content, no technical rules |
 | **E** | `prePromptTemplate` via `GetLlmPromptConfig.ts` | **CDN / images / encoding agent** | RESPONSE FORMAT, JSON ENCODING RULES, HTML ATTRIBUTE QUOTING, APPROVED CDN LIBRARIES, LIBRARY SELECTION GUIDANCE, IMAGES, CONVERSATION CONTEXT |
 | **F** | `governanceSystemPrompt` from `PlatformConfig` | **Superadmin operator** (parametric UI) | Product governance, operator policies, per-presetId overrides |
-| **G** | `roleModel.promptTemplate` (appended to E in `llmRoutes.ts`) | **Models agent** | MODEL-SPECIFIC GUIDANCE per pipeline role (dialogue, coding, vision…) |
+| **G** | `buildGlobalBrandLayer()` supplied as `brandContextLayer` | **Brand identity agent** | Hierarchical platform/user/project brand identity. Model-specific `roleModel.promptTemplate` is currently a sourced segment of Layer E, not Layer G. |
 | **Budget** | `buildOutputBudgetPolicy()` in `llmMessageBuilder.ts` | **Infra / env agent** | OUTPUT BUDGET POLICY + REASONING BUDGET — dynamic from env, no duplication |
 | **Req** | `requestSystemPrompt` | **Runtime** | Per-call override — never persisted |
 
@@ -36,8 +45,8 @@ The following sections are **frozen**: modifying them requires explicit review f
 | File | Section / Constant | Reason |
 |---|---|---|
 | `systemPromptLayers.ts` — `buildBaseConstraintsLayer()` | Entire function | Layer A architectural rules. An error here breaks ALL presets. |
-| `systemPromptComposer.ts` — `composeSystemPrompt()` | Layer order and separator `"\n\n---\n\n"` | Changing the order or separator invalidates the expected behaviour of all downstream layers. |
-| `llmRoutes.ts` — `resolveContext()` | `effectivePrePromptTemplate` assembly logic and the `composeSystemPrompt` call | Critical production pipeline. Changes require full E2E test coverage. |
+| `systemPromptComposer.ts` — `composeSystemPromptWithLayers()` | Layer order and separator `"\n\n---\n\n"` | Changing the order or separator invalidates the expected behaviour of all downstream layers. |
+| `llmRoutes.ts` — `resolveContext()` | Current composition orchestration | Critical production pipeline. Its extraction into the application layer requires the staged plan and full E2E coverage. |
 | `GetLlmPromptConfig.ts` — `DEFAULT_RESPONSE_FORMAT_VERSION` | The version constant | Increment only with a dedicated PR and explicit DB migration. |
 
 ---
@@ -122,6 +131,30 @@ than emitting the JSON artifact.
 - **`PP-019` SHOULD:** prefer compact imperative wording over anxious phrasing such as repeated
   "final authority", "non-editable", or multi-step self-audit instructions unless the rule must
   genuinely override an editable template.
+
+### 3.7 Service contract ownership (PP-022)
+
+- **`PP-022` MUST:** keep versioned service envelopes, slot syntax, field allowlists and limits in
+  deterministic Layer V and the shared contracts package.
+- **`PP-022` MUST NOT:** place recipients, endpoints, secrets, retention policy, tenant settings,
+  or executable handlers in any prompt layer.
+- **`PP-022` MUST NOT:** let Layer S redefine the service envelope. Layer S may provide only
+  preset-specific craft and UX guidance within Layer V's capabilities.
+- The provider structured-output schema and runtime validation must derive from the same shared
+  contract version.
+
+### 3.8 Pipeline model and brief authority (PP-023)
+
+- **`PP-023` MUST:** treat a user model selection for a Vibe/Zero Effort/GodMode pipeline as a
+  server-owned, immutable run decision. Every text-model dispatch in that run must receive the
+  resolved decision through the application layer.
+- **`PP-023` MUST NOT:** silently substitute a provider or model when a locked selection cannot be
+  resolved. The run must fail closed or record an explicitly approved capability exception.
+- **`PP-023` MUST:** build the canonical generation brief once on the server and dispatch that
+  exact brief as the user contribution. Browser storage and URL parameters may aid navigation but
+  must never be authoritative for the model lock or canonical prompt.
+- **`PP-023` MUST NOT:** invoke implicit optimization for a run whose persisted optimization policy
+  is `skip`.
 
 ---
 
@@ -216,7 +249,7 @@ Answer each question before committing. A single "yes" is a blocker.
 | Layer composer (structure) | `apps/api/src/application/llm/systemPromptComposer.ts` |
 | Layer A + B builders | `apps/api/src/application/llm/systemPromptLayers.ts` |
 | Layer C builder (style) | `apps/api/src/application/llm/styleContextBuilder.ts` |
-| Layer D builder (to be implemented) | `apps/api/src/application/llm/systemPromptLayers.ts` |
+| Layer D builder | `apps/api/src/application/llm/systemPromptLayers.ts` |
 | Layer E default (DEFAULT_PRE_PROMPT) | `apps/api/src/application/use-cases/GetLlmPromptConfig.ts` |
 | Budget policy (dynamic from env) | `apps/api/src/application/llm/llmMessageBuilder.ts` |
 | Pipeline assembly (resolveContext) | `apps/api/src/presentation/http/routes/llmRoutes.ts` |
@@ -253,6 +286,7 @@ array; never remove an existing repair without consensus):
 | `aos-css-opacity-neutralized` | Inline `[data-aos]{opacity:0}` rule with no AOS JS at all | Remove the `opacity:0` declaration |
 | `css-literal-escapes-unescaped` | Literal `\n` / `\t` / `\r` inside the CSS artifact | Convert to real whitespace |
 | `phaser-parent-canvas-rewritten` | Phaser `parent: 'X'` while `<canvas id='X'>` exists | Rewrite that `<canvas>` element to a `<div>` with the same id |
+| `tailwind-runtime-injected` | Three or more Tailwind utility classes, with neither Tailwind CDN nor compiled utility CSS | Inject pinned Tailwind 3.4.17 and a safe config for CSS custom-property colours |
 
 When a repair fires, the route emits an `artifact_repaired` execution-log event
 containing the list of triggered tags. Use those events as the canary metric for
@@ -288,3 +322,28 @@ Implemented per `docs/specs/PROMPT_LAYER_SSOT_SPEC.md` /
 - **`PP-020` MUST:** real generation, prompt preview, and persisted traces all
   use the same `resolveContext()` composition path. Do not add a second Layer S
   preview/composition path.
+
+---
+
+## 9. Exact Sent-Prompt Trace Parity (PP-021)
+
+- **`PP-021` MUST:** `promptingTrace.messagesSentToLlm` persist the complete, ordered message array
+  supplied to the provider. It is the authoritative audit record, not a reconstruction.
+- **`PP-021` MUST:** `promptingTrace.effectiveSystemPrompt` be byte-identical to the system-message
+  content in `messagesSentToLlm`.
+- **`PP-021` MUST:** `promptingTrace.layers` contain every `PROMPT_LAYER_DESCRIPTORS` item in
+  canonical order, including entries with `chars: 0` and source `empty`. Every non-empty span must
+  slice the exact marker-wrapped segment from `effectiveSystemPrompt`.
+- **`PP-021` MUST:** Layer V appear in every trace, including as an empty row when no capability is
+  active. Missing Layer V, omitted layers, truncated prompt text, or a stored system prompt that
+  differs from the provider message is a trace-integrity failure.
+- **`PP-021` MUST:** the Prompt Inspector render persisted `promptingTrace` for a completed request
+  and label `/llm/prompt-preview` only as a dry-run estimate for the next request.
+- **`PP-021` MUST NOT:** focused-mode, governance, model, capability, or runtime prompt text be
+  appended after `composeSystemPromptWithLayers()`. Register such text as a descriptor with a
+  marker, source and span before provider send.
+- **`PP-021` MUST:** use Layer Q (`focused-edit-protocol`) for focused edit instructions and
+  focused governance. Layer Q remains present with `chars: 0` and source `empty` for normal
+  generation.
+- **`PP-021` MUST:** run `assertPromptTraceParity()` against the exact messages before the provider
+  call. The frontend must not reconstruct missing legacy layers from prompt markers.

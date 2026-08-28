@@ -27,6 +27,8 @@ const promptTaskSettingSchema = z.object({
     temperature: z.number().min(0).max(2).default(0.7),
     maxCompletionTokens: z.number().int().min(64).max(32000).default(1200),
     systemTemplate: z.string().max(20000).default(""),
+    /** sha256:<16 hex chars> of the platform default text this override was saved against — used to detect a stale override when the platform default later changes. */
+    systemTemplateBaselineHash: z.string().max(80).optional(),
 });
 
 const mediaStockProviderSchema = z.enum(["pexels", "pixabay", "unsplash", "loremflickr", "picsum"]);
@@ -128,6 +130,22 @@ export const adminLlmModelPatchSchema = z.object({
     providerActive: z.boolean().optional(),
 });
 export type AdminLlmModelPatchInput = z.infer<typeof adminLlmModelPatchSchema>;
+
+/**
+ * Turn a set of models on or off in one request.
+ *
+ * A batch rather than a per-model call because the operator's unit is a batch: "activate this
+ * whole author", "turn this provider off". Sending one request per model turns a single decision
+ * into hundreds of writes that can half-fail, leaving a catalog nobody chose.
+ *
+ * The cap is deliberately generous — a large provider listing is exactly the case this exists for.
+ */
+export const adminLlmModelActivationSchema = z.object({
+    modelIds: z.array(z.string().min(1).max(200)).min(1).max(1000),
+    isActive: z.boolean(),
+});
+
+export type AdminLlmModelActivationInput = z.infer<typeof adminLlmModelActivationSchema>;
 
 export const adminSeedLlmRegistrySchema = z.object({
     providers: z.array(z.string().min(1).max(80)).max(10).optional(),
@@ -340,6 +358,7 @@ export interface PlatformConfigDto {
             temperature: number;
             maxCompletionTokens: number;
             systemTemplate: string;
+            systemTemplateBaselineHash?: string;
         }>;
         injections: {
             headHtml: string;
@@ -381,6 +400,43 @@ export interface PlatformConfigDto {
             fallbackProviders: Array<"pexels" | "pixabay" | "unsplash" | "loremflickr" | "picsum">;
             allowPicsumFallback: boolean;
             strictPersistence?: boolean;
+        };
+    };
+}
+
+// ── Prompt task registry (governance SSOT) ──────────────────────────────────
+
+export interface PromptSlotDescriptorDto {
+    id: string;
+    key: string;
+    label: string;
+    description: string;
+    editableBy: string;
+    store: string;
+}
+
+export interface PromptTaskDescriptorDto {
+    key: string;
+    label: string;
+    group: string;
+    operatorSlotId?: string;
+    defaultText: string;
+    defaultTextHash: string;
+    slots: PromptSlotDescriptorDto[];
+}
+
+export interface AdminPromptRegistryDto {
+    tasks: PromptTaskDescriptorDto[];
+    policyDefaults: {
+        attachmentPolicy: {
+            maxAttachmentsPerPrompt: number;
+            maxFileSizeBytes: number;
+            maxTotalBytes: number;
+            warningThresholdBytes: number;
+        };
+        documentContextPolicy: {
+            maxAssetsPerPrompt: number;
+            fallbackInlineExtractionMaxAssets: number;
         };
     };
 }

@@ -63,10 +63,17 @@ export interface VibeClassifyResponse {
      * Optional only for backward compatibility with pre-cost-attribution clients.
      */
     projectId?: string;
+    /**
+     * Human-readable notices for the user, merged by the route with its own attachment
+     * warnings. Populated when the classification could not run as asked — a model the caller
+     * selected that the operator has not activated, for instance — so a skipped classification
+     * is visible rather than silently answered by a different model.
+     */
+    warnings?: string[];
 }
 
-// ── Zero-Effort LLM Prefill ───────────────────────────────────────────────────
-// See docs/specs/ZERO_EFFORT_PREFILL_SPEC.md
+// ── Guided Mode LLM Prefill ────────────────────────────────────────────────────
+// See docs/specs/GUIDED_MODE_PREFILL_SPEC.md
 
 export interface VibePrefillRequest {
     prompt: string;
@@ -85,10 +92,10 @@ export interface VibePrefillRequest {
 }
 
 /**
- * Shape mirrors ZeroEffortLaunchInput (packages/contracts/src/pipeline.ts)
+ * Shape mirrors GuidedLaunchInput (packages/contracts/src/pipeline.ts)
  * but is inlined here so the vibecore module stays self-contained.
  */
-export interface ZeroEffortDraft {
+export interface GuidedDraft {
     businessName: string;
     /** PRESET_CATALOG id (e.g. "slideshow", "landing", "website", "videogame"). */
     presetId: string;
@@ -97,6 +104,17 @@ export interface ZeroEffortDraft {
     tone?: string;
     primaryCta?: string;
     styleHint?: string;
+    /** Verbatim user request; inferred fields may enrich but never contradict it. */
+    sourceRequest?: string;
+    projectSummary?: string;
+    contentStructure?: string;
+    contentRequirements?: string;
+    functionalRequirements?: string;
+    interactionModel?: string;
+    visualDirection?: string;
+    successCriteria?: string;
+    constraints?: string;
+    mustAvoid?: string;
     contactInfo?: Array<{ key: string; value: string }>;
     styleAttributes?: string[];
     /** Filenames of project documents that were analysed to generate this draft (informational only). */
@@ -106,7 +124,7 @@ export interface ZeroEffortDraft {
 }
 
 export interface VibePrefillResponse {
-    draft: ZeroEffortDraft;
+    draft: GuidedDraft;
     dataDashboardDraft?: DataDashboardDraft;
     resolvedMode?: VibeResolvedMode;
     confidence: number;
@@ -117,6 +135,12 @@ export interface VibePrefillResponse {
      * Optional only for backward compatibility with pre-cost-attribution clients.
      */
     projectId?: string;
+    /**
+     * Human-readable notices for the user. Populated when `skipped` is true so a failed
+     * automatic prefill is visible instead of presenting an empty wizard with no explanation.
+     * The route merges these with its own attachment warnings.
+     */
+    warnings?: string[];
 }
 
 export interface VibeConfigResponse {

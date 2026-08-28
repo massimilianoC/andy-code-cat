@@ -17,6 +17,12 @@ export class DeletePreviewSnapshot {
             throw err;
         }
 
+        // AL-015: re-link before deleting, never after. Children keep the seed chain intact by
+        // inheriting the deleted snapshot's own seed — the grandparent for a mid-chain delete,
+        // or nothing (they become roots) when the deleted snapshot was itself a root. Doing this
+        // after deleteById would leave a window where the children point at nothing.
+        await this.repo.relinkChildren(projectId, snapshotId, snapshot.parentSnapshotId);
+
         const deleted = await this.repo.deleteById(projectId, snapshotId);
         if (!deleted) {
             const err = new Error("Preview snapshot not found");

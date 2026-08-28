@@ -2,29 +2,29 @@
 
 import { cn } from "@/lib/utils";
 
-export type VibeMode = "easy" | "medium" | "hard";
+export type EntryMode = "vibe" | "guided" | "project";
 
 interface ModeSelectorProps {
-    value: VibeMode;
-    onChange: (mode: VibeMode) => void;
+    value: EntryMode;
+    onChange: (mode: EntryMode) => void;
 }
 
 const MODE_CONFIG: Record<
-    VibeMode,
+    EntryMode,
     { label: string; color: string; description: string }
 > = {
-    easy:   { label: "EASY",   color: "#8b5cf6", description: "Un prompt, tutto il resto lo fa l'AI" },
-    medium: { label: "MEDIUM", color: "#3b82f6", description: "Guida passo-passo con form intelligente" },
-    hard:   { label: "HARD",   color: "#10b981", description: "Controllo completo sull'editor" },
+    vibe:    { label: "VIBE",    color: "#8b5cf6", description: "One prompt, the AI does the rest" },
+    guided:  { label: "GUIDED",  color: "#3b82f6", description: "Step-by-step guidance with a smart form" },
+    project: { label: "PROJECT", color: "#10b981", description: "Full control in the editor" },
 };
 
 /**
- * Segmented 3-part pill selector (EASY / MEDIUM / HARD).
+ * Segmented 3-part pill selector (VIBE / GUIDED / PROJECT).
  * Glow accent color follows the active mode.
  * Mode is persisted in localStorage under `vibe_mode`.
  */
 export function ModeSelector({ value, onChange }: ModeSelectorProps) {
-    const modes: VibeMode[] = ["easy", "medium", "hard"];
+    const modes: EntryMode[] = ["vibe", "guided", "project"];
 
     return (
         <div

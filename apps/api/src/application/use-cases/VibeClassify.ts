@@ -1,16 +1,18 @@
 import type { VibeClassifyResponse, AttachmentMeta, FormatHint, VibeGenerationMode, VibeResolvedMode } from "@andy-code-cat/contracts";
 import { PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
+import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
-import { buildTemplateListBlock, FORMAT_HINT_RULES } from "../prompting/formatHintRules";
+import { FORMAT_HINT_RULES } from "../prompting/formatHintRules";
 import { env } from "../../config";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { ResourceType } from "../../domain/entities/CostTransaction";
-import { inferDeterministicVibeTemplate } from "../prompting/vibeTemplateIntent";
+import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
+import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -19,6 +21,7 @@ const CONFIDENCE_THRESHOLD = 0.65;
 const MAX_PROMPT_CHARS = 2000;
 
 const VALID_FORMAT_HINTS = new Set<string>(Object.keys(FORMAT_HINT_RULES));
+const VALID_PRESET_IDS = new Set(PRESET_CATALOG.map((preset) => preset.id));
 function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none"): string | undefined {
     if (authType === "none") return undefined;
     const key = env.providerApiKeys[providerKey];
@@ -26,31 +29,32 @@ function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" 
     return (authType ?? "bearer") === "api-key" ? key : `Bearer ${key}`;
 }
 
-function buildSystemPrompt(templateListBlock: string): string {
-    return `You are a document-type and template classifier.
-Given a user prompt and optional file metadata, return a JSON object:
+export const TEMPLATE_LIST_POINTER = "(see the COMPLETE ANNOTATED PRESET CATALOG in the CANONICAL PRESET SELECTION CONTRACT appended below)";
+
+export function buildClassifySystemPrompt(): string {
+    return `You are a deliverable-type and template classifier.
+Given a user prompt and optional attachment metadata, return a JSON object:
 {
-  "templateId": "<id from catalog or null>",
+  "templateId": "<preset id from the canonical catalog, or null>",
   "formatHint": "<one of: ${Object.keys(FORMAT_HINT_RULES).join(", ")} or null>",
-  "confidence": <number 0.0–1.0>,
-  "reasoning": "<one sentence>"
+  "confidence": <number 0.0-1.0>,
+  "reasoning": "<one sentence naming the exact words that decided the choice>"
 }
 
 Rules:
-- Set templateId only if confidence >= ${CONFIDENCE_THRESHOLD} against the template catalog below.
+- Select templateId by applying the CANONICAL PRESET SELECTION CONTRACT below. It is the
+  only selection authority. Nothing corrects or overrides your answer afterwards.
+- Set templateId only if your confidence is >= ${CONFIDENCE_THRESHOLD}. Below that, return null.
 - Set formatHint independently of templateId; it can be non-null even when templateId is null.
-- If neither signal is clear, return both as null.
-- Choose by intended output, not by surface wording. A request for something playable, game-like, arcade,
-  puzzle, challenge, score, controls, levels, HUD, character movement, or interaction loop MUST prefer
-  the most specific active game template. Use "videogame" for generic playable browser games; use
-  "seriousgame" only when learning/training is the main goal; use "game3d" for explicit 3D scenes/games;
-  use "vr-aframe" for explicit VR/immersive A-Frame requests; use "interactive-story" for branching stories.
-- Do not choose "landing" or "website" for a prompt that asks to build a playable experience, even if it
-  also mentions a title, brand, launch page, or presentation copy.
+- reasoning must quote or name the decisive words from the request. If the only decisive
+  words are atmosphere or craft words (interactive, animated, immersive, kinetic,
+  micro-interactions, Awwwards-level), you have no evidence: lower your confidence and
+  prefer the matching web preset or null.
+- Never infer a game, XR, or interactive-story preset from animation, interaction or
+  immersion language alone. See STEP 2 of the procedure.
 - Return valid JSON only — no markdown fences, no extra text.
 
-Available templates:
-${templateListBlock}`;
+Available templates: ${TEMPLATE_LIST_POINTER}`;
 }
 
 function buildUserMessage(prompt: string, attachmentMeta?: AttachmentMeta[]): string {
@@ -125,7 +129,7 @@ function parseClassifyResponse(raw: string): Omit<VibeClassifyResponse, "skipped
     try {
         const parsed = JSON.parse(candidate) as Record<string, unknown>;
         const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0;
-        const templateId = typeof parsed.templateId === "string" && parsed.templateId !== "null"
+        const templateId = typeof parsed.templateId === "string" && parsed.templateId !== "null" && VALID_PRESET_IDS.has(parsed.templateId)
             ? parsed.templateId
             : null;
         const rawHint = typeof parsed.formatHint === "string" ? parsed.formatHint : null;
@@ -161,7 +165,6 @@ export class VibeClassify {
 
     async execute(input: VibeClassifyInput): Promise<VibeClassifyResponse> {
         const echoProject = input.projectId ? { projectId: input.projectId } : {};
-        const deterministicTemplate = inferDeterministicVibeTemplate(input.prompt);
         if (input.generationMode === "website" || input.generationMode === "data_dashboard") {
             return buildManualModeResponse(input.generationMode, input.projectId);
         }
@@ -173,87 +176,67 @@ export class VibeClassify {
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier disabled", skipped: true, ...echoProject };
         }
 
-        // Only expose active presets to the classifier — inactive ones (freerunner,
-        // data-dashboard) split probability mass and push game/generic requests below
-        // the confidence threshold, causing templateId to return null and Layer B to be empty.
-        const templateListBlock = buildTemplateListBlock(
-            PRESET_CATALOG
-                .filter((p) => p.isActive !== false)
-                .map((p) => ({
-                    id: p.id,
-                    label: p.label,
-                    hint: p.hint ?? "",
-                    category: p.category,
-                    tags: p.tags,
-                    pageModel: p.outputSpec.pageModel,
-                    sectionModel: p.outputSpec.sectionModel,
-                    printReady: p.outputSpec.printReady,
-                    briefTemplate: p.briefTemplate,
-                    styleTemplate: p.styleTemplate,
-                })),
-        );
-
-        // If a custom systemTemplate is set in platform config, use it as template
-        // ({{TEMPLATE_LIST}} is substituted with the live catalog block).
-        const systemPrompt = taskSettings.systemTemplate?.trim()
-            ? taskSettings.systemTemplate.replace("{{TEMPLATE_LIST}}", templateListBlock)
-            : buildSystemPrompt(templateListBlock);
+        // Legacy operator overrides may still contain the {{TEMPLATE_LIST}} placeholder.
+        // It is substituted with a pointer to the single annotated catalog rendering
+        // appended below, so the catalog is never embedded twice in one prompt.
+        const configuredPrompt = taskSettings.systemTemplate?.trim()
+            ? taskSettings.systemTemplate.replace("{{TEMPLATE_LIST}}", TEMPLATE_LIST_POINTER)
+            : buildClassifySystemPrompt();
+        // Persisted overrides may customize the task but cannot remove the live catalog
+        // or its current selection semantics.
+        const systemPrompt = `${configuredPrompt}\n\n${buildCanonicalPresetSelectionRules()}`;
         const userMessage = buildUserMessage(input.prompt, input.attachmentMeta);
 
         const catalog = await this.getLlmCatalog.execute();
         const activeProviders = catalog.providers.filter((p) => p.isActive);
-        const overrideProviderCatalog = input.provider
-            ? activeProviders.find((p) => p.provider === input.provider)
-            : undefined;
-        const selectedProviderCatalog =
-            overrideProviderCatalog ??
-            activeProviders.find((p) => p.provider === taskSettings.provider) ??
-            activeProviders.find((p) => p.provider === FALLBACK_PROVIDER) ??
-            // Never silently fall back to local LM Studio for this background task.
-            activeProviders.find((p) => p.provider !== "lmstudio") ??
-            activeProviders[0];
+        // Never silently fall back to local LM Studio for this background task — see the
+        // "lmstudio" exclusion inside resolveModelSelection's vibe-cascade fallback chain.
+        const selectionInput: ResolveModelSelectionInput = {
+            profile: "vibe-cascade",
+            activeProviders,
+            requestedProvider: input.provider,
+            requestedModel: input.model,
+            taskSettingProvider: taskSettings.provider,
+            taskSettingModel: taskSettings.model,
+            fallbackProvider: FALLBACK_PROVIDER,
+            hardcodedFallbackModel: FALLBACK_MODEL,
+            requireOverrideInCatalog: true,
+            gateOverrideOnOpenAiCompatible: false,
+            // See the same line in VibePrefill and ResolvePipelineModelLock: one selection, one
+            // rule. Classification is the first step of the flow the user's model choice
+            // governs, so answering it on a substitute would mean the template was picked by a
+            // model they never selected.
+            policy: (input.provider || input.model) ? "strict" : "legacy",
+        };
+        const decision = resolveModelSelection(selectionInput);
+        if (input.projectId) {
+            observeModelSelectionShadow(selectionInput, decision, { projectId: input.projectId, taskKey: TASK_KEY });
+        }
 
-        if (!selectedProviderCatalog) {
-            if (deterministicTemplate) {
-                return {
-                    templateId: deterministicTemplate.templateId,
-                    formatHint: null,
-                    resolvedMode: "website",
-                    confidence: 0.9,
-                    reasoning: `${deterministicTemplate.reasoning}; no active provider`,
-                    skipped: false,
-                    ...echoProject,
-                };
-            }
+        if (decision.blocked) {
+            return {
+                templateId: null,
+                formatHint: null,
+                confidence: 0,
+                reasoning: `requested model unavailable: ${decision.blocked.reason}`,
+                skipped: true,
+                warnings: [
+                    `Il modello selezionato (${input.provider ?? "?"}/${input.model ?? "?"}) non è attivo nel catalogo: `
+                    + `attivalo dal pannello admin o scegline un altro.`,
+                ],
+                ...echoProject,
+            };
+        }
+
+        if (!decision.providerCatalog) {
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "no active provider", skipped: true, ...echoProject };
         }
 
-        const providerCatalog = selectedProviderCatalog;
-
-        const overrideModelId = input.model
-            ? providerCatalog.models.find((m) => m.isActive && m.id === input.model)?.id
-            : undefined;
-
-        const modelId =
-            overrideModelId ??
-            providerCatalog.models.find((m) => m.isActive && m.id === taskSettings.model)?.id ??
-            providerCatalog.models.find((m) => m.isActive && m.isDefault)?.id ??
-            providerCatalog.models.find((m) => m.isActive)?.id ??
-            FALLBACK_MODEL;
+        const providerCatalog = decision.providerCatalog;
+        const modelId = decision.effective.model;
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
-            if (deterministicTemplate) {
-                return {
-                    templateId: deterministicTemplate.templateId,
-                    formatHint: null,
-                    resolvedMode: "website",
-                    confidence: 0.9,
-                    reasoning: `${deterministicTemplate.reasoning}; missing API key`,
-                    skipped: false,
-                    ...echoProject,
-                };
-            }
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "missing API key", skipped: true, ...echoProject };
         }
 
@@ -279,17 +262,6 @@ export class VibeClassify {
             });
 
             if (!response.ok) {
-                if (deterministicTemplate) {
-                    return {
-                        templateId: deterministicTemplate.templateId,
-                        formatHint: null,
-                        resolvedMode: "website",
-                        confidence: 0.9,
-                        reasoning: `${deterministicTemplate.reasoning}; provider error ${response.status}`,
-                        skipped: false,
-                        ...echoProject,
-                    };
-                }
                 return { templateId: null, formatHint: null, confidence: 0, reasoning: `provider error ${response.status}`, skipped: true, ...echoProject };
             }
 
@@ -347,16 +319,11 @@ export class VibeClassify {
                 });
             }
 
-            // Enforce confidence threshold for templateId, then apply deterministic
-            // high-signal game/XR routing so playable prompts cannot collapse to web templates.
-            const thresholdTemplateId = parsed.confidence >= CONFIDENCE_THRESHOLD ? parsed.templateId : null;
-            const templateId = deterministicTemplate?.templateId ?? thresholdTemplateId;
-            const confidence = deterministicTemplate
-                ? Math.max(parsed.confidence, 0.9)
-                : parsed.confidence;
-            const reasoning = deterministicTemplate
-                ? `${deterministicTemplate.reasoning}; model: ${parsed.reasoning || "no reasoning"}`
-                : parsed.reasoning;
+            // The LLM is the sole selection authority: enforce only the confidence
+            // threshold. No deterministic post-hoc override exists.
+            const templateId = parsed.confidence >= CONFIDENCE_THRESHOLD ? parsed.templateId : null;
+            const confidence = parsed.confidence;
+            const reasoning = parsed.reasoning;
 
             const resolution = resolveModeAndTemplate({
                 prompt: input.prompt,
@@ -376,17 +343,6 @@ export class VibeClassify {
                 ...(input.projectId ? { projectId: input.projectId } : {}),
             };
         } catch {
-            if (deterministicTemplate) {
-                return {
-                    templateId: deterministicTemplate.templateId,
-                    formatHint: null,
-                    resolvedMode: "website",
-                    confidence: 0.9,
-                    reasoning: `${deterministicTemplate.reasoning}; classifier error`,
-                    skipped: false,
-                    ...echoProject,
-                };
-            }
             return { templateId: null, formatHint: null, confidence: 0, reasoning: "classifier error", skipped: true, ...echoProject };
         }
     }

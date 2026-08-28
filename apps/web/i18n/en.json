@@ -42,7 +42,7 @@
         "newProject": "New project",
         "logout": "Logout",
         "superadmin": "Superadmin",
-        "zeroEffort": "Zero Effort",
+        "guidedMode": "Guided Mode",
         "hero": {
             "title": "Projects",
             "empty": "No projects yet. Create the first one from a preset below.",
@@ -69,7 +69,7 @@
             "cancel": "Cancel",
             "create": "Create",
             "creating": "Creating...",
-            "startZeroEffort": "Start Zero Effort"
+            "startGuided": "Start Guided Mode"
         },
         "confirm": {
             "delete": "Delete project \"{{name}}\"? This operation is irreversible."
@@ -295,7 +295,7 @@
         "completed_other": "{{count}} completed"
     },
     "launch": {
-        "badge": "Zero Effort",
+        "badge": "Guided Mode",
         "title": "Guided generation",
         "subtitle": "{{name}} · Complete 3 steps and review the brief before launching.",
         "project": "Your project",
@@ -317,7 +317,7 @@
             "slideshow": "Slideshow",
             "keynote": "Visual keynote",
             "videogame": "Videogame",
-            "freerunner": "Free canvas game",
+            "freerunner": "Infinite Runner",
             "seriousgame": "Serious Game",
             "game3d": "3D Game",
             "vr-aframe": "VR A-Frame Experience",
@@ -366,8 +366,7 @@
         },
         "phase": {
             "review": "Ready for generation",
-            "optimizing": "Optimizing prompt...",
-            "optimized": "Prompt optimized — continue in Guided Mode to generate"
+            "launching": "Creating the run and opening the workspace…"
         },
         "brief": {
             "title": "PROJECT BRIEF — {{brand}}",
@@ -464,10 +463,11 @@
             "readySuffix": "to generate the site with complete artifact saving, preview, and editing tools.",
             "dashboard": "Dashboard",
             "backToDashboard": "Back to dashboard",
-            "continueInWorkspace": "Continue in workspace"
+            "continueInWorkspace": "Continue in workspace",
+            "launching": "Launching…"
         },
-        "workspaceModeBadge": "God Mode",
-        "openGodMode": "Open God Mode",
+        "workspaceModeBadge": "Workspace",
+        "openWorkspace": "Open Workspace",
         "review": {
             "badge": "Review and generate",
             "prefillTitle": "✦ AI pre-filled",
@@ -509,6 +509,25 @@
         "styleNotesPlaceholder": "Specific style constraints or preferences…",
         "inheritUser": "Inherit user preferences (fallback)",
         "presetActive": "Active preset — brief and tags pre-filled.",
+        "forms": {
+            "title": "Operational forms",
+            "subtitle": "Project delivery and privacy settings",
+            "enabled": "Enabled",
+            "disabled": "Disabled",
+            "enable": "Enable",
+            "disable": "Disable",
+            "explanation": "The LLM defines only the form structure. Recipient and privacy settings remain private project configuration and are applied deterministically during preview, publish and export.",
+            "recipient": "Recipient email",
+            "controller": "Data controller",
+            "privacyContact": "Privacy contact email",
+            "privacyVersion": "Privacy notice version",
+            "privacyUrl": "Privacy policy HTTPS URL",
+            "save": "Save form service",
+            "saving": "Saving…",
+            "saved": "Form service settings saved.",
+            "loadError": "Unable to load form service settings.",
+            "saveError": "Unable to save form service settings."
+        },
         "media": {
             "title": "Project media",
             "empty": "No media in library.",
@@ -623,7 +642,7 @@
         "tokenCounter": "~ {{count}} tokens",
         "prefillBanner": "✦ Pre-filled by AI · Review and generate",
         "prefillEdit": "Edit manually",
-        "prefillCta": "God Mode — Generate"
+        "prefillCta": "Process Project"
     },
     "workspace": {
         "selectionNone": "No selection",
@@ -662,6 +681,10 @@
                 "notApplicableLabel": "Asset not applicable",
                 "noActive": "Select an image first or generate a new asset.",
                 "noActiveLabel": "No active media"
+            },
+            "modelFallback": {
+                "label": "Model switched automatically",
+                "message": "Requested \"{{requested}}\" was not available — using \"{{actual}}\" instead."
             },
             "style": {
                 "done": "Style applied",
@@ -714,7 +737,11 @@
                 "activatedLabel": "Version activated",
                 "activated": "Snapshot selected as active version.",
                 "newVersionLabel": "New version saved",
-                "newVersionMessage": "Snapshot saved and activated by the backend."
+                "newVersionMessage": "Snapshot saved and activated by the backend.",
+                "staleBaseLabel": "Version out of date",
+                "staleBase": "This edit started from a version that has since changed. The current version has been reloaded — reapply the change on it.",
+                "noChangeLabel": "Nothing changed",
+                "noChange": "The content is identical to the current version, so no new version was created."
             },
             "llm": {
                 "label": "AI Generation",
@@ -726,7 +753,9 @@
                 "doneMessage": "Response ready with {{provider}} · {{model}}",
                 "abortedLabel": "Generation stopped",
                 "aborted": "Processing cancelled by user.",
-                "abortedContent": "⏹ Processing stopped by user"
+                "abortedContent": "⏹ Processing stopped by user",
+                "parseErrorLabel": "Generation failed",
+                "parseError": "The model returned an unparseable response. Nothing was saved and the project is unchanged. Retry, or select a different model."
             },
             "focusPatch": {
                 "parseErrorLabel": "Response parse error",
@@ -861,6 +890,9 @@
             "unpublish": "Remove",
             "staleVersion": "⚠ online v{{published}}, active v{{current}}",
             "updatePublish": "Update",
+            "snapshotPanelLiveLine": "🌐 live: v{{live}} · you're working on v{{current}}",
+            "snapshotPanelLiveBadge": "🌐 live",
+            "branchNotice": "⎘ You're working on v{{active}}, not the latest (v{{latest}}): your next change will branch from here. v{{latest}} stays reachable in the history.",
             "slugPlaceholder": "e.g. my-bakery",
             "slugChecking": "⏳ Checking…",
             "slugAvailable": "✓ Available",
@@ -881,6 +913,9 @@
             "promptPanelLoading": "Loading…",
             "promptPanelHint": "The prompt will load automatically. If it doesn't appear, click ↻ Reload.",
             "promptPanelTokensPreset": "~{{tokens}} tokens · preset: {{preset}}",
+            "promptPanelUserMessage": "User message",
+            "promptPanelAssistantMessage": "Assistant message (history)",
+            "promptPanelNoGenYet": "No generation yet — preview of what will be sent on the next request.",
             "stream": {
                 "optimizing": "Optimizing prompt...",
                 "analysingOptimizer": "Analysing optimizer...",
@@ -1015,7 +1050,9 @@
                 "copied": "Copied",
                 "copyError": "Error",
                 "copyTitle": "Copy message",
-                "nextSteps": "Next steps"
+                "nextSteps": "Next steps",
+                "errorBadge": "Error",
+                "errorHint": "No version was saved — the project is unchanged."
             }
         }
     },

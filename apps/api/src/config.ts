@@ -32,7 +32,11 @@ const envSchema = z.object({
     LLM_MAX_HISTORY_MESSAGES: z.coerce.number().int().positive().default(12),
     LLM_HISTORY_MESSAGE_MAX_CHARS: z.coerce.number().int().positive().default(2000),
     LLM_HISTORY_MAX_CHARS: z.coerce.number().int().positive().default(7000),
-    LLM_DEFAULT_MAX_COMPLETION_TOKENS: z.coerce.number().int().positive().default(24000),
+    // Generation output budget. The route ceiling is already 64k; this default is what
+    // actually clamped it, and a reasoning model spends thousands of these tokens thinking
+    // before the first character of the artifact — artifacts with thinking have been
+    // observed well past 24k. Raised to the ceiling so the two agree.
+    LLM_DEFAULT_MAX_COMPLETION_TOKENS: z.coerce.number().int().positive().default(64000),
     // --- Template Skills Layer S (filesystem-first) ---
     LLM_TEMPLATE_SKILLS_ENABLED: z.string().default("true"),
     LLM_TEMPLATE_SKILLS_ROOT: z.string().default(DEFAULT_TEMPLATE_SKILLS_ROOT),
@@ -109,7 +113,6 @@ const envSchema = z.object({
     ENRICHMENT_LAYER_D_MAX_ASSETS: z.coerce.number().int().positive().default(5),
     // ── VibeCore pipeline flags ───────────────────────────────────────────────
     VIBE_CLASSIFIER_ENABLED: z.string().default("true"),
-    VIBE_OPTIMIZER_ENABLED: z.string().default("true"),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -176,5 +179,4 @@ export const env = {
     enrichmentImageAnalysis: parsed.data.ENRICHMENT_IMAGE_ANALYSIS === "true",
     enrichmentInjectLayerD: parsed.data.ENRICHMENT_INJECT_LAYER_D === "true",
     vibeClassifierEnabled: parsed.data.VIBE_CLASSIFIER_ENABLED === "true",
-    vibeOptimizerEnabled: parsed.data.VIBE_OPTIMIZER_ENABLED === "true",
 };

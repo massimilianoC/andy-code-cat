@@ -1,3 +1,5 @@
+import type { LlmPromptingTrace } from "@andy-code-cat/contracts";
+
 export type MessageRole = 'user' | 'assistant' | 'system' | 'error';
 
 export interface TokenUsage {
@@ -53,25 +55,7 @@ export interface MessageMetadata {
      * assistant message, when one exists.
      */
     snapshotId?: string;
-    promptingTrace?: {
-        originalUserMessage: string;
-        /** MongoDB _id of the llm_prompt_configs document active at generation time */
-        promptConfigId?: string;
-        prePromptTemplate?: string;
-        effectiveSystemPrompt: string;
-        layers?: Array<{
-            id: string;
-            key: string;
-            label: string;
-            source: string;
-            chars: number;
-            span: [number, number];
-        }>;
-        messagesSentToLlm: Array<{
-            role: "system" | "user" | "assistant";
-            content: string;
-        }>;
-    };
+    promptingTrace?: LlmPromptingTrace;
     generatedArtifacts?: {
         html: string;
         css: string;

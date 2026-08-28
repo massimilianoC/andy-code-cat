@@ -3,21 +3,26 @@
 ## What To Read Before Coding
 
 1. `AGENTS.md` — non-negotiable rules, layer boundaries, isolation model
-2. `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md` — layer ownership map, frozen zones, PP-NNN rule IDs, and collision-prevention checklist for all agents touching the prompting pipeline
-3. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (`R1` delivered, `R2`/`R3` active)
-4. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — current codebase structure
-5. `docs/architecture/PIPELINE_LAYERS.md` — 2-layer architecture and transition mechanism
-6. `docs/security/SECURITY_BASELINE.md` — auth and isolation baseline
-7. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
-8. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
-9. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
-10. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 16 presets (14 active, 2 hidden: `freerunner`, `data-dashboard`) with `outputSpec` and `systemPromptModule`
-11. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
-12. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
-13. `docs/project/PRODUCT_VISION.md` — current product vision and July 2026 direction lock
-14. `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md` — filesystem-first Layer S template-skills architecture and runtime strategy
-15. `docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md` — Layer S ownership, filesystem source of truth, validation workflow, and impact rubric
-16. `docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md` — implemented Layer S resolver, env flags, prompt trace, DB logging, and Docker packaging
+2. `docs/specs/ARTIFACT_LIFECYCLE_SPEC.md` — **binding** `AL-NNN` rules for artifact versioning, seed/branching, activation, publication and traceability; read before changing anything that creates, activates, publishes, exports or deletes a snapshot, and before adding any save path (AL-031)
+3. `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md` — layer ownership map, frozen zones, PP-NNN rule IDs, and collision-prevention checklist for all agents touching the prompting pipeline
+4. `docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md` — active prompt-execution traceability remediation; read before changing prompting, Workshop prompt transparency, snapshots, or provider dispatch
+5. `docs/specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md` — active P0/P1 authority for model selection locks, canonical briefs, optimization policy, and Vibe/Zero Effort/GodMode handoffs
+6. `docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md` — current implementation order for the two SSOT refactors; read before adding an LLM resolver, fallback, optimizer, handoff, prompt storage, model UI, or notification
+7. `docs/DEVELOPMENT_PLAN.md` — current development plan with milestones and status (`R1` delivered, `R2`/`R3` active)
+8. `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — current codebase structure
+9. `docs/architecture/PIPELINE_LAYERS.md` — 2-layer architecture and transition mechanism
+10. `docs/security/SECURITY_BASELINE.md` — auth and isolation baseline
+11. `docs/guides/GITFLOW_RELEASE_POLICY.md` — branch governance, release flow, `RELEASE_VERSION`
+12. `docs/guides/AGENT_RELEASE_CHECKLIST.md` — operational checklist for branch, commit, merge, release, hotfix
+13. `docs/runbooks/TESTABLE_STEPS.md` — testable steps for each milestone
+14. `docs/specs/PRESET_TYPED_SPECS.md` — catalog of 16 presets (14 active, 2 hidden: `freerunner`, `data-dashboard`) with `outputSpec` and `systemPromptModule`
+15. `docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md` — reusable prompt-task infrastructure, task routing, audit logging, and admin governance for prompt-driven helpers
+16. `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — ZIP export + web publishing specification
+17. `docs/project/PRODUCT_VISION.md` — current product vision and July 2026 direction lock
+18. `docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md` — filesystem-first Layer S template-skills architecture and runtime strategy
+19. `docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md` — Layer S ownership, filesystem source of truth, validation workflow, and impact rubric
+20. `docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md` — implemented Layer S resolver, env flags, prompt trace, DB logging, and Docker packaging
+21. `docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md` — current deferred-R4 decision for declarative service manifests, runtime ownership, multi-tenant data scope, Forms Inbox and secure capability rollout
 
 ---
 
@@ -33,9 +38,17 @@ Current active platform tracks:
 - **R2/R3 verification gate**: VibeCore -> enrichment -> workspace -> export/publish traceability before widening runtime scope
 - **Template Skills / Layer S**: filesystem resolver is implemented; runtime reads Markdown files from `docs/skills/template-skills/by-template/<presetId>/`, seed manuals live under `seed-catalog/`, and `template-skill-map.json` remains a validation/documentation map
 - **Artifact Media Orchestrator continuation**: media resolution reliability, trace completeness, resolver expansion, browser E2E
-- **Guided entry / Zero Effort / VibeCore evolution**: additive intake flows that reuse the same backend orchestration and project model
+- **Guided entry / Guided Mode / VibeCore evolution**: additive intake flows that reuse the same backend orchestration and project model
 
-BaaS remains a deferred R4 direction. Do not start backend-as-a-service implementation unless a newer roadmap update explicitly reactivates it.
+BaaS remains a deferred R4 direction beyond the explicitly activated mailto v1 form foundation.
+`docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md` records the target architecture and supersedes
+older generated-SDK mechanics. For the bounded capability, follow
+`docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md`; do not add a public router, capture, SMTP,
+arbitrary external endpoints or further BaaS services without a newer roadmap update.
+
+The mailto foundation uses `prepareArtifactServices()` plus an allowlisted `runtime-plan-v1`.
+Platform core/config/forms/mailto scripts stay separate from generated `artifacts.js`; invalid
+generated JS is blocked before activation, publish, and ZIP export.
 
 When touching prompting code, treat the prompt architecture as an implemented foundation to extend carefully, not as an unbuilt milestone.
 

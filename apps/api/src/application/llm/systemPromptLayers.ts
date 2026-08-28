@@ -17,7 +17,7 @@ const ASSET_FRAGMENT_DEFAULT_BUDGET = 8_000;
  * Layer D text. It is deterministic — same trace in → same fragment out — and
  * intentionally has no global state. The output is cached on the trace itself
  * (`AssetEnrichmentTrace.renderedFragment`) by `buildEnrichmentTrace()` so that
- * every consumer (VibePrefill brief pass, OptimizePrompt, God Mode generation)
+ * every consumer (VibePrefill brief pass, OptimizePrompt, Project Mode generation)
  * uses the exact same text without recomputing.
  *
  * Output format:
@@ -173,7 +173,7 @@ export interface TemplateResolution {
     formatHint?: import("@andy-code-cat/contracts").FormatHint | null;
     confidence: number;
     reasoning: string;
-    source: "layer_phi" | "user_explicit" | "zero_effort_form";
+    source: "layer_phi" | "user_explicit" | "guided_form";
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -208,7 +208,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 /**
  * Layer L — Output language directive.
  * Injected immediately after Layer A (base constraints) and before Layer B (preset).
- * Only present when an explicit output language is resolved (never injected in God Mode).
+ * Only present when an explicit output language is resolved (never injected in Project Mode).
  */
 export function buildLanguageLayer(bcp47: string): string {
     const code = bcp47.toLowerCase().split("-")[0]!;
@@ -221,6 +221,46 @@ export function buildLanguageLayer(bcp47: string): string {
         "",
         "This directive applies to all text in the generated artifact.",
         "It overrides any language implied by template names or style labels.",
+    ].join("\n");
+}
+
+/**
+ * Layer V — deterministic service capability contract.
+ *
+ * This is structural protocol, not template craft: Layer S may advise which
+ * fields make a good form, while Layer V alone owns the slot/envelope rules.
+ */
+export function buildServiceContractLayer(input: {
+    presetId?: string | null;
+    enabledCapabilities?: readonly "forms"[];
+}): string {
+    const formsEnabled = input.presetId === "form" || input.enabledCapabilities?.includes("forms");
+    if (!formsEnabled) return "";
+
+    return [
+        "## LAYER V — DECLARATIVE SERVICE CONTRACT",
+        "The platform form runtime is available. Declare service intent; never implement delivery infrastructure.",
+        "",
+        "FORM OWNERSHIP:",
+        "- For each operational form, artifacts.html contains exactly one EMPTY slot: <div data-pf-form-id='contact'></div>.",
+        "- Do not render duplicate controls for that form and do not create a custom submission handler.",
+        "- artifacts.js MUST NOT query the slot, register form listeners, construct mailto URIs, call endpoints, or reproduce platform runtime code.",
+        "- The platform compiler owns controls, validation, privacy text, recipient and delivery behavior.",
+        "- The declarative slot plus serviceManifest is the complete implementation expected from you; platform runtime preparation happens after generation.",
+        "- Never emit an endpoint, recipient email, credential, SMTP setting, retention value, or legal claim.",
+        "",
+        "TOP-LEVEL RESPONSE FIELD:",
+        "- serviceManifest must be service-manifest-v1 when an operational form is present; otherwise return null.",
+        "- serviceManifest appears ONLY in the top-level JSON response field. Never paste, comment, serialize, or append it inside artifacts.html, artifacts.css, or artifacts.js.",
+        "- forms: 1..5; steps per form: 1..5; visible fields per step: 1..5; fields per form: max 20.",
+        "- IDs are lowercase kebab-case and unique in their scope.",
+        "- Allowed field types: text, email, tel, textarea, number, select, radio, checkbox, date, time, url, hidden_context.",
+        "- Every field declares required and dataCategory (identity, contact, request, preference, consent, context).",
+        "- Use null for optional structured-output properties that do not apply.",
+        "- Newsletter forms keep email, privacy-acknowledgement and marketing-consent as distinct fields.",
+        "- successMessage must describe preparation or hand-off, never claim that a message was sent or delivered.",
+        "",
+        "Minimal shape: { version, forms: [{ id, kind, title, description, purposeKey, steps: [{ id, title, description, fields }], submitLabel, successMessage, privacyNoticeRef: 'project-default' }] }.",
     ].join("\n");
 }
 

@@ -18,6 +18,7 @@ import {
     setLlmPromptConfig,
     streamOptimizePrompt,
     getPromptUsageSummary,
+    getPipelineRun,
     type PromptPreviewResponse,
     listPreviewSnapshots,
     createPreviewSnapshot,
@@ -32,19 +33,12 @@ import {
     type ConversationDetail,
     type ProjectPreset,
     type MessageDto,
+    type OptimizePromptResult,
     type PreviewSnapshot,
     type LlmProviderCatalogDto,
     type LlmFocusContext,
     type LlmChatDefaults,
     type LlmChatStreamEvent,
-    requestLayer1Export,
-    downloadExportBlob,
-    downloadSnapshotCapture,
-    publishProject,
-    getPublishStatus,
-    unpublishProject,
-    checkSlugAvailability,
-    updateDeploymentSlug,
     listProjectAssets,
     getProjectAiAnalytics,
     generateProjectImage,
@@ -54,12 +48,12 @@ import {
     suggestProjectImageIdea,
     downloadProjectAssetDataUrl,
     getPublicAssetUrl,
-    type SiteDeploymentDto,
     type ProjectAssetDto,
     type AiUsageAnalyticsDto,
     type SuggestProjectImageIdeaResult,
     type StockImageProviderStatus,
 } from "../../../lib/api";
+import { ARTIFACT_BASE_STALE, MODEL_NOT_AVAILABLE, type CreatePreviewSnapshotRequest } from "@andy-code-cat/contracts";
 import { getToken } from "../../../lib/token-store";
 import { useNotifications } from "../../../lib/notifications";
 import { getProjectCostSummary } from "../../../lib/api/cost";
@@ -80,6 +74,7 @@ import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { buildPreviewDoc } from "@/lib/preview/buildPreviewDoc";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import PromptLayersView from "@/components/PromptLayersView";
+import PromptTranscriptView from "@/components/PromptTranscriptView";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
 import { DidacticPanel } from "../../../components/didactic/DidacticPanel";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
@@ -87,6 +82,36 @@ import type { PreviewViewport } from "../../../components/workspace/PreviewViewp
 import { SnapshotHistoryPanel } from "../../../components/workspace/SnapshotHistoryPanel";
 import { DualView } from "../../../components/workspace/DualView";
 import { PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT } from "./iframe-scripts";
+import { WorkspaceLayoutProvider, useWorkspaceLayout } from "../contexts/WorkspaceLayoutContext";
+import { usePublish } from "../features/header/usePublish";
+import {
+    clipIdentifier,
+    estimateTokens,
+    formatCostEur,
+    formatDuration,
+    getMediaFailedCount,
+    getMediaResolvedCount,
+    getMessageOutcomeSummary,
+    parseChatFromContent,
+    type MessageMediaResolutionView,
+} from "../features/chat/messageUtils";
+import {
+    appendPromptSegment,
+    extractMediaKeyFromSelectedElement,
+    getElementTargetType,
+    inferStockImageQuery,
+    isFocusContextValidationError,
+    sanitizeMediaElementPayload,
+    sanitizeRuntimeMediaUrl,
+    sanitizeSelectedElementForFocus,
+    type SelectedFocusElement,
+} from "../features/focus/focusUtils";
+import {
+    parseProtectedAssetDownloadUrl,
+    resolvePreviewAssetUrls,
+    reversePreviewAssetReplacements,
+} from "../features/preview/resolvePreviewAssetUrls";
+import { buildVersionIndex } from "../features/versions/versionNumbering";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
     ssr: false,
@@ -94,8 +119,7 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 
 
 
-const SPLIT_COOKIE = "andy-code-cat_workspace_split";
-const CHAT_VSPLIT_COOKIE = "andy-code-cat_chat_vsplit";
+
 
 type BrowserSpeechRecognitionResult = {
     isFinal: boolean;
@@ -146,313 +170,13 @@ declare global {
     }
 }
 
-function getCookie(name: string): string | null {
-    if (typeof document === "undefined") return null;
-    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-    return match ? decodeURIComponent(match[1]) : null;
-}
-
-function setCookie(name: string, value: string, days = 365) {
-    if (typeof document === "undefined") return;
-    const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
-    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
-}
-
-// ── Cost formatting helper ────────────────────────────────────────────────────
-/**
- * Formats a EUR cost amount for compact display.
- * Returns empty string for zero / undefined (no badge shown).
- */
-function formatCostEur(amount: number | undefined): string {
-    if (!amount || amount <= 0) return "";
-    if (amount < 0.0001) return "<€0.0001";
-    if (amount < 0.01)   return `€${amount.toFixed(4)}`;
-    if (amount < 1)      return `€${amount.toFixed(3)}`;
-    return `€${amount.toFixed(2)}`;
-}
-
-type MessageMetadataView = NonNullable<MessageDto["metadata"]>;
-type MessageMediaResolutionView = NonNullable<MessageMetadataView["mediaResolution"]>;
-
-function clipIdentifier(value: string | undefined, head = 8, tail = 4): string {
-    if (!value) return "—";
-    if (value.length <= head + tail + 1) return value;
-    return `${value.slice(0, head)}…${value.slice(-tail)}`;
-}
-
-function getMediaResolvedCount(mediaResolution: MessageMediaResolutionView | undefined): number {
-    if (!mediaResolution) return 0;
-    return mediaResolution.directives?.filter((directive) =>
-        directive.status === "resolved" || directive.status === "fallback_resolved",
-    ).length ?? mediaResolution.assetIds?.length ?? 0;
-}
-
-function getMediaFailedCount(mediaResolution: MessageMediaResolutionView | undefined): number {
-    if (!mediaResolution) return 0;
-    return mediaResolution.directives?.filter((directive) => directive.status === "unresolved").length
-        ?? Math.max(0, (mediaResolution.mediaKeys?.length ?? 0) - getMediaResolvedCount(mediaResolution));
-}
-
-function getMessageOutcomeSummary(message: MessageDto | undefined) {
-    const metadata = message?.metadata;
-    const mediaResolution = metadata?.mediaResolution;
-    return {
-        hasSnapshot: Boolean(metadata?.snapshotId),
-        hasMedia: Boolean(mediaResolution?.mediaKeys?.length),
-        resolvedCount: getMediaResolvedCount(mediaResolution),
-        failedCount: getMediaFailedCount(mediaResolution),
-        degraded: Boolean(mediaResolution?.degraded),
-    };
-}
-
 function getStringDetail(details: unknown, key: string): string | undefined {
     if (!details || typeof details !== "object") return undefined;
     const value = (details as Record<string, unknown>)[key];
     return typeof value === "string" ? value : undefined;
 }
 
-function appendPromptSegment(base: string, addition: string): string {
-    const normalizedAddition = addition.trim();
-    if (!normalizedAddition) return base;
-    if (!base.trim()) return normalizedAddition;
-    const needsSpace = !/[\s\n]$/.test(base);
-    return `${base}${needsSpace ? " " : ""}${normalizedAddition}`;
-}
-
-const PROJECT_ASSET_DOWNLOAD_PATH_RE = /\/v1\/projects\/([^/]+)\/assets\/([^/]+)\/download(?:$|\?)/i;
-const PUBLIC_MEDIA_PATH_RE = /\/p\/media\/([^/?#]+)/i;
-const ARTIFACT_URL_RE = /(?:https?:\/\/[^"'()\s]+|\/(?:p\/media|v1\/projects)\/[^"'()\s]+)/gi;
-
-function parseProtectedAssetDownloadUrl(rawSrc: string): { projectId: string; assetId: string } | null {
-    const trimmed = String(rawSrc ?? "").trim();
-    if (!trimmed || typeof window === "undefined") return null;
-
-    try {
-        const url = new URL(trimmed, window.location.origin);
-        const match = url.pathname.match(PROJECT_ASSET_DOWNLOAD_PATH_RE);
-        if (!match?.[1] || !match?.[2]) return null;
-        return {
-            projectId: decodeURIComponent(match[1]),
-            assetId: decodeURIComponent(match[2]),
-        };
-    } catch {
-        return null;
-    }
-}
-
-function parsePublicMediaUrl(rawSrc: string): { assetId: string } | null {
-    const trimmed = String(rawSrc ?? "").trim();
-    if (!trimmed || typeof window === "undefined") return null;
-
-    try {
-        const url = new URL(trimmed, window.location.origin);
-        const match = url.pathname.match(PUBLIC_MEDIA_PATH_RE);
-        if (!match?.[1]) return null;
-        return { assetId: decodeURIComponent(match[1]) };
-    } catch {
-        return null;
-    }
-}
-
-async function resolvePreviewAssetUrls(input: {
-    html: string;
-    css: string;
-    token: string;
-    projectId: string;
-}): Promise<{ html: string; css: string }> {
-    const source = `${input.html}\n${input.css}`;
-    const urls = Array.from(new Set(source.match(ARTIFACT_URL_RE) ?? []));
-    if (urls.length === 0) return { html: input.html, css: input.css };
-
-    const replacements = new Map<string, string>();
-    await Promise.all(urls.map(async (url) => {
-        const protectedAsset = parseProtectedAssetDownloadUrl(url);
-        const publicAsset = parsePublicMediaUrl(url);
-        const assetId = protectedAsset?.assetId ?? publicAsset?.assetId;
-        const assetProjectId = protectedAsset?.projectId ?? input.projectId;
-        if (!assetId) return;
-
-        try {
-            const dataUrl = await downloadProjectAssetDataUrl(input.token, assetProjectId, assetId);
-            if (dataUrl) replacements.set(url, dataUrl);
-        } catch {
-            // Keep the original URL. The preview should degrade without blocking rendering.
-        }
-    }));
-
-    if (replacements.size === 0) return { html: input.html, css: input.css };
-
-    let html = input.html;
-    let css = input.css;
-    for (const [from, to] of replacements) {
-        html = html.split(from).join(to);
-        css = css.split(from).join(to);
-    }
-
-    return { html, css };
-}
-
-function sanitizeRuntimeMediaUrl(value?: string): string | undefined {
-    const trimmed = value?.trim();
-    if (!trimmed || /^data:/i.test(trimmed) || /^asset:\/\/media\//i.test(trimmed)) {
-        return undefined;
-    }
-
-    const scheme = trimmed.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
-    if (scheme && !["http", "https", "blob"].includes(scheme)) {
-        return undefined;
-    }
-
-    return trimmed.length > 1500 ? trimmed.slice(0, 1500) : trimmed;
-}
-
-function sanitizeMediaElementPayload(element: SelectedFocusElement) {
-    return {
-        stableNodeId: element.stableNodeId,
-        selector: element.selector,
-        tag: element.tag,
-        textSnippet: clipFocusValue(element.textSnippet, 500),
-        currentSrc: sanitizeRuntimeMediaUrl(element.currentSrc),
-        currentAlt: clipFocusValue(element.currentAlt, 300),
-        backgroundImageUrl: sanitizeRuntimeMediaUrl(element.backgroundImageUrl),
-        mediaMode: element.mediaMode,
-        originalWidth: element.originalWidth,
-        originalHeight: element.originalHeight,
-        aspectRatio: element.aspectRatio,
-    };
-}
-
-function inferStockImageQuery(element: SelectedFocusElement, fallbackPrompt: string): string {
-    const candidates = [
-        element.currentAlt,
-        element.textSnippet,
-        fallbackPrompt,
-    ];
-
-    for (const candidate of candidates) {
-        const cleaned = candidate?.replace(/\s+/g, " ").trim();
-        if (cleaned && cleaned.length >= 3) {
-            return cleaned.slice(0, 120);
-        }
-    }
-
-    const src = sanitizeRuntimeMediaUrl(element.currentSrc) || sanitizeRuntimeMediaUrl(element.backgroundImageUrl) || "";
-    try {
-        const url = new URL(src);
-        if (url.hostname.includes("loremflickr.com")) {
-            const parts = url.pathname.split("/").filter(Boolean);
-            const keyword = parts[2]?.replace(/[,+_-]+/g, " ");
-            if (keyword) return decodeURIComponent(keyword).slice(0, 120);
-        }
-        if (url.hostname.includes("picsum.photos")) {
-            const parts = url.pathname.split("/").filter(Boolean);
-            const seed = parts[1]?.replace(/[,+_-]+/g, " ");
-            if (seed) return decodeURIComponent(seed).slice(0, 120);
-        }
-    } catch {
-        // Ignore malformed current src and use a stable default below.
-    }
-
-    return "website image";
-}
-
-type SelectedFocusElement = NonNullable<LlmFocusContext["selectedElement"]>;
-
-const MAX_FOCUS_SELECTOR_LEN = 240;
-const MAX_FOCUS_NODE_ID_LEN = 120;
-const MAX_FOCUS_TEXT_LEN = 160;
-const MAX_FOCUS_OUTER_HTML_LEN = 8000;
-const MAX_FOCUS_CLASSES = 8;
-const INVALID_FOCUS_TAGS = new Set(["html", "body", "head", "script", "style", "link", "meta"]);
-
-function clipFocusValue(value: string | undefined, max: number): string | undefined {
-    if (typeof value !== "string") return undefined;
-    const trimmed = value.trim();
-    if (!trimmed) return undefined;
-    return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
-}
-
-function sanitizeSelectedElementForFocus(
-    element: LlmFocusContext["selectedElement"] | null | undefined,
-): SelectedFocusElement | null {
-    if (!element) return null;
-
-    const tag = clipFocusValue(element.tag?.toLowerCase(), 64);
-    if (!tag || INVALID_FOCUS_TAGS.has(tag)) {
-        return null;
-    }
-
-    const stableNodeId = clipFocusValue(element.stableNodeId, MAX_FOCUS_NODE_ID_LEN);
-    const selector = clipFocusValue(element.selector, MAX_FOCUS_SELECTOR_LEN);
-    if (!stableNodeId || !selector) {
-        return null;
-    }
-
-    const classes = Array.isArray(element.classes)
-        ? element.classes
-            .map((item) => clipFocusValue(item, 60))
-            .filter((item): item is string => Boolean(item))
-            .slice(0, MAX_FOCUS_CLASSES)
-        : [];
-
-    const textSnippet = clipFocusValue(element.textSnippet, MAX_FOCUS_TEXT_LEN);
-    const outerHtml = clipFocusValue(element.outerHtml, MAX_FOCUS_OUTER_HTML_LEN);
-    const currentSrc = sanitizeRuntimeMediaUrl(clipFocusValue(element.currentSrc, 1500));
-    const currentAlt = clipFocusValue(element.currentAlt, 300);
-    const backgroundImageUrl = sanitizeRuntimeMediaUrl(clipFocusValue(element.backgroundImageUrl, 1500));
-    const mediaMode = element.mediaMode === "foreground" || element.mediaMode === "background"
-        ? element.mediaMode
-        : ((currentSrc || backgroundImageUrl) ? "none" : undefined);
-    const originalWidth = typeof element.originalWidth === "number" && Number.isFinite(element.originalWidth) && element.originalWidth > 0
-        ? Math.round(element.originalWidth)
-        : undefined;
-    const originalHeight = typeof element.originalHeight === "number" && Number.isFinite(element.originalHeight) && element.originalHeight > 0
-        ? Math.round(element.originalHeight)
-        : undefined;
-    const aspectRatio = typeof element.aspectRatio === "number" && Number.isFinite(element.aspectRatio) && element.aspectRatio > 0
-        ? Math.round(element.aspectRatio * 1000) / 1000
-        : (originalWidth && originalHeight ? Math.round((originalWidth / originalHeight) * 1000) / 1000 : undefined);
-
-    if (outerHtml && /^<(html|body)\b/i.test(outerHtml)) {
-        return null;
-    }
-
-    return {
-        stableNodeId,
-        selector,
-        tag,
-        classes,
-        ...(textSnippet ? { textSnippet } : {}),
-        ...(outerHtml ? { outerHtml } : {}),
-        ...(currentSrc ? { currentSrc } : {}),
-        ...(currentAlt ? { currentAlt } : {}),
-        ...(backgroundImageUrl ? { backgroundImageUrl } : {}),
-        ...(mediaMode ? { mediaMode } : {}),
-        ...(originalWidth ? { originalWidth } : {}),
-        ...(originalHeight ? { originalHeight } : {}),
-        ...(aspectRatio ? { aspectRatio } : {}),
-    };
-}
-
-function extractMediaKeyFromSelectedElement(element: LlmFocusContext["selectedElement"] | null | undefined): string | null {
-    const outerHtml = element?.outerHtml ?? "";
-    const match = outerHtml.match(/\bdata-media-key=["']([a-z0-9]+(?:-[a-z0-9]+)*)["']/i);
-    return match?.[1] ?? null;
-}
-
-function isFocusContextValidationError(error: unknown): boolean {
-    if (!(error instanceof ApiError) || error.status !== 400) {
-        return false;
-    }
-
-    const details = error.details as
-        | { fieldErrors?: { focusContext?: unknown } }
-        | undefined;
-
-    return Array.isArray(details?.fieldErrors?.focusContext) && details.fieldErrors.focusContext.length > 0;
-}
-
-export default function WorkspacePage() {
+function WorkspacePageContent() {
     const { t, i18n } = useTranslation();
     const router = useRouter();
     const params = useParams();
@@ -512,6 +236,16 @@ export default function WorkspacePage() {
         const model = searchParams?.get("preferredModel") ?? "";
         return provider || model ? { provider, model, applied: false } : null;
     });
+    // Set when a requested/preferred provider or model (from a Zero Effort / Vibe pipeline
+    // handoff) could not be resolved against the hydrated catalog and the workspace silently
+    // fell through to a different model. Surfaced via a notification only — it never changes
+    // which model actually gets used.
+    const [modelFallbackNotice, setModelFallbackNotice] = useState<{
+        requestedProvider: string;
+        requestedModel: string;
+        actualProvider: string;
+        actualModel: string;
+    } | null>(null);
     const imageModelOptions = React.useMemo(() => {
         const imageProviders = providersCatalog.filter((provider) =>
             provider.models.some((model) => model.isActive && model.capabilities.includes("image_generation")),
@@ -527,19 +261,28 @@ export default function WorkspacePage() {
             })));
     }, [providersCatalog]);
     const presetRecommendationAppliedRef = useRef<string | null>(null);
-    // Preferred provider/model passed as URL params from Zero Effort / Vibe pipeline redirects.
+    // Preferred provider/model passed as URL params from Guided Mode / Vibe pipeline redirects.
     // Read once on mount so they survive the router.replace that clears autoPrompt.
     const preferredProviderRef = useRef(searchParams?.get("preferredProvider") ?? "");
     const preferredModelRef = useRef(searchParams?.get("preferredModel") ?? "");
-    const preferredModelAppliedRef = useRef(false);
-    // Track whether we arrived from the Zero Effort / Vibe pipeline.
-    // True when a sessionStorage handoff key exists for the conv param (new path)
-    // or when an autoPrompt URL param is present (legacy/fallback path).
-    const fromZeroEffortRef = useRef(!!(searchParams?.get("conv") && (
+    // I15 of the SSOT program — server-owned run handoff. When present, the workspace re-derives
+    // the auto-send prompt from PipelineRun.canonicalBrief (not client storage) and the locked
+    // modelLock.effective becomes the preferred provider/model (mutated into the refs above once
+    // the run loads — see the mount effect below), instead of URL-param hints that can silently
+    // fall back to the wrong model.
+    const pipelineRunIdRef = useRef(searchParams?.get("pipelineRunId") ?? "");
+    const [preferredModelResolutionComplete, setPreferredModelResolutionComplete] = useState(
+        () => !preferredProviderRef.current && !preferredModelRef.current && !pipelineRunIdRef.current,
+    );
+    // Track whether we arrived from the Guided Mode / Vibe pipeline.
+    // True when a sessionStorage handoff key exists for the conv param (new path),
+    // when an autoPrompt URL param is present (legacy/fallback path), or when a
+    // server-owned pipelineRunId handoff is present (I15).
+    const fromGuidedRef = useRef(!!(searchParams?.get("conv") && (
         typeof sessionStorage !== "undefined"
             ? !!sessionStorage.getItem(`pipeline_handoff_${searchParams.get("conv")}`)
             : false
-    ) || searchParams?.get("autoPrompt")));
+    ) || searchParams?.get("autoPrompt") || pipelineRunIdRef.current));
     const projectAssetsBootstrappedRef = useRef(false);
     // voiceListening, voiceSupported, voiceError are provided by useSpeechDictation below
     const [chatAttachedFiles, setChatAttachedFiles] = useState<ChatAttachedFile[]>([]);
@@ -547,23 +290,22 @@ export default function WorkspacePage() {
     const chatFileInputRef = useRef<HTMLInputElement>(null);
     const [pendingEnrichmentPolling, setPendingEnrichmentPolling] = useState<string[]>([]);
     const [imageSuggestions, setImageSuggestions] = useState<{ assetId: string; name: string; suggestion: "logo" | "background" | "icon"; dismissed: boolean }[]>([]);
-    // When coming from the Zero Effort flow the brief is already structured — skip auto-optimize
+    // When coming from the Guided Mode flow the brief is already structured — skip auto-optimize
     // for that one automated handoff only. After the first generated artifact is saved, restore
     // the workspace default so future prompts are optimized unless the user turns it off.
     const autoOptimizeSuppressedByHandoffRef = useRef(searchParams?.get("skipAutoOptimize") === "1");
     const [autoOptimize, setAutoOptimize] = useState(() => !autoOptimizeSuppressedByHandoffRef.current);
 
-    const [leftWidth, setLeftWidth] = useState(40);
-    
-    const [isDragging, setIsDragging] = useState(false);
-    const [chatVSplit, setChatVSplit] = useState(65);
-    const chatVSplitRef = useRef<number>(65);
-    const chatBodyRef = useRef<HTMLDivElement>(null);
-    const [isDraggingVChat, setIsDraggingVChat] = useState(false);
-    const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("desktop");
-    const [previewTab, setPreviewTab] = useState<"preview" | "html" | "css" | "js" | "prompt">("preview");
-    const [workMode, setWorkMode] = useState<"build" | "didactic">("build");
-    const [splitMode, setSplitMode] = useState(false);
+    const {
+        leftWidth, setLeftWidth,
+        isDragging, setIsDragging,
+        chatVSplit, setChatVSplit, chatVSplitRef,
+        isDraggingVChat, setIsDraggingVChat, chatBodyRef,
+        previewViewport, setPreviewViewport,
+        previewTab, setPreviewTab,
+        workMode, setWorkMode,
+        splitMode, setSplitMode,
+    } = useWorkspaceLayout();
     const [promptTemplate, setPromptTemplate] = useState("");
     const [promptEnabled, setPromptEnabled] = useState(true);
     const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -614,6 +356,9 @@ export default function WorkspacePage() {
         sourceCss: string;
         html: string;
         css: string;
+        // AL-009 — original-URL -> data-URI map, kept so handleCommitEditVersion can reverse
+        // the substitution before persisting what WYSIWYG reads back from the iframe DOM.
+        replacements: Map<string, string>;
     } | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const assetPreviewUrlCacheRef = useRef<Map<string, string>>(new Map());
@@ -652,11 +397,14 @@ export default function WorkspacePage() {
 
     // ── WYSIWYG EDIT mode state ──────────────────────────────────────────────
     const [editMode, setEditMode] = useState(false);
-    // ── Zero Effort auto-send ─────────────────────────────────────────────────
-    // When redirected from the Zero Effort launch page, autoPrompt is passed as a
+    // ── Guided Mode auto-send ─────────────────────────────────────────────────
+    // When redirected from the Guided Mode launch page, autoPrompt is passed as a
     // search param. We pre-fill the prompt and auto-trigger generation once the
     // conversation and providers are both ready.
     const autoPromptFiredRef = useRef(false);
+    // The text the run handoff dropped into the composer. Kept so a refresh that finds the brief
+    // already dispatched can clear the composer without touching anything the user typed.
+    const handoffPromptRef = useRef<string | null>(null);
     const [autoPromptPending, setAutoPromptPending] = useState(false);
     const [editSessionId, setEditSessionId] = useState<string | null>(null);
     const [isSavingEditVersion, setIsSavingEditVersion] = useState(false);
@@ -664,133 +412,53 @@ export default function WorkspacePage() {
     const pendingEditHtmlRef = useRef<string | null>(null);
     const handleCommitEditVersionRef = useRef<(html: string) => Promise<void>>(null as any);
 
-    const [exportState, setExportState] = useState<"idle" | "loading" | "error">("idle");
-    const [exportError, setExportError] = useState<string | null>(null);
-    const [captureState, setCaptureState] = useState<"idle" | "loading" | "error">("idle");
     // Preview refresh feedback
     const [previewRefreshing, setPreviewRefreshing] = useState(false);
     const [previewPending, setPreviewPending] = useState(false);
     // Watchdog: bumped when iframe fails to fire onLoad within timeout
     const [previewForceKey, setPreviewForceKey] = useState(0);
     const iframeLoadedRef = useRef(false);
-    const [captureDropdownOpen, setCaptureDropdownOpen] = useState(false);
-    const captureDropdownRef = useRef<HTMLDivElement>(null);
-
-    // Publish state
-    const [publishState, setPublishState] = useState<"idle" | "loading" | "error">("idle");
-    const [publishDeployment, setPublishDeployment] = useState<SiteDeploymentDto | null>(null);
-    const [publishCopied, setPublishCopied] = useState(false);
-    // Slug edit state
-    const [slugEditMode, setSlugEditMode] = useState(false);
-    const [slugInput, setSlugInput] = useState("");
-    const [slugCheckState, setSlugCheckState] = useState<"idle" | "checking" | "available" | "taken" | "invalid" | "reserved" | "error">("idle");
-    const [slugSaving, setSlugSaving] = useState(false);
-    const slugDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const handleExportLayer1 = useCallback(async () => {
-        if (!token) return;
-        setExportState("loading");
-        setExportError(null);
-        const notifId = addNotification({
-            label: t("workspace.notifications.export.label"),
-            status: "running",
-            message: t("workspace.notifications.export.running"),
-        });
-        try {
-            // 1. Create the export record on the server
-            const snapshotId = selectedBackendSnapshotId ?? undefined;
-            const res = await requestLayer1Export(token, projectId, snapshotId);
-
-            // 2. Download the ZIP blob using the Bearer token (no JWT-in-URL fragility)
-            updateNotification(notifId, { message: t("workspace.notifications.export.downloading") });
-            const blob = await downloadExportBlob(token, res.id);
-
-            // 3. Trigger browser download
-            const objectUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = objectUrl;
-            a.download = "export-layer1.zip";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(objectUrl);
-
-            setExportState("idle");
-            updateNotification(notifId, { status: "done", message: t("workspace.notifications.export.done") });
-        } catch (err) {
-            // 401 from the blob download = sessione scaduta — mostra la modal
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-                setExportState("idle");
-                updateNotification(notifId, { status: "error", message: t("workspace.notifications.export.sessionExpired") });
-                return;
-            }
-            const msg = err instanceof Error ? err.message : t("workspace.notifications.export.error");
-            setExportError(msg);
-            setExportState("error");
-            updateNotification(notifId, { status: "error", message: msg });
-        }
-    }, [token, projectId, selectedBackendSnapshotId, addNotification, updateNotification]);
-
-    // Close camera dropdown on outside click
-    useEffect(() => {
-        function onDown(e: MouseEvent) {
-            if (captureDropdownRef.current && !captureDropdownRef.current.contains(e.target as Node)) {
-                setCaptureDropdownOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", onDown);
-        return () => document.removeEventListener("mousedown", onDown);
-    }, []);
-
-    const handleCaptureSnapshot = useCallback(async (format: "jpg" | "pdf") => {
-        if (!token || !selectedBackendSnapshotId) return;
-        setCaptureState("loading");
-        setCaptureDropdownOpen(false);
-        const notifId = addNotification({
-        label: t("workspace.notifications.capture.label", { format: format.toUpperCase() }),
-            status: "running",
-            message: t("workspace.notifications.capture.running"),
-        });
-        try {
-            // Calls the backend Puppeteer endpoint:
-            // GET /v1/projects/:projectId/preview-snapshots/:snapshotId/capture?format=jpg|pdf
-            const blob = await downloadSnapshotCapture(token, projectId, selectedBackendSnapshotId, format);
-
-            const objectUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = objectUrl;
-            a.download = `preview-snapshot.${format}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(objectUrl);
-
-            setCaptureState("idle");
-            updateNotification(notifId, { status: "done", message: t("workspace.notifications.capture.done") });
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-                setCaptureState("idle");
-                updateNotification(notifId, { status: "error", message: t("workspace.notifications.capture.sessionExpired") });
-                return;
-            }
-            const msg = err instanceof Error ? err.message : t("workspace.notifications.capture.error");
-            console.error("[snapshot-capture]", err);
-            setCaptureState("error");
-            updateNotification(notifId, { status: "error", message: msg });
-            window.setTimeout(() => setCaptureState("idle"), 3000);
-        }
-    }, [token, projectId, selectedBackendSnapshotId, addNotification, updateNotification]);
-
-    // ── Publish handlers ────────────────────────────────────────────
-    // Fetch current deployment status on mount / when projectId changes
-    useEffect(() => {
-        if (!token) return;
-        getPublishStatus(token, projectId)
-            .then((d) => setPublishDeployment(d))
-            .catch(() => setPublishDeployment(null));
-    }, [token, projectId]);
+    const {
+        export: {
+            state: exportState,
+            error: exportError,
+            run: handleExportLayer1,
+        },
+        capture: {
+            state: captureState,
+            dropdownOpen: captureDropdownOpen,
+            dropdownRef: captureDropdownRef,
+            toggleDropdown: toggleCaptureDropdown,
+            run: handleCaptureSnapshot,
+        },
+        publish: {
+            state: publishState,
+            deployment: publishDeployment,
+            url: publishUrl,
+            copied: publishCopied,
+            run: handlePublish,
+            unpublish: handleUnpublish,
+            copyLink: handleCopyPublishLink,
+        },
+        slug: {
+            editMode: slugEditMode,
+            input: slugInput,
+            checkState: slugCheckState,
+            saving: slugSaving,
+            toggleEditor: toggleSlugEditor,
+            updateInput: updateSlugInput,
+            save: handleSlugSave,
+            remove: handleSlugRemove,
+            cancel: cancelSlugEdit,
+        },
+    } = usePublish({
+        token,
+        projectId,
+        selectedBackendSnapshotId,
+        previewSnapshots,
+        addNotification,
+        updateNotification,
+    });
 
     useEffect(() => {
         if (!token) return;
@@ -798,144 +466,6 @@ export default function WorkspacePage() {
             .then((summary) => setPromptOpsSummary(summary))
             .catch(() => setPromptOpsSummary({ totalCost: 0, totalTokens: 0, runs: 0 }));
     }, [token, projectId]);
-
-    // Debounced slug availability check.
-    // Mirrors the backend slug format (2-30 chars, no leading/trailing hyphen) and
-    // maps the server's `reason` 1:1 so the UI message always matches the real verdict.
-    useEffect(() => {
-        if (!slugEditMode) { setSlugCheckState("idle"); return; }
-        const slug = slugInput.trim().toLowerCase();
-        if (!slug) { setSlugCheckState("idle"); return; }
-        // Re-entering your own current slug is always allowed (it's already yours).
-        if (slug === (publishDeployment?.customSlug ?? "")) {
-            setSlugCheckState("available");
-            return;
-        }
-        if (!/^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$/.test(slug)) {
-            setSlugCheckState("invalid");
-            return;
-        }
-        setSlugCheckState("checking");
-        if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current);
-        slugDebounceRef.current = setTimeout(async () => {
-            try {
-                const result = await checkSlugAvailability(slug, publishDeployment?.id);
-                if (result.available) {
-                    setSlugCheckState("available");
-                } else if (result.reason === "reserved") {
-                    setSlugCheckState("reserved");
-                } else if (result.reason === "invalid") {
-                    setSlugCheckState("invalid");
-                } else {
-                    setSlugCheckState("taken");
-                }
-            } catch {
-                // Surface the failure instead of silently resetting to idle, otherwise
-                // a network error looks identical to "not yet checked".
-                setSlugCheckState("error");
-            }
-        }, 450);
-        return () => { if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current); };
-    }, [slugInput, slugEditMode, publishDeployment?.customSlug, publishDeployment?.id]);
-
-    const handlePublish = useCallback(async () => {
-        if (!token) return;
-        setPublishState("loading");
-        const activeId = previewSnapshots.find((s) => s.isActive)?.id ?? null;
-        const notifId = addNotification({
-            label: t("workspace.notifications.publish.label"),
-            status: "running",
-            message: t("workspace.notifications.publish.running"),
-        });
-        try {
-            // Never pass selectedBackendSnapshotId here — the user may have browsed to an
-            // old version without "applying" it, which would republish the wrong snapshot.
-            // Always publish whatever snapshot is marked isActive in the DB (no snapshotId
-            // param → backend calls getActiveForProject()). If the user wants to publish a
-            // specific version they must first "Applica" it in the history panel.
-            const deployment = await publishProject(token, projectId, undefined);
-            setPublishDeployment(deployment);
-            setPublishState("idle");
-            const vn = (() => {
-                if (!activeId) return null;
-                const idx = previewSnapshots.findIndex((s) => s.id === activeId);
-                return idx === -1 ? null : previewSnapshots.length - idx;
-            })();
-            updateNotification(notifId, {
-                status: "done",
-                message: vn ? t("workspace.notifications.publish.doneVersioned", { vn }) : t("workspace.notifications.publish.done"),
-            });
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-                setPublishState("idle");
-                updateNotification(notifId, { status: "error", message: t("workspace.notifications.publish.sessionExpired") });
-                return;
-            }
-            setPublishState("error");
-            const msg = err instanceof Error ? err.message : t("workspace.notifications.publish.error");
-            updateNotification(notifId, { status: "error", message: msg });
-            window.setTimeout(() => setPublishState("idle"), 3000);
-        }
-    }, [token, projectId, previewSnapshots, addNotification, updateNotification]);
-
-    const handleUnpublish = useCallback(async () => {
-        if (!token || !publishDeployment) return;
-        setPublishState("loading");
-        try {
-            await unpublishProject(token, projectId, publishDeployment.id);
-            setPublishDeployment(null);
-            setPublishState("idle");
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-                setPublishState("idle");
-                return;
-            }
-            setPublishState("error");
-            window.setTimeout(() => setPublishState("idle"), 3000);
-        }
-    }, [token, projectId, publishDeployment]);
-
-    const handleCopyPublishLink = useCallback(() => {
-        if (!publishDeployment) return;
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-        // Prefer subdomain URL when set (human-readable), fall back to path URL
-        const link = publishDeployment.subdomainUrl ?? `${baseUrl}/p/${publishDeployment.publishId}`;
-        navigator.clipboard.writeText(link).then(() => {
-            setPublishCopied(true);
-            window.setTimeout(() => setPublishCopied(false), 2000);
-        });
-    }, [publishDeployment]);
-
-    const handleSlugSave = useCallback(async () => {
-        if (!token || !publishDeployment) return;
-        const trimmed = slugInput.trim().toLowerCase();
-        const newSlug = trimmed || null;
-        setSlugSaving(true);
-        try {
-            const updated = await updateDeploymentSlug(token, projectId, newSlug);
-            setPublishDeployment(updated);
-            setSlugEditMode(false);
-            setSlugInput("");
-            setSlugCheckState("idle");
-        } catch (err) {
-            // Surface the failure in the inline status and keep the editor open so the
-            // user understands why the save didn't take (previously swallowed silently,
-            // making the Save button look broken on a 409/400).
-            if (err instanceof ApiError && err.status === 409) {
-                setSlugCheckState("taken");
-            } else if (err instanceof ApiError && err.status === 400) {
-                setSlugCheckState("invalid");
-            } else if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-            } else {
-                setSlugCheckState("error");
-            }
-        } finally {
-            setSlugSaving(false);
-        }
-    }, [token, projectId, slugInput, publishDeployment]);
 
     const handleSavePromptConfig = useCallback(async () => {
         if (!token) return;
@@ -1007,14 +537,6 @@ export default function WorkspacePage() {
         // Load preset catalog (public, no token needed)
         void getPresets().then((r) => setPresetCatalog(r.presets)).catch(() => {});
 
-        const savedSplit = Number(getCookie(SPLIT_COOKIE));
-        if (savedSplit >= 25 && savedSplit <= 60) {
-            setLeftWidth(savedSplit);
-        }
-        const savedVSplit = Number(getCookie(CHAT_VSPLIT_COOKIE));
-        if (savedVSplit >= 30 && savedVSplit <= 85) {
-            setChatVSplit(savedVSplit);
-        }
     }, [router]);
 
     const loadProjectConversation = useCallback(
@@ -1073,8 +595,57 @@ export default function WorkspacePage() {
             .catch(() => undefined);
     }, [token, loadProjectConversation, projectId]);
 
-    // ── Zero Effort auto-send: read prompt from sessionStorage (primary) or URL param (fallback) ──
+    // ── I15: server-owned run handoff (PipelineRun.canonicalBrief, not client storage) ──
+    // Takes priority over both legacy handoff paths below when a pipelineRunId is present —
+    // it's only ever set by the new launch-workspace flow, which never also writes the legacy
+    // sessionStorage/autoPrompt handoff for the same navigation.
     useEffect(() => {
+        const runId = pipelineRunIdRef.current;
+        if (!runId) return;
+        const authToken = getToken();
+        if (!authToken) return;
+        let cancelled = false;
+        void getPipelineRun(authToken, projectId, runId)
+            .then(({ run }) => {
+                if (cancelled) return;
+                // The run's optimizationPolicy is authoritative — the workspace must not decide
+                // this for itself. "skip" means the brief arriving here IS the optimized artifact
+                // of the guided flow: re-optimizing it rewrites the very text whose contentHash
+                // is frozen on the run, so what reaches the model stops matching the run's own
+                // record of what was supposed to reach it.
+                //
+                // Written to the ref (not just state) because this runs inside an async .then():
+                // the auto-send below reads it during the same tick and would otherwise still see
+                // the mount-time default of "optimize".
+                if (run.optimizationPolicy === "skip") {
+                    autoOptimizeSuppressedByHandoffRef.current = true;
+                    setAutoOptimize(false);
+                }
+                if (run.canonicalBrief?.content) {
+                    handoffPromptRef.current = run.canonicalBrief.content;
+                    setPrompt(run.canonicalBrief.content);
+                    setAutoPromptPending(true);
+                }
+                // Locked model is authoritative for this run — feed it into the existing
+                // preferred-provider/model resolution effect (which already validates against
+                // the hydrated catalog and shows a fallback notice if it's since gone inactive)
+                // instead of trusting a client-supplied URL param.
+                preferredProviderRef.current = run.modelLock.effective.providerId;
+                preferredModelRef.current = run.modelLock.effective.modelId;
+                setPreferredModelResolutionComplete(false);
+            })
+            .catch(() => {
+                // Run fetch failed (flag flipped off after launch, run not found, network) —
+                // fall through with an empty prompt; the user can still type/send manually.
+            });
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // run once on mount — searchParams/projectId are stable
+
+    // ── Guided Mode auto-send: read prompt from sessionStorage (primary) or URL param (fallback) ──
+    // Skipped entirely when a pipelineRunId handoff is present (I15 path above owns it instead).
+    useEffect(() => {
+        if (pipelineRunIdRef.current) return;
         const convId = searchParams?.get("conv");
         // Primary path: sessionStorage handoff (avoids URI-length limits and encoding errors).
         const handoffKey = convId ? `pipeline_handoff_${convId}` : null;
@@ -1101,18 +672,31 @@ export default function WorkspacePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // run once on mount — searchParams is stable
 
-    // ── Zero Effort auto-send: fire when conversation + providers are ready ───
+    // ── Guided Mode auto-send: fire when conversation + providers are ready ───
     useEffect(() => {
         if (!autoPromptPending) return;
         if (autoPromptFiredRef.current) return;
-        if ((preferredProviderRef.current || preferredModelRef.current) && !preferredModelAppliedRef.current) return;
+        if (!preferredModelResolutionComplete) return;
         if (conversationLoading || !selectedModel || sending || !token) return;
+        // A reload re-runs this effect with the same pipelineRunId still in the URL, and the ref
+        // above is fresh on every mount — so without a stored signal the brief would be sent
+        // again on every refresh. The conversation itself is that signal: LaunchGuidedProject
+        // creates it EMPTY on purpose (see its comment), so "no messages yet" is the precise,
+        // server-owned answer to "has this brief already been dispatched?".
+        if ((activeConv?.messages.length ?? 0) > 0) {
+            autoPromptFiredRef.current = true;
+            setAutoPromptPending(false);
+            // Drop the pre-filled brief so the composer doesn't come back holding a 7 000-character
+            // prompt the user never typed and has already sent. Anything else is left alone.
+            setPrompt((current) => (current === handoffPromptRef.current ? "" : current));
+            return;
+        }
         autoPromptFiredRef.current = true;
         setAutoPromptPending(false);
         // Trigger send with a fake FormEvent — handleSend will read the current prompt state.
         void handleSend({ preventDefault: () => {} } as React.FormEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [autoPromptPending, conversationLoading, selectedModel, sending, token]);
+    }, [activeConv, autoPromptPending, conversationLoading, preferredModelResolutionComplete, selectedModel, sending, token]);
 
     useEffect(() => {
         if (!selectedProvider) return;
@@ -1160,32 +744,66 @@ export default function WorkspacePage() {
         presetRecommendationAppliedRef.current = projectPresetId;
     }, [projectPresetId, presetCatalog, providersCatalog]);
 
-    // ── Zero Effort / Vibe pipeline: apply preferred model from URL params ────
+    // ── Guided Mode / Vibe pipeline: apply preferred model from URL params ────
     // Runs after the catalog and preset recommendation have been applied so that
     // the pipeline-configured model always wins over the preset default.
     useEffect(() => {
-        if (preferredModelAppliedRef.current) return;
+        if (preferredModelResolutionComplete) return;
         const prefProvider = preferredProviderRef.current;
         const prefModel = preferredModelRef.current;
-        if (!prefProvider && !prefModel) return;
+        if (!prefProvider && !prefModel) {
+            setPreferredModelResolutionComplete(true);
+            return;
+        }
         if (providersCatalog.length === 0) return;
 
         const provider = prefProvider
             ? providersCatalog.find((p) => p.provider === prefProvider)
             : providersCatalog.find((p) => p.models.some((m) => m.isActive && m.id === prefModel));
-        if (!provider) return;
+        if (!provider) {
+            // The requested provider isn't active in the hydrated catalog — silently falls
+            // through to whatever provider/model the earlier catalog-default / preset-
+            // recommendation effects already selected. Behavior is unchanged; surface it.
+            setPipelineModelOverride(null);
+            setPreferredModelResolutionComplete(true);
+            setModelFallbackNotice({ requestedProvider: prefProvider, requestedModel: prefModel, actualProvider: selectedProvider, actualModel: selectedModel });
+            addNotification({
+                label: t("workspace.notifications.modelFallback.label"),
+                status: "done",
+                message: t("workspace.notifications.modelFallback.message", {
+                    requested: prefProvider || prefModel || "—",
+                    actual: selectedModel || selectedProvider || "—",
+                }),
+            });
+            return;
+        }
 
         const model = prefModel
             ? provider.models.find((m) => m.isActive && m.id === prefModel)
             : provider.models.find((m) => m.isActive && m.isDefault) ?? provider.models.find((m) => m.isActive);
-        if (!model) return;
+        if (!model) {
+            // The requested model isn't active on the resolved provider — same silent
+            // fallthrough as above, scoped to the model within an otherwise-valid provider.
+            setPipelineModelOverride(null);
+            setPreferredModelResolutionComplete(true);
+            setModelFallbackNotice({ requestedProvider: prefProvider, requestedModel: prefModel, actualProvider: selectedProvider, actualModel: selectedModel });
+            addNotification({
+                label: t("workspace.notifications.modelFallback.label"),
+                status: "done",
+                message: t("workspace.notifications.modelFallback.message", {
+                    requested: prefModel || prefProvider || "—",
+                    actual: selectedModel || selectedProvider || "—",
+                }),
+            });
+            return;
+        }
 
         setSelectedProvider(provider.provider);
         setSelectedModel(model.id);
         setPipelineModelOverride({ provider: provider.provider, model: model.id, applied: true });
-        preferredModelAppliedRef.current = true;
+        setPreferredModelResolutionComplete(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [providersCatalog]);
+    }, [preferredModelResolutionComplete, providersCatalog]);
 
     // Auto-load prompt preview when user opens the prompt tab
     useEffect(() => {
@@ -1266,6 +884,70 @@ export default function WorkspacePage() {
         selectedBackendSnapshotIdRef.current = selectedBackendSnapshotId;
     }, [selectedBackendSnapshotId]);
 
+    // AL-042 — the versions as the server described them, readable from inside callbacks.
+    // The certification a write declares is read from here, never recomputed from what the
+    // editor happens to be holding.
+    const previewSnapshotsRef = useRef<PreviewSnapshot[]>([]);
+    useEffect(() => { previewSnapshotsRef.current = previewSnapshots; }, [previewSnapshots]);
+
+    /**
+     * AL-042/043 — the single client write path for an artifact version.
+     *
+     * Every editing mode goes through here, so every mode declares the same base: the version
+     * the user has selected, plus the contentHash the server issued for it. Four call sites
+     * each assembling their own declaration is exactly how they came to disagree — one of them
+     * used to omit the parent entirely and silently start a second root.
+     *
+     * The hash is echoed, never recomputed. What the API returns has been compiled for the
+     * preview runtime (forms, inline assets) and legitimately differs from the canonical
+     * artifacts the hash certifies, so a locally computed one would never match.
+     *
+     * When the base predates AL-039 there is no hash to declare; the server accepts the write
+     * and records it as unverifiable rather than locking the user out of their own history.
+     */
+    const certifiedHashOf = useCallback((snapshotId: string | null | undefined): string | undefined => {
+        if (!snapshotId) return undefined;
+        return previewSnapshotsRef.current.find((snapshot) => snapshot.id === snapshotId)?.metadata?.contentHash;
+    }, []);
+
+    const commitArtifactVersion = useCallback(async (
+        authToken: string,
+        input: Omit<CreatePreviewSnapshotRequest, "parentSnapshotId" | "baseContentHash">,
+    ) => {
+        const baseId = selectedBackendSnapshotIdRef.current ?? undefined;
+        const result = await createPreviewSnapshot(authToken, projectId, {
+            ...input,
+            parentSnapshotId: baseId,
+            baseContentHash: certifiedHashOf(baseId),
+        });
+        // Keep the certification current without waiting for the list to reload, so a second
+        // save in the same interaction declares the version the first one just produced.
+        previewSnapshotsRef.current = [
+            result.snapshot,
+            ...previewSnapshotsRef.current.filter((snapshot) => snapshot.id !== result.snapshot.id),
+        ];
+        return result;
+    }, [projectId, certifiedHashOf]);
+
+    /**
+     * AL-042 — the server refused the write because its base is no longer current. Re-read the
+     * history and say so; do not retry. Retrying would send an edit built on something that is
+     * not there any more, which is the overwrite this rule exists to prevent.
+     *
+     * Returns true when it handled the error, so callers can fall through to their own
+     * handling for everything else.
+     */
+    const handleStaleArtifactBase = useCallback(async (err: unknown): Promise<boolean> => {
+        if (!(err instanceof ApiError) || err.code !== ARTIFACT_BASE_STALE) return false;
+        if (token) await loadSnapshots(token);
+        addNotification({
+            label: t("workspace.notifications.snapshot.staleBaseLabel"),
+            status: "error",
+            message: err.userMessage ?? t("workspace.notifications.snapshot.staleBase"),
+        });
+        return true;
+    }, [token, loadSnapshots, addNotification]);
+
     useEffect(() => { editorHtmlRef.current = editorHtml; }, [editorHtml]);
     useEffect(() => { editorCssRef.current = editorCss; }, [editorCss]);
     useEffect(() => { editorJsRef.current = editorJs; }, [editorJs]);
@@ -1324,11 +1006,11 @@ export default function WorkspacePage() {
         void refreshProjectDbCost();
     }, [token, loadProjectAssets, loadProjectAiUsage, refreshProjectDbCost]);
 
-    // Bridge Zero Effort project assets into the chat attachment strip on first load.
-    // Runs once after projectAssets settles so that files uploaded during the Vibe/ZE
+    // Bridge Guided Mode project assets into the chat attachment strip on first load.
+    // Runs once after projectAssets settles so that files uploaded during the Vibe/Guided
     // pipeline appear as active chat attachments without the user having to re-attach them.
     useEffect(() => {
-        if (!fromZeroEffortRef.current) return;
+        if (!fromGuidedRef.current) return;
         if (projectAssetsBootstrappedRef.current) return;
         if (projectAssets.length === 0) return;
         projectAssetsBootstrappedRef.current = true;
@@ -1528,19 +1210,20 @@ export default function WorkspacePage() {
 
             if (!conversationId) return false;
 
-            const result = await createPreviewSnapshot(token, projectId, {
+            const result = await commitArtifactVersion(token, {
                 conversationId,
-                parentSnapshotId: selectedBackendSnapshotIdRef.current ?? undefined,
                 artifacts: { html, css: editorCssRef.current, js: editorJsRef.current },
                 metadata: { finishReason },
                 activate: true,
             });
             await persistWorkspaceSnapshot(result.snapshot.id, { html, css: editorCssRef.current, js: editorJsRef.current }, options);
             return true;
-        } catch {
+        } catch (err) {
+            // AL-042 — a refused base is a real answer, not a failed save to swallow silently.
+            await handleStaleArtifactBase(err);
             return false;
         }
-    }, [token, activeConvId, projectId, persistWorkspaceSnapshot]);
+    }, [token, activeConvId, projectId, persistWorkspaceSnapshot, handleStaleArtifactBase]);
 
     const handleApplyAsset = useCallback(async (asset: ProjectAssetDto) => {
         if (!token || !selectedElement) return;
@@ -1919,7 +1602,7 @@ export default function WorkspacePage() {
         if (!token || !activeConvId) return;
         setIsSavingEditorSnapshot(true);
         try {
-            const result = await createPreviewSnapshot(token, projectId, {
+            const result = await commitArtifactVersion(token, {
                 conversationId: activeConvId,
                 artifacts: { html: editorHtml, css: editorCss, js: editorJs },
                 metadata: { finishReason: "manual-save" },
@@ -1929,15 +1612,20 @@ export default function WorkspacePage() {
             incrementSnapCount(projectId);
             await loadSnapshots(token);
             setSelectedBackendSnapshotId(result.snapshot.id);
-            addNotification({ label: t("workspace.notifications.snapshot.savedLabel"), status: "done", message: t("workspace.notifications.snapshot.saved") });
+            // AL-045 — say which of the two things happened. Reporting "version saved" when
+            // the content was identical teaches the user to distrust the history panel.
+            addNotification(result.created
+                ? { label: t("workspace.notifications.snapshot.savedLabel"), status: "done", message: t("workspace.notifications.snapshot.saved") }
+                : { label: t("workspace.notifications.snapshot.noChangeLabel"), status: "done", message: t("workspace.notifications.snapshot.noChange") });
         } catch (err) {
+            if (await handleStaleArtifactBase(err)) return;
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
             }
         } finally {
             setIsSavingEditorSnapshot(false);
         }
-    }, [token, projectId, activeConvId, editorHtml, editorCss, editorJs, loadSnapshots, addNotification]);
+    }, [token, projectId, activeConvId, editorHtml, editorCss, editorJs, loadSnapshots, addNotification, handleStaleArtifactBase]);
 
     // Receive element selections + EDIT mode messages from the sandboxed preview iframe
     useEffect(() => {
@@ -2073,45 +1761,60 @@ export default function WorkspacePage() {
     const handleCommitEditVersion = useCallback(async (html: string) => {
         if (!token || !activeConvId) return;
         setIsSavingEditVersion(true);
+        let editProducedVersion = true;
         try {
+            // AL-009 — `html` is read back from the sandboxed preview DOM, which had project
+            // asset URLs inlined as base64 data URIs so the sandbox could render them without
+            // an auth header (see resolvePreviewAssetUrls). Undo that here so the persisted
+            // version stores the source URLs, not the render: one measured save otherwise went
+            // 10.703 -> 131.884 characters. Both branches below persist, so both need it.
+            const sourceHtml = reversePreviewAssetReplacements(html, previewAssetResolved?.replacements ?? new Map());
             if (editSessionId) {
                 // Autosave current state first, then commit via session
                 await saveWysiwygEditState(token, projectId, editSessionId, {
-                    html,
+                    html: sourceHtml,
                     css: editorCss,
                     js: editorJs,
                 });
                 const res = await commitWysiwygSession(token, projectId, editSessionId, {
                     description: "EDIT Light",
+                    // AL-043 — the session pinned its origin when it opened; the certification
+                    // travels at commit, which is the moment the base could have moved.
+                    baseContentHash: certifiedHashOf(selectedBackendSnapshotIdRef.current),
                 });
-                saveThumbnail(projectId, { html, css: editorCss, js: editorJs });
+                saveThumbnail(projectId, { html: sourceHtml, css: editorCss, js: editorJs });
                 incrementSnapCount(projectId);
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
                 setEditSessionId(null);
+                editProducedVersion = res.created;
             } else {
                 // Degraded mode: session was not created, save directly as PreviewSnapshot
-                const res = await createPreviewSnapshot(token, projectId, {
+                const res = await commitArtifactVersion(token, {
                     conversationId: activeConvId,
-                    artifacts: { html, css: editorCss, js: editorJs },
+                    artifacts: { html: sourceHtml, css: editorCss, js: editorJs },
                     metadata: { finishReason: "wysiwyg-edit-light" },
                     activate: true,
                 });
-                saveThumbnail(projectId, { html, css: editorCss, js: editorJs });
+                saveThumbnail(projectId, { html: sourceHtml, css: editorCss, js: editorJs });
                 incrementSnapCount(projectId);
                 await loadSnapshots(token);
                 setSelectedBackendSnapshotId(res.snapshot.id);
+                editProducedVersion = res.created;
             }
-            addNotification({ label: t("workspace.notifications.snapshot.editSavedLabel"), status: "done", message: t("workspace.notifications.snapshot.editSaved") });
+            addNotification(editProducedVersion
+                ? { label: t("workspace.notifications.snapshot.editSavedLabel"), status: "done", message: t("workspace.notifications.snapshot.editSaved") }
+                : { label: t("workspace.notifications.snapshot.noChangeLabel"), status: "done", message: t("workspace.notifications.snapshot.noChange") });
             setEditMode(false);
         } catch (err) {
+            if (await handleStaleArtifactBase(err)) return;
             if (err instanceof ApiError && err.status === 401) {
                 window.dispatchEvent(new CustomEvent("session-expired"));
             }
         } finally {
             setIsSavingEditVersion(false);
         }
-    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification]);
+    }, [token, projectId, activeConvId, editSessionId, editorCss, editorJs, loadSnapshots, addNotification, previewAssetResolved, commitArtifactVersion, certifiedHashOf, handleStaleArtifactBase]);
     handleCommitEditVersionRef.current = handleCommitEditVersion;
 
     // ── Derived values ──────────────────────────────────────────────────────
@@ -2128,15 +1831,27 @@ export default function WorkspacePage() {
         .reverse()
         .find((m) => m.role === "assistant");
 
-    // Ground-truth: the exact messages ACTUALLY sent to the LLM in the most recent generation,
-    // recorded in the message's promptingTrace. The Prompt panel shows THIS — the real prompt,
-    // structured into system sections + user message(s) — not a live recomposed estimate.
-    const lastSentTrace = (activeConv?.messages ?? [])
+    // Ground-truth: the exact messages ACTUALLY sent to the LLM for the SELECTED snapshot's
+    // generation, recorded in the message's promptingTrace. The Prompt panel shows THIS — the
+    // real prompt, structured into system sections + message history — not a live recomposed
+    // estimate.
+    //
+    // I16 of the SSOT program: this used to always resolve to the LATEST assistant message's
+    // trace regardless of which snapshot was selected in the preview panel, so switching to an
+    // older version in the preview silently kept showing the newest generation's prompt. Each
+    // assistant message is stamped with metadata.snapshotId for the snapshot it produced (see
+    // handleSend), so the selected snapshot's own message can be found directly. Falls back to
+    // the latest trace when nothing is explicitly selected yet, or when the selected snapshot
+    // predates snapshotId-tagged messages (legacy data).
+    const selectedSnapshotTrace = selectedBackendSnapshotId
+        ? (activeConv?.messages ?? []).find((m) => m.metadata?.snapshotId === selectedBackendSnapshotId)?.metadata?.promptingTrace
+        : undefined;
+    const lastSentTrace = selectedSnapshotTrace ?? (activeConv?.messages ?? [])
         .slice()
         .reverse()
         .map((m) => m.metadata?.promptingTrace)
         .find((tr) => Boolean(tr && ((tr.messagesSentToLlm?.length ?? 0) > 0 || tr.effectiveSystemPrompt)));
-    const lastSentMessages: Array<{ role: "system" | "user"; content: string }> = lastSentTrace
+    const lastSentMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = lastSentTrace
         ? ((lastSentTrace.messagesSentToLlm?.length ?? 0) > 0
             ? lastSentTrace.messagesSentToLlm!
             : lastSentTrace.effectiveSystemPrompt
@@ -2149,15 +1864,24 @@ export default function WorkspacePage() {
     // snapshot with actual content to prevent sending blank context to the LLM.
     const activeMarked = previewSnapshots.find((s) => s.isActive);
 
+    // AL-011 — number = depth along the seed chain, not list position (see
+    // versionNumbering.ts). Shared by the Live banner below and SnapshotHistoryPanel so the
+    // two never disagree about which version a given badge refers to.
+    const versionIndex = useMemo(() => buildVersionIndex(previewSnapshots), [previewSnapshots]);
+
     // Published version tracking — for the Live banner stale warning.
-    const publishedSnapshotIdx = publishDeployment
-        ? previewSnapshots.findIndex((s) => s.id === publishDeployment.snapshotId)
-        : -1;
-    const publishedVersionNumber = publishedSnapshotIdx !== -1
-        ? previewSnapshots.length - publishedSnapshotIdx
+    const publishedVersionNumber = publishDeployment
+        ? versionIndex.get(publishDeployment.snapshotId) ?? null
         : null;
-    const activeMarkedIdx = previewSnapshots.findIndex((s) => s.isActive);
-    const activeVersionNumber = activeMarkedIdx !== -1 ? previewSnapshots.length - activeMarkedIdx : null;
+    const activeVersionNumber = activeMarked ? versionIndex.get(activeMarked.id) ?? null : null;
+
+    // AL-014 — branch notice near the composer. previewSnapshots is newest-first (backend
+    // sorts createdAt desc), so index 0 is whatever was created most recently, independent of
+    // its chain depth. The seed of the next edit is the active version (AL-012); if that isn't
+    // the newest snapshot, the next change branches rather than continuing the tip.
+    const newestSnapshot = previewSnapshots[0] ?? null;
+    const willBranchOnNextEdit = !!activeMarked && !!newestSnapshot && activeMarked.id !== newestSnapshot.id;
+    const newestVersionNumberForBranchNotice = newestSnapshot ? versionIndex.get(newestSnapshot.id) ?? null : null;
     const isPublishStale =
         publishDeployment?.status === "live" &&
         !!activeMarked &&
@@ -2212,6 +1936,7 @@ export default function WorkspacePage() {
                 sourceCss: editorCss,
                 html: resolved.html,
                 css: resolved.css,
+                replacements: resolved.replacements,
             });
         });
 
@@ -2314,51 +2039,7 @@ export default function WorkspacePage() {
             : `${previewDoc}${scripts}`;
     }, [previewDoc, editMode]);
 
-    // ── Drag resize ─────────────────────────────────────────────────────────
-    useEffect(() => {
-        function onMove(e: MouseEvent) {
-            if (!isDragging) return;
-            const width = window.innerWidth;
-            const pct = (e.clientX / width) * 100;
-            const clamped = Math.max(25, Math.min(60, pct));
-            setLeftWidth(clamped);
-        }
 
-        function onUp() {
-            if (!isDragging) return;
-            setIsDragging(false);
-            setCookie(SPLIT_COOKIE, String(Math.round(leftWidth)));
-        }
-
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", onUp);
-        return () => {
-            window.removeEventListener("mousemove", onMove);
-            window.removeEventListener("mouseup", onUp);
-        };
-    }, [isDragging, leftWidth]);
-
-    useEffect(() => {
-        if (!isDraggingVChat) return;
-        function onMove(e: MouseEvent) {
-            const body = chatBodyRef.current;
-            if (!body) return;
-            const rect = body.getBoundingClientRect();
-            const pct = Math.min(85, Math.max(30, ((e.clientY - rect.top) / rect.height) * 100));
-            setChatVSplit(pct);
-            chatVSplitRef.current = pct;
-        }
-        function onUp() {
-            setIsDraggingVChat(false);
-            setCookie(CHAT_VSPLIT_COOKIE, String(Math.round(chatVSplitRef.current)));
-        }
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp);
-        return () => {
-            document.removeEventListener("mousemove", onMove);
-            document.removeEventListener("mouseup", onUp);
-        };
-    }, [isDraggingVChat]);
 
     useEffect(() => {
         if (llmErrorDialog?.code === "LLM_PROVIDER_API_KEY_MISSING" && !currentProviderMissingKey) {
@@ -2383,7 +2064,9 @@ export default function WorkspacePage() {
         if (!content || !token || sending || conversationLoading || optimizingPrompt) return;
 
         // Auto-optimize pipeline: run optimizer first, then send with the result.
-        if (autoOptimize) {
+        // The ref wins over the state: a handoff that arrives asynchronously (the I15 run fetch)
+        // sets it after this component has already rendered with autoOptimize = true.
+        if (autoOptimize && !autoOptimizeSuppressedByHandoffRef.current) {
             const optimized = await runOptimizeAsync(content);
             if (optimized === null) return; // aborted or failed — don't send
             content = optimized;
@@ -2540,6 +2223,7 @@ export default function WorkspacePage() {
                         history,
                         currentArtifacts,
                         focusContext,
+                        pipelineRunId: pipelineRunIdRef.current || undefined,
                     },
                     (event) => {
                         if (event.type === "thinking") {
@@ -2672,6 +2356,7 @@ export default function WorkspacePage() {
                     history,
                     currentArtifacts,
                     focusContext: retryWithoutFocusContext ? undefined : focusContext,
+                    pipelineRunId: pipelineRunIdRef.current || undefined,
                 });
             }
 
@@ -2679,8 +2364,12 @@ export default function WorkspacePage() {
                 || llm.structured?.chat?.summary?.trim()
                 || "Risposta AI generata senza testo visibile.").slice(0, 50000);
 
+            // A generation whose JSON could not be parsed is a failure, not a reply. Storing it
+            // as "assistant" is what made it render like a normal turn and, worse, fed its
+            // empty artifacts back as conversation history on the next request. Role "error"
+            // is already excluded from the history window built above.
             const assistantSaved = await addMessage(token, projectId, convId, {
-                role: "assistant",
+                role: llm.generationParseError ? "error" : "assistant",
                 content: assistantContent,
                 metadata: {
                     model: llm.model,
@@ -2718,16 +2407,21 @@ export default function WorkspacePage() {
 
             let previewVersionSaved = false;
 
-            // Persist preview snapshot to DB — only when html is non-empty.
+            // Persist preview snapshot to DB — only when html is non-empty AND the
+            // structured parse succeeded. A parse failure now returns empty artifacts
+            // (buildParseFailureStructured) and generationParseError=true; persisting it
+            // would activate a snapshot with no usable HTML and break every later
+            // focused edit (see FOCUSED_EDIT_SPEC isActive invariant).
             // In focused-patch mode the LLM returns artifacts:{html:"",…}; the server
             // merges the patch and returns the full HTML. If html is still empty after
             // the merge (anchor not found AND base was empty) we skip snapshot creation
             // to avoid versioning an empty artifact and corrupting the active baseline.
             // Also skip when the server explicitly reports focusPatchApplied === false
             // (anchor not found, fallback returned) to avoid creating no-op versions.
-            if (llm.structured?.artifacts && llm.structured.artifacts.html && convId && llm.focusPatchApplied !== false) {
+            if (llm.structured?.artifacts && llm.structured.artifacts.html && convId
+                && llm.focusPatchApplied !== false && llm.generationParseError !== true) {
                 try {
-                    const snap = await createPreviewSnapshot(token, projectId, {
+                    const snap = await commitArtifactVersion(token, {
                         conversationId: convId,
                         sourceMessageId: assistantSaved.message.id,
                         artifacts: {
@@ -2735,11 +2429,16 @@ export default function WorkspacePage() {
                             css: llm.structured.artifacts.css ?? "",
                             js: llm.structured.artifacts.js ?? "",
                         },
+                        serviceManifest: llm.structured.serviceManifest,
                         // In focused-patch mode the rawResponse has artifacts.html=""; the
                         // server already merged the patch and returned full HTML via
                         // structured.artifacts. Sending rawResponse here would cause the
                         // snapshot route to overwrite the correct merged HTML with empty.
                         rawLlmResponse: llm.focusPatchApplied ? undefined : (llm.rawResponse ?? undefined),
+                        // AL-029 — records which element (or code selection) this generation
+                        // targeted, on the version it produced. 0 of 195 stored snapshots carry
+                        // this today because no client call site ever sent it.
+                        focusContext,
                         metadata: {
                             model: llm.model,
                             provider: llm.provider,
@@ -2749,6 +2448,11 @@ export default function WorkspacePage() {
                             tokenUsage: llm.usage,
                             promptingTrace: llm.promptingTrace,
                             mediaResolution: llm.mediaResolution,
+                            // AL-026 — the durable PromptExecutionLog id this response was
+                            // persisted under (packages/contracts llm.ts:332). The contract
+                            // field on the snapshot side (preview.ts) is landing in a parallel
+                            // change; until it does, the backend simply drops this key.
+                            promptExecutionId: llm.promptExecutionId,
                         },
                         activate: true,
                     });
@@ -2812,8 +2516,12 @@ export default function WorkspacePage() {
                         setPreviewRefreshing(false);
                     }, 3000);
                     previewVersionSaved = true;
-                } catch {
-                    // non-blocking — UI works without snapshot persistence
+                } catch (err) {
+                    // AL-042 — a refused base is not "snapshot persistence is optional": the
+                    // model produced a version that could not be attached to what the user is
+                    // looking at, and they need to know before they build on it.
+                    await handleStaleArtifactBase(err);
+                    // Anything else stays non-blocking — the chat works without the snapshot.
                 }
             }
 
@@ -2844,6 +2552,15 @@ export default function WorkspacePage() {
                 });
             }
 
+            // Initial/full generation whose JSON could not be parsed: nothing was saved.
+            if (llm.generationParseError) {
+                addNotification({
+                    label: t("workspace.notifications.llm.parseErrorLabel"),
+                    status: "error",
+                    message: t("workspace.notifications.llm.parseError"),
+                });
+            }
+
             if (userMessageId) {
                 await logBackgroundTask(token, projectId, convId, userMessageId, {
                     type: "llm_chat_preview",
@@ -2864,15 +2581,15 @@ export default function WorkspacePage() {
             }
 
             updateNotification(notifId, {
-                label: llm.focusPatchParseError
+                label: (llm.focusPatchParseError || llm.generationParseError)
                     ? t("workspace.notifications.focusPatch.parseResponseLabel")
                     : llm.focusPatchApplied
                         ? t("workspace.notifications.focusPatch.appliedLabel")
                         : previewVersionSaved
                             ? t("workspace.notifications.snapshot.newVersionLabel")
                             : t("workspace.notifications.llm.doneLabel"),
-                status: llm.focusPatchParseError ? "error" : "done",
-                message: llm.focusPatchParseError
+                status: (llm.focusPatchParseError || llm.generationParseError) ? "error" : "done",
+                message: (llm.focusPatchParseError || llm.generationParseError)
                     ? t("workspace.notifications.focusPatch.parseResponseMessage")
                     : llm.focusPatchApplied
                         ? t("workspace.notifications.focusPatch.appliedMessage")
@@ -2895,6 +2612,19 @@ export default function WorkspacePage() {
                 status: "error",
                 message: msg,
             });
+
+            // The catalog is the source of truth for what may be dispatched, and this tab may be
+            // holding a list from before an operator switched something off. Re-read it and let
+            // the selector fall back to something that is actually available, rather than leaving
+            // the user to press send again on the same dead model.
+            if (err instanceof ApiError && err.code === MODEL_NOT_AVAILABLE && token) {
+                try {
+                    const refreshed = await getLlmProviders(token);
+                    setProvidersCatalog(refreshed.providers.filter((provider) => provider.isActive));
+                } catch {
+                    // Leave the stale list rather than blanking the selector on a second failure.
+                }
+            }
 
             if (token && trackedConversationId) {
                 try {
@@ -2936,6 +2666,14 @@ export default function WorkspacePage() {
     // Does NOT set prompt state; callers decide what to do with the result.
     async function runOptimizeAsync(original: string): Promise<string | null> {
         if (!token || !original || optimizingPrompt || conversationLoading) return null;
+
+        // An empty conversation means this is the opening brief and the optimizer should enrich
+        // it with the full project context. Anything else is a revision instruction: the history
+        // and the system prompt layers already carry that context on every send, so enriching it
+        // again here turns "add some text, the contrast is poor" into a fresh project brief and
+        // the user's actual request never reaches the model.
+        const optimizeMode: "initial" | "follow-up" =
+            (activeConv?.messages.length ?? 0) > 0 ? "follow-up" : "initial";
 
         let trackedConversationId: string | null = activeConvId;
         let trackedUserMessageId: string | null = null;
@@ -2979,28 +2717,7 @@ export default function WorkspacePage() {
                 prev ? { ...prev, messages: [...prev.messages, userSaved.message] } : prev
             );
 
-            let finalResult: {
-                optimizedPrompt: string;
-                provider: string;
-                model: string;
-                usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
-                costEstimate?: {
-                    currency: "EUR";
-                    amount: number;
-                    breakdown: { tokenCost: number; imageCost: number; videoCost: number };
-                    unitRates: { textEurPer1kTokens: number; imageEurPerAsset: number; videoEurPerAsset: number };
-                    providerCostUsd?: number;
-                };
-                durationMs: number;
-                skipped?: boolean;
-                rawResponse?: string;
-                finishReason?: string;
-                promptingTrace?: {
-                    originalUserMessage: string;
-                    effectiveSystemPrompt: string;
-                    messagesSentToLlm: Array<{ role: "system" | "user"; content: string }>;
-                };
-            } | null = null;
+            let finalResult: OptimizePromptResult | null = null;
 
             await streamOptimizePrompt(
                 token,
@@ -3011,6 +2728,8 @@ export default function WorkspacePage() {
                     conversationId: convId,
                     provider: selectedProvider || undefined,
                     model: selectedModel || undefined,
+                    pipelineRunId: pipelineRunIdRef.current || undefined,
+                    optimizeMode,
                 },
                 (event) => {
                     if (event.type === "thinking") { setThinkingText((prev) => prev + event.content); return; }
@@ -3504,31 +3223,19 @@ export default function WorkspacePage() {
                             layers={lastSentTrace.layers ?? []}
                             defaultRaw={!lastSentTrace.layers?.length}
                         />
-                        {lastSentMessages
-                            .filter((msg) => msg.role === "user")
-                            .map((msg, i) => (
-                                <div key={`sent-usr-${i}`} style={{ marginTop: "1rem" }}>
-                                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#7dd3fc", marginBottom: "0.35rem" }}>
-                                        {t("workspace.ui.promptPanelUserMessage", "Messaggio utente")}
-                                    </div>
-                                    <pre
-                                        style={{
-                                            margin: 0,
-                                            padding: "0.75rem 1rem",
-                                            background: "#080e1a",
-                                            color: "#94a3b8",
-                                            fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                                            fontSize: "0.78rem",
-                                            lineHeight: 1.65,
-                                            whiteSpace: "pre-wrap",
-                                            wordBreak: "break-word",
-                                            overflowX: "auto",
-                                        }}
-                                    >
-                                        {msg.content}
-                                    </pre>
-                                </div>
-                            ))}
+                        {/* I16: every non-system message in the trace (user AND assistant history
+                            turns), not just role:user — prior assistant replies are part of what
+                            was actually sent and were being dropped from this view before.
+                            Folded: once an artifact exists each turn carries the full generated
+                            markup, which used to bury the conversation under thousands of lines. */}
+                        <PromptTranscriptView
+                            messages={lastSentMessages}
+                            labels={{
+                                user: t("workspace.ui.promptPanelUserMessage", "Messaggio utente"),
+                                assistant: t("workspace.ui.promptPanelAssistantMessage", "Messaggio assistant (cronologia)"),
+                                system: "System",
+                            }}
+                        />
                     </>
                 ) : promptPreview ? (
                     <>
@@ -3722,6 +3429,27 @@ export default function WorkspacePage() {
                     aria-orientation="horizontal"
                     aria-label={t("workspace.ui.resizeChat")}
                 />
+                {/* AL-014 — the seed of the next version is already the active one (enforced
+                    server-side); this only makes that fact visible. Without it, going back to
+                    an old version and editing silently starts a branch the user cannot see
+                    forming, and the newer versions it leaves behind look lost even though they
+                    stay reachable in the history panel. */}
+                {willBranchOnNextEdit && (
+                    <div
+                        style={{
+                            padding: "0.3rem 0.7rem",
+                            fontSize: "0.72rem",
+                            color: "#f59e0b",
+                            background: "rgba(245,158,11,0.07)",
+                            borderTop: "1px solid rgba(245,158,11,0.20)",
+                        }}
+                    >
+                        {t("workspace.ui.branchNotice", {
+                            active: activeVersionNumber ?? "?",
+                            latest: newestVersionNumberForBranchNotice ?? "?",
+                        })}
+                    </div>
+                )}
                 <form
                     onSubmit={(e) => void handleSend(e)}
                     className="workspace-input-form relative"
@@ -4200,7 +3928,7 @@ export default function WorkspacePage() {
                                     type="button"
                                     className="secondary"
                                     disabled={captureState === "loading"}
-                                    onClick={() => setCaptureDropdownOpen((v) => !v)}
+                                    onClick={toggleCaptureDropdown}
                                     style={{ fontSize: "0.72rem", padding: "0.18rem 0.5rem" }}
                                     title={t("workspace.ui.captureTitle")}
                                 >
@@ -4244,6 +3972,7 @@ export default function WorkspacePage() {
                                     snapshots={previewSnapshots}
                                     selectedId={selectedBackendSnapshotId}
                                     loading={loadingSnapshots}
+                                    publishDeployment={publishDeployment}
                                     onSelect={(id) => {
                                         const snap = previewSnapshots.find((s) => s.id === id);
                                         if (snap?.artifacts) {
@@ -4450,7 +4179,7 @@ export default function WorkspacePage() {
                             ) : null}
                             {/* Path URL (secondary / always shown) */}
                             <a
-                                href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/p/${publishDeployment.publishId}`}
+                                href={publishUrl ?? publishDeployment.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style={{ color: "#7dd3fc", textDecoration: "underline", opacity: publishDeployment.subdomainUrl ? 0.6 : 1 }}
@@ -4475,11 +4204,7 @@ export default function WorkspacePage() {
                             {/* Slug edit toggle */}
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setSlugInput(publishDeployment.customSlug ?? "");
-                                    setSlugEditMode((v) => !v);
-                                    setSlugCheckState("idle");
-                                }}
+                                onClick={toggleSlugEditor}
                                 style={{
                                     background: "transparent",
                                     border: "1px solid rgba(125,211,252,0.25)",
@@ -4540,7 +4265,7 @@ export default function WorkspacePage() {
                                 <input
                                     type="text"
                                     value={slugInput}
-                                    onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                                    onChange={(e) => updateSlugInput(e.target.value)}
                                     placeholder={t("workspace.ui.slugPlaceholder")}
                                     maxLength={30}
                                     style={{
@@ -4593,15 +4318,7 @@ export default function WorkspacePage() {
                                 {publishDeployment.customSlug && (
                                     <button
                                         type="button"
-                                        onClick={async () => {
-                                            setSlugSaving(true);
-                                            try {
-                                                const updated = await updateDeploymentSlug(token!, projectId, null);
-                                                setPublishDeployment(updated);
-                                                setSlugEditMode(false);
-                                                setSlugInput("");
-                                            } catch { /* ignore */ } finally { setSlugSaving(false); }
-                                        }}
+                                        onClick={() => void handleSlugRemove()}
                                         disabled={slugSaving}
                                         style={{
                                             background: "transparent",
@@ -4618,7 +4335,7 @@ export default function WorkspacePage() {
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => { setSlugEditMode(false); setSlugInput(""); setSlugCheckState("idle"); }}
+                                    onClick={cancelSlugEdit}
                                     style={{
                                         background: "transparent",
                                         border: "none",
@@ -4803,32 +4520,6 @@ export default function WorkspacePage() {
 // ─── Inspect infrastructure: PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT → see ./iframe-scripts.ts ───
 
 
-
-function getElementTargetType(
-    tag: string,
-    mediaMode?: SelectedFocusElement["mediaMode"],
-): "html" | "css" | "js" | "component" | "section" {
-    if (mediaMode === "foreground" || mediaMode === "background") return "component";
-    if (["section", "main", "article", "header", "footer", "nav", "aside"].includes(tag)) return "section";
-    if (["button", "input", "select", "textarea", "form", "canvas", "svg", "img", "picture", "figure", "video"].includes(tag)) return "component";
-    return "html";
-}
-
-function parseChatFromContent(content: string): { summary: string; bullets: string[]; nextActions: string[] } | null {
-    if (!content?.startsWith("```json")) return null;
-    try {
-        let jsonText = content.replace(/^```(?:json)?\s*\n?/i, "");
-        const lastFence = jsonText.lastIndexOf("```");
-        if (lastFence > 0) jsonText = jsonText.slice(0, lastFence).trim();
-        const parsed = JSON.parse(jsonText) as { chat?: { summary?: string; bullets?: unknown; nextActions?: unknown } };
-        if (parsed?.chat?.summary) return {
-            summary: String(parsed.chat.summary),
-            bullets: Array.isArray(parsed.chat.bullets) ? (parsed.chat.bullets as unknown[]).map(String) : [],
-            nextActions: Array.isArray(parsed.chat.nextActions) ? (parsed.chat.nextActions as unknown[]).map(String) : [],
-        };
-    } catch { /* fall through */ }
-    return null;
-}
 
 async function copyTextToClipboard(text: string) {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -5058,19 +4749,6 @@ function CodeEditorPanel({
             />
         </div>
     );
-}
-
-/** Estimated token count for a string (char/4 heuristic). */
-function estimateTokens(text: string | undefined): number {
-    if (!text) return 0;
-    return Math.max(1, Math.round(text.length / 4));
-}
-
-/** Compact time label: <1 s → "540ms", else seconds with 1 decimal. */
-function formatDuration(ms: number | undefined): string {
-    if (!ms) return "—";
-    if (ms < 1000) return `${Math.round(ms)}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function MetaStat({
@@ -5545,7 +5223,11 @@ function MessageBubble({ message }: { message: MessageDto }) {
     const { t } = useTranslation();
     const [copyLabel, setCopyLabel] = useState(() => t("workspace.ui.messageBubble.copy"));
     const isUser = message.role === "user";
-    const isError = message.role === "error";
+    // A failed generation is an error even when the HTTP call succeeded: the model answered,
+    // the answer could not be parsed, and nothing was saved. Rendering that as an ordinary reply
+    // is what made "nessuna versione salvata" read like a normal chat turn. `structuredParseValid`
+    // is stored truth, so conversations written before this fix render correctly too.
+    const isError = message.role === "error" || message.metadata?.structuredParseValid === false;
     const operation = message.metadata?.operation;
 
     const chatStructured = message.metadata?.chatStructured ?? (!isUser && !isError ? parseChatFromContent(message.content) : null);
@@ -5556,13 +5238,19 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 className="message-bubble-content"
                 style={{
                     maxWidth: "92%",
-                    background: isUser ? "var(--accent)" : isError ? "rgba(239,68,68,0.12)" : "var(--surface)",
-                    border: isUser ? "none" : `1px solid ${isError ? "rgba(239,68,68,0.3)" : "var(--border)"}`,
+                    background: isUser ? "var(--accent)" : isError ? "rgba(239,68,68,0.10)" : "var(--surface)",
+                    border: isUser ? "none" : `1px solid ${isError ? "var(--danger)" : "var(--border)"}`,
+                    // The left rule is what makes a failure scannable in a long transcript: the
+                    // tint alone reads as decoration, an unbroken red edge does not.
+                    borderLeft: isError ? "3px solid var(--danger)" : undefined,
+                    boxShadow: isError ? "0 0 0 1px rgba(239,68,68,0.18)" : undefined,
                     borderRadius: "var(--radius)",
                     padding: "0.55rem 0.75rem",
                     fontSize: "0.86rem",
                     lineHeight: 1.48,
-                    color: isError ? "var(--danger)" : "var(--text)",
+                    // Body stays readable; the badge and the border carry the red. All-red prose
+                    // at 0.86rem is harder to read precisely when it matters most.
+                    color: "var(--text)",
                     wordBreak: "break-word",
                 }}
             >
@@ -5584,6 +5272,28 @@ function MessageBubble({ message }: { message: MessageDto }) {
                 >
                     {copyLabel}
                 </button>
+                {isError && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.4rem", flexWrap: "wrap" }}>
+                        <span
+                            style={{
+                                fontSize: "0.66rem",
+                                fontWeight: 700,
+                                letterSpacing: "0.04em",
+                                textTransform: "uppercase",
+                                padding: "0.12rem 0.4rem",
+                                borderRadius: "999px",
+                                background: "rgba(239,68,68,0.16)",
+                                color: "var(--danger)",
+                                border: "1px solid rgba(239,68,68,0.45)",
+                            }}
+                        >
+                            ⚠ {t("workspace.ui.messageBubble.errorBadge")}
+                        </span>
+                        <span style={{ fontSize: "0.66rem", color: "var(--text-muted)" }}>
+                            {t("workspace.ui.messageBubble.errorHint")}
+                        </span>
+                    </div>
+                )}
                 {operation && (
                     <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.45rem", flexWrap: "wrap" }}>
                         <span
@@ -5633,7 +5343,10 @@ function MessageBubble({ message }: { message: MessageDto }) {
             <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.18rem" }}>
                 {operation?.label ? `${message.role} · ${operation.label}` : message.role}
             </span>
-            {!isUser && !isError && <RequestMetaInfo message={message} />}
+            {/* Failures keep their meta strip: a run that burned tokens and produced nothing is
+                exactly when "which model, how long, what did it cost" matters most. Messages with
+                no metadata (a transport error) render nothing — RequestMetaInfo bails out. */}
+            {!isUser && <RequestMetaInfo message={message} />}
         </div>
     );
 }
@@ -5671,3 +5384,11 @@ const textareaStyle: React.CSSProperties = {
     outline: "none",
     fontFamily: "var(--font)",
 };
+
+export default function WorkspacePage() {
+    return (
+        <WorkspaceLayoutProvider>
+            <WorkspacePageContent />
+        </WorkspaceLayoutProvider>
+    );
+}

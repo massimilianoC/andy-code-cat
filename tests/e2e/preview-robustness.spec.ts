@@ -12,7 +12,8 @@ import {
     API_URL,
     loginTestUser,
     createTestProject,
-    deleteAllTestProjects,
+    createTestPreviewSnapshot,
+    deleteTestProject,
 } from "./helpers/test-user";
 
 // --- helpers ---
@@ -60,6 +61,8 @@ test.describe("Preview panel robustness", () => {
         const page = await ctx.newPage();
         await loginTestUser(page);
         botProjectId = await createTestProject(page, `E2E Preview Test ${Date.now()}`);
+        await createTestPreviewSnapshot(page, botProjectId, "Preview version one");
+        await createTestPreviewSnapshot(page, botProjectId, "Preview version two");
         await ctx.close();
     });
 
@@ -68,15 +71,15 @@ test.describe("Preview panel robustness", () => {
         const ctx = await browser.newContext();
         const page = await ctx.newPage();
         await loginTestUser(page);
-        await deleteAllTestProjects(page);
+        if (botProjectId) await deleteTestProject(page, botProjectId);
         await ctx.close();
     });
 
     test("login and navigate to a workspace", async ({ page }) => {
         await loginTestUser(page);
-        const url = page.url();
-        expect(url).not.toContain("/login");
-        console.log("After login URL:", url);
+        expect(botProjectId).not.toBeNull();
+        await openWorkspace(page, botProjectId!);
+        expect(page.url()).toContain(`/workspace/${botProjectId}`);
     });
 
     test("preview iframe loads with content on initial page load", async ({ page }) => {

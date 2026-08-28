@@ -91,6 +91,8 @@ export interface PromptTaskSettingDto {
     temperature: number;
     maxCompletionTokens: number;
     systemTemplate: string;
+    /** sha256:<16 hex chars> of the platform default text this override was saved against — used to detect a stale override. */
+    systemTemplateBaselineHash?: string;
 }
 
 export interface ProductInjectionsDto {
@@ -172,6 +174,9 @@ export interface AdminLlmModelDto {
     priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
     priceInputUsdPerM?: number;
     priceOutputUsdPerM?: number;
+    /** "deprecated" = the provider no longer lists it. Kept so ids in existing builds resolve. */
+    availability?: "live" | "deprecated";
+    availabilityCheckedAt?: string;
 }
 
 export interface AdminLlmProviderDto {
@@ -297,6 +302,35 @@ export interface AdminDeploymentDto {
     updatedAt: string;
 }
 
+// ── Prompt task registry (governance SSOT) ──────────────────────────────────
+
+export interface PromptSlotDescriptorDto {
+    id: string;
+    key: string;
+    label: string;
+    description: string;
+    editableBy: string;
+    store: string;
+}
+
+export interface PromptTaskDescriptorDto {
+    key: string;
+    label: string;
+    group: string;
+    operatorSlotId?: string;
+    defaultText: string;
+    defaultTextHash: string;
+    slots: PromptSlotDescriptorDto[];
+}
+
+export interface AdminPromptRegistryDto {
+    tasks: PromptTaskDescriptorDto[];
+    policyDefaults: {
+        attachmentPolicy: ProductAttachmentPolicyDto;
+        documentContextPolicy: ProductDocumentContextPolicyDto;
+    };
+}
+
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 function auth(token: string): Record<string, string> {
@@ -327,6 +361,10 @@ export function getAdminProjectAiAnalytics(
 
 export function getAdminConfig(token: string): Promise<PlatformConfigDto> {
     return call<PlatformConfigDto>("GET", "/v1/admin/config", undefined, auth(token));
+}
+
+export function getAdminPromptRegistry(token: string): Promise<AdminPromptRegistryDto> {
+    return call<AdminPromptRegistryDto>("GET", "/v1/admin/prompt-registry", undefined, auth(token));
 }
 
 export function updateAdminConfig(
@@ -387,6 +425,26 @@ export function updateAdminLlmModel(
         "PUT",
         `/v1/admin/llm-registry/providers/${encodeURIComponent(provider)}/models/${encodeURIComponent(modelId)}`,
         body,
+        auth(token),
+    );
+}
+
+/**
+ * Turn a set of models on or off in one call — one model, an author group, or a whole provider.
+ * One request per decision, not one per model: a partial failure would leave a catalog the
+ * operator never chose. Returns the refreshed registry so the caller renders the persisted truth
+ * rather than its own optimistic guess.
+ */
+export function setAdminLlmModelsActive(
+    token: string,
+    provider: string,
+    modelIds: string[],
+    isActive: boolean,
+): Promise<AdminLlmRegistryDto & { ok: boolean; applied: string[]; unknown: string[]; deprecated: string[] }> {
+    return call(
+        "POST",
+        `/v1/admin/llm-registry/providers/${encodeURIComponent(provider)}/models/activation`,
+        { modelIds, isActive },
         auth(token),
     );
 }

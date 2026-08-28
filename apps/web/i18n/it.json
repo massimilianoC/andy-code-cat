@@ -42,7 +42,7 @@
         "newProject": "Nuovo progetto",
         "logout": "Logout",
         "superadmin": "Superadmin",
-        "zeroEffort": "Zero Effort",
+        "guidedMode": "Modalità Guidata",
         "hero": {
             "title": "Dashboard Progetti",
             "empty": "Nessun progetto ancora. Crea il primo da un preset qui sotto.",
@@ -69,7 +69,7 @@
             "cancel": "Annulla",
             "create": "Crea",
             "creating": "Creazione...",
-            "startZeroEffort": "Avvia Zero Effort"
+            "startGuided": "Avvia Modalità Guidata"
         },
         "confirm": {
             "delete": "Eliminare il progetto \"{{name}}\"? Questa operazione è irreversibile."
@@ -260,8 +260,8 @@
     },
     "session": {
         "expired": "Sessione scaduta",
-        "requiresLogin": "La tua sessione \u00e8 scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
-        "tokenExpired": "La tua sessione \u00e8 scaduta. Effettua di nuovo il login per continuare.",
+        "requiresLogin": "La tua sessione è scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
+        "tokenExpired": "La tua sessione è scaduta. Effettua di nuovo il login per continuare.",
         "logout": "Esci"
     },
     "security": {
@@ -295,7 +295,7 @@
         "completed_other": "{{count}} completati"
     },
     "launch": {
-        "badge": "Zero Effort",
+        "badge": "Modalità Guidata",
         "title": "Generazione guidata",
         "subtitle": "{{name}} · Compila i 3 step e rivedi il brief prima di avviare.",
         "project": "Il tuo progetto",
@@ -317,7 +317,7 @@
             "slideshow": "Slideshow",
             "keynote": "Keynote visiva",
             "videogame": "Videogioco",
-            "freerunner": "Gioco libero",
+            "freerunner": "Runner infinito",
             "seriousgame": "Serious Game",
             "game3d": "Gioco 3D",
             "vr-aframe": "Esperienza VR A-Frame",
@@ -366,8 +366,7 @@
         },
         "phase": {
             "review": "Pronto per la generazione",
-            "optimizing": "Ottimizzazione prompt...",
-            "optimized": "Prompt ottimizzato — continua in Guided Mode per generare"
+            "launching": "Creo la run e apro il workspace…"
         },
         "brief": {
             "title": "BRIEF DI PROGETTO — {{brand}}",
@@ -464,10 +463,11 @@
             "readySuffix": "per generare il sito con salvataggio completo dell'artefatto, preview e strumenti di modifica.",
             "dashboard": "Dashboard",
             "backToDashboard": "Torna alla dashboard",
-            "continueInWorkspace": "Continua nel workspace"
+            "continueInWorkspace": "Continua nel workspace",
+            "launching": "Avvio…"
         },
-        "workspaceModeBadge": "God Mode",
-        "openGodMode": "Apri God Mode",
+        "workspaceModeBadge": "Workspace",
+        "openWorkspace": "Apri Workspace",
         "review": {
             "badge": "Rivedi e genera",
             "prefillTitle": "✦ Pre-compilato dall'AI",
@@ -509,6 +509,25 @@
         "styleNotesPlaceholder": "Vincoli o preferenze di stile specifiche…",
         "inheritUser": "Eredita preferenze utente (fallback)",
         "presetActive": "Preset attivo — brief e tag pre-compilati.",
+        "forms": {
+            "title": "Form operativi",
+            "subtitle": "Consegna e privacy configurate per progetto",
+            "enabled": "Attivo",
+            "disabled": "Disattivo",
+            "enable": "Attiva",
+            "disable": "Disattiva",
+            "explanation": "La LLM definisce solo la struttura del form. Destinatario e privacy restano configurazione privata del progetto e vengono applicati deterministicamente in anteprima, pubblicazione ed export.",
+            "recipient": "Email destinatario",
+            "controller": "Titolare del trattamento",
+            "privacyContact": "Email contatto privacy",
+            "privacyVersion": "Versione informativa",
+            "privacyUrl": "URL HTTPS privacy policy",
+            "save": "Salva servizio form",
+            "saving": "Salvataggio…",
+            "saved": "Configurazione del servizio form salvata.",
+            "loadError": "Impossibile caricare la configurazione del servizio form.",
+            "saveError": "Impossibile salvare la configurazione del servizio form."
+        },
         "media": {
             "title": "Media di progetto",
             "empty": "Nessun media in libreria.",
@@ -623,7 +642,7 @@
         "tokenCounter": "~ {{count}} token",
         "prefillBanner": "✦ Pre-compilato dall'AI · Rivedi e genera",
         "prefillEdit": "Modifica manualmente",
-        "prefillCta": "God Mode — Genera"
+        "prefillCta": "Elabora Progetto"
     },
     "workspace": {
         "selectionNone": "Nessuna selezione",
@@ -662,6 +681,10 @@
                 "notApplicableLabel": "Asset non applicabile",
                 "noActive": "Seleziona prima un'immagine o genera un nuovo asset.",
                 "noActiveLabel": "Nessuna media attiva"
+            },
+            "modelFallback": {
+                "label": "Modello cambiato automaticamente",
+                "message": "\"{{requested}}\" richiesto non era disponibile — in uso \"{{actual}}\"."
             },
             "style": {
                 "done": "Stile applicato",
@@ -714,7 +737,11 @@
                 "activatedLabel": "Versione attivata",
                 "activated": "Snapshot selezionato come versione attiva.",
                 "newVersionLabel": "Nuova versione salvata",
-                "newVersionMessage": "Snapshot salvato e attivato dal backend."
+                "newVersionMessage": "Snapshot salvato e attivato dal backend.",
+                "staleBaseLabel": "Versione non aggiornata",
+                "staleBase": "Questa modifica parte da una versione che nel frattempo è cambiata. La versione corrente è stata ricaricata — riapplica la modifica su quella.",
+                "noChangeLabel": "Nessuna modifica",
+                "noChange": "Il contenuto è identico alla versione corrente: nessuna nuova versione creata."
             },
             "llm": {
                 "label": "Generazione AI",
@@ -726,7 +753,9 @@
                 "doneMessage": "Risposta pronta con {{provider}} · {{model}}",
                 "abortedLabel": "Generazione interrotta",
                 "aborted": "Elaborazione annullata dall'utente.",
-                "abortedContent": "⏹ Elaborazione interrotta dall'utente"
+                "abortedContent": "⏹ Elaborazione interrotta dall'utente",
+                "parseErrorLabel": "Generazione fallita",
+                "parseError": "Il modello ha restituito una risposta non interpretabile. Nulla è stato salvato e il progetto è invariato. Riprova oppure seleziona un modello diverso."
             },
             "focusPatch": {
                 "parseErrorLabel": "Errore di parsing focus patch",
@@ -861,6 +890,9 @@
             "unpublish": "Rimuovi",
             "staleVersion": "⚠ online v{{published}}, attiva v{{current}}",
             "updatePublish": "Aggiorna",
+            "snapshotPanelLiveLine": "🌐 live: v{{live}} · stai lavorando su v{{current}}",
+            "snapshotPanelLiveBadge": "🌐 live",
+            "branchNotice": "⎘ Stai lavorando su v{{active}}, non l'ultima versione (v{{latest}}): la prossima modifica creerà un nuovo ramo da qui. v{{latest}} resta raggiungibile nello storico.",
             "slugPlaceholder": "es. mia-pizzeria",
             "slugChecking": "⏳ Verifica…",
             "slugAvailable": "✓ Disponibile",
@@ -881,6 +913,9 @@
             "promptPanelLoading": "Caricamento…",
             "promptPanelHint": "Il prompt verrà caricato automaticamente. Se non appare, clicca ↻ Ricarica.",
             "promptPanelTokensPreset": "~{{tokens}} token · preset: {{preset}}",
+            "promptPanelUserMessage": "Messaggio utente",
+            "promptPanelAssistantMessage": "Messaggio assistant (cronologia)",
+            "promptPanelNoGenYet": "Nessuna generazione ancora — anteprima di cosa verrà inviato alla prossima request.",
             "stream": {
                 "optimizing": "Ottimizzazione prompt in corso...",
                 "analysingOptimizer": "Analisi optimizer...",
@@ -1015,7 +1050,9 @@
                 "copied": "Copiato",
                 "copyError": "Errore",
                 "copyTitle": "Copia messaggio",
-                "nextSteps": "Prossimi passi"
+                "nextSteps": "Prossimi passi",
+                "errorBadge": "Errore",
+                "errorHint": "Nessuna versione salvata — il progetto non è stato modificato."
             }
         }
     },

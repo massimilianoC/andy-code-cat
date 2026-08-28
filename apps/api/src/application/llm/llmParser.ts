@@ -1,4 +1,4 @@
-import { artifactMediaManifestSchema, type LlmStructuredResponse } from "@andy-code-cat/contracts";
+import { artifactMediaManifestSchema, serviceManifestSchema, type LlmStructuredResponse } from "@andy-code-cat/contracts";
 import { jsonrepair } from "jsonrepair";
 
 /**
@@ -298,6 +298,12 @@ function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredRe
     const manifest = rawManifest
         ? artifactMediaManifestSchema.safeParse(rawManifest)
         : null;
+    const rawServiceManifest =
+        coerceManifestCandidate(parsed.serviceManifest)
+        ?? coerceManifestCandidate((parsed.artifacts as unknown as Record<string, unknown>)?.serviceManifest);
+    const serviceManifest = rawServiceManifest
+        ? serviceManifestSchema.safeParse(rawServiceManifest)
+        : null;
 
     return {
         chat: {
@@ -307,6 +313,7 @@ function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredRe
         },
         artifacts: { html: htmlStr, css: cssStr, js: jsStr },
         mediaManifest: manifest?.success ? manifest.data : undefined,
+        serviceManifest: serviceManifest?.success ? serviceManifest.data : undefined,
         focusPatch: extractFocusPatch(parsed),
     };
 }
@@ -535,6 +542,13 @@ export function tryParseStructuredJson(raw: string): { structured: LlmStructured
         // Stray-gt-repaired candidates (covers Hunyuan >\", pattern between fields)
         gtRepaired !== sourceForGtRepair ? gtRepaired : null,
         gtRepaired !== sourceForGtRepair ? extractFirstJsonObject(gtRepaired) : null,
+        // Last-resort: the raw fence-stripped text itself (unbalanced braces and all).
+        // extractFirstJsonObject requires balanced braces to return anything, so a
+        // completion truncated mid-way (max_tokens cutoff, no trailing markdown fence)
+        // never produces a non-null candidate above — repairTruncatedJson (in
+        // tryParseWithRepairs) then never gets a chance to run on it. Adding the raw
+        // text here, after the tighter extractions, lets the repair chain reach it.
+        stripped,
     ];
     const seen = new Set<string>();
     const candidates: string[] = [];

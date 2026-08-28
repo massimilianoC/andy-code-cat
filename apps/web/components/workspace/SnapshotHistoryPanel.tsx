@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import type { PreviewSnapshot } from "../../lib/api";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import type { PreviewSnapshot, SiteDeploymentDto } from "../../lib/api";
+import { buildVersionIndex } from "../../app/workspace/features/versions/versionNumbering";
 
 interface SnapshotHistoryPanelProps {
     snapshots: PreviewSnapshot[];
@@ -11,6 +13,9 @@ interface SnapshotHistoryPanelProps {
     onActivate: (id: string) => Promise<void>;
     onDelete: (id: string) => Promise<void>;
     onRecover: () => void;
+    // AL-023 — which version is currently live, so the panel can badge it and show how far
+    // the working copy has diverged without the user leaving the workspace.
+    publishDeployment?: SiteDeploymentDto | null;
 }
 
 export function SnapshotHistoryPanel({
@@ -21,7 +26,9 @@ export function SnapshotHistoryPanel({
     onActivate,
     onDelete,
     onRecover,
+    publishDeployment,
 }: SnapshotHistoryPanelProps) {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
@@ -37,11 +44,23 @@ export function SnapshotHistoryPanel({
         return () => document.removeEventListener("mousedown", onDown);
     }, []);
 
+    // AL-011 — number = depth along the parentSnapshotId chain, not list position. Position
+    // (`snapshots.length - i`) misrepresents history the moment a branch exists and renumbers
+    // survivors when one is deleted.
+    const versionIndex = useMemo(() => buildVersionIndex(snapshots), [snapshots]);
+
     const activeSnapshot = snapshots.find((s) => s.isActive) ?? snapshots[0] ?? null;
     const selectedSnapshot = snapshots.find((s) => s.id === selectedId) ?? activeSnapshot;
     const selectedIndex = snapshots.findIndex((s) => s.id === selectedSnapshot?.id);
-    const selectedVersionNumber = selectedIndex === -1 ? snapshots.length : snapshots.length - selectedIndex;
+    const selectedVersionNumber = selectedSnapshot
+        ? versionIndex.get(selectedSnapshot.id) ?? snapshots.length
+        : snapshots.length;
     const isViewingOld = selectedSnapshot?.id !== activeSnapshot?.id;
+
+    const publishedSnapshot = publishDeployment
+        ? snapshots.find((s) => s.id === publishDeployment.snapshotId) ?? null
+        : null;
+    const publishedVersionNumber = publishedSnapshot ? versionIndex.get(publishedSnapshot.id) ?? null : null;
 
     return (
         <div ref={ref} style={{ position: "relative", display: "flex", alignItems: "center", gap: "0.4rem" }}>
@@ -111,8 +130,28 @@ export function SnapshotHistoryPanel({
                         Cronologia Preview · {snapshots.length} versioni
                     </div>
 
+                    {/* AL-023 — "what is live, and how far has my working copy diverged?" answerable
+                        without leaving the workspace. Absent when nothing is published (no
+                        publishedVersionNumber), per acceptance. */}
+                    {publishedVersionNumber != null && (
+                        <div
+                            style={{
+                                padding: "0.35rem 0.85rem",
+                                fontSize: "0.7rem",
+                                color: "var(--text-muted)",
+                                borderBottom: "1px solid var(--border)",
+                                background: "var(--surface-2)",
+                            }}
+                        >
+                            {t("workspace.ui.snapshotPanelLiveLine", {
+                                live: publishedVersionNumber,
+                                current: selectedVersionNumber,
+                            })}
+                        </div>
+                    )}
+
                     {snapshots.map((snap, i) => {
-                        const vn = snapshots.length - i;
+                        const vn = versionIndex.get(snap.id) ?? snapshots.length - i;
                         const isSel = snap.id === selectedId;
                         const isAct = snap.isActive;
                         const time = new Date(snap.createdAt).toLocaleTimeString("it-IT", {
@@ -182,6 +221,13 @@ export function SnapshotHistoryPanel({
                                         {isAct && (
                                             <span className="badge green" style={{ fontSize: "0.65rem" }}>attiva</span>
                                         )}
+                                        {/* AL-023 — badges the exact version currently live, in the
+                                            same visual language as the finishReason badges above. */}
+                                        {publishedSnapshot?.id === snap.id && (
+                                            <span className="badge" style={{ fontSize: "0.65rem", background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
+                                                {t("workspace.ui.snapshotPanelLiveBadge")}
+                                            </span>
+                                        )}
                                         {isEmpty && (
                                             <span className="badge" style={{ fontSize: "0.65rem", background: "rgba(239,68,68,0.15)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }} title="HTML vuoto – versione corrotta">⚠ vuota</span>
                                         )}
@@ -224,8 +270,7 @@ export function SnapshotHistoryPanel({
 
             {/* Delete confirmation modal */}
             {confirmDeleteId && (() => {
-                const snapIdx = snapshots.findIndex((s) => s.id === confirmDeleteId);
-                const versionLabel = snapIdx === -1 ? "?" : String(snapshots.length - snapIdx);
+                const versionLabel = String(versionIndex.get(confirmDeleteId) ?? "?");
                 return (
                     <div
                         style={{

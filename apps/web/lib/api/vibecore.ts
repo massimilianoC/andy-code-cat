@@ -29,7 +29,7 @@ export function classifyVibeIntent(
     });
 }
 
-export function prefillZeroEffort(
+export function prefillGuidedDraft(
     token: string,
     input: VibePrefillRequest,
 ): Promise<VibePrefillResponse> {

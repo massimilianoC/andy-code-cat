@@ -77,6 +77,7 @@ export function createExportRoutes(): Router {
                     projectName,
                     snapshotId: body.snapshotId,
                     conversationId: body.conversationId,
+                    formSettings: project?.serviceConfig?.forms,
                 });
 
                 res.status(201).json({

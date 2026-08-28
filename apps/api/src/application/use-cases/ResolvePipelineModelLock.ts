@@ -1,0 +1,293 @@
+import { createHash } from "crypto";
+import { MODEL_NOT_AVAILABLE } from "@andy-code-cat/contracts";
+import type { PipelineEntryMode, PipelineModelLock, OptimizationPolicy, PipelineStage } from "@andy-code-cat/contracts";
+import type { LlmProviderCatalog } from "../../domain/entities/LlmCatalog";
+import type { PipelineRun, PipelineRunBlockedDetail } from "../../domain/entities/PipelineRun";
+import type { NewPipelineRun, PipelineRunRepository } from "../../domain/repositories/PipelineRunRepository";
+import { resolveModelSelection } from "../llm/modelSelection";
+import type { GetLlmCatalog } from "./GetLlmCatalog";
+import { HttpError } from "../../presentation/http/errors/httpError";
+import { notifyPipelineRunBlocked } from "../llm/pipelineRunNotifications";
+import { tracePipeline } from "../services/PipelineTrace";
+
+const FALLBACK_PROVIDER = "siliconflow";
+const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
+
+/**
+ * Deterministic fingerprint of the currently active provider/model set. There is no live
+ * "catalog revision" concept anywhere in this codebase yet (I8 scope note — see
+ * docs/SSOT_REFACTOR_PROGRESS.md) so this hash stands in as the `catalogRevision` recorded
+ * on a `PipelineModelLock`: two calls made against an unchanged active catalog produce the
+ * same revision; any activation/deactivation of a provider or model changes it.
+ */
+export function computeCatalogRevision(providers: LlmProviderCatalog[]): string {
+    const fingerprint = providers
+        .map((p) => `${p.provider}:${p.models.filter((m) => m.isActive).map((m) => m.id).sort().join(",")}`)
+        .sort()
+        .join("|");
+    return createHash("sha256").update(fingerprint).digest("hex").slice(0, 16);
+}
+
+export interface CreatePipelineRunInput {
+    projectId: string;
+    ownerUserId: string;
+    conversationId?: string;
+    entryMode: PipelineEntryMode;
+    requestedProviderId?: string;
+    requestedModelId?: string;
+    optimizationPolicy: OptimizationPolicy;
+}
+
+export interface DispatchStageInput {
+    runId: string;
+    ownerUserId: string;
+    /**
+     * Double-sandbox scoping (matches this repo's other project-scoped resolvers): a run must
+     * belong to THIS project, not just this user, or dispatch refuses it — otherwise a request
+     * against project A could drive generation off a run created under project B.
+     */
+    projectId: string;
+    stage: PipelineStage;
+}
+
+export interface DispatchStageResult {
+    run: PipelineRun;
+    blocked: PipelineRunBlockedDetail | null;
+    /**
+     * Whether the caller must dispatch on the run's frozen model.
+     *
+     * `false` means the lock has already done its job (see `dispatch()`): the caller falls back
+     * to the ordinary model cascade and honours the user's selector. It is NOT an error and is
+     * never accompanied by `blocked`.
+     */
+    lockApplies: boolean;
+}
+
+/**
+ * I8 of the SSOT program. `createRun()` freezes a `PipelineModelLock` against the live
+ * catalog at run-creation time; `dispatch()` re-validates that lock's `effective`
+ * provider/model are still active before a stage is allowed to proceed, and blocks
+ * (never silently substitutes a different model) when they are not.
+ *
+ * Additive and unconsumed in this batch: no existing route or use case calls this yet.
+ * `createRun()` reuses the exact "vibe-cascade" resolution shape already pinned by I1-I3's
+ * `resolveModelSelection`, so a run created here picks the same model a legacy Vibe call
+ * would pick against the same catalog + request — not a new decision algorithm.
+ */
+export class ResolvePipelineModelLock {
+    constructor(
+        private readonly repository: PipelineRunRepository,
+        private readonly getLlmCatalog: GetLlmCatalog,
+    ) { }
+
+    async createRun(input: CreatePipelineRunInput): Promise<PipelineRun> {
+        const catalog = await this.getLlmCatalog.execute();
+        const activeProviders = catalog.providers.filter((p) => p.isActive);
+        const catalogRevision = computeCatalogRevision(activeProviders);
+
+        // A model the user picked by hand is a decision, not a hint. Under "legacy" the
+        // cascade quietly walks past an unresolvable choice to the next candidate and that
+        // substitute becomes the lock — so the run is faithfully frozen onto a model nobody
+        // selected, and every later stage honours it. Observed live: a user selected
+        // moonshotai/Kimi-K3 (inactive in the catalog) and the whole pipeline ran on
+        // deepseek-ai/DeepSeek-V4-Pro-0813, recorded as selectedBy "user".
+        //
+        // "strict" is what `requireOverrideInCatalog` was built for — it has no effect under
+        // "legacy", as its own doc comment says. It applies only when the caller actually
+        // asked for something: an unattended run with no request still cascades as before.
+        const userChoseModel = Boolean(input.requestedProviderId || input.requestedModelId);
+        const decision = resolveModelSelection({
+            profile: "vibe-cascade",
+            activeProviders,
+            requestedProvider: input.requestedProviderId,
+            requestedModel: input.requestedModelId,
+            fallbackProvider: FALLBACK_PROVIDER,
+            hardcodedFallbackModel: FALLBACK_MODEL,
+            requireOverrideInCatalog: true,
+            gateOverrideOnOpenAiCompatible: false,
+            policy: userChoseModel ? "strict" : "legacy",
+        });
+
+        // Refuse, do not substitute (AGENTS.md, Rule Zero's second corollary). The client can
+        // act on this: re-read the catalog, tell the user the model is off, let them pick
+        // another. Freezing a different model instead produces a run nobody chose and a
+        // record that misattributes it.
+        if (decision.blocked) {
+            throw new HttpError(
+                `Requested model ${input.requestedProviderId ?? "?"}/${input.requestedModelId ?? "?"} is not available in the catalog.`,
+                {
+                    statusCode: 409,
+                    code: MODEL_NOT_AVAILABLE,
+                    userMessage: `Il modello selezionato non è attivo nel catalogo: attivalo dal pannello admin oppure scegline un altro.`,
+                    details: {
+                        requestedProvider: input.requestedProviderId,
+                        requestedModel: input.requestedModelId,
+                        reason: decision.blocked.reason,
+                        blockedCode: decision.blocked.code,
+                    },
+                },
+            );
+        }
+
+        const modelLock: PipelineModelLock = {
+            policy: decision.policy,
+            requested: {
+                providerId: input.requestedProviderId ?? decision.effective.provider,
+                modelId: input.requestedModelId ?? decision.effective.model,
+                catalogRevision,
+            },
+            effective: {
+                providerId: decision.effective.provider,
+                modelId: decision.effective.model,
+            },
+            selectedAt: new Date().toISOString(),
+            selectedBy: input.requestedProviderId || input.requestedModelId ? "user" : "catalog-proposal",
+        };
+
+        const newRun: NewPipelineRun = {
+            projectId: input.projectId,
+            ownerUserId: input.ownerUserId,
+            conversationId: input.conversationId,
+            entryMode: input.entryMode,
+            modelLock,
+            optimizationPolicy: input.optimizationPolicy,
+        };
+
+        return this.repository.create(newRun);
+    }
+
+    async dispatch(input: DispatchStageInput): Promise<DispatchStageResult> {
+        const run = await this.repository.findByIdForUser(input.runId, input.ownerUserId);
+        // Not-found and wrong-project are reported identically (404, same message shape) —
+        // mirrors PipelineRunRepository.findByIdForUser's own doc comment: callers must not be
+        // able to distinguish "doesn't exist" from "exists but isn't yours to use here".
+        if (!run || run.projectId !== input.projectId) {
+            throw new HttpError(`PipelineRun not found: ${input.runId}`, {
+                statusCode: 404,
+                code: "PIPELINE_RUN_NOT_FOUND",
+            });
+        }
+
+        // The model lock certifies ONE thing: the generation whose canonicalBrief contentHash
+        // this run attests. Once that generation has been dispatched the run has said everything
+        // it can truthfully say about a model, and every later turn is user-driven iteration that
+        // must follow the model selector like any other chat — otherwise picking a different model
+        // mid-conversation is silently discarded, which is what happened on 2026-08-26: three
+        // consecutive turns all dispatched kat-coder-pro-v2.5 while the selector said otherwise.
+        //
+        // Checked BEFORE the catalog re-validation below on purpose: a lock whose model has since
+        // been deactivated must not be able to block iteration on a run that already produced its
+        // artifact. An exhausted lock has no say in anything, including whether to block.
+        if (run.stages.length > 0) {
+            tracePipeline({
+                runId: run.id,
+                step: "dispatch",
+                detail: {
+                    stage: input.stage,
+                    outcome: "lock-exhausted",
+                    consumedBy: run.stages[0]?.stage,
+                    modelSource: "user-selection",
+                },
+            });
+            return { run, blocked: null, lockApplies: false };
+        }
+
+        const catalog = await this.getLlmCatalog.execute();
+        const activeProviders = catalog.providers.filter((p) => p.isActive);
+        const providerCatalog = activeProviders.find((p) => p.provider === run.modelLock.effective.providerId);
+        const modelStillActive = providerCatalog?.models.some(
+            (m) => m.isActive && m.id === run.modelLock.effective.modelId,
+        );
+
+        if (!providerCatalog || !modelStillActive) {
+            const blocked: PipelineRunBlockedDetail = {
+                code: "MODEL_LOCK_UNAVAILABLE",
+                stage: input.stage,
+                at: new Date(),
+            };
+            // I17: notify once, on the genuine transition INTO blocked — not on every retry
+            // against an already-blocked run (the idempotent re-block below allows those to
+            // succeed without erroring, so gating on run.status here is what keeps a client
+            // retry loop from spamming duplicate notifications for the same block event).
+            if (run.status !== "blocked") {
+                notifyPipelineRunBlocked({
+                    projectId: run.projectId,
+                    userId: run.ownerUserId,
+                    runId: run.id,
+                    stage: input.stage,
+                    code: blocked.code,
+                    lockedProviderId: run.modelLock.effective.providerId,
+                    lockedModelId: run.modelLock.effective.modelId,
+                });
+            }
+            // Idempotent re-block: a retry against an already-blocked run re-confirms the block
+            // (PipelineRun.ts now allows "blocked" -> "blocked") rather than throwing on what
+            // used to be an illegal self-transition, which surfaced as a 500 and hid the real
+            // MODEL_LOCK_UNAVAILABLE code from the caller.
+            const blockedRun = await this.repository.setStatus(run.id, "blocked", {
+                code: blocked.code,
+                stage: blocked.stage,
+            });
+            tracePipeline({
+                runId: run.id,
+                step: "dispatch",
+                detail: {
+                    stage: input.stage,
+                    outcome: "BLOCKED",
+                    code: blocked.code,
+                    locked: `${run.modelLock.effective.providerId}/${run.modelLock.effective.modelId}`,
+                },
+            });
+            return { run: blockedRun, blocked, lockApplies: true };
+        }
+
+        // Recording the stage is what consumes the lock, so it has to happen here rather than
+        // after the provider answers: the exhaustion check above reads it, and a run that dies
+        // mid-generation must not come back with its lock still armed.
+        const dispatchedRun = await this.repository.appendStage(run.id, {
+            stage: input.stage,
+            taskKey: input.stage,
+            decision: {
+                version: "model-selection-v1",
+                policy: run.modelLock.policy,
+                requested: {
+                    providerId: run.modelLock.requested.providerId,
+                    modelId: run.modelLock.requested.modelId,
+                    source: "pipeline-run-lock",
+                    catalogRevision: run.modelLock.requested.catalogRevision,
+                },
+                effective: {
+                    providerId: run.modelLock.effective.providerId,
+                    modelId: run.modelLock.effective.modelId,
+                    source: "pipeline-run-lock",
+                },
+                // The lock was re-validated against the live catalog immediately above, so the
+                // model dispatched here is byte-for-byte the one frozen at run creation.
+                outcome: "exact",
+                trail: [{
+                    rule: "pipeline-run-lock",
+                    providerId: run.modelLock.effective.providerId,
+                    modelId: run.modelLock.effective.modelId,
+                    accepted: true,
+                    reason: "model lock re-validated against the active catalog",
+                }],
+                decidedAt: new Date().toISOString(),
+            },
+            status: "dispatched",
+            startedAt: new Date().toISOString(),
+        });
+
+        tracePipeline({
+            runId: run.id,
+            step: "dispatch",
+            detail: {
+                stage: input.stage,
+                outcome: "ok",
+                locked: `${run.modelLock.effective.providerId}/${run.modelLock.effective.modelId}`,
+                modelSource: "run-lock",
+                lockConsumed: true,
+            },
+        });
+        return { run: dispatchedRun, blocked: null, lockApplies: true };
+    }
+}

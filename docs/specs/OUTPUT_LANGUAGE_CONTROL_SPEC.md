@@ -15,7 +15,7 @@
 >    workspace now sends its current UI language with every `chat-preview` call.
 >
 > This means the God-Mode workspace now DOES receive Layer L via the UI-language fallback (an
-> intentional evolution of the original §3.3 "no Layer L in God Mode" design, per maintainer request
+> intentional evolution of the original §3.3 "no Layer L in Workspace" design, per maintainer request
 > 2026-07-02): the operator wanted the UI language to drive output language when no explicit choice
 > was made. A user who wants a different language still sets it explicitly (zero-effort form, which
 > persists, or by writing it in the prompt).
@@ -28,8 +28,8 @@ Rendere la lingua dell'output generato dalla piattaforma un parametro di prima c
 
 - la lingua dell'interfaccia utente (UI language, `andy_lang` in localStorage)
 - la lingua inferita dall'intento/testo dell'utente nel flusso Vibe
-- una selezione esplicita dell'utente nel flusso Zero Effort narrativo
-- il testo libero dell'utente in God Mode
+- una selezione esplicita dell'utente nel flusso Guided Mode narrativo
+- il testo libero dell'utente in Workspace
 
 Il risultato deve essere una direttiva di lingua chiara e non ambigua iniettata nel system prompt del motore generativo, con una catena di fallback deterministica che termina sempre su `"en"` (inglese).
 
@@ -55,7 +55,7 @@ Il risultato deve essere una direttiva di lingua chiara e non ambigua iniettata 
 
 **Nota:** La lingua inferita viene restituita in `VibePrefillResponse.outputLanguage` così la UI può mostrare/confermare quale lingua è stata rilevata prima della generazione.
 
-### 3.2 Zero Effort Mode (narrativo, form guidato)
+### 3.2 Guided Mode Mode (narrativo, form guidato)
 
 | Priorità | Sorgente | Come |
 |----------|----------|------|
@@ -65,14 +65,14 @@ Il risultato deve essere una direttiva di lingua chiara e non ambigua iniettata 
 
 **Logica:** Il form ha un selettore (o campo testo libero) di lingua precompilato con la lingua UI. L'utente può modificarlo. La lingua selezionata viene inclusa nel `LaunchZeroEffortProjectInput` e nel brief normalizzato.
 
-### 3.3 God Mode (prompt libero, senza orchestrazione Zero Effort)
+### 3.3 Workspace (prompt libero, senza orchestrazione Guided Mode)
 
 | Priorità | Sorgente | Come |
 |----------|----------|------|
 | 1 | Lingua specificata esplicitamente nel prompt dall'utente | L'utente scrive "in italiano" o "in English" nel testo |
 | 2 (fallback) | Default del system prompt: inglese | Layer A non inietta direttiva attiva — il modello genera in base al training default (EN) |
 
-**Logica:** In God Mode non c'è orchestrazione Zero Effort. Non viene iniettato Layer L nel system prompt. Il comportamento è quello di default del modello (tendenzialmente inglese). Se l'utente vuole un'altra lingua, la specifica nel prompt libero. Nessuna auto-inferenza forzata.
+**Logica:** In Workspace non c'è orchestrazione Guided Mode. Non viene iniettato Layer L nel system prompt. Il comportamento è quello di default del modello (tendenzialmente inglese). Se l'utente vuole un'altra lingua, la specifica nel prompt libero. Nessuna auto-inferenza forzata.
 
 ---
 
@@ -116,8 +116,8 @@ Dove `{LANGUAGE_NAME}` è il nome leggibile (es. "Italian", "English", "Spanish"
 | Modalità | Layer L iniettato? |
 |----------|-------------------|
 | Vibe Mode | ✅ Sì — lingua risolta dal VibePrefill |
-| Zero Effort | ✅ Sì — lingua dal form / UI / fallback EN |
-| God Mode | ❌ No — l'utente controlla via prompt libero |
+| Guided Mode | ✅ Sì — lingua dal form / UI / fallback EN |
+| Workspace | ❌ No — l'utente controlla via prompt libero |
 | Optimize (ottimizzazione brief) | ❌ No — preserva la lingua del testo input (già gestito da regola esistente) |
 
 ### 4.4 Implementazione `buildLanguageLayer()`
@@ -324,7 +324,7 @@ function buildNormalizedBrief(input: NormalizedBriefInput): string {
 ```typescript
 export function composeSystemPrompt(opts: {
     // ... parametri esistenti ...
-    /** Resolved BCP-47 output language. If omitted, Layer L is not injected (God Mode). */
+    /** Resolved BCP-47 output language. If omitted, Layer L is not injected (Workspace). */
     outputLanguage?: string | null;
 }): string {
     return [
@@ -347,7 +347,7 @@ I seguenti use-case devono ricevere `outputLanguage` e passarlo a `composeSystem
 |---|---|
 | `LaunchZeroEffortProject` | Da `input.outputLanguage` (form) |
 | `VibeModeGenerate` | Da `VibePrefillResponse.outputLanguage` (già nel draft) |
-| `GodModeGenerate` | Non passato → Layer L omesso |
+| `WorkspaceGenerate` | Non passato → Layer L omesso |
 | `RegenerateMediaByKey` | Non passato (media regen, lingua irrilevante) |
 
 ---
@@ -376,9 +376,9 @@ export async function vibePrefill(req: VibePrefillRequest) {
 }
 ```
 
-### 7.2 Selettore lingua nel form Zero Effort
+### 7.2 Selettore lingua nel form Guided Mode
 
-Nel componente form Zero Effort (narrativo):
+Nel componente form Guided Mode (narrativo):
 
 ```tsx
 // Stato locale
@@ -406,9 +406,9 @@ useEffect(() => {
 - Non obbligatorio — se vuoto, fallback `"en"` lato server
 - Mostra un badge quando la lingua è stata auto-inferita dal prompt ("Detected: Italian")
 
-### 7.3 Nessuna modifica a God Mode UI
+### 7.3 Nessuna modifica a Workspace UI
 
-In God Mode il form non ha un selettore lingua. Un hint testuale statico informa l'utente:
+In Workspace il form non ha un selettore lingua. Un hint testuale statico informa l'utente:
 
 ```
 💡 Output language follows your prompt. Add "in Italian" or "en español" to set it explicitly.
@@ -439,9 +439,9 @@ Aggiungere a `apps/web/i18n/en.json` e `it.json`:
 - `outputLanguage` in `ZeroEffortDraft` è aggiunto come campo required ma con default `"en"` nel `defaultDraft()`.
 - `VibePrefillResponse.outputLanguage` è aggiunto come campo required ma i consumer esistenti che non lo leggono non sono impattati.
 
-### 9.2 God Mode invariato
+### 9.2 Workspace invariato
 
-Layer L non viene iniettato in God Mode. Nessun cambiamento comportamentale per quella modalità.
+Layer L non viene iniettato in Workspace. Nessun cambiamento comportamentale per quella modalità.
 
 ### 9.3 Optimize invariato
 
@@ -481,5 +481,5 @@ Layer L non viene iniettato in God Mode. Nessun cambiamento comportamentale per 
 - Traduzione dell'interfaccia utente (già gestita da i18next, non cambia)
 - Lingua dei template/presets (etichette in catalogo, gestione separata)
 - Lingua dei documenti caricati (già gestita da `DocumentBriefExtractor.contentLanguage`)
-- Auto-rilevamento lingua in God Mode (by design: è una modalità libera)
+- Auto-rilevamento lingua in Workspace (by design: è una modalità libera)
 - Multi-lingua all'interno dello stesso output (non supportato, un solo Language Layer per generazione)

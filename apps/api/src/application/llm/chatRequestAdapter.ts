@@ -1,3 +1,5 @@
+import { SERVICE_MANIFEST_JSON_SCHEMA } from "@andy-code-cat/contracts";
+
 type ChatCompletionMessage = {
     role: string;
     content: string | Array<unknown>;
@@ -100,6 +102,12 @@ const ARTIFACT_RESPONSE_SCHEMA = {
                 { type: "null" },
             ],
         },
+        serviceManifest: {
+            anyOf: [
+                SERVICE_MANIFEST_JSON_SCHEMA,
+                { type: "null" },
+            ],
+        },
         focusPatch: {
             anyOf: [
                 {
@@ -116,7 +124,7 @@ const ARTIFACT_RESPONSE_SCHEMA = {
             ],
         },
     },
-    required: ["chat", "artifacts", "mediaManifest", "focusPatch"],
+    required: ["chat", "artifacts", "mediaManifest", "serviceManifest", "focusPatch"],
     additionalProperties: false,
 };
 

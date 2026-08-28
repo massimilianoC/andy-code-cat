@@ -140,6 +140,7 @@ export class MongoPlatformConfigRepository implements PlatformConfigRepository {
                                     temperature: task?.temperature ?? defaults.temperature,
                                     maxCompletionTokens: task?.maxCompletionTokens ?? defaults.maxCompletionTokens,
                                     systemTemplate: task?.systemTemplate ?? defaults.systemTemplate,
+                                    systemTemplateBaselineHash: task?.systemTemplateBaselineHash,
                                 },
                             ];
                         }),

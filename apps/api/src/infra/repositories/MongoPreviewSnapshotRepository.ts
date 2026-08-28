@@ -14,6 +14,7 @@ interface PreviewSnapshotDocument {
     parentSnapshotId?: string;
     isActive: boolean;
     artifacts: PreviewSnapshot["artifacts"];
+    serviceManifest?: PreviewSnapshot["serviceManifest"];
     focusContext?: PreviewSnapshot["focusContext"];
     metadata?: PreviewSnapshot["metadata"];
     thumbnailPath?: string;
@@ -38,6 +39,7 @@ export class MongoPreviewSnapshotRepository implements PreviewSnapshotRepository
         sourceMessageId?: string;
         parentSnapshotId?: string;
         artifacts: PreviewSnapshot["artifacts"];
+        serviceManifest?: PreviewSnapshot["serviceManifest"];
         focusContext?: PreviewSnapshot["focusContext"];
         metadata?: PreviewSnapshot["metadata"];
         activate: boolean;
@@ -60,6 +62,7 @@ export class MongoPreviewSnapshotRepository implements PreviewSnapshotRepository
             parentSnapshotId: input.parentSnapshotId,
             isActive: input.activate,
             artifacts: input.artifacts,
+            serviceManifest: input.serviceManifest,
             focusContext: input.focusContext,
             metadata: input.metadata,
             createdAt: now,
@@ -153,6 +156,19 @@ export class MongoPreviewSnapshotRepository implements PreviewSnapshotRepository
         const col = await this.col();
         const result = await col.deleteOne({ _id: snapshotId, projectId } as Filter<PreviewSnapshotDocument>);
         return result.deletedCount === 1;
+    }
+
+    async relinkChildren(projectId: string, fromParentId: string, toParentId?: string): Promise<number> {
+        const col = await this.col();
+        const filter = { projectId, parentSnapshotId: fromParentId } as Filter<PreviewSnapshotDocument>;
+        // toParentId undefined means fromParentId was itself a root: its children become roots
+        // too, rather than being pinned to a made-up ancestor. $unset (not $set: undefined) so
+        // the field is actually absent, matching how roots are stored elsewhere.
+        const update: Parameters<typeof col.updateMany>[1] = toParentId
+            ? { $set: { parentSnapshotId: toParentId } }
+            : { $unset: { parentSnapshotId: "" as const } };
+        const result = await col.updateMany(filter, update);
+        return result.modifiedCount;
     }
 
     async updateThumbnailPath(projectId: string, snapshotId: string, storedPath: string): Promise<void> {

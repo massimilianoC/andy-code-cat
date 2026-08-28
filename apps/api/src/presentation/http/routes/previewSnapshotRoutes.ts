@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     activatePreviewSnapshotSchema,
     createPreviewSnapshotSchema,
+    type ProjectFormSettingsInput,
 } from "@andy-code-cat/contracts";
 import { tryParseStructuredJson } from "../../../application/llm/llmParser";
 import { injectStableIds, normalizeStoredHtml } from "../../../application/llm/htmlIdInjector";
@@ -23,6 +24,27 @@ import { DeletePreviewSnapshot } from "../../../application/use-cases/DeletePrev
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { SnapshotThumbnailJob } from "../../../application/services/SnapshotThumbnailJob";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
+import { prepareArtifactServices } from "../../../application/platform-runtime/prepareArtifactServices";
+import { assertGeneratedJavaScriptSyntax } from "../../../application/artifacts/generatedJavaScriptSyntax";
+import type { PreviewSnapshot } from "../../../domain/entities/PreviewSnapshot";
+import type { RuntimePlanV1 } from "@andy-code-cat/contracts";
+
+function withConfiguredFormRuntime(
+    snapshot: PreviewSnapshot,
+    settings: ProjectFormSettingsInput | undefined,
+): PreviewSnapshot & { runtimePlan?: RuntimePlanV1 } {
+    const prepared = prepareArtifactServices({
+        artifacts: snapshot.artifacts,
+        serviceManifest: snapshot.serviceManifest,
+        formSettings: settings,
+        delivery: "inline-preview",
+    });
+    return {
+        ...snapshot,
+        artifacts: prepared.artifacts,
+        runtimePlan: prepared.runtimePlan,
+    };
+}
 
 export function createPreviewSnapshotRoutes(): Router {
     const router = Router();
@@ -68,7 +90,11 @@ export function createPreviewSnapshotRoutes(): Router {
 
                 const snapshots = await listPreviewSnapshots.execute(req.sandbox!.projectId, conversationId);
                 const activeSnapshotId = snapshots.find((s) => s.isActive)?.id;
-                res.json({ snapshots, activeSnapshotId });
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                res.json({
+                    snapshots: snapshots.map((snapshot) => withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms)),
+                    activeSnapshotId,
+                });
             } catch (error) {
                 next(error);
             }
@@ -141,24 +167,62 @@ export function createPreviewSnapshotRoutes(): Router {
                     };
                 }
 
-                const snapshot = await createPreviewSnapshot.execute({
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                const inheritedManifest = body.parentSnapshotId
+                    ? (await previewSnapshotRepository.findById(req.sandbox!.projectId, body.parentSnapshotId))?.serviceManifest
+                    : undefined;
+                // Validate and prepare the response/thumbnail view, but persist only
+                // canonical LLM artifacts. Runtime settings can then change without
+                // regenerating or mutating the immutable snapshot.
+                if (body.activate) assertGeneratedJavaScriptSyntax(artifacts.js);
+                const compiledForms = prepareArtifactServices({
+                    artifacts,
+                    serviceManifest: body.serviceManifest ?? inheritedManifest,
+                    formSettings: project?.serviceConfig?.forms,
+                    delivery: "inline-preview",
+                });
+                const runtimeArtifacts = compiledForms.artifacts;
+
+                const { snapshot, created, baseVerification } = await createPreviewSnapshot.execute({
                     projectId: req.sandbox!.projectId,
                     conversationId: body.conversationId,
                     sourceMessageId: body.sourceMessageId,
                     parentSnapshotId: body.parentSnapshotId,
+                    // AL-040 — forwarded verbatim; the use case is where the claim is checked.
+                    baseContentHash: body.baseContentHash,
                     artifacts,
+                    serviceManifest: body.serviceManifest,
                     focusContext: body.focusContext,
                     metadata: body.metadata ? { ...body.metadata, structuredParseValid } : undefined,
                     activate: body.activate,
                 });
 
                 // ── Execution log (fire-and-forget) ──────────────────────────
+                if (baseVerification === "unverifiable") {
+                    // AL-041 — accepted without certification because the base predates AL-039.
+                    // Rare and shrinking, but the one case where the guarantee does not hold, so
+                    // it has to be findable rather than silent.
+                    ExecutionLogger.instance.emit({
+                        projectId: req.sandbox!.projectId,
+                        conversationId: body.conversationId,
+                        snapshotId: body.parentSnapshotId,
+                        domain: "snapshot",
+                        eventType: "artifact_base_unverifiable",
+                        level: "warn",
+                        status: "success",
+                        metadata: {
+                            baseSnapshotId: body.parentSnapshotId,
+                            declaredContentHash: body.baseContentHash,
+                            reason: "base carries no stored contentHash",
+                        },
+                    });
+                }
                 ExecutionLogger.instance.emit({
                     projectId: req.sandbox!.projectId,
                     conversationId: body.conversationId,
                     snapshotId: snapshot.id,
                     domain: "snapshot",
-                    eventType: "snapshot_created",
+                    eventType: created ? "snapshot_created" : "snapshot_noop_skipped",
                     level: "info",
                     status: "success",
                     metadata: {
@@ -166,6 +230,9 @@ export function createPreviewSnapshotRoutes(): Router {
                         parentSnapshotId: body.parentSnapshotId,
                         sourceMessageId: body.sourceMessageId,
                         activated: body.activate,
+                        // AL-045 — false means the base was returned unchanged, no version added.
+                        created,
+                        contentHash: snapshot.metadata?.contentHash,
                         htmlBytes: artifacts.html?.length ?? 0,
                         finishReason: body.metadata?.finishReason,
                         model: body.metadata?.model,
@@ -187,17 +254,25 @@ export function createPreviewSnapshotRoutes(): Router {
                 // ── end execution log ─────────────────────────────────────────
 
                 // ── Background thumbnail job (fire-and-forget) ────────────────
-                if (body.activate && artifacts.html) {
+                if (body.activate && runtimeArtifacts.html && (created || !snapshot.thumbnailPath)) {
                     SnapshotThumbnailJob.schedule(
                         req.sandbox!.projectId,
                         snapshot.id,
-                        artifacts,
+                        runtimeArtifacts,
                         previewSnapshotRepository
                     );
                 }
                 // ── end thumbnail job ─────────────────────────────────────────
 
-                res.status(201).json({ snapshot });
+                // AL-045 — a no-op write is not a creation. 200 says "here is the version you
+                // are on"; 201 says "here is the version you just made". The client shows a
+                // different message for each, so the distinction has to survive the response.
+                res.status(created ? 201 : 200).json({
+                    created,
+                    snapshot: created
+                        ? { ...snapshot, artifacts: runtimeArtifacts, runtimePlan: compiledForms.runtimePlan }
+                        : withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms),
+                });
             } catch (error) {
                 next(error);
             }
@@ -214,7 +289,8 @@ export function createPreviewSnapshotRoutes(): Router {
                     res.status(404).json({ error: "Snapshot not found" });
                     return;
                 }
-                res.json({ snapshot });
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                res.json({ snapshot: withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms) });
             } catch (error) {
                 next(error);
             }
@@ -235,6 +311,16 @@ export function createPreviewSnapshotRoutes(): Router {
                         return;
                     }
                 }
+
+                const candidate = await previewSnapshotRepository.findById(
+                    req.sandbox!.projectId,
+                    req.params.snapshotId!,
+                );
+                if (!candidate) {
+                    res.status(404).json({ error: "Snapshot not found" });
+                    return;
+                }
+                assertGeneratedJavaScriptSyntax(candidate.artifacts.js);
 
                 const snapshot = await activatePreviewSnapshot.execute({
                     projectId: req.sandbox!.projectId,
@@ -259,17 +345,19 @@ export function createPreviewSnapshotRoutes(): Router {
                 // ── end execution log ─────────────────────────────────────────
 
                 // ── Background thumbnail job (fire-and-forget) ────────────────
-                if (snapshot.artifacts.html && !snapshot.thumbnailPath) {
+                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
+                const runtimeSnapshot = withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms);
+                if (runtimeSnapshot.artifacts.html && !runtimeSnapshot.thumbnailPath) {
                     SnapshotThumbnailJob.schedule(
                         req.sandbox!.projectId,
-                        snapshot.id,
-                        snapshot.artifacts,
+                        runtimeSnapshot.id,
+                        runtimeSnapshot.artifacts,
                         previewSnapshotRepository
                     );
                 }
                 // ── end thumbnail job ─────────────────────────────────────────
 
-                res.json({ snapshot });
+                res.json({ snapshot: runtimeSnapshot });
             } catch (error) {
                 next(error);
             }

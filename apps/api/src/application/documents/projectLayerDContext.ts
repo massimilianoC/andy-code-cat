@@ -19,10 +19,27 @@ function isPotentiallyEnrichable(asset: ProjectAsset): boolean {
     return asset.mimeType.toLowerCase().startsWith("image/");
 }
 
-function isPendingLayerDAsset(asset: ProjectAsset): boolean {
+/**
+ * Whether enrichment for this asset is genuinely in flight, i.e. worth blocking a request for.
+ *
+ * Only `AssetEnrichmentPipeline` writes "pending", and only once it has actually started work, so
+ * a trace-less asset is either (a) uploaded moments ago, with the pipeline about to stamp it, or
+ * (b) never scheduled at all and never will be. Case (b) is the common one — every image the media
+ * pipeline generates during a run lands with no trace — and treating it as pending burned the
+ * entire PROJECT_LAYER_D_WAIT_FOR_PENDING_MS budget on EVERY subsequent request, which is why a
+ * project with generated images sat on "CONNESSIONE AL PROVIDER…" for two minutes before the
+ * provider was contacted at all.
+ *
+ * The grace window separates the two: long enough to cover the upload -> pipeline handoff, short
+ * enough that a permanently trace-less asset costs nothing.
+ */
+const ENRICHMENT_SCHEDULING_GRACE_MS = 15_000;
+
+function isPendingLayerDAsset(asset: ProjectAsset, now: number): boolean {
     if (!isPotentiallyEnrichable(asset)) return false;
     const status = asset.enrichmentTrace?.provenance.enrichmentStatus;
-    return !status || status === "pending";
+    if (status) return status === "pending";
+    return now - asset.createdAt.getTime() < ENRICHMENT_SCHEDULING_GRACE_MS;
 }
 
 async function waitForLayerDAssets(input: {
@@ -36,7 +53,7 @@ async function waitForLayerDAssets(input: {
     let assets = input.assets;
 
     for (;;) {
-        const pending = assets.filter(isPendingLayerDAsset);
+        const pending = assets.filter((asset) => isPendingLayerDAsset(asset, Date.now()));
         if (pending.length === 0 || Date.now() >= deadline) return assets;
 
         await sleep(Math.min(PENDING_POLL_INTERVAL_MS, Math.max(1, deadline - Date.now())));

@@ -1,11 +1,13 @@
 # Dashboard VibeCore — Feature Specification
 
-**Status**: Draft v2  
+**Status**: **historical design reference** — implementation directives for model routing, task defaults, fallback and handoff are superseded by the 2026-08-18 SSOT implementation program.
 **Priority**: High  
 **Last updated**: 2026-05-14  
 **Depends on**: DCL (Document Context Layer) — fully implemented; PrepromptEngine  
 **Target branch**: `feat/dashboard-lovable-chat` from `develop`  
 **Internal codename**: `VibeCore` (do not surface to users)
+
+> For active Vibe implementation, follow [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md). This document remains useful for UX/design context only.
 
 ---
 
@@ -20,7 +22,7 @@ dominated by one question and one input:
 Beneath that experience — partially visible as a scroll invitation — lives the existing dashboard
 (project list, template catalog, recent activity).
 
-This is an **additive** feature. All existing flows (Zero Effort form, God Mode workspace, manual
+This is an **additive** feature. All existing flows (Guided Mode form, Workspace workspace, manual
 "New Project") remain unchanged.
 
 ---
@@ -104,8 +106,8 @@ Single centered card, max-width 680px.
 
 Glow color follows mode:
 - EASY (VibeCore): `#8b5cf6` (violet)
-- MEDIUM (Zero Effort): `#3b82f6` (blue)
-- HARD (God Mode): `#10b981` (emerald)
+- MEDIUM (Guided Mode): `#3b82f6` (blue)
+- HARD (Workspace): `#10b981` (emerald)
 
 ### 3.3 Typography
 
@@ -217,8 +219,8 @@ corner of the VibeCore section.
 | Label | Internal name | UX |
 | --- | --- | --- |
 | EASY | `VibeCore` | One-shot: write + attach + send. AI handles everything. |
-| MEDIUM | `ZeroEffort` | Guided multi-step form (existing Zero Effort flow). |
-| HARD | `GodMode` | Full workspace with preview, iteration, granular controls. |
+| MEDIUM | `ZeroEffort` | Guided multi-step form (existing Guided Mode flow). |
+| HARD | `Workspace` | Full workspace with preview, iteration, granular controls. |
 
 **Persistence**: `localStorage` key `vibe_mode` — restored on next visit.
 
@@ -230,8 +232,8 @@ Active segment uses `bg-white/10` + glow accent color border.
 // renders: [ EASY ] [ MEDIUM ] [ HARD ]
 ```
 
-On MEDIUM: VibeCore chat disappears, Zero Effort form fades in (existing component).  
-On HARD: navigates directly to `/workspace/new` (existing God Mode blank workspace).
+On MEDIUM: VibeCore chat disappears, Guided Mode form fades in (existing component).  
+On HARD: navigates directly to `/workspace/new` (existing Workspace blank workspace).
 
 ---
 
@@ -563,7 +565,7 @@ const MODE_CONFIG: Record<Mode, { label: string; color: string; description: str
 
 Tooltip on hover shows `description`.  
 Mode persisted in `localStorage("vibe_mode")`.  
-On MEDIUM: transitions to existing Zero Effort form with fade (200ms).  
+On MEDIUM: transitions to existing Guided Mode form with fade (200ms).  
 On HARD: `router.push("/workspace/new")`.
 
 ---
@@ -655,7 +657,7 @@ degrades to the legacy `classifyIntent` behavior (direct project creation, no op
 | 6 | §15 — UserTemplate entity + repository | Required before auto-save |
 | 7 | E — Layer Φ classifier use-case | Requires Layer T slot |
 | 8 | C — `/v1/vibecore/classify` | Requires E |
-| 9 | §16 — Cross-mode Layer Φ service | Wires ZeroEffort + GodMode |
+| 9 | §16 — Cross-mode Layer Φ service | Wires ZeroEffort + Workspace |
 | 10 | B — VibeCoreEntry | Requires A, C, D, F, G |
 | 11 | §17 — Auto-save & promotion flow | Post-generation; requires §15 |
 
@@ -665,7 +667,7 @@ degrades to the legacy `classifyIntent` behavior (direct project creation, no op
 
 | # | Question | Recommendation |
 | --- | --- | --- |
-| 1 | Blank project from VibeCore → God Mode or Zero Effort? | God Mode; user already saw the AI's plan via Layer Φ |
+| 1 | Blank project from VibeCore → Workspace or Guided Mode? | Workspace; user already saw the AI's plan via Layer Φ |
 | 2 | `confidence < 0.65`: disambiguation step or straight to blank? | Straight to blank — minimal friction, no extra modal |
 | 3 | Should VibeCore support multi-turn before project creation? | No in MVP — one-shot is the brand promise; revisit post-launch |
 | 4 | Should format hint rules be editable by tenant admins or only superadmin? | Superadmin only in MVP; tenant override as a v2 feature |
@@ -684,8 +686,8 @@ documents the exact integration contract for each touch-point.
 | Entry point | Current behavior | Impact of this spec |
 | --- | --- | --- |
 | Dashboard → "New Project" button | Opens `ProjectConfigPopup` → manual config → `prePromptTemplate` (flat, monolithic) | **None.** Button and popup unchanged. Layer T enrichment is opt-in per job. |
-| Zero Effort form submit | `DraftProjectTemplate` use-case → `PrepromptEngine` → Layer 2 generation | Layer Φ runs before `DraftProjectTemplate` when `VIBE_CLASSIFIER_ENABLED=true`. See §16.2. |
-| God Mode workspace — first chat message | Layer 1 (chat preview) using `prePromptTemplate` inline | Layer Φ runs silently on blank-profile projects. Layer T slot populated before Layer 1 system prompt build. See §16.3. |
+| Guided Mode form submit | `DraftProjectTemplate` use-case → `PrepromptEngine` → Layer 2 generation | Layer Φ runs before `DraftProjectTemplate` when `VIBE_CLASSIFIER_ENABLED=true`. See §16.2. |
+| Workspace workspace — first chat message | Layer 1 (chat preview) using `prePromptTemplate` inline | Layer Φ runs silently on blank-profile projects. Layer T slot populated before Layer 1 system prompt build. See §16.3. |
 | `/launch/{projectId}?autoPrompt=` | Existing launch page runs generation with stored prompt | No change. `templateResolution` is already resolved and stored in the Job by the time `/launch` receives it. |
 | POST `/v1/projects/:id/generate` | Stage A PrepromptEngine → Stage B GenerationWorker | PrepromptEngine gains an optional `templateResolution` input field. When absent: exact current behavior. |
 
@@ -979,13 +981,13 @@ export interface VibeClassifyOutput {
 }
 ```
 
-### 16.2 Integration — Zero Effort Mode (MEDIUM)
+### 16.2 Integration — Guided Mode Mode (MEDIUM)
 
-Zero Effort invokes `VibeClassify` **after** the intake form is submitted and **before**
+Guided Mode invokes `VibeClassify` **after** the intake form is submitted and **before**
 `DraftProjectTemplate` runs.
 
 ```
-Zero Effort form submitted
+Guided Mode form submitted
   │
   ▼
 POST /v1/zero-effort/submit   (existing endpoint)
@@ -1006,14 +1008,14 @@ Layer T injected if templateResolution ≠ null
 ```
 
 **User visibility**: In MEDIUM mode, if a template was matched, a non-blocking banner in the
-Zero Effort launch screen shows:
+Guided Mode launch screen shows:
 > "Ho identificato il tipo di progetto: *Portfolio creativo*. Puoi modificarlo prima di procedere."
 
 With a link to change the template. This is informational only — the user is not blocked.
 
-### 16.3 Integration — God Mode (HARD), Blank Profile
+### 16.3 Integration — Workspace (HARD), Blank Profile
 
-In God Mode, Layer Φ runs **on first message submission** in the workspace when the project
+In Workspace, Layer Φ runs **on first message submission** in the workspace when the project
 has no preset assigned (`project.presetId == null`).
 
 ```
@@ -1048,7 +1050,7 @@ explicit: user sees the "Analisi della richiesta…" phase label.
 
 ### 16.5 Mode Comparison Summary
 
-| Aspect | EASY (VibeCore) | MEDIUM (Zero Effort) | HARD (God Mode) |
+| Aspect | EASY (VibeCore) | MEDIUM (Guided Mode) | HARD (Workspace) |
 | --- | --- | --- | --- |
 | When Φ runs | Pre-submit, before project creation | Post-form, before DraftProjectTemplate | First message, before Layer 1 |
 | User visibility | Explicit phase label | Non-blocking banner with edit option | Silent (auto-detected label in popup) |
@@ -1198,7 +1200,7 @@ preserving exact current behavior.
 ### J — Cross-mode `VibeClassify` service wiring
 
 **Scope**: New service integration  
-**Risk**: Medium (touches Zero Effort and God Mode entry paths)  
+**Risk**: Medium (touches Guided Mode and Workspace entry paths)  
 **Files**:
 
 - `apps/api/src/application/use-cases/VibeClassify.ts` — already planned in Sub-task E

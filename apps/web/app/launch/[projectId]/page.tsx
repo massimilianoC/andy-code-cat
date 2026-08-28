@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { launchZeroEffort, getZeroEffortConfig, type ZeroEffortLaunchInput, type ZeroEffortPipelineConfig } from "../../../lib/api/pipelines";
+import { previewCanonicalBrief, getGuidedPipelineConfig, launchWorkspacePipeline, type GuidedLaunchInput, type GuidedPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
 import { getToken } from "../../../lib/token-store";
 import { optimizePrompt } from "../../../lib/api/llm";
@@ -27,7 +27,6 @@ import {
     Target,
     Trash2,
     Upload,
-    Wand2,
 } from "lucide-react";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -52,12 +51,47 @@ interface ExtendedForm {
     contactFields: ContactField[];
     styleAttributes: string[];
     outputLanguage: string;
+    sourceRequest?: string;
+    projectSummary?: string;
+    contentStructure?: string;
+    contentRequirements?: string;
+    functionalRequirements?: string;
+    interactionModel?: string;
+    visualDirection?: string;
+    successCriteria?: string;
+    constraints?: string;
+    mustAvoid?: string;
+}
+
+function ExpressiveBriefField({ id, label, hint, value, onChange }: {
+    id: string;
+    label: string;
+    hint: string;
+    value?: string;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <div className="space-y-2">
+            <Label htmlFor={id}>{label}</Label>
+            <p className="text-xs text-muted-foreground">{hint}</p>
+            <textarea
+                id={id}
+                className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+                value={value ?? ""}
+                onChange={(event) => onChange(event.target.value)}
+            />
+        </div>
+    );
 }
 
 type GenerationPhase =
-    | "review"       // show normalized brief, Avvia Generazione button
-    | "optimizing"   // calling optimize API
-    | "optimized";   // show optimized prompt — redirect to Guided Mode to generate
+    | "review"      // canonical brief on screen, editable, nothing created yet
+    | "launching";  // creating the PipelineRun and handing off to the workspace
+
+// The "optimizing"/"optimized" phases are gone. They ran a `zero_effort_optimize` pass over the
+// brief before it ever reached the workspace, which contradicts the guided flow's own contract:
+// the canonical brief IS the optimized artifact, and rewriting it invalidated the contentHash
+// the run certifies. See AGENTS.md Rule Zero.
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -131,6 +165,21 @@ function Step1Content({ form, onChange, onNext, canProceed }: Step1Props) {
                     placeholder={t("launch.step1.businessNamePlaceholder")}
                 />
             </div>
+
+            <ExpressiveBriefField
+                id="projectSummary"
+                label={t("launch.expressive.projectSummary", "Concept and value proposition")}
+                hint={t("launch.expressive.projectSummaryHint", "What is being created, why it matters, and what makes it distinctive.")}
+                value={form.projectSummary}
+                onChange={(value) => onChange({ projectSummary: value })}
+            />
+            <ExpressiveBriefField
+                id="contentStructure"
+                label={t("launch.expressive.contentStructure", "Structure, screens and states")}
+                hint={t("launch.expressive.contentStructureHint", "Ordered sections, screens, slides, scenes, form steps, game states or levels.")}
+                value={form.contentStructure}
+                onChange={(value) => onChange({ contentStructure: value })}
+            />
 
             <div className="space-y-2">
                 <Label>{t("launch.step1.presetId")}</Label>
@@ -208,6 +257,28 @@ function Step2Content({ form, onChange, onNext, onBack, canProceed, addContact, 
                     placeholder={t("launch.step2.audiencePlaceholder")}
                 />
             </div>
+
+            <ExpressiveBriefField
+                id="contentRequirements"
+                label={t("launch.expressive.contentRequirements", "Content and data requirements")}
+                hint={t("launch.expressive.contentRequirementsHint", "Copy, messages, entities, data, assets and information that must be present.")}
+                value={form.contentRequirements}
+                onChange={(value) => onChange({ contentRequirements: value })}
+            />
+            <ExpressiveBriefField
+                id="functionalRequirements"
+                label={t("launch.expressive.functionalRequirements", "Functions and mechanics")}
+                hint={t("launch.expressive.functionalRequirementsHint", "Behaviors, validation, calculations, mechanics and capabilities required from the result.")}
+                value={form.functionalRequirements}
+                onChange={(value) => onChange({ functionalRequirements: value })}
+            />
+            <ExpressiveBriefField
+                id="interactionModel"
+                label={t("launch.expressive.interactionModel", "Interactions, controls and feedback")}
+                hint={t("launch.expressive.interactionModelHint", "Navigation, input methods, controls, transitions, feedback and important edge cases.")}
+                value={form.interactionModel}
+                onChange={(value) => onChange({ interactionModel: value })}
+            />
 
             <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -334,6 +405,35 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
                 </div>
             </div>
 
+            <ExpressiveBriefField
+                id="visualDirection"
+                label={t("launch.expressive.visualDirection", "Detailed visual direction")}
+                hint={t("launch.expressive.visualDirectionHint", "Composition, hierarchy, palette, typography, imagery, motion and atmosphere.")}
+                value={form.visualDirection}
+                onChange={(value) => onChange({ visualDirection: value })}
+            />
+            <ExpressiveBriefField
+                id="successCriteria"
+                label={t("launch.expressive.successCriteria", "Success and completion criteria")}
+                hint={t("launch.expressive.successCriteriaHint", "Observable conditions the first generation must satisfy to be considered complete.")}
+                value={form.successCriteria}
+                onChange={(value) => onChange({ successCriteria: value })}
+            />
+            <ExpressiveBriefField
+                id="constraints"
+                label={t("launch.expressive.constraints", "Constraints and compatibility")}
+                hint={t("launch.expressive.constraintsHint", "Accessibility, responsive behavior, legal, content, device or compatibility constraints.")}
+                value={form.constraints}
+                onChange={(value) => onChange({ constraints: value })}
+            />
+            <ExpressiveBriefField
+                id="mustAvoid"
+                label={t("launch.expressive.mustAvoid", "Must avoid")}
+                hint={t("launch.expressive.mustAvoidHint", "Only explicit exclusions: patterns, content or behaviors that must not appear.")}
+                value={form.mustAvoid}
+                onChange={(value) => onChange({ mustAvoid: value })}
+            />
+
             <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                     <Label htmlFor="tone">{t("launch.step3.tone")}</Label>
@@ -408,80 +508,11 @@ function Step3Content({ form, onChange, onSubmit, onBack, submitting, error, tog
     );
 }
 
-// ─── Structured brief builder ─────────────────────────────────────────────────
-
-function buildStructuredBrief(
-    form: ExtendedForm,
-    projectName: string,
-    t: ReturnType<typeof useTranslation>["t"],
-    templateLabel?: string | null,
-    docNames?: string[],
-): string {
-    const siteLabel = t(`launch.templates.${form.presetId}`, { defaultValue: form.presetId });
-    const brandName = form.businessName.trim() || projectName;
-
-    const sections: string[] = [];
-
-    sections.push(
-        `# ${t("launch.brief.title", { brand: brandName })}\n\n` +
-        `## ${t("launch.brief.identity")}\n` +
-        `- **${t("launch.brief.brand")}:** ${brandName}\n` +
-        (templateLabel ? `- **${t("launch.brief.template")}:** ${templateLabel}\n` : "") +
-        `- **${t("launch.brief.siteType")}:** ${siteLabel}`,
-    );
-
-    if (form.primaryGoal.trim()) {
-        sections.push(
-            `## ${t("launch.brief.goal")}\n\n` +
-            form.primaryGoal.trim(),
-        );
-    }
-
-    if (form.audience.trim()) {
-        sections.push(
-            `## ${t("launch.brief.audience")}\n\n` +
-            form.audience.trim(),
-        );
-    }
-
-    const styleLines: string[] = [];
-    const selectedStyles = STYLE_ATTRIBUTES
-        .filter((a) => form.styleAttributes.includes(a.id))
-        .map((a) => t(`launch.styleAttributes.${a.id}`));
-    if (selectedStyles.length > 0) {
-        styleLines.push(`- **${t("launch.brief.visualAttributes")}:** ${selectedStyles.join(", ")}`);
-    }
-    if (form.tone?.trim()) {
-        styleLines.push(`- **${t("launch.brief.tone")}:** ${form.tone.trim()}`);
-    }
-    if (form.primaryCta?.trim()) {
-        styleLines.push(`- **${t("launch.brief.cta")}:** ${form.primaryCta.trim()}`);
-    }
-    if (form.styleHint?.trim()) {
-        styleLines.push(`- **${t("launch.brief.styleNotes")}:** ${form.styleHint.trim()}`);
-    }
-    if (styleLines.length > 0) {
-        sections.push(`## ${t("launch.brief.style")}\n\n${styleLines.join("\n")}`);
-    }
-
-    const validContacts = form.contactFields.filter((cf) => cf.key.trim() && cf.value.trim());
-    if (validContacts.length > 0) {
-        const contactLines = validContacts
-            .map((cf) => `- **${cf.key.trim()}:** ${cf.value.trim()}`)
-            .join("\n");
-        sections.push(`## ${t("launch.brief.contacts")}\n\n${contactLines}`);
-    }
-
-    if (docNames && docNames.length > 0) {
-        const docList = docNames.map((d) => `- ${d}`).join("\n");
-        sections.push(`## ${t("launch.brief.attachments")}\n\n${docList}`);
-    }
-
-    const footer = `\n---\n*${t("launch.brief.footer", { presetId: form.presetId, siteType: siteLabel, sections: sections.length - 1 })}*`;
-    return sections.join("\n\n") + footer;
-}
-
 // ─── Step config ──────────────────────────────────────────────────────────────
+// Structured brief text is no longer built client-side (see I9 of the SSOT program,
+// docs/SSOT_REFACTOR_PROGRESS.md): the server's buildCanonicalGenerationBrief is now the single
+// source of truth, and this page uses `briefResult.normalizedBrief` verbatim instead of
+// reconstructing a second, differently-formatted copy from raw form state.
 
 const STEPS = [
     { number: 1, titleKey: "launch.steps.1.title", subtitleKey: "launch.steps.1.subtitle", icon: FileText },
@@ -494,8 +525,7 @@ const STEPS = [
 function phaseLabel(phase: GenerationPhase, t: ReturnType<typeof useTranslation>["t"]): string {
     switch (phase) {
         case "review": return t("launch.phase.review");
-        case "optimizing": return t("launch.phase.optimizing");
-        case "optimized": return t("launch.phase.optimized");
+        case "launching": return t("launch.phase.launching");
     }
 }
 
@@ -510,7 +540,7 @@ function templateLabel(templateId: string | null | undefined, t: ReturnType<type
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function ZeroEffortLaunchPage() {
+export default function GuidedLaunchPage() {
     const { t, i18n } = useTranslation();
     const params = useParams<{ projectId: string }>();
     const router = useRouter();
@@ -528,8 +558,13 @@ export default function ZeroEffortLaunchPage() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [result, setResult] = useState<Awaited<ReturnType<typeof launchZeroEffort>> | null>(null);
-    const [pipelineConfig, setPipelineConfig] = useState<ZeroEffortPipelineConfig | null>(null);
+    // The brief currently on screen was previewed from THIS intake. Launching sends the same
+    // object back, so the text the user approved and the text the run freezes cannot diverge.
+    const [previewedIntake, setPreviewedIntake] = useState<GuidedLaunchInput | null>(null);
+    // The pristine previewed brief, so launching can tell "user edited this" from "user left it
+    // alone" without diffing against a re-derivation.
+    const previewBriefRef = useRef("");
+    const [pipelineConfig, setPipelineConfig] = useState<GuidedPipelineConfig | null>(null);
     const [currentStep, setCurrentStep] = useState(1);
     const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
 
@@ -557,7 +592,7 @@ export default function ZeroEffortLaunchPage() {
     const defaultUiLang = i18n.language?.split("-")[0] ?? "en";
     const [form, setForm] = useState<ExtendedForm>({
         businessName: "",
-        presetId: "landing",
+        presetId: "neutral",
         primaryGoal: "",
         audience: "",
         tone: "clear and modern",
@@ -566,6 +601,16 @@ export default function ZeroEffortLaunchPage() {
         contactFields: [],
         styleAttributes: [],
         outputLanguage: defaultUiLang,
+        sourceRequest: "",
+        projectSummary: "",
+        contentStructure: "",
+        contentRequirements: "",
+        functionalRequirements: "",
+        interactionModel: "",
+        visualDirection: "",
+        successCriteria: "",
+        constraints: "",
+        mustAvoid: "",
     });
 
     function patch(update: Partial<ExtendedForm>) {
@@ -580,7 +625,13 @@ export default function ZeroEffortLaunchPage() {
             .then((res) => {
                 setProject(res.project);
                 setPrefillTemplateId((prev) => prev || res.project.presetId || null);
-                setForm((prev) => ({ ...prev, businessName: prev.businessName || res.project.name }));
+                setForm((prev) => ({
+                    ...prev,
+                    businessName: prev.businessName || res.project.name,
+                    presetId: prev.presetId === "neutral"
+                        ? (res.project.presetId || prev.presetId)
+                        : prev.presetId,
+                }));
             })
             .catch(() => setError("Unable to load the project."))
             .finally(() => setLoading(false));
@@ -590,9 +641,9 @@ export default function ZeroEffortLaunchPage() {
     useEffect(() => {
         if (searchParams?.get("prefilled") !== "1" || !projectId) return;
         try {
-            const raw = sessionStorage.getItem(`ze_prefill_${projectId}`);
+            const raw = sessionStorage.getItem(`guided_prefill_${projectId}`);
             if (!raw) return;
-            sessionStorage.removeItem(`ze_prefill_${projectId}`);
+            sessionStorage.removeItem(`guided_prefill_${projectId}`);
             const draft = JSON.parse(raw) as Record<string, unknown>;
             if (typeof draft.templateId === "string" && draft.templateId.trim()) {
                 setPrefillTemplateId(draft.templateId);
@@ -626,6 +677,16 @@ export default function ZeroEffortLaunchPage() {
                 outputLanguage: typeof draft.outputLanguage === "string" && draft.outputLanguage.trim()
                     ? draft.outputLanguage.trim()
                     : defaultUiLang,
+                sourceRequest: typeof draft.sourceRequest === "string" ? draft.sourceRequest : "",
+                projectSummary: typeof draft.projectSummary === "string" ? draft.projectSummary : "",
+                contentStructure: typeof draft.contentStructure === "string" ? draft.contentStructure : "",
+                contentRequirements: typeof draft.contentRequirements === "string" ? draft.contentRequirements : "",
+                functionalRequirements: typeof draft.functionalRequirements === "string" ? draft.functionalRequirements : "",
+                interactionModel: typeof draft.interactionModel === "string" ? draft.interactionModel : "",
+                visualDirection: typeof draft.visualDirection === "string" ? draft.visualDirection : "",
+                successCriteria: typeof draft.successCriteria === "string" ? draft.successCriteria : "",
+                constraints: typeof draft.constraints === "string" ? draft.constraints : "",
+                mustAvoid: typeof draft.mustAvoid === "string" ? draft.mustAvoid : "",
             });
             // Restore the names of documents that the AI used to generate this brief
             if (Array.isArray(draft.attachedDocuments)) {
@@ -642,17 +703,19 @@ export default function ZeroEffortLaunchPage() {
     }, [projectId, searchParams]);
 
     useEffect(() => {
-        if (result && step4Ref.current) {
+        if (previewedIntake && step4Ref.current) {
             step4Ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
         }
-    }, [result]);
+    }, [previewedIntake]);
 
     const step1Valid = useMemo(
         () => form.businessName.trim().length >= 2 && form.primaryGoal.trim().length >= 8,
         [form.businessName, form.primaryGoal],
     );
     const step2Valid = useMemo(() => form.audience.trim().length >= 3, [form.audience]);
-    const selectedTemplateId = prefillTemplateId || project?.presetId || null;
+    // The editable form is the single source of truth after prefill. This keeps
+    // the visible badge, brief and persisted project preset aligned.
+    const selectedTemplateId = form.presetId || prefillTemplateId || project?.presetId || null;
     const selectedTemplateLabel = templateLabel(selectedTemplateId, t);
     const selectedFormatLabel = !selectedTemplateLabel && prefillFormatHint
         ? t(`launch.formatHints.${prefillFormatHint}`, {
@@ -706,11 +769,14 @@ export default function ZeroEffortLaunchPage() {
         setUploadingFiles(false);
     }
 
-    async function handleSubmit() {
-        if (!token || !step1Valid || !step2Valid) return;
-        setSubmitting(true);
-        setError(null);
-        const payload: ZeroEffortLaunchInput = {
+    /**
+     * The intake exactly as the server will receive it. Built in one place so the brief the user
+     * previews and the brief the run freezes are derived from identical input — two copies of
+     * this object drifting apart is the "two brief builders" failure the canonical builder was
+     * introduced to end.
+     */
+    function buildIntakePayload(): GuidedLaunchInput {
+        return {
             businessName: form.businessName,
             presetId: form.presetId,
             primaryGoal: form.primaryGoal,
@@ -718,21 +784,43 @@ export default function ZeroEffortLaunchPage() {
             tone: form.tone,
             primaryCta: form.primaryCta,
             styleHint: form.styleHint,
+            sourceRequest: form.sourceRequest || form.primaryGoal,
+            projectSummary: form.projectSummary,
+            contentStructure: form.contentStructure,
+            contentRequirements: form.contentRequirements,
+            functionalRequirements: form.functionalRequirements,
+            interactionModel: form.interactionModel,
+            visualDirection: form.visualDirection,
+            successCriteria: form.successCriteria,
+            constraints: form.constraints,
+            mustAvoid: form.mustAvoid,
             contactInfo: form.contactFields
                 .filter((cf) => cf.key.trim() && cf.value.trim())
                 .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
             styleAttributes: form.styleAttributes,
             outputLanguage: form.outputLanguage,
+            attachmentNames: attachedFiles,
         };
+    }
+
+    async function handleSubmit() {
+        if (!token || !step1Valid || !step2Valid) return;
+        setSubmitting(true);
+        setError(null);
+        const payload = buildIntakePayload();
         try {
+            // Preview only — nothing is created until the user presses Avvia generazione. The
+            // previous version called launchGuided here, so merely reaching the review step
+            // created a conversation and a workspace even if the user walked away.
             const [briefResult, configResult] = await Promise.all([
-                launchZeroEffort(token, projectId, payload),
-                getZeroEffortConfig(token, projectId).catch(() => null),
+                previewCanonicalBrief(token, projectId, payload),
+                getGuidedPipelineConfig(token, projectId).catch(() => null),
             ]);
-            setResult(briefResult);
-            // Build the structured brief client-side from the full form data
-            // so every section and long-text field is included verbatim.
-            setEditedBrief(buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles));
+            setPreviewedIntake(payload);
+            // The server's canonical brief verbatim (I9 — see the SSOT program docs), never a
+            // second copy reconstructed client-side.
+            previewBriefRef.current = briefResult.brief.content;
+            setEditedBrief(briefResult.brief.content);
             setPipelineConfig(configResult);
             setCompletedSteps(new Set([1, 2, 3]));
             setPhase("review");
@@ -744,100 +832,78 @@ export default function ZeroEffortLaunchPage() {
         }
     }
 
-    async function handleOptimize() {
-        if (!token || !result) return;
-        setPhase("optimizing");
+    /**
+     * The one and only launch. Creates the PipelineRun, freezes the model lock and the canonical
+     * brief, and hands the workspace a runId to read them back from.
+     *
+     * What used to live here — handleOptimize() running a `zero_effort_optimize` pass, and
+     * handleGoToWorkspace() stuffing the result into `sessionStorage` and passing
+     * skipAutoOptimize/preferredProvider/preferredModel as URL parameters — created no
+     * PipelineRun at all. The wizard was therefore still running the legacy pipeline while the
+     * one-click card next to it ran the strict one: two paths for one user action, which is
+     * exactly what AGENTS.md Rule Zero forbids.
+     */
+    async function handleLaunch() {
+        if (!token || !previewedIntake) return;
+        setPhase("launching");
         setGenError(null);
         try {
-            const optimizeRes = await optimizePrompt(token, projectId, {
-                rawPrompt: editedBrief,
-                conversationId: result.conversationId,
-                taskKey: "zero_effort_optimize",
-                provider: pipelineOverride?.provider ?? pipelineConfig?.optimize.provider,
-                model: pipelineOverride?.model ?? pipelineConfig?.optimize.model,
+            const trimmedBrief = editedBrief.trim();
+            const launchResult = await launchWorkspacePipeline(token, projectId, {
+                ...previewedIntake,
+                requestedProviderId: pipelineOverride?.provider,
+                requestedModelId: pipelineOverride?.model,
+                // The canonical brief is already the structured output of the guided flow.
+                // Optimizing it again would rewrite the text whose hash the run certifies.
+                optimizationPolicy: "skip",
+                // Sent only when the user actually changed something, so an untouched brief stays
+                // marked as derived from the intake rather than as a hand-edit.
+                briefOverride: trimmedBrief && trimmedBrief !== previewBriefRef.current.trim()
+                    ? trimmedBrief
+                    : undefined,
             });
-            setOptimizedPrompt(optimizeRes.optimizedPrompt);
-            setEditedOptimizedPrompt(optimizeRes.optimizedPrompt);
-            setPhase("optimized");
+            router.push(
+                `/workspace/${projectId}?conv=${launchResult.conversationId}&pipelineRunId=${encodeURIComponent(launchResult.pipelineRunId)}`,
+            );
         } catch (err) {
-            setGenError(err instanceof Error ? err.message : t("launch.errors.optimizePrompt"));
+            setGenError(err instanceof Error ? err.message : t("launch.errors.startGeneration"));
             setPhase("review");
         }
     }
 
-    function handleGoToGodMode() {
-        if (!result) return;
-        const finalPrompt = editedOptimizedPrompt || optimizedPrompt;
-        const convId = result.conversationId;
-        // Store the prompt in sessionStorage to avoid URI-length limits.
-        // The workspace page reads and deletes this key on mount.
-        sessionStorage.setItem(`pipeline_handoff_${convId}`, finalPrompt);
-        let url = `/workspace/${projectId}?conv=${convId}`;
-        const effectiveProvider = pipelineOverride?.provider ?? pipelineConfig?.vibeGenerate?.provider ?? pipelineConfig?.generate?.provider;
-        const effectiveModel = pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model;
-        if (effectiveProvider) {
-            url += `&preferredProvider=${encodeURIComponent(effectiveProvider)}`;
-        }
-        if (effectiveModel) {
-            url += `&preferredModel=${encodeURIComponent(effectiveModel)}`;
-        }
-        router.push(url);
-    }
-
     /**
-     * Guided Mode one-click flow (from AI prefill card):
-     * 1. launchZeroEffort → get brief + conversationId
-     * 2. optimizePrompt   → get optimized prompt
-     * 3. navigate         → /workspace with autoPrompt
+     * Guided Mode one-click flow (from the AI prefill card): launch the Workspace pipeline and
+     * hand the workspace the runId. Same single path as the reviewed flow above — this one just
+     * skips the review step because the user asked for one click.
      */
-    async function handleGodModeGenerate() {
+    async function handleProcessProject() {
         if (!token) return;
         setSubmitting(true);
         setError(null);
-        const payload: ZeroEffortLaunchInput = {
-            businessName:   form.businessName,
-            presetId:       form.presetId,
-            primaryGoal:    form.primaryGoal,
-            audience:       form.audience,
-            tone:           form.tone,
-            primaryCta:     form.primaryCta,
-            styleHint:      form.styleHint,
-            contactInfo:    form.contactFields
-                .filter((cf) => cf.key.trim() && cf.value.trim())
-                .map((cf) => ({ key: cf.key.trim(), value: cf.value.trim() })),
-            styleAttributes: form.styleAttributes,
-        };
+        const payload = buildIntakePayload();
         try {
-            const [briefResult, configResult] = await Promise.all([
-                launchZeroEffort(token, projectId, payload),
-                getZeroEffortConfig(token, projectId).catch(() => null),
-            ]);
-            const localConfig = configResult;
-            const brief = buildStructuredBrief(form, project?.name ?? "", t, selectedTemplateOrFormatLabel, attachedFiles);
-
-            // Always run one optimization pass — the structured brief (AI-prefilled or manual)
-            // needs to be rewritten with system-layer context before entering Guided Mode.
-            // When AI-prefilled, skipAutoOptimize=1 prevents a second pass in the workspace.
-            const optimizeRes = await optimizePrompt(token, projectId, {
-                rawPrompt: brief,
-                conversationId: briefResult.conversationId,
-                taskKey: "zero_effort_optimize",
-                provider: pipelineOverride?.provider ?? localConfig?.optimize.provider,
-                model: pipelineOverride?.model ?? localConfig?.optimize.model,
+            // The guided launch has exactly one path: the server-owned Workspace pipeline.
+            // It freezes a modelLock and a canonical brief on a real PipelineRun, and the
+            // workspace re-derives both from the run itself (see the run-handoff mount effect
+            // in workspace/[projectId]/page.tsx).
+            //
+            // The legacy path — launchGuided + a client-side "zero_effort_optimize" pass +
+            // a sessionStorage handoff — was removed with the NEXT_PUBLIC_PIPELINE_RUN_UI flag
+            // that selected it. Keeping both meant the behaviour under test depended on a
+            // build-time variable that was silently false in the deploy image, so the pipeline
+            // people exercised was not the pipeline being developed.
+            //
+            // optimizationPolicy is "skip" because the canonical brief this run freezes is
+            // already the structured output of the guided flow: optimizing it again would
+            // rewrite the very text the run's contentHash certifies.
+            const launchResult = await launchWorkspacePipeline(token, projectId, {
+                ...payload,
+                requestedProviderId: pipelineOverride?.provider,
+                requestedModelId: pipelineOverride?.model,
+                optimizationPolicy: "skip",
             });
-            const finalPrompt = optimizeRes.optimizedPrompt;
-
-            const convId = briefResult.conversationId;
-            // Store the prompt in sessionStorage to avoid URI-length limits.
-            sessionStorage.setItem(`pipeline_handoff_${convId}`, finalPrompt);
-            const skipParam = aiPrefilled ? "&skipAutoOptimize=1" : "";
-            const effectiveProvider = pipelineOverride?.provider ?? localConfig?.vibeGenerate?.provider ?? localConfig?.generate?.provider;
-            const effectiveModel = pipelineOverride?.model ?? localConfig?.vibeGenerate?.model ?? localConfig?.generate?.model;
-            const modelParams = effectiveProvider && effectiveModel
-                ? `&preferredProvider=${encodeURIComponent(effectiveProvider)}&preferredModel=${encodeURIComponent(effectiveModel)}`
-                : "";
             router.push(
-                `/workspace/${projectId}?conv=${convId}${skipParam}${modelParams}`,
+                `/workspace/${projectId}?conv=${launchResult.conversationId}&pipelineRunId=${encodeURIComponent(launchResult.pipelineRunId)}`,
             );
         } catch (e) {
             const message = e instanceof Error ? e.message : t("launch.errors.startGeneration");
@@ -875,14 +941,14 @@ export default function ZeroEffortLaunchPage() {
                         <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")}>
                             {t("launch.step4.backToDashboard")}
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => router.push(
-                            result ? `/workspace/${projectId}?conv=${result.conversationId}` : `/workspace/${projectId}`
-                        )}>{t("launch.openGodMode")}</Button>
+                        <Button size="sm" variant="outline" onClick={() => router.push(`/workspace/${projectId}`)}>
+                            {t("launch.openWorkspace")}
+                        </Button>
                     </div>
                 </div>
 
                 {/* ── AI Prefill review card ── */}
-                {aiPrefilled && !result && (
+                {aiPrefilled && !previewedIntake && (
                     <Card className="border-primary/40 bg-primary/[0.03]">
                         <CardHeader className="pb-3">
                             <div className="flex items-start gap-3">
@@ -967,7 +1033,7 @@ export default function ZeroEffortLaunchPage() {
                                     {t("vibecore.prefillEdit")}
                                 </button>
                                 <Button
-                                    onClick={() => void handleGodModeGenerate()}
+                                    onClick={() => void handleProcessProject()}
                                     disabled={submitting}
                                     className="gap-2"
                                 >
@@ -1178,20 +1244,14 @@ export default function ZeroEffortLaunchPage() {
                 </Card>
 
                 {/* Automatic generation appears after the API prepares the brief. */}
-                {result && (
-                    <Card ref={step4Ref} className={cn(
-                        "border-primary/40 transition-all",
-                        phase === "optimized" && "border-primary/60",
-                    )}>
+                {previewedIntake && (
+                    <Card ref={step4Ref} className="border-primary/40 transition-all">
                         <CardHeader className="pb-3">
                             <div className="flex items-center gap-3">
-                                <div className={cn(
-                                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                                    phase === "optimized" ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary",
-                                )}>
-                                    {phase === "optimizing" ? <Loader2 className="h-4 w-4 animate-spin" /> :
-                                     phase === "optimized" ? <Check className="h-4 w-4" /> :
-                                     <Sparkles className="h-4 w-4" />}
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                    {phase === "launching"
+                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                        : <Sparkles className="h-4 w-4" />}
                                 </div>
                                 <div className="flex-1">
                                     <CardTitle className="text-base">{t("launch.step4.generationTitle")}</CardTitle>
@@ -1199,8 +1259,8 @@ export default function ZeroEffortLaunchPage() {
                                         {phaseLabel(phase, t)}
                                     </CardDescription>
                                 </div>
-                                <Badge variant={phase === "optimized" ? "success" : "secondary"} className="ml-auto text-xs">
-                                    {phase === "optimized" ? t("launch.step4.promptReady") : `${pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model ?? "MiniMax-M3"}`}
+                                <Badge variant="secondary" className="ml-auto text-xs">
+                                    {pipelineOverride?.model ?? pipelineConfig?.vibeGenerate?.model ?? pipelineConfig?.generate?.model ?? "MiniMax-M3"}
                                 </Badge>
                             </div>
                         </CardHeader>
@@ -1208,7 +1268,7 @@ export default function ZeroEffortLaunchPage() {
                         <CardContent className="space-y-4">
 
                             {/* ── Phase: review ── */}
-                            {(phase === "review" || phase === "optimizing") && (
+                            {(phase === "review" || phase === "launching") && (
                                 <>
                                     <div className="space-y-1.5">
                                         <Label className="text-xs text-muted-foreground">
@@ -1228,7 +1288,7 @@ export default function ZeroEffortLaunchPage() {
                                                     fontSize: 13,
                                                     padding: { top: 12 },
                                                     scrollBeyondLastLine: false,
-                                                    readOnly: phase === "optimizing",
+                                                    readOnly: phase === "launching",
                                                 }}
                                             />
                                         </div>
@@ -1245,83 +1305,16 @@ export default function ZeroEffortLaunchPage() {
                                             {t("launch.step4.optimizeHint")}
                                         </p>
                                         <Button
-                                            onClick={handleOptimize}
-                                            disabled={phase === "optimizing" || !editedBrief.trim()}
+                                            onClick={handleLaunch}
+                                            disabled={phase === "launching" || !editedBrief.trim()}
                                             className="gap-2"
                                         >
-                                            {phase === "optimizing" ? (
-                                                <><Loader2 className="h-4 w-4 animate-spin" /> {t("launch.step4.optimizing")}</>
+                                            {phase === "launching" ? (
+                                                <><Loader2 className="h-4 w-4 animate-spin" /> {t("launch.step4.launching")}</>
                                             ) : (
-                                                <><Wand2 className="h-4 w-4" /> {t("launch.step4.startGeneration")}</>
+                                                <><Rocket className="h-4 w-4" /> {t("launch.step4.startGeneration")}</>
                                             )}
                                         </Button>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* ── Phase: optimized ── */}
-                            {phase === "optimized" && (
-                                <>
-                                    <div className="space-y-1.5">
-                                        <div className="flex items-center justify-between">
-                                            <Label className="text-xs text-muted-foreground">
-                                                {t("launch.step4.optimizedPromptLabel")}
-                                            </Label>
-                                            <button
-                                                type="button"
-                                                onClick={() => setPhase("review")}
-                                                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-                                            >
-                                                {t("launch.step4.backToBrief")}
-                                            </button>
-                                        </div>
-                                        <div className="rounded-md border border-border overflow-hidden h-[220px]">
-                                            <MonacoEditor
-                                                height="220px"
-                                                defaultLanguage="markdown"
-                                                value={editedOptimizedPrompt}
-                                                onChange={(val) => setEditedOptimizedPrompt(val ?? "")}
-                                                theme="vs-dark"
-                                                options={{
-                                                    minimap: { enabled: false },
-                                                    wordWrap: "on",
-                                                    lineNumbers: "off",
-                                                    fontSize: 13,
-                                                    padding: { top: 12 },
-                                                    scrollBeyondLastLine: false,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {genError && (
-                                        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                                            {genError}
-                                        </div>
-                                    )}
-
-                                    <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3">
-                                        <div className="flex items-start gap-3">
-                                            <Sparkles className="mt-0.5 h-4 w-4 text-primary shrink-0" />
-                                            <p className="text-xs text-muted-foreground">
-                                                {t("launch.step4.readyPrefix")} <strong className="text-foreground">{t("launch.step4.continueInGuided")}</strong> {t("launch.step4.readySuffix")}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border">
-                                        <Badge variant="outline" className="font-mono text-xs">
-                                            Conv {result.conversationId.slice(0, 8)}
-                                        </Badge>
-                                        <div className="ml-auto flex gap-2">
-                                            <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")}>
-                                                {t("launch.step4.dashboard")}
-                                            </Button>
-                                            <Button size="sm" onClick={handleGoToGodMode} className="gap-2">
-                                                <Rocket className="h-3.5 w-3.5" />
-                                                {t("launch.step4.continueInGuided")}
-                                            </Button>
-                                        </div>
                                     </div>
                                 </>
                             )}

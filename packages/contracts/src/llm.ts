@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ArtifactMediaManifest } from "./mediaManifest";
 import type { MediaResolutionMetadata } from "./mediaResolution";
+import type { ServiceManifestV1 } from "./serviceManifest";
 
 const optionalTrimmedString = (max: number) =>
     z.preprocess(
@@ -36,6 +37,15 @@ export const llmHistoryMessageSchema = z.object({
     role: z.enum(["user", "assistant"]),
     content: z.string().max(50000), // backend truncates at LLM_HISTORY_MESSAGE_MAX_CHARS (default 2000)
 });
+
+/**
+ * The requested provider/model is not an active entry in the catalog.
+ *
+ * The catalog in Mongo is the source of truth for what may be dispatched, and a model id in a
+ * request is a request, not an authority. The client re-reads the catalog and asks the user to
+ * choose again; it must not retry with the same id, and it must not silently substitute one.
+ */
+export const MODEL_NOT_AVAILABLE = "MODEL_NOT_AVAILABLE";
 
 export const llmFocusContextSchema = z.object({
     mode: z.enum(["project", "preview-element", "code-selection"]),
@@ -96,6 +106,19 @@ export const llmChatPreviewSchema = z.object({
     conversationId: z.string().min(1).max(120).optional(),
     /** BCP-47 UI language from the client (e.g. "it", "en"). When provided, injects Layer L into the system prompt. */
     uiLanguage: z.string().min(2).max(10).optional(),
+    /**
+     * I11 (SSOT program) — a client-generated key stable across retries of the SAME logical
+     * send (e.g. re-tap after a network timeout). When a "succeeded" PromptExecutionLog already
+     * exists for this key, the server replays that stored result instead of dispatching a
+     * second provider call. Optional: omitting it means no idempotency protection, matching
+     * pre-I11 behavior exactly.
+     */
+    idempotencyKey: z.string().min(1).max(120).optional(),
+    /**
+     * I14 of the SSOT program — when present, dispatch is governed by this PipelineRun's frozen
+     * modelLock instead of the legacy cascade (see ResolvePromptExecution.execute).
+     */
+    pipelineRunId: z.string().min(1).max(120).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({
@@ -113,6 +136,26 @@ export const optimizePromptSchema = z.object({
     model: z.string().min(1).max(200).optional(),
     /** Override the task key used to resolve platform task settings (e.g. "zero_effort_optimize"). */
     taskKey: z.string().min(1).max(80).optional(),
+    /**
+     * I13 of the SSOT program — when present, dispatch is governed by this PipelineRun's frozen
+     * modelLock instead of the legacy cascade (see OptimizeUserPrompt.prepareExecutionContext).
+     * Omitted: 100% unchanged legacy behavior.
+     */
+    pipelineRunId: z.string().min(1).max(120).optional(),
+    /**
+     * What kind of text is being optimized — the two cases need opposite amounts of context.
+     *
+     * "initial"   — an opening project brief. Enrich it with the full project context (moodboard,
+     *               style profile, document knowledge): nothing else has established that context yet.
+     *
+     * "follow-up" — a revision instruction inside a conversation that already produced an artifact.
+     *               The chat history and the system prompt re-inject the project context on every
+     *               send, so doing it here too makes the optimizer restate the whole brief and
+     *               discard what the user actually asked for. Expand the instruction's wording only.
+     *
+     * Defaults to "initial" so existing callers keep their exact behavior.
+     */
+    optimizeMode: z.enum(["initial", "follow-up"]).default("initial"),
 });
 
 export type LlmChatPreviewInput = z.infer<typeof llmChatPreviewSchema>;
@@ -157,6 +200,8 @@ export interface LlmStructuredResponse {
      * provider-specific image URLs.
      */
     mediaManifest?: ArtifactMediaManifest;
+    /** Optional, declarative BaaS intent. No endpoint, credential, or executable code may appear here. */
+    serviceManifest?: ServiceManifestV1;
     /** Present only when the LLM operated in focused-edit mode. */
     focusPatch?: LlmFocusedPatch;
 }
@@ -281,6 +326,19 @@ export interface LlmChatPreviewResult {
     focusPatchApplied?: boolean;
     /** true when focused-mode was active but the LLM response could not be parsed at all (malformed JSON). */
     focusPatchParseError?: boolean;
+    /**
+     * true when the LLM completion could not be parsed into the structured artifact
+     * contract on a NON-focused (initial/full) generation. When true, `structured.artifacts`
+     * is empty by design: the client MUST NOT create or activate a preview snapshot.
+     * Mirrors focusPatchParseError, which covers the focused-edit path.
+     */
+    generationParseError?: boolean;
+    /**
+     * I11 (SSOT program) — id of the durable PromptExecutionLog record this response was
+     * persisted under. Callers that later create a PreviewSnapshot should store this as a FK
+     * reference instead of duplicating the full promptingTrace blob.
+     */
+    promptExecutionId?: string;
     provider: string;
     model: string;
     finishReason?: string;

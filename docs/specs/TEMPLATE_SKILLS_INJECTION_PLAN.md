@@ -1,6 +1,6 @@
 # Template Skills Injection — MD Skill Manuals per Template
 
-> Status: **filesystem-first strategy approved for next implementation wave** — runtime wiring still pending
+> Status: **historical implementation plan** — runtime wiring is implemented; use TEMPLATE_SKILLS_LAYER_S_POLICY.md and TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md for active work. Further content/governance expansion remains deferred behind the SSOT R2/R3 verification gate.
 > Branch target: `develop` (future `feat/template-skills`)
 > Date: 2026-07-02
 > Research update: 2026-07-08 — first seed manuals added under

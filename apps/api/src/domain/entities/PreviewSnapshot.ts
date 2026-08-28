@@ -1,105 +1,19 @@
-export interface PreviewSnapshotArtifacts {
-    html: string;
-    css: string;
-    js: string;
-}
+import type {
+    PreviewArtifactsDto,
+    PreviewSnapshotFocusContextDto,
+    PreviewSnapshotMetadataDto,
+    ServiceManifestV1,
+} from "@andy-code-cat/contracts";
 
-export interface PreviewSnapshotFocusContext {
-    mode: "project" | "preview-element" | "code-selection";
-    targetType: "html" | "css" | "js" | "component" | "section";
-    userIntent?: string;
-    selectedElement?: {
-        stableNodeId: string;
-        selector: string;
-        tag: string;
-        classes: string[];
-        textSnippet?: string;
-        currentSrc?: string;
-        currentAlt?: string;
-        backgroundImageUrl?: string;
-        mediaMode?: "foreground" | "background" | "none";
-    };
-    codeSelection?: {
-        language: "html" | "css" | "js";
-        startLine: number;
-        endLine: number;
-        selectedText?: string;
-    };
-}
+// The shape of an artifact version is declared once, in packages/contracts/src/preview.ts.
+// This module names those shapes for the domain layer; it does not restate them. Re-typing
+// them here is what let promptConfigId and promptExecutionId drift out of the stored record.
 
-export interface PreviewSnapshotMetadata {
-    model?: string;
-    provider?: string;
-    durationMs?: number;
-    finishReason?: string;
-    structuredParseValid?: boolean;
-    rawResponse?: string;
-    wysiwygSessionId?: string;
-    tokenUsage?: {
-        promptTokens: number;
-        completionTokens: number;
-        totalTokens: number;
-    };
-    promptingTrace?: {
-        originalUserMessage: string;
-        prePromptTemplate?: string;
-        effectiveSystemPrompt?: string;
-    };
-    mediaResolution?: {
-        version: "media-resolution-v1";
-        traceIds: string[];
-        assetIds: string[];
-        mediaKeys: string[];
-        degraded: boolean;
-        directives?: Array<{
-            key: string;
-            role?: string;
-            semanticQuery?: string;
-            status: "resolved" | "fallback_resolved" | "unresolved";
-            provider?: string;
-            assetId?: string;
-            fallbackUsed?: boolean;
-        }>;
-    };
-    dataDashboard?: {
-        artifactKind: "data_dashboard";
-        datasetBindings: Array<{
-            bindingId: string;
-            assetId: string;
-            tableName?: string;
-            runtimeMode: "source_file" | "normalized_local" | "backend_query" | "hybrid";
-            exposureClass: "private_runtime_only" | "published_runtime_only" | "published_runtime_plus_source" | "backend_only";
-            limitations?: string[];
-        }>;
-        dashboardDefinition?: {
-            title?: string;
-            description?: string;
-            defaultBindingId?: string;
-            defaultTableName?: string;
-            preferredInteractionMode?: "local_first" | "backend_first" | "hybrid";
-        };
-        querySpecs?: Array<{
-            queryId: string;
-            bindingId: string;
-            tableName?: string;
-            intent: "kpi" | "series" | "distribution" | "table" | "ranking";
-            aggregation?: string;
-            column?: string;
-            groupBy?: string;
-            filters?: Array<Record<string, unknown>>;
-            limit?: number;
-        }>;
-        chartSpecs?: Array<{
-            chartId: string;
-            queryId: string;
-            family: "line" | "bar" | "area" | "pie" | "table" | "metric";
-            title: string;
-            x?: string;
-            y?: string;
-            series?: string;
-        }>;
-    };
-}
+export type PreviewSnapshotArtifacts = PreviewArtifactsDto;
+
+export type PreviewSnapshotFocusContext = PreviewSnapshotFocusContextDto;
+
+export type PreviewSnapshotMetadata = PreviewSnapshotMetadataDto;
 
 export interface PreviewSnapshot {
     id: string;
@@ -109,6 +23,8 @@ export interface PreviewSnapshot {
     parentSnapshotId?: string;
     isActive: boolean;
     artifacts: PreviewSnapshotArtifacts;
+    /** Immutable declarative service definition paired with this artifact version. */
+    serviceManifest?: ServiceManifestV1;
     focusContext?: PreviewSnapshotFocusContext;
     metadata?: PreviewSnapshotMetadata;
     /**

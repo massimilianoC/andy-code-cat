@@ -1,5 +1,5 @@
 import { call } from "./call";
-import type { PromptLayerEntryDto } from "./llm";
+import type { LlmPromptingTrace } from "@andy-code-cat/contracts";
 
 export interface BackgroundTaskDto {
     id: string;
@@ -54,19 +54,8 @@ export interface MessageDto {
         rawResponse?: string;
         structuredParseValid?: boolean;
         snapshotId?: string;
-        promptingTrace?: {
-            originalUserMessage: string;
-            /** MongoDB _id of the llm_prompt_configs document used to build the pipeline wrapper */
-            promptConfigId?: string;
-            prePromptTemplate?: string;
-            effectiveSystemPrompt: string;
-            messagesSentToLlm: Array<{
-                role: "system" | "user";
-                content: string;
-            }>;
-            /** Structured system-prompt layer breakdown, in composition order. Absent for legacy traces or focused-mode edits. */
-            layers?: PromptLayerEntryDto[];
-        };
+        /** Canonical shape from packages/contracts/src/llm.ts — see LlmPromptingTrace. */
+        promptingTrace?: LlmPromptingTrace;
         generatedArtifacts?: {
             html: string;
             css: string;

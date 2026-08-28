@@ -7,6 +7,7 @@ export interface PreviewSnapshotRepository {
         sourceMessageId?: string;
         parentSnapshotId?: string;
         artifacts: PreviewSnapshot["artifacts"];
+        serviceManifest?: PreviewSnapshot["serviceManifest"];
         focusContext?: PreviewSnapshot["focusContext"];
         metadata?: PreviewSnapshot["metadata"];
         activate: boolean;
@@ -31,6 +32,15 @@ export interface PreviewSnapshotRepository {
 
     /** Delete a single snapshot. Returns true if deleted, false if not found. */
     deleteById(projectId: string, snapshotId: string): Promise<boolean>;
+
+    /**
+     * AL-015: re-parent every snapshot whose parentSnapshotId is `fromParentId` to `toParentId`.
+     * Called before deleting `fromParentId` so the chain never dangles. `toParentId` is the
+     * deleted snapshot's own seed, which may be undefined — children of a deleted root correctly
+     * become roots themselves rather than inheriting a made-up ancestor. Project-scoped, same as
+     * every other chain operation (AL-016). Returns the number of snapshots re-linked.
+     */
+    relinkChildren(projectId: string, fromParentId: string, toParentId?: string): Promise<number>;
 
     /** Persist the stored thumbnail path after the background Puppeteer job completes. */
     updateThumbnailPath(projectId: string, snapshotId: string, storedPath: string): Promise<void>;
