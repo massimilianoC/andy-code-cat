@@ -137,8 +137,14 @@ describe("SetLlmModelsActive", () => {
     });
 });
 
-describe("SetLlmModelsActive — a model the provider dropped cannot be switched back on", () => {
-    it("refuses to activate a deprecated model and says so", async () => {
+// BEHAVIOUR CHANGE, deliberate. These used to assert that a model marked deprecated could
+// not be switched back on. That rule trusted `availability` as a verdict, and it is not one:
+// discovery reported 13 SiliconFlow models on one poll and 77 on the next, so a single
+// unlucky poll could put a model permanently out of the operator's reach. Availability is
+// now advisory — the operator decides, and a model that really is gone fails at dispatch
+// with a named error instead of being refused on a guess.
+describe("SetLlmModelsActive — availability is advisory, the operator decides", () => {
+    it("activates a deprecated model, and still reports that it is not currently offered", async () => {
         const { repository, useCase } = harness([
             model("still/offered"),
             model("retired/model", { availability: "deprecated" }),
@@ -150,10 +156,11 @@ describe("SetLlmModelsActive — a model the provider dropped cannot be switched
             isActive: true,
         });
 
-        expect(result.applied).toEqual(["still/offered"]);
+        expect(result.applied).toEqual(["still/offered", "retired/model"]);
+        // Reported, not refused: the operator should know what they switched on.
         expect(result.deprecated).toEqual(["retired/model"]);
         const written = repository.setModelsActive.mock.calls[0]![0];
-        expect(written.models.map((entry) => entry.id)).toEqual(["still/offered"]);
+        expect(written.models.map((entry) => entry.id)).toEqual(["still/offered", "retired/model"]);
     });
 
     it("still allows switching a deprecated model OFF, so a group cleanup completes", async () => {
@@ -172,16 +179,18 @@ describe("SetLlmModelsActive — a model the provider dropped cannot be switched
         expect(repository.setModelsActive).toHaveBeenCalledTimes(1);
     });
 
-    it("writes nothing when every requested id is deprecated", async () => {
-        const { repository, useCase } = harness([model("retired/model", { availability: "deprecated" })]);
+    it("writes nothing when every requested id is unknown to the catalog", async () => {
+        // Unknown is still a hard skip — there is no model to rule on, so nothing is written.
+        const { repository, useCase } = harness([model("still/offered")]);
 
         const result = await useCase.execute({
             provider: "siliconflow",
-            modelIds: ["retired/model"],
+            modelIds: ["never/existed"],
             isActive: true,
         });
 
         expect(result.applied).toEqual([]);
+        expect(result.unknown).toEqual(["never/existed"]);
         expect(repository.setModelsActive).not.toHaveBeenCalled();
     });
 });

@@ -58,12 +58,19 @@ export class SetLlmModelsActive {
         const byId = new Map(providerCatalog.models.map((model) => [model.id, model]));
         const unknown = requested.filter((id) => !byId.has(id));
 
-        // A model the provider dropped can always be switched OFF — that is how a group
-        // deactivation tidies up — but never switched back ON.
+        // Deprecation no longer blocks activation. `availability` records what a provider last
+        // offered, and that reading is not always right: discovery has been observed reporting
+        // 13 models on one poll and 77 on the next, so refusing to switch a model on because a
+        // poll missed it puts the operator behind a guess. If the model really is gone, the
+        // dispatch fails and says which model and why — one honest error at the moment of use.
+        //
+        // Still reported, because the operator should know what they are turning on: the field
+        // is now advisory, and the UI can say "not currently offered" instead of silently
+        // dropping the request.
         const deprecated = input.isActive
             ? requested.filter((id) => byId.get(id)?.availability === "deprecated")
             : [];
-        const skip = new Set([...unknown, ...deprecated]);
+        const skip = new Set(unknown);
 
         const models = requested
             .filter((id) => !skip.has(id))
