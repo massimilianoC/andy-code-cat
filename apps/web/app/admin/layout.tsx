@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { getToken, hasRole } from "@/lib/token-store";
+import { VersionBadge } from "@/components/VersionBadge";
 
 const NAV_LINKS = [
     { href: "/admin", label: "Dashboard", exact: true },
@@ -90,6 +91,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         >
                             Platform Admin
                         </span>
+                        <VersionBadge className="ml-1" />
                     </span>
 
                     {/* Nav links */}
