@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { adminDraftProjectTemplateSchema, adminLlmModelPatchSchema, adminProjectPresetPatchSchema, adminSeedLlmRegistrySchema, adminSeedPresetRegistrySchema, createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
+import { adminDraftProjectTemplateSchema, adminLlmModelActivationSchema, adminLlmModelPatchSchema, adminProjectPresetPatchSchema, adminSeedLlmRegistrySchema, adminSeedPresetRegistrySchema, createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { requireSuperAdmin } from "../middlewares/requireSuperAdmin";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
@@ -32,6 +32,8 @@ import { AdminTogglePublication } from "../../../application/use-cases/admin/Adm
 import { SeedLlmCatalog } from "../../../application/use-cases/SeedLlmCatalog";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
+import { SetLlmModelsActive } from "../../../application/use-cases/SetLlmModelsActive";
+import { ReconcileLlmCatalogAvailability } from "../../../application/use-cases/ReconcileLlmCatalogAvailability";
 import { clearLiveModelCatalogCache } from "../../../application/llm/liveProviderCatalog";
 import { DraftProjectTemplate } from "../../../application/use-cases/DraftProjectTemplate";
 import { env } from "../../../config";
@@ -180,6 +182,8 @@ export function createAdminRoutes(): Router {
         env.LLM_DEFAULT_PROVIDER,
     );
     const getEffectiveLlmCatalog = new GetEffectiveLlmCatalog(getLlmCatalog);
+    const setLlmModelsActive = new SetLlmModelsActive(llmCatalogRepo, getEffectiveLlmCatalog);
+    const reconcileLlmCatalogAvailability = new ReconcileLlmCatalogAvailability(llmCatalogRepo, getEffectiveLlmCatalog);
     const draftProjectTemplate = new DraftProjectTemplate(
         configRepo,
         promptExecutionLogRepo,
@@ -285,8 +289,12 @@ export function createAdminRoutes(): Router {
     router.post("/admin/llm-registry/refresh-live", async (_req, res, next) => {
         try {
             clearLiveModelCatalogCache();
+            // Refreshing IS asking what the providers really offer, so it is also the moment to
+            // record the answer: models that have disappeared get flagged rather than silently
+            // going missing from the list.
+            const availability = await reconcileLlmCatalogAvailability.execute().catch(() => null);
             const result = await getEffectiveLlmCatalog.execute({ forceRefresh: true });
-            res.json({ ok: true, refreshedAt: new Date().toISOString(), ...result, byokEnabled: true });
+            res.json({ ok: true, refreshedAt: new Date().toISOString(), availability, ...result, byokEnabled: true });
         } catch (err) {
             next(err);
         }
@@ -348,6 +356,22 @@ export function createAdminRoutes(): Router {
                 existingDraft: body.existingDraft,
             });
             res.json(result);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.post("/admin/llm-registry/providers/:provider/models/activation", async (req, res, next) => {
+        try {
+            const provider = getRequiredRouteParam(req.params.provider, "provider");
+            const body = adminLlmModelActivationSchema.parse(req.body ?? {});
+            const result = await setLlmModelsActive.execute({
+                provider,
+                modelIds: body.modelIds,
+                isActive: body.isActive,
+            });
+            const catalog = await getEffectiveLlmCatalog.execute();
+            res.json({ ok: true, ...result, ...catalog, byokEnabled: true });
         } catch (err) {
             next(err);
         }

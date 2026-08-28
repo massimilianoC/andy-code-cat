@@ -52,7 +52,12 @@ interface ProviderModelPickerProps {
     className?: string;
 }
 
-function familyLabel(modelId: string): string {
+/**
+ * The author/vendor a model id belongs to — "deepseek-ai/DeepSeek-V3" is DeepSeek's. Exported
+ * because the admin registry groups by the same thing the picker groups by: two different
+ * groupings of the same catalog would be two different mental models of it.
+ */
+export function familyLabel(modelId: string): string {
     const family = modelId.includes("/") ? modelId.split("/")[0] : (modelId.match(/^([a-zA-Z]+)/)?.[1] ?? "other");
     const labels: Record<string, string> = {
         google: "Google",

@@ -143,6 +143,7 @@ describe("ResolvePromptExecution — I14 strict cutover wave 2 (pipelineRunId di
                 },
             },
             blocked: null,
+            lockApplies: true,
         }));
         const { resolver } = createResolver({ resolvePipelineModelLock: { dispatch } });
 
@@ -167,6 +168,7 @@ describe("ResolvePromptExecution — I14 strict cutover wave 2 (pipelineRunId di
                 },
             },
             blocked: null,
+            lockApplies: true,
         }));
         const { resolver } = createResolver({ resolvePipelineModelLock: { dispatch } });
 
@@ -192,6 +194,7 @@ describe("ResolvePromptExecution — I14 strict cutover wave 2 (pipelineRunId di
                 },
             },
             blocked: null,
+            lockApplies: true,
         }));
         const { resolver } = createResolver({ resolvePipelineModelLock: { dispatch } });
 
@@ -230,6 +233,7 @@ describe("ResolvePromptExecution — I14 strict cutover wave 2 (pipelineRunId di
                 },
             },
             blocked: null,
+            lockApplies: true,
         }));
         const { resolver } = createResolver({ resolvePipelineModelLock: { dispatch } });
 
@@ -250,6 +254,7 @@ describe("ResolvePromptExecution — I14 strict cutover wave 2 (pipelineRunId di
                 },
             },
             blocked: null,
+            lockApplies: true,
         }));
         const { resolver } = createResolver({ resolvePipelineModelLock: { dispatch } });
 

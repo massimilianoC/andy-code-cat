@@ -242,8 +242,31 @@ export const launchWorkspacePipelineSchema = z.object({
     requestedProviderId: z.string().min(1).max(80).optional(),
     requestedModelId: z.string().min(1).max(200).optional(),
     optimizationPolicy: optimizationPolicySchema.default("skip"),
+    /**
+     * The brief text the user actually reviewed, when they edited the generated one.
+     *
+     * The guided wizard shows the canonical brief in an editor before launching. If the user
+     * changes a word, the run must certify THAT text — a run whose canonicalBrief no longer
+     * matches what gets sent certifies nothing. Omitted when the user did not edit, in which
+     * case the server builds the brief from the intake fields as usual.
+     */
+    briefOverride: z.string().trim().min(1).max(40000).optional(),
 });
 export type LaunchWorkspacePipelineInput = z.infer<typeof launchWorkspacePipelineSchema>;
+
+/**
+ * Side-effect-free preview of the canonical brief. The guided wizard calls this to show the
+ * brief for review BEFORE anything is created, so abandoning the wizard leaves no conversation,
+ * no run and no project state behind. Same intake shape as the launch request minus the
+ * launch-only fields.
+ */
+export const previewCanonicalBriefSchema = launchWorkspacePipelineSchema.omit({
+    requestedProviderId: true,
+    requestedModelId: true,
+    optimizationPolicy: true,
+    briefOverride: true,
+});
+export type PreviewCanonicalBriefInput = z.infer<typeof previewCanonicalBriefSchema>;
 
 export interface LaunchWorkspacePipelineResultDto {
     mode: "workspace";

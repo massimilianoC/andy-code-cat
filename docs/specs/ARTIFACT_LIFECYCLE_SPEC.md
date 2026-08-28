@@ -1,0 +1,366 @@
+# Artifact Lifecycle — Cardinal Spec
+
+> **Status:** binding. This document defines the intended behaviour of artifact versioning,
+> activation, publication and traceability. Where the code disagrees with this document, the code
+> is wrong.
+>
+> **Authority:** product owner, 2026-08-27. Supersedes nothing; it writes down rules that were
+> previously implicit or scattered across `FOCUSED_EDIT_SPEC.md`, `EXECUTION_LOG_SPEC.md`,
+> `WYSIWYG_EDIT_MODE_SPEC.md` and `PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md`.
+>
+> **Rule IDs** (`AL-NNN`) are stable. Cite them in commit messages and PR descriptions, the same
+> way `PP-NNN` rules are cited for the prompting pipeline. Example:
+> `fix(snapshots): derive version numbers from the parent chain — AL-011`.
+>
+> **Language policy:** English, matching `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md`.
+
+---
+
+## 0. Why this document exists
+
+The artifact system is the product. Everything else — prompting, model routing, media resolution —
+exists to produce and refine artifacts. Yet until now it had no cardinal spec: the single most
+load-bearing rule in the whole system (*the active snapshot is the seed of every subsequent
+change*) lived at line 446 of `FOCUSED_EDIT_SPEC.md`, a document no agent is instructed to read.
+
+The consequence was measurable. On 2026-08-26 an audit of 195 stored snapshots found:
+
+- **158 of 195 were roots** (`parentSnapshotId: null`) — the version chain was written by one code
+  path and ignored by every other
+- **35 projects had more than one root**, one had 19
+- **0 snapshots carried a `promptExecutionId`** — no version could be traced to the prompt that
+  produced it
+- **30 snapshots contained inlined base64 images**, 19.6 MB in total, because one save path
+  persisted the rendered preview instead of the source
+
+None of this was a deliberate decision. It is architectural drift: successive changes each made
+local sense and collectively dismantled a coherent design. Section 8 exists to stop that repeating.
+
+---
+
+## 1. Vocabulary — five distinct pointers
+
+Most defects in this area come from conflating these. They are independent.
+
+| Term | Meaning | Cardinality |
+|---|---|---|
+| **Artifact version** | An immutable, uniquely identified, complete snapshot of html/css/js for a project | many per project |
+| **Seed** (`parentSnapshotId`) | The version a given version was derived from | one per version, nullable only for the first |
+| **Active** | The working head: what edits apply to, what the LLM receives as `currentArtifacts` | exactly one per project |
+| **Selected** | What the user is currently looking at | exactly one per session |
+| **Published** | What visitors see at the public URL | zero or one per project |
+
+**AL-001** — These five are independent. In particular, **the published version is not necessarily
+the active one**: a user may publish v4, keep working, and reach v9 without republishing. Any code
+that assumes `published === active` is wrong.
+
+**AL-002** — Selecting a version activates it (see AL-020). Selected and active therefore converge
+by design, but the code must never assume they are the same variable.
+
+---
+
+## 2. Entry paths
+
+**AL-003** — There is exactly one artifact generation engine. Every entry path converges on it:
+
+1. **Vibe mode** — prompt plus attached documents are auto-compiled into a brief
+2. **Zero-effort form** — the user fills the intake manually; the same builder produces the brief
+3. **Direct project mode** — the user writes a free prompt, optionally passed through an
+   optimization step
+
+**AL-004** — All three produce a **brief**, and the brief is what enters the prompting pipeline.
+No entry path may reach the model by a different route, with a different composition, or through a
+client-side handoff. (See `AGENTS.md` Rule Zero.)
+
+**AL-005** — The brief enters the pipeline together with the full system-prompt layer set: style
+and branding layers populated when declared on the project and empty when not, plus the mandatory
+static layers. A layer being empty is a normal state, never a reason to skip composition.
+
+**AL-006** — The first generation produces **version 1**. Version 1 has no seed.
+
+---
+
+## 3. Version creation
+
+**AL-007** — Every mutation of the artifact produces exactly one new version. The mutation kinds
+are:
+
+| Mutation | Produces |
+|---|---|
+| Chat prompt with conversation history and full layer set | new version |
+| Focused edit (element selected in the inspector + instruction) | new version |
+| WYSIWYG interactive edit, saved | new version |
+| Code editor (HTML/CSS/JS) edit, saved | new version |
+
+**AL-008** — Versions are **equipollent**. A version produced by a WYSIWYG save is the same kind of
+object, at the same level of completeness, as a version produced by the model. It carries the full
+artifact, not a delta, not a rendered projection, not a partial document.
+
+**AL-009** — A version persists the **source** artifact, never the rendered preview. Preview
+rendering may inline assets as data URIs so that a sandboxed iframe can display them; that
+transformation must be reversed before persistence. A version whose html contains `data:image/`
+payloads that were not authored by the model is a defect.
+
+**AL-010** — No version is created from a failed generation. If the structured parse fails, nothing
+is saved, the active version is unchanged, and the failure is surfaced as an error (not as an
+assistant reply).
+
+**AL-011** — Version numbering is derived from the **seed chain**, never from list position or
+creation order. Position-based numbering misrepresents history the moment a branch exists, and
+renumbers surviving versions when one is deleted.
+
+---
+
+## 4. Seed and branching
+
+**AL-012** — The seed of a new version is the **active version at the moment of creation**. This
+holds for every mutation kind in AL-007, including saves initiated from an editor, and it is
+enforced server-side rather than trusted to each caller.
+
+**AL-013** — Returning to an earlier version and modifying it creates a **branch**. If the project
+is at v10, the user selects v5, and then edits, the new version's seed is v5. If the user then
+selects v10 and edits again, that version's seed is v10, and the branch that grew from v5 remains
+in the archive, reachable, and is not deleted.
+
+**AL-014** — Branching must be visible. The interface has to show that a new version is starting
+from something other than the newest one, and that the abandoned branch is still reachable.
+Silent branching loses user work in a way the user cannot diagnose.
+
+**AL-015** — Deleting a version must preserve chain integrity: its children are re-linked to its
+seed. A dangling `parentSnapshotId` is corruption, whether or not anything currently reads it.
+
+---
+
+## 5. Activation
+
+**AL-016** — Exactly one version per project is active. Activation is project-scoped: activating a
+version deactivates every other version of the project, across all conversations.
+
+**AL-017** — The active version is the source of truth for:
+
+1. `currentArtifacts` sent to the model
+2. the merge base for focused edits
+3. what the editors load
+4. the default target for export
+
+**AL-018** — The active version must always contain valid, non-empty html. This invariant predates
+this document (`FOCUSED_EDIT_SPEC.md` §"Baseline Snapshot") and is restated here because it is a
+lifecycle rule, not a focused-edit rule.
+
+**AL-019** — Unsaved editor state must not silently become the base of a generation. Either it is
+saved as a version first (AL-007), or the generation runs against the active version. Feeding the
+model content that exists in no version breaks the 1:1 correspondence in section 7.
+
+**AL-020** — Selecting a version in the history activates it. If activation fails, selection must
+fail visibly rather than leaving the interface showing one version while the system uses another.
+The certification rules in section 11 are what make this reliable across the frontend/backend
+boundary.
+
+---
+
+## 6. Publication
+
+**AL-021** — Publication targets a **specific version**, recorded by id. It is not a project-level
+"publish current state" operation.
+
+**AL-022** — The published version is independent of the active one (AL-001). Continuing to work
+after publishing never changes what is live; only an explicit republish does.
+
+**AL-023** — Which version is published must be visible next to the version history. A user must be
+able to answer "what is live right now, and how far has my working copy diverged from it?" without
+leaving the workspace.
+
+**AL-024** — Every publication, republication and unpublication is recorded as an event carrying:
+the version id, the acting user, the timestamp, the action, the resulting deployment and URL, and
+the reason where the user supplied one. `publish_history` and `site_deployments` already carry most
+of this; the gap is the reason and the surfacing, not the storage.
+
+**AL-025** — Export follows the same version semantics as publication: it targets an explicit
+version, defaulting to the active one, resolved at **project** scope (AL-016). Resolving the active
+version at conversation scope is a defect.
+
+---
+
+## 7. One-to-one traceability
+
+**AL-026** — Every version carries an immutable reference to the prompt execution that produced it
+(`promptExecutionId`), where one exists. Versions produced by direct user editing carry the acting
+user and the edit kind instead. There is no version whose origin is unknown.
+
+**AL-027** — A version, its assistant message, its prompt execution record and its cost record all
+reference the same execution id. This requirement is already stated as P1 in
+`PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md` §"Snapshot and prompt trace are not
+first-class peers"; this document makes it a lifecycle rule.
+
+**AL-028** — Selecting a version resolves the prompt view to **that version's** execution. Falling
+back to the most recent execution is permitted only when no version is selected, and that state
+must be labelled.
+
+**AL-029** — Focused edits record which element they targeted on the version they produced. A
+version created by a focused edit whose target is unknown cannot be explained after the fact.
+
+**AL-030** — The prompt history shown for a project is the **whole project history**, compacted,
+with the entries belonging to the selected version highlighted. Rationale: once branching exists
+(AL-013), a linear reading of history is factually wrong — it implies a descent that never
+happened. The seed chain is the only structure that reflects what actually occurred, so it is the
+structure the view is built on.
+
+---
+
+## 8. Change control — no silent architecture drift
+
+This section is the reason the rest of the document is worth writing.
+
+**AL-031** — Any change that introduces a new save path, a new precedence between existing paths,
+or a new way of persisting or activating an artifact is an **architectural change**. It may not be
+made as an incidental part of another task.
+
+**AL-032** — An architectural change under AL-031 must be proposed and argued before being made.
+The proposal states: which rule of this document it alters, what the current behaviour is, what the
+proposed behaviour is, and what concrete value the change delivers that the current design does
+not. "It was simpler", "it was faster to implement", or "the existing path was in the way" are not
+values.
+
+**AL-033** — Adding a second path while keeping the first is not a compromise, it is the failure
+mode. See `AGENTS.md` Rule Zero.
+
+**AL-034** — When an agent finds behaviour that contradicts this document, the default action is to
+**restore the documented behaviour**, not to codify what the code happens to do. If the documented
+behaviour is genuinely wrong, that is an AL-032 proposal.
+
+---
+
+## 9. Conformance as of 2026-08-27
+
+Assessed against the code and against 195 stored snapshots on the local stack.
+Rows marked ✅ with a date were verified live against the running stack, not only unit-tested.
+
+| Rule | State | Evidence |
+|---|---|---|
+| AL-003/004 one engine, all entries | ✅ implemented 2026-08-26 | the guided wizard was a second legacy path until commit `227609f` |
+| AL-007 every mutation versions | ⚠️ partial | AL-019 hole: `currentArtifactsSource` prefers `editorHtml` over the active version |
+| AL-008/009 equipollent, source not render | ⚠️ partial, 2026-08-27 | Asset inlining reversed on save: verified live, 0 data URIs, 131.884 → 24.266 chars. Remaining: the preview's injected `<style>` blocks (10.813 chars) are still serialised into the artifact — same rule, smaller instance |
+| AL-010 no version from failure | ✅ implemented | frontend guard plus `generationParseError` |
+| AL-011 numbering from the chain | ✅ 2026-08-27 | `buildVersionIndex` walks `parentSnapshotId`; legacy roots fall back to `createdAt` for display only. Verified live |
+| AL-012 seed is the active version | ✅ implemented 2026-08-26 | server-side default in `CreatePreviewSnapshot`; previously 158/195 roots |
+| AL-013/014 branching | ✅ 2026-08-27 | Verified live: activating v7 seeded the next version from v7 and the composer stated the branch and that v9 stays reachable |
+| AL-015 delete preserves the chain | ✅ 2026-08-27 | `relinkChildren` runs before the delete; children of a deleted root become roots rather than being pinned to an invented ancestor |
+| AL-016/017/018 activation | ✅ implemented | `activateForProject`, `activeBaselineSnapshot` |
+| AL-021/022/024 publication records the version | ✅ storage present | `site_deployments` and `publish_history` carry `snapshotId`, `userId`, `action`, timestamps |
+| AL-023 published version visible | ✅ 2026-08-27 | Verified live with published ≠ active: badge on the live row and "live: v9 · stai lavorando su v7" in the panel header |
+| AL-025 export scope | ✅ 2026-08-27 | Export resolves the active version with `getActiveForProject`, matching publication; `conversationId` now only feeds the README |
+| AL-026 execution id stored | ✅ 2026-08-27 | `metadata.promptExecutionId` in the contract and passed at the LLM call site. Verified live: a write carrying it round-trips intact |
+| AL-027/028 execution id shared and resolved | ❌ not implemented | assistant message and cost record do not yet share the id; the Prompt tab still resolves the latest execution |
+| AL-039 content hash on every version | ✅ 2026-08-27 | `computeArtifactContentHash` in `CreatePreviewSnapshot`, over the canonical artifacts. Live: a client-supplied hash is ignored |
+| AL-040/041 declared base, verified server-side | ✅ 2026-08-27 | `baseContentHash` on the write; a stale base is refused `409 ARTIFACT_BASE_STALE` naming the current version. Live: refused on mismatch, on a deleted base, and accepted on a match; a write that declares nothing still works |
+| AL-042/043 one base across all editing modes | ✅ 2026-08-27 | `commitArtifactVersion` is the single client write path, so chat, focused edit, WYSIWYG and Monaco declare the same base by construction. The WYSIWYG session commit declares it too. On refusal the client re-reads history and does not retry |
+| AL-044 recovery by activation | ✅ available | versions are additive; activating the last good version already restores it |
+| AL-045 no-op writes create no version | ✅ 2026-08-27 | Identical content returns the base with `created: false` and HTTP 200; the base is still activated if asked for. The base's hash is computed on the fly when it predates AL-039, so it also covers the duplicates already in history |
+| AL-029 focused edit target recorded | ✅ 2026-08-27 | `focusContext` now sent at the generation call site. One edge case open: a retry that drops focus context can still record the originally attempted target |
+| AL-030 project-wide compacted history | ❌ not implemented | — |
+| AL-046 the artifact shape is declared once | ✅ 2026-08-27 | Was declared four times and had drifted: the web client sent `promptingTrace.promptConfigId`, which the schema never declared, so zod stripped it from every write. One schema now, everything else infers. Live: the field survives a write |
+| AL-047 one write path | ✅ 2026-08-27 | `CommitWysiwygSession` called the repository directly and produced versions with no hash, no no-op suppression, and two metadata keys smuggled past the contract by an `as` cast. It goes through `CreatePreviewSnapshot` now |
+
+---
+
+## 10. Robustness measures
+
+Beyond conformance, these make the invariants hard to break rather than merely documented.
+
+**AL-035** — Chain and activation invariants are enforced in the application layer, not in each
+caller. A client that forgets a field gets correct behaviour, not a silent second root.
+
+**AL-036** — A startup or on-demand integrity check reports: versions with a missing seed, projects
+with more than one root, active-version count per project other than one, published versions that
+no longer exist, and versions whose html is empty.
+
+**AL-037** — Persisting a version whose html contains data URIs that did not come from the model is
+rejected at the application boundary, so AL-009 cannot regress silently.
+
+**AL-038** — The conformance table in section 9 is updated whenever a rule's state changes. A rule
+that moves to ✅ without a test that pins it has not moved.
+
+**AL-046** — The shape of an artifact version is **declared in exactly one place**: the schema in
+`packages/contracts`. The API domain entity, the HTTP response type and every client type are
+derived from it, never restated. A shape written down more than once is a shape that will be wrong
+in all but one of them — and it already was: the web client declared and sent
+`promptingTrace.promptConfigId`, which the schema never declared, so zod stripped it from every
+write and no stored version carries it. Adding a second declaration is an architectural change
+under AL-031.
+
+**AL-047** — There is **exactly one code path that persists a version**. Everything that produces a
+version — chat, focused edit, WYSIWYG (session and degraded), the code editor, media application —
+goes through it, so a rule added there applies everywhere by construction rather than by every call
+site remembering. A second path is how AL-039 and AL-045 came to be true of most versions instead
+of all of them.
+
+---
+
+## 11. Version certification — the frontend/backend contract
+
+Sections 3 to 6 say what the states are. This section says how the two sides stay in agreement
+about them, which is what makes the rest trustworthy rather than merely intended.
+
+The primitive is not new. `CanonicalBriefEnvelope.contentHash` already certifies that the text a
+`PipelineRun` froze is the text that reaches the model: same idea, applied to the object that needs
+it most.
+
+**AL-039** — Every version carries a **content hash** of its artifacts, computed server-side at
+creation. It lives in metadata beside the other execution facts; it is not a new structure.
+
+**AL-040** — Every mutation **declares the base it was derived from**: the version id and that
+version's content hash. A client does not simply "save"; it states what it was looking at when it
+made the change.
+
+**AL-041** — The server **verifies the declared base before accepting**. The base must exist and its
+stored hash must match the declared one. On mismatch the write is refused with a distinct code and
+the client re-synchronises and tells the user. It does not retry blindly, and it does not write on
+top of a state that is not what it believed.
+
+The check is deliberately *not* "the base must be the currently active version". Editing from an
+explicitly selected older version is branching (AL-013), not staleness, and refusing it would break
+the behaviour section 4 requires. What matters is that the base is still the thing the client read.
+
+A base stored before AL-039 has no hash to compare against. That write is **accepted and recorded as
+unverifiable**, not refused: the history predates the rule, and locking users out of their own
+versions is a larger harm than an uncertified write. The event is logged so the shrinking set of
+unverifiable writes stays findable.
+
+**AL-042** — The interface **never loads an uncertified state into an editor**. Loading an artifact
+means loading a persisted version, and recording which id and hash were loaded so the eventual write
+can declare them (AL-040). Content that corresponds to no version is not editable, because a change
+to it cannot be based on anything.
+
+**AL-043** — All editing modes share one base. Moving between chat, focused edit, WYSIWYG and the
+code editor does not re-base: each operates on the same certified version. A mode switch that
+silently changes the base is a defect, and it is the mechanism by which edits get applied to
+something other than what the user was looking at.
+
+**AL-044** — A failed or malformed result **never replaces a good one**. Because versions are
+additive and the previous one is untouched, recovery is always "activate the last good version".
+This is the reason versioning is a safety mechanism and not merely a history: when the model
+produces an invalid first artifact, the corrective request produces a new version and the user
+proceeds from there, with the broken one still on record rather than having overwritten anything.
+
+**AL-045** — A mutation whose result is identical to its base **creates no version**. Four snapshots
+recorded on 2026-08-26 (`e29137b8`, `2c2095c9`, `77521a5f`, `85c09fbd`) carry byte-identical html of
+10.702 characters: no-op versions that inflate the history and make the real changes harder to find.
+
+Suppressing the version does not suppress the activation. "Make this the live version" is a separate
+intent from "record a new version", and refusing the first because the second turned out to be
+unnecessary would leave the user looking at something they did not select.
+
+**AL-037 is subordinate to this section.** Rejecting a version because it introduces data URIs its
+base did not have is a content check on one known failure; AL-039 to AL-043 are the structural
+guarantee that catches the class. Implement AL-037 only where it stays cheap, and never in place of
+this section.
+
+## 12. Related documents
+
+- `AGENTS.md` — Rule Zero, one execution path per user action
+- `docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md` — the `PP-NNN` model this document follows
+- `docs/specs/FOCUSED_EDIT_SPEC.md` — focused-edit mechanics; its `isActive` invariant is restated here as AL-018
+- `docs/specs/WYSIWYG_EDIT_MODE_SPEC.md` — WYSIWYG mechanics; its single-exit-point rule is AL-007
+- `docs/specs/EXECUTION_LOG_SPEC.md` — event record shapes; `parentSnapshotId` is defined there as "the previous active snapshot"
+- `docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md` — P1 execution-id linkage, formalised here as AL-026/027/028
+- `docs/specs/EXPORT_AND_PUBLISH_SPEC.md` — export and publish mechanics

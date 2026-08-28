@@ -102,14 +102,22 @@ describe("VibePrefill — model resolution (resolveModelSelection pin)", () => {
         expect(requestBody.model).toBe("Qwen/Qwen3-32B");
     });
 
-    it("an override model not in the catalog silently falls through to the catalog default model", async () => {
+    // BEHAVIOUR CHANGE, deliberate. This test used to assert the fall-through as correct, and in
+    // doing so it pinned a live defect: a model the caller named but that is not in the active
+    // catalog was quietly replaced, so the brief came back written by a model the user never
+    // chose while the pipeline lock froze yet another one. The rule is now the same everywhere —
+    // honour the request or refuse it, never substitute — and for this use case the refusal
+    // travels through its existing graceful-degradation path rather than a throw.
+    it("an override model not in the catalog is refused, not silently replaced", async () => {
         const fetchMock = stubLlm();
         const { useCase } = createUseCase();
 
-        await useCase.execute({ prompt: "Build a jazz club website", model: "not-a-real-model" });
+        const result = await useCase.execute({ prompt: "Build a jazz club website", model: "not-a-real-model" });
 
-        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M3");
+        // No provider call at all: nothing was asked of a substitute model.
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(result.skipped).toBe(true);
+        expect(result.warnings?.join(" ")).toContain("not-a-real-model");
     });
 
     it("no override at all: uses the task-setting provider+model when configured", async () => {

@@ -131,6 +131,22 @@ export const adminLlmModelPatchSchema = z.object({
 });
 export type AdminLlmModelPatchInput = z.infer<typeof adminLlmModelPatchSchema>;
 
+/**
+ * Turn a set of models on or off in one request.
+ *
+ * A batch rather than a per-model call because the operator's unit is a batch: "activate this
+ * whole author", "turn this provider off". Sending one request per model turns a single decision
+ * into hundreds of writes that can half-fail, leaving a catalog nobody chose.
+ *
+ * The cap is deliberately generous — a large provider listing is exactly the case this exists for.
+ */
+export const adminLlmModelActivationSchema = z.object({
+    modelIds: z.array(z.string().min(1).max(200)).min(1).max(1000),
+    isActive: z.boolean(),
+});
+
+export type AdminLlmModelActivationInput = z.infer<typeof adminLlmModelActivationSchema>;
+
 export const adminSeedLlmRegistrySchema = z.object({
     providers: z.array(z.string().min(1).max(80)).max(10).optional(),
 });

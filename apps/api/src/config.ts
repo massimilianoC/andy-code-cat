@@ -32,7 +32,11 @@ const envSchema = z.object({
     LLM_MAX_HISTORY_MESSAGES: z.coerce.number().int().positive().default(12),
     LLM_HISTORY_MESSAGE_MAX_CHARS: z.coerce.number().int().positive().default(2000),
     LLM_HISTORY_MAX_CHARS: z.coerce.number().int().positive().default(7000),
-    LLM_DEFAULT_MAX_COMPLETION_TOKENS: z.coerce.number().int().positive().default(24000),
+    // Generation output budget. The route ceiling is already 64k; this default is what
+    // actually clamped it, and a reasoning model spends thousands of these tokens thinking
+    // before the first character of the artifact — artifacts with thinking have been
+    // observed well past 24k. Raised to the ceiling so the two agree.
+    LLM_DEFAULT_MAX_COMPLETION_TOKENS: z.coerce.number().int().positive().default(64000),
     // --- Template Skills Layer S (filesystem-first) ---
     LLM_TEMPLATE_SKILLS_ENABLED: z.string().default("true"),
     LLM_TEMPLATE_SKILLS_ROOT: z.string().default(DEFAULT_TEMPLATE_SKILLS_ROOT),
@@ -115,7 +119,12 @@ const envSchema = z.object({
     // area. It exists now so later increments (I9+) that DO wire live traffic
     // through PipelineRun can be reverted with a single env change + restart,
     // with no code revert and no data migration. See docs/SSOT_REFACTOR_PROGRESS.md.
-    PIPELINE_RUN_ENABLED: z.string().default("false"),
+    /**
+     * Strict PipelineRun dispatch. Defaults ON: the frontend no longer has a path that avoids
+     * it, so a false default would leave the API refusing runs the UI unconditionally creates.
+     * Kept as an env var purely as an emergency lever.
+     */
+    PIPELINE_RUN_ENABLED: z.string().default("true"),
     PIPELINE_MODEL_LOCK_DEFAULT_POLICY: z.enum(["legacy", "strict"]).default("legacy"),
 });
 

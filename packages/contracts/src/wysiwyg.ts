@@ -19,6 +19,12 @@ export const saveWysiwygEditStateSchema = z.object({
 export const commitWysiwygSessionSchema = z.object({
     /** Optional human-readable description stored in snapshot metadata. */
     description: z.string().max(300).optional(),
+    /**
+     * AL-040 — the contentHash of the origin version this session was opened on, as the
+     * client received it. Declared at commit rather than at session open so the check happens
+     * at the moment of the write, which is when the base can actually have moved.
+     */
+    baseContentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 });
 
 // ── Types ─────────────────────────────────────────────────────────────────────

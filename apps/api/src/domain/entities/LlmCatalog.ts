@@ -34,6 +34,18 @@ export interface LlmModel {
     priceInputUsdPerM?: number;
     /** Actual output price in USD per million tokens (0 = free; undefined = unknown). */
     priceOutputUsdPerM?: number;
+    /**
+     * Whether the provider still lists this model, as of the last reconciliation.
+     *
+     * Set by `ReconcileLlmCatalogAvailability`, never edited by hand. A model the provider has
+     * dropped is marked "deprecated" rather than deleted: its id may already be referenced by a
+     * stored PipelineRun model lock, an execution log or a published build, and deleting the row
+     * would turn every one of those references into an unresolvable string. Absent on records
+     * written before this field existed, which reads as "never checked".
+     */
+    availability?: "live" | "deprecated";
+    /** When availability was last established against the provider. */
+    availabilityCheckedAt?: Date;
 }
 
 export interface LlmProviderCatalog {

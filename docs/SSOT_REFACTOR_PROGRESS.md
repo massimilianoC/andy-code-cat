@@ -1,7 +1,7 @@
 # SSOT Refactor — Progress and Resume Point
 
-**Status:** I0–I14 implemented and merged to `develop`; I15–I20 remain  
-**Last updated:** 2026-08-19  
+**Status:** I0–I17 implemented and merged to `develop`; I18–I20 remain  
+**Last updated:** 2026-08-25  
 **Resume authority:** [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md)
 
 **2026-08-19 scope note:** the "deferred past the demo" framing below (2026-08-18) was explicitly
@@ -75,23 +75,22 @@ increments and their `develop` merge commits are:
 - [x] `PipelineRun` aggregate built, persisted, and wired into real dispatch call sites (I7–I14).
 - [x] Strict-dispatch invariant (never silently substitute a locked model) holds at every call
   site that currently exists — verified by an independent coherence review, hardened in I14.1.
-- [ ] Frontend still does not create or send `pipelineRunId` anywhere (I15) — the whole strict
-  path above is live but dormant until the frontend cutover lands, gated behind
-  `PIPELINE_RUN_ENABLED` (default off) in the meantime.
-- [ ] I16–I20 (Workshop projection, persisted notifications, typed preflight, Kimi K3 E2E
-  acceptance test, legacy removal) not started.
+- [x] Frontend run-based handoff landed (I15, PR #74) — scoped to the one-click AI launch flow;
+  the manual review-then-continue path stays on the legacy handoff. Gated behind
+  `NEXT_PUBLIC_PIPELINE_RUN_UI` (frontend) and `PIPELINE_RUN_ENABLED` (backend, default off), so
+  the strict chain is reachable by real traffic only once both flags are on.
+- [x] Workshop pure server projection + persisted run notifications landed (I16–I17, PR #75).
+- [ ] I18–I20 (typed POST preflight + Layer-E nested segments, Kimi K3 E2E acceptance test,
+  legacy call-site removal) not started.
 
 ## Resume here next session
 
-Continue with **I15**: frontend run-based handoff (replace `sessionStorage` with a server-owned
-`PipelineRun` reference), behind a build-time flag until I20 removes the legacy path. See the
-full increment list and test plan in the implementation program linked above.
+Continue with **I18**: typed POST preflight and Layer-E nested segments. See the full increment
+list and test plan in the implementation program linked above.
 
 ## Subsequent slices
 
-- **I16–I17:** Workshop pure server projection (fixes "shows latest trace not selected snapshot's"
-  and "only renders role:user" bugs) + persisted run notifications.
-- **I18–I19:** typed POST preflight, Layer-E nested segments, Kimi K3 E2E acceptance test.
+- **I19:** Kimi K3 E2E acceptance test.
 - **I20:** legacy call-site removal — gated on I12–I19 being landed, tested, and confirmed stable,
   not on calendar/demo timing.
 

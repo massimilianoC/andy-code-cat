@@ -25,6 +25,26 @@ describe("buildCanonicalGenerationBrief", () => {
         expect(again.content).toBe(envelope.content);
     });
 
+    it("certifies a user-edited brief verbatim, hashed and marked USER_EDITED", () => {
+        const edited = "# My own brief\n\nJust build a one page site.";
+        const envelope = buildCanonicalGenerationBrief(baseInput(), edited);
+
+        // The run must certify the text that will actually be sent, not a re-derivation of it.
+        expect(envelope.content).toBe(edited);
+        expect(envelope.provenance).toEqual(["USER_EDITED"]);
+        expect(envelope.schemaVersion).toBe("canonical-brief-v1");
+        expect(envelope.contentHash).toMatch(/^[a-f0-9]{64}$/);
+        expect(envelope.contentHash).not.toBe(buildCanonicalGenerationBrief(baseInput()).contentHash);
+        // The intake that produced the text the user started from is still recoverable.
+        expect(envelope.sourceFields).toMatchObject({ businessName: "Acme", presetId: "landing" });
+    });
+
+    it("ignores a blank override rather than certifying an empty brief", () => {
+        const derived = buildCanonicalGenerationBrief(baseInput());
+        expect(buildCanonicalGenerationBrief(baseInput(), "   ").content).toBe(derived.content);
+        expect(buildCanonicalGenerationBrief(baseInput(), undefined).content).toBe(derived.content);
+    });
+
     it("contentHash changes when the content changes", () => {
         const a = buildCanonicalGenerationBrief(baseInput());
         const b = buildCanonicalGenerationBrief({ ...baseInput(), primaryGoal: "Something else entirely." });

@@ -413,6 +413,7 @@ describe("OptimizeUserPrompt", () => {
                 },
             },
             blocked: null,
+            lockApplies: true,
         }));
         const resolvePipelineModelLock = { dispatch, createRun: vi.fn() };
 
@@ -485,6 +486,7 @@ describe("OptimizeUserPrompt", () => {
                     },
                 },
                 blocked: null,
+                lockApplies: true,
             })),
             createRun: vi.fn(),
         };

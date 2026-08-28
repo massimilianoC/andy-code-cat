@@ -317,7 +317,7 @@
             "slideshow": "Slideshow",
             "keynote": "Visual keynote",
             "videogame": "Videogame",
-      "freerunner": "Infinite Runner",
+            "freerunner": "Infinite Runner",
             "seriousgame": "Serious Game",
             "game3d": "3D Game",
             "vr-aframe": "VR A-Frame Experience",
@@ -366,8 +366,7 @@
         },
         "phase": {
             "review": "Ready for generation",
-            "optimizing": "Optimizing prompt...",
-            "optimized": "Prompt optimized — continue in Guided Mode to generate"
+            "launching": "Creating the run and opening the workspace…"
         },
         "brief": {
             "title": "PROJECT BRIEF — {{brand}}",
@@ -464,7 +463,8 @@
             "readySuffix": "to generate the site with complete artifact saving, preview, and editing tools.",
             "dashboard": "Dashboard",
             "backToDashboard": "Back to dashboard",
-            "continueInWorkspace": "Continue in workspace"
+            "continueInWorkspace": "Continue in workspace",
+            "launching": "Launching…"
         },
         "workspaceModeBadge": "Workspace",
         "openWorkspace": "Open Workspace",
@@ -737,7 +737,11 @@
                 "activatedLabel": "Version activated",
                 "activated": "Snapshot selected as active version.",
                 "newVersionLabel": "New version saved",
-                "newVersionMessage": "Snapshot saved and activated by the backend."
+                "newVersionMessage": "Snapshot saved and activated by the backend.",
+                "staleBaseLabel": "Version out of date",
+                "staleBase": "This edit started from a version that has since changed. The current version has been reloaded — reapply the change on it.",
+                "noChangeLabel": "Nothing changed",
+                "noChange": "The content is identical to the current version, so no new version was created."
             },
             "llm": {
                 "label": "AI Generation",
@@ -886,6 +890,9 @@
             "unpublish": "Remove",
             "staleVersion": "⚠ online v{{published}}, active v{{current}}",
             "updatePublish": "Update",
+            "snapshotPanelLiveLine": "🌐 live: v{{live}} · you're working on v{{current}}",
+            "snapshotPanelLiveBadge": "🌐 live",
+            "branchNotice": "⎘ You're working on v{{active}}, not the latest (v{{latest}}): your next change will branch from here. v{{latest}} stays reachable in the history.",
             "slugPlaceholder": "e.g. my-bakery",
             "slugChecking": "⏳ Checking…",
             "slugAvailable": "✓ Available",
@@ -1043,7 +1050,9 @@
                 "copied": "Copied",
                 "copyError": "Error",
                 "copyTitle": "Copy message",
-                "nextSteps": "Next steps"
+                "nextSteps": "Next steps",
+                "errorBadge": "Error",
+                "errorHint": "No version was saved — the project is unchanged."
             }
         }
     },

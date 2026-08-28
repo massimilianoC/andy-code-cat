@@ -27,7 +27,9 @@ function makePendingUpload(overrides: Partial<ProjectAsset> = {}): ProjectAsset 
         fileSize: 1024,
         source: "user_upload",
         useInProject: true,
-        createdAt: new Date("2026-07-10T00:00:00.000Z"),
+        // Fresh by default: these fixtures stand in for an upload the enrichment pipeline has not
+        // stamped yet, which is the only trace-less state worth waiting on.
+        createdAt: new Date(),
         enrichmentTrace: null,
         ...overrides,
     };
@@ -157,6 +159,35 @@ describe("buildProjectLayerDContext", () => {
         expect(repository.listByProject).toHaveBeenCalled();
         expect(result.layer).toContain("Brand book allegato");
         expect(result.layer).toContain("Brand book: tono editoriale");
+    });
+
+    it("does not wait on an asset the pipeline never scheduled", async () => {
+        // Every image the media pipeline generates lands with no enrichmentTrace and never gets
+        // one. Waiting on it used to cost the full 120s budget on every request in the project.
+        const generated = makePendingUpload({
+            originalName: "hero-generated.jpg",
+            mimeType: "image/jpeg",
+            createdAt: new Date(Date.now() - 5 * 60_000),
+        });
+        const repository = makeAssetRepository();
+
+        const startedAt = Date.now();
+        const result = await buildProjectLayerDContext({
+            assetRepository: repository,
+            storage: makeStorage(),
+            projectId: generated.projectId,
+            userId: generated.userId,
+            assets: [generated],
+            maxChars: 8000,
+            maxAssets: 10,
+            fallbackInlineExtractionMaxAssets: 0,
+            waitForPendingMs: 120_000,
+        });
+
+        // Returns immediately and never polls: there is nothing in flight to poll for.
+        expect(Date.now() - startedAt).toBeLessThan(1_000);
+        expect(repository.listByProject).not.toHaveBeenCalled();
+        expect(result.assets).toEqual([generated]);
     });
 
     it("keeps freshly uploaded attachments visible when enrichment is still pending", async () => {

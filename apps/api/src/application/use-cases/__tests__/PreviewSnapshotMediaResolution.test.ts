@@ -3,6 +3,7 @@ import type { Conversation } from "../../../domain/entities/Conversation";
 import type { PreviewSnapshot } from "../../../domain/entities/PreviewSnapshot";
 import { ActivatePreviewSnapshot } from "../ActivatePreviewSnapshot";
 import { CreatePreviewSnapshot } from "../CreatePreviewSnapshot";
+import { DeletePreviewSnapshot } from "../DeletePreviewSnapshot";
 
 class MemoryPreviewSnapshotRepository {
     snapshots: PreviewSnapshot[] = [];
@@ -46,8 +47,25 @@ class MemoryPreviewSnapshotRepository {
         return this.snapshots.find((snapshot) => snapshot.id === snapshotId) ?? null;
     });
     getActive = vi.fn();
-    getActiveForProject = vi.fn();
-    deleteById = vi.fn();
+    getActiveForProject = vi.fn(async (_projectId: string) => {
+        return this.snapshots.find((snapshot) => snapshot.isActive) ?? null;
+    });
+    deleteById = vi.fn(async (projectId: string, snapshotId: string) => {
+        const index = this.snapshots.findIndex((snapshot) => snapshot.id === snapshotId && snapshot.projectId === projectId);
+        if (index === -1) return false;
+        this.snapshots.splice(index, 1);
+        return true;
+    });
+    relinkChildren = vi.fn(async (projectId: string, fromParentId: string, toParentId?: string) => {
+        let relinked = 0;
+        for (const snapshot of this.snapshots) {
+            if (snapshot.projectId === projectId && snapshot.parentSnapshotId === fromParentId) {
+                snapshot.parentSnapshotId = toParentId;
+                relinked++;
+            }
+        }
+        return relinked;
+    });
     updateThumbnailPath = vi.fn();
     getActiveForProjects = vi.fn();
 }
@@ -98,13 +116,44 @@ class MemoryConversationRepository {
     updateBackgroundTask = vi.fn();
 }
 
+describe("CreatePreviewSnapshot — AL-026 promptExecutionId", () => {
+    it("stores and returns metadata.promptExecutionId when the caller supplies it", async () => {
+        const repository = new MemoryPreviewSnapshotRepository();
+        const useCase = new CreatePreviewSnapshot(repository as any);
+
+        const { snapshot } = await useCase.execute({
+            projectId: "project-1",
+            conversationId: "conversation-1",
+            artifacts: { html: "<main></main>", css: "", js: "" },
+            metadata: { promptExecutionId: "exec-123" },
+            activate: true,
+        });
+
+        expect(snapshot.metadata?.promptExecutionId).toBe("exec-123");
+    });
+
+    it("leaves a snapshot created without promptExecutionId unaffected", async () => {
+        const repository = new MemoryPreviewSnapshotRepository();
+        const useCase = new CreatePreviewSnapshot(repository as any);
+
+        const { snapshot } = await useCase.execute({
+            projectId: "project-1",
+            conversationId: "conversation-1",
+            artifacts: { html: "<main></main>", css: "", js: "" },
+            activate: true,
+        });
+
+        expect(snapshot.metadata?.promptExecutionId).toBeUndefined();
+    });
+});
+
 describe("Preview snapshot media resolution guardrails", () => {
     it("attaches persisted media trace IDs after snapshot creation", async () => {
         const repository = new MemoryPreviewSnapshotRepository();
         const traceRepository = { attachSnapshot: vi.fn(async () => undefined), createMany: vi.fn() };
         const useCase = new CreatePreviewSnapshot(repository as any, traceRepository as any);
 
-        const snapshot = await useCase.execute({
+        const { snapshot } = await useCase.execute({
             projectId: "project-1",
             conversationId: "conversation-1",
             artifacts: { html: "<main></main>", css: "", js: "" },
@@ -134,7 +183,7 @@ describe("Preview snapshot media resolution guardrails", () => {
             conversationRepository as any,
         );
 
-        const snapshot = await useCase.execute({
+        const { snapshot } = await useCase.execute({
             projectId: "project-1",
             conversationId: "conversation-1",
             sourceMessageId: "message-1",
@@ -223,5 +272,328 @@ describe("Preview snapshot media resolution guardrails", () => {
             snapshotId: "snapshot-1",
         })).rejects.toThrow("Cannot activate preview snapshot with unresolved media placeholders");
         expect(repository.activate).not.toHaveBeenCalled();
+    });
+});
+
+describe("CreatePreviewSnapshot — version chain", () => {
+    function makeUseCase() {
+        const repo = new MemoryPreviewSnapshotRepository();
+        return { repo, useCase: new CreatePreviewSnapshot(repo as never) };
+    }
+
+    const artifacts = { html: "<p>hi</p>", css: "", js: "" };
+
+    it("continues from the active snapshot when the caller omits a parent", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const { snapshot: first } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        });
+        // Manual editor saves (Monaco, WYSIWYG degraded mode) send no parentSnapshotId. Before
+        // the server defaulted it, each one started a fresh root and the history collapsed to a
+        // single visible version.
+        const { snapshot: second } = await useCase.execute({
+            // Distinct content: an identical save is deliberately suppressed by AL-045, which
+            // is a different rule from the one under test here.
+            projectId: "p1", conversationId: "c1", artifacts: { ...artifacts, html: "<p>hi again</p>" }, activate: true,
+        });
+
+        expect(first.parentSnapshotId).toBeUndefined();
+        expect(second.parentSnapshotId).toBe(first.id);
+        expect(repo.snapshots).toHaveLength(2);
+    });
+
+    it("keeps an explicit parent, so restoring an older version branches from THAT one", async () => {
+        const { useCase } = makeUseCase();
+
+        const { snapshot: root } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        });
+        const { snapshot: branch } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: { ...artifacts, html: "<p>branched</p>" }, activate: true,
+            parentSnapshotId: root.id,
+        });
+
+        expect(branch.parentSnapshotId).toBe(root.id);
+    });
+
+    it("does not invent a parent that no longer exists", async () => {
+        const { useCase } = makeUseCase();
+
+        const { snapshot: orphan } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: "deleted-snapshot",
+        });
+
+        expect(orphan.parentSnapshotId).toBeUndefined();
+    });
+});
+
+describe("DeletePreviewSnapshot — AL-015 chain re-linking", () => {
+    const artifacts = { html: "<p>hi</p>", css: "", js: "" };
+
+    it("mid-chain delete re-parents children to the grandparent", async () => {
+        const repo = new MemoryPreviewSnapshotRepository();
+        const v1 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+        const v2 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v1.id, activate: false });
+        const v3 = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v2.id, activate: true,
+        });
+
+        const useCase = new DeletePreviewSnapshot(repo as any);
+        await useCase.execute("p1", v2.id);
+
+        expect(repo.relinkChildren).toHaveBeenCalledWith("p1", v2.id, v1.id);
+        expect(repo.snapshots.find((s) => s.id === v3.id)?.parentSnapshotId).toBe(v1.id);
+        expect(repo.snapshots.some((s) => s.id === v2.id)).toBe(false);
+    });
+
+    it("deleting a root leaves its children as roots", async () => {
+        const repo = new MemoryPreviewSnapshotRepository();
+        const v1 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+        const v2 = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v1.id, activate: true,
+        });
+
+        const useCase = new DeletePreviewSnapshot(repo as any);
+        await useCase.execute("p1", v1.id);
+
+        expect(repo.relinkChildren).toHaveBeenCalledWith("p1", v1.id, undefined);
+        expect(repo.snapshots.find((s) => s.id === v2.id)?.parentSnapshotId).toBeUndefined();
+    });
+
+    it("deleting a leaf changes nothing else in the chain", async () => {
+        const repo = new MemoryPreviewSnapshotRepository();
+        const v1 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        const v2 = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v1.id, activate: false,
+        });
+
+        const useCase = new DeletePreviewSnapshot(repo as any);
+        await useCase.execute("p1", v2.id);
+
+        expect(await repo.relinkChildren.mock.results[0]?.value).toBe(0);
+        expect(repo.snapshots).toHaveLength(1);
+        expect(repo.snapshots[0]?.id).toBe(v1.id);
+        expect(repo.snapshots[0]?.parentSnapshotId).toBeUndefined();
+    });
+
+    it("scopes the re-link to the deleted snapshot's own project", async () => {
+        const repo = new MemoryPreviewSnapshotRepository();
+        const v1 = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+        const v2 = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, parentSnapshotId: v1.id, activate: true,
+        });
+        // A different project's snapshot that happens to carry the same id as its parent — must
+        // never be touched by a delete happening in project "p1".
+        const foreign = await repo.create({
+            projectId: "p2", conversationId: "c2", artifacts, parentSnapshotId: v1.id, activate: true,
+        });
+
+        const useCase = new DeletePreviewSnapshot(repo as any);
+        await useCase.execute("p1", v1.id);
+
+        expect(repo.snapshots.find((s) => s.id === v2.id)?.parentSnapshotId).toBeUndefined();
+        expect(repo.snapshots.find((s) => s.id === foreign.id)?.parentSnapshotId).toBe(v1.id);
+    });
+});
+
+describe("CreatePreviewSnapshot — AL-039…AL-045 version certification", () => {
+    function makeUseCase() {
+        const repo = new MemoryPreviewSnapshotRepository();
+        return { repo, useCase: new CreatePreviewSnapshot(repo as never) };
+    }
+
+    const artifacts = { html: "<p>base</p>", css: "", js: "" };
+    const edited = { html: "<p>edited</p>", css: "", js: "" };
+
+    it("AL-039 — stamps a server-computed contentHash on every version", async () => {
+        const { useCase } = makeUseCase();
+
+        const { snapshot } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        });
+
+        expect(snapshot.metadata?.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it("AL-039 — the same artifacts hash the same, different artifacts do not", async () => {
+        const { useCase } = makeUseCase();
+
+        const a = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+        const b = await useCase.execute({ projectId: "p2", conversationId: "c1", artifacts, activate: false });
+        const c = await useCase.execute({ projectId: "p3", conversationId: "c1", artifacts: edited, activate: false });
+
+        expect(b.snapshot.metadata?.contentHash).toBe(a.snapshot.metadata?.contentHash);
+        expect(c.snapshot.metadata?.contentHash).not.toBe(a.snapshot.metadata?.contentHash);
+    });
+
+    it("AL-039 — the hash is computed, never taken from the request", async () => {
+        const { useCase } = makeUseCase();
+        const forged = "0".repeat(64);
+
+        const { snapshot } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            metadata: { contentHash: forged },
+        });
+
+        expect(snapshot.metadata?.contentHash).not.toBe(forged);
+    });
+
+    it("AL-041 — a write declaring the current base is accepted", async () => {
+        const { useCase } = makeUseCase();
+
+        const base = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        const child = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: edited, activate: true,
+            parentSnapshotId: base.snapshot.id,
+            baseContentHash: base.snapshot.metadata!.contentHash!,
+        });
+
+        expect(child.created).toBe(true);
+        expect(child.snapshot.parentSnapshotId).toBe(base.snapshot.id);
+    });
+
+    it("AL-041 — a write declaring a base that no longer hashes that way is refused", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const base = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        // Someone else advanced the version behind this editor's back.
+        repo.snapshots[0]!.metadata = { contentHash: "b".repeat(64) };
+
+        await expect(useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: edited, activate: true,
+            parentSnapshotId: base.snapshot.id,
+            baseContentHash: "a".repeat(64),
+        })).rejects.toMatchObject({
+            statusCode: 409,
+            code: "ARTIFACT_BASE_STALE",
+            details: { currentSnapshotId: base.snapshot.id, currentContentHash: "b".repeat(64) },
+        });
+        expect(repo.snapshots).toHaveLength(1);
+    });
+
+    it("AL-041 — a write declaring a base that was deleted is refused, not re-rooted", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        await expect(useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: "deleted-version",
+            baseContentHash: "a".repeat(64),
+        })).rejects.toMatchObject({ statusCode: 409, code: "ARTIFACT_BASE_STALE" });
+        expect(repo.snapshots).toHaveLength(0);
+    });
+
+    it("AL-041 — a base stored before AL-039 cannot be verified, so the write is accepted", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const legacy = await repo.create({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+        });
+        expect(legacy.metadata?.contentHash).toBeUndefined();
+
+        const { snapshot, created } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: edited, activate: true,
+            parentSnapshotId: legacy.id,
+            baseContentHash: "a".repeat(64),
+        });
+
+        expect(created).toBe(true);
+        expect(snapshot.parentSnapshotId).toBe(legacy.id);
+    });
+
+    it("AL-041 — a write that declares nothing is accepted, as it was before the rule", async () => {
+        const { useCase } = makeUseCase();
+
+        const base = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        const child = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts: edited, activate: true,
+        });
+
+        expect(child.created).toBe(true);
+        expect(child.snapshot.parentSnapshotId).toBe(base.snapshot.id);
+    });
+
+    it("AL-045 — an edit identical to its base creates no version and returns the base", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const base = await useCase.execute({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+        const again = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: base.snapshot.id,
+            baseContentHash: base.snapshot.metadata!.contentHash!,
+        });
+
+        expect(again.created).toBe(false);
+        expect(again.snapshot.id).toBe(base.snapshot.id);
+        expect(repo.snapshots).toHaveLength(1);
+    });
+
+    it("AL-045 — suppression also covers a base stored before AL-039, whose hash is computed on the fly", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const legacy = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: true });
+
+        const again = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: legacy.id,
+        });
+
+        expect(again.created).toBe(false);
+        expect(again.snapshot.id).toBe(legacy.id);
+        expect(repo.snapshots).toHaveLength(1);
+    });
+
+    it("AL-045 — a suppressed write still activates the base when activation was asked for", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        const inactive = await repo.create({ projectId: "p1", conversationId: "c1", artifacts, activate: false });
+
+        const again = await useCase.execute({
+            projectId: "p1", conversationId: "c1", artifacts, activate: true,
+            parentSnapshotId: inactive.id,
+        });
+
+        expect(again.created).toBe(false);
+        expect(repo.activateForProject).toHaveBeenCalledWith("p1", inactive.id);
+    });
+});
+
+describe("CreatePreviewSnapshot — AL-045 line endings are not content", () => {
+    function makeUseCase() {
+        const repo = new MemoryPreviewSnapshotRepository();
+        return { repo, useCase: new CreatePreviewSnapshot(repo as never) };
+    }
+
+    it("a CRLF round-trip of the same artifact creates no version", async () => {
+        const { repo, useCase } = makeUseCase();
+
+        // Stored as the pipeline writes it.
+        const base = await useCase.execute({
+            projectId: "p1", conversationId: "c1", activate: true,
+            artifacts: { html: "<main>\n  <h1>hi</h1>\n</main>", css: "a{\n  color: red;\n}", js: "" },
+        });
+
+        // Handed back by a Windows editor, untouched by the user.
+        const again = await useCase.execute({
+            projectId: "p1", conversationId: "c1", activate: true,
+            artifacts: { html: "<main>\r\n  <h1>hi</h1>\r\n</main>", css: "a{\r\n  color: red;\r\n}", js: "" },
+            parentSnapshotId: base.snapshot.id,
+        });
+
+        expect(again.created).toBe(false);
+        expect(repo.snapshots).toHaveLength(1);
+    });
+
+    it("the stored artifact is the canonical one, so the hash certifies what is on disk", async () => {
+        const { useCase } = makeUseCase();
+
+        const { snapshot } = await useCase.execute({
+            projectId: "p1", conversationId: "c1", activate: true,
+            artifacts: { html: "<p>a</p>\r\n<p>b</p>", css: "", js: "let x = 1;\r\n" },
+        });
+
+        expect(snapshot.artifacts.html).not.toContain("\r");
+        expect(snapshot.artifacts.js).not.toContain("\r");
     });
 });

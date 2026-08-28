@@ -15,6 +15,7 @@ import {
     type PreviewSnapshot,
 } from "../../../../lib/api";
 import { resolvePublicDeploymentUrl } from "./publishUrl";
+import { buildVersionIndex } from "../versions/versionNumbering";
 
 type AsyncActionState = "idle" | "loading" | "error";
 type SlugCheckState = "idle" | "checking" | "available" | "taken" | "invalid" | "reserved" | "error";
@@ -248,11 +249,9 @@ export function usePublish({
             const deployment = await publishProject(token, projectId, undefined);
             setPublishDeployment(deployment);
             setPublishState("idle");
-            const vn = (() => {
-                if (!activeId) return null;
-                const idx = previewSnapshots.findIndex((s) => s.id === activeId);
-                return idx === -1 ? null : previewSnapshots.length - idx;
-            })();
+            // AL-011 — chain depth, not list position, so this toast agrees with the number
+            // SnapshotHistoryPanel badges for the same snapshot.
+            const vn = activeId ? buildVersionIndex(previewSnapshots).get(activeId) ?? null : null;
             updateNotification(notifId, {
                 status: "done",
                 message: vn ? t("workspace.notifications.publish.doneVersioned", { vn }) : t("workspace.notifications.publish.done"),

@@ -215,7 +215,11 @@ These endpoints must be generic and reusable beyond Guided Mode.
 
 ### Start a pipeline run
 
-POST /v1/projects/:projectId/pipelines/execute
+POST /v1/projects/:projectId/pipeline/launch-workspace
+
+> **Superseded 2026-08-27.** Planned as `/pipelines/execute` with a convenience alias; both
+> were built and both launched without a `PipelineRun`. Removed in favour of a single entry
+> point — see the note under the alias section below.
 
 Request body:
 
@@ -226,11 +230,15 @@ Request body:
 
 This is the preferred generic execution entrypoint.
 
-### Convenience alias for Guided Mode
+### Convenience alias for Guided Mode — removed
 
-POST /v1/projects/:projectId/pipelines/zero-effort
+`POST /v1/projects/:projectId/pipelines/zero-effort` and `POST /v1/projects/:projectId/pipelines/guided`
+existed and did exactly this: same use case, different URL. They were removed on 2026-08-27.
 
-This can internally call the same generic execution use-case with a default templateKey.
+The alias was cheap to add and turned out to be expensive to keep: it bypassed the
+`PipelineRun` wrapper, so a caller who knew the old URL got a launch with no frozen model
+lock and no canonical brief, while the UI next to it got one. One user action, two paths.
+Guided Mode is a set of defaults on the one entry point, not a second entry point.
 
 ## 6.2 Status and events
 

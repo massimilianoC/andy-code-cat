@@ -1,4 +1,5 @@
 import type { LlmFocusContext } from "@andy-code-cat/contracts";
+import { MODEL_NOT_AVAILABLE } from "@andy-code-cat/contracts";
 import { HttpError } from "../../presentation/http/errors/httpError";
 import { PRESET_MAP, withStaticViewportFallback } from "../../domain/entities/ProjectPreset";
 import {
@@ -29,8 +30,10 @@ import {
 import { resolveFilesystemTemplateSkills } from "../llm/templateSkillsLayer";
 import { buildFocusedModeSystemAddendum } from "../llm/focusedPrompt";
 import { buildOutputBudgetPolicy } from "../llm/llmMessageBuilder";
+import { dedupeModelsById, resolveComposerCascade } from "../llm/catalogModels";
 import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../documents/projectLayerDContext";
 import { env } from "../../config";
+import { tracePromptLayers } from "../services/PipelineTrace";
 
 /**
  * I10 of the SSOT program (see docs/SSOT_REFACTOR_PROGRESS.md) — extracted verbatim (pure move,
@@ -97,25 +100,6 @@ export interface ResolvePromptExecutionInput {
      * the lock is unavailable. Omitted: 100% unchanged legacy path.
      */
     pipelineRunId?: string;
-}
-
-function dedupeModelsById(models: LlmRuntimeContext["providerCatalog"]["models"]) {
-    const byId = new Map<string, LlmRuntimeContext["providerCatalog"]["models"][number]>();
-
-    for (const model of models) {
-        if (!model.isActive || !model.id) continue;
-        if (!byId.has(model.id)) {
-            byId.set(model.id, model);
-            continue;
-        }
-
-        const prev = byId.get(model.id)!;
-        if (model.isDefault && !prev.isDefault) {
-            byId.set(model.id, model);
-        }
-    }
-
-    return [...byId.values()];
 }
 
 export class ResolvePromptExecution {
@@ -221,21 +205,27 @@ export class ResolvePromptExecution {
             : "";
 
         let providerCatalog: (typeof catalog.providers)[number] | undefined;
-        let providerModels: ReturnType<typeof dedupeModelsById> = [];
-        let roleModel: ReturnType<typeof dedupeModelsById>[number] | undefined;
+        let providerModels: (typeof catalog.providers)[number]["models"] = [];
+        let roleModel: (typeof catalog.providers)[number]["models"][number] | undefined;
         let pipelineRunLocked = false;
 
+        // I14 strict cutover wave 2: a PipelineRun's frozen modelLock governs dispatch instead of
+        // the legacy cascade. dispatch() re-validates the lock against the live catalog and never
+        // substitutes a different model — a stale/deactivated lock blocks (409) rather than
+        // silently falling back to the cascade below. Gated on PIPELINE_RUN_ENABLED too, not just
+        // the presence of pipelineRunId: this is the master rollback lever's whole point —
+        // flipping the flag off must revert EVERY call site to legacy behavior, even one that
+        // (incorrectly, or from a stale client) still sends a pipelineRunId.
+        //
+        // The lock is single-use: it certifies the run's own generation, the one whose
+        // canonicalBrief contentHash the run attests. Once dispatched, dispatch() reports
+        // lockApplies:false and we fall through to the cascade, so the model the user picks in
+        // the selector governs every later turn (owner decision, 2026-08-26). Before this, a run
+        // pinned its model for the whole conversation and discarded the selector in silence.
+        let lockedSelection: { providerId: string; modelId: string } | null = null;
         if (input.pipelineRunId && env.pipelineRunEnabled) {
-            // I14 strict cutover wave 2: a PipelineRun's frozen modelLock governs dispatch
-            // instead of the legacy cascade. dispatch() re-validates the lock against the live
-            // catalog and never substitutes a different model — a stale/deactivated lock blocks
-            // (409) rather than silently falling back to the cascade below. Gated on
-            // PIPELINE_RUN_ENABLED too, not just the presence of pipelineRunId: this is the
-            // master rollback lever's whole point — flipping the flag off must revert EVERY call
-            // site to legacy behavior, even one that (incorrectly, or from a stale client) still
-            // sends a pipelineRunId.
             const stage = input.focusedMode ? "focused_edit" : "generate";
-            const { run, blocked } = await this.resolvePipelineModelLock.dispatch({
+            const { run, blocked, lockApplies } = await this.resolvePipelineModelLock.dispatch({
                 runId: input.pipelineRunId,
                 ownerUserId: input.userId,
                 projectId: input.projectId,
@@ -249,8 +239,17 @@ export class ResolvePromptExecution {
                 });
             }
 
-            const lockedProviderId = run.modelLock.effective.providerId;
-            const lockedModelId = run.modelLock.effective.modelId;
+            if (lockApplies) {
+                lockedSelection = {
+                    providerId: run.modelLock.effective.providerId,
+                    modelId: run.modelLock.effective.modelId,
+                };
+            }
+        }
+
+        if (lockedSelection) {
+            const lockedProviderId = lockedSelection.providerId;
+            const lockedModelId = lockedSelection.modelId;
             providerCatalog = catalog.providers.find((p) => p.provider === lockedProviderId);
             if (!providerCatalog) {
                 throw new HttpError(`Locked provider is no longer in the active catalog: ${lockedProviderId}`, {
@@ -270,30 +269,52 @@ export class ResolvePromptExecution {
 
             pipelineRunLocked = true;
         } else {
-            providerCatalog =
-                (input.provider
-                    ? catalog.providers.find((p) => p.provider === input.provider && p.isActive)
-                    : undefined) ??
-                catalog.providers.find((p) => p.provider === env.LLM_DEFAULT_PROVIDER) ??
-                catalog.providers[0];
+            // The cascade itself lives in catalogModels.ts, next to the other model-resolution
+            // rules, instead of being hand-inlined here — this call site serves 100% of real
+            // generation traffic and was the last one still carrying its own private copy.
+            const cascade = resolveComposerCascade({
+                providers: catalog.providers,
+                requestedProvider: input.provider,
+                requestedModel: input.model,
+                capability: input.capability,
+                pipelineRole: input.pipelineRole,
+                envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
+            });
 
-            if (!providerCatalog) {
+            if (!cascade.providerCatalog) {
                 throw new Error("No active LLM provider catalog found");
             }
 
-            providerModels = dedupeModelsById(providerCatalog.models);
-            const explicitModel = input.model
-                ? providerModels.find((model) => model.id === input.model)
-                : undefined;
+            // The catalog is the source of truth for what may be dispatched, so it is verified,
+            // not consulted. This branch used to return `input.model` verbatim for any
+            // openai-compatible provider — "trust the requested id directly" — which meant an
+            // operator switching a model off governed what the UI offered but not what the API
+            // accepted. Every other resolution path in the codebase already filters on isActive;
+            // this one opted out, and an SSOT that one path opts out of is not a source of truth.
+            //
+            // The original justification was propagation lag: a freshly discovered id might not
+            // be in the hydrated list yet. That reason is void now that discovery no longer
+            // activates anything — a model nobody has approved is not usable regardless of how
+            // fresh it is.
+            if (cascade.requestedProviderUnavailable || cascade.requestedModelUnavailable) {
+                throw new HttpError(
+                    `Requested model ${input.provider ?? "?"}/${input.model ?? "?"} is not available in the catalog.`,
+                    {
+                        statusCode: 409,
+                        code: MODEL_NOT_AVAILABLE,
+                        userMessage: "Il modello selezionato non e piu disponibile. Ricarica l'elenco e scegline un altro.",
+                        details: {
+                            requestedProvider: input.provider,
+                            requestedModel: input.model,
+                            reason: cascade.requestedProviderUnavailable ? "provider-inactive" : "model-inactive-or-unknown",
+                        },
+                    },
+                );
+            }
 
-            roleModel = explicitModel ??
-                (input.capability
-                    ? providerModels.find((m) => m.capabilities.includes(input.capability!) && m.isDefault && m.isActive)
-                    : undefined) ??
-                providerModels.find((m) => m.role === input.pipelineRole && m.isDefault && m.isActive) ??
-                providerModels.find((m) => m.role === input.pipelineRole && m.isFallback && m.isActive) ??
-                providerModels.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
-                providerModels.find((m) => m.isActive);
+            providerCatalog = cascade.providerCatalog;
+            providerModels = cascade.providerModels;
+            roleModel = cascade.roleModel;
         }
 
         const effectivePrePromptTemplate = [
@@ -391,24 +412,14 @@ export class ResolvePromptExecution {
         });
         const systemPrompt = composedLayers.composed;
 
-        // For openai-compatible providers with an explicit model request, trust the
-        // requested id directly. The catalog is already live-hydrated (GetLlmCatalog →
-        // hydrateProviderCatalog), but this keeps the call safe even if a freshly
-        // discovered id has not yet propagated into this provider's hydrated list.
-        // Skipped when a PipelineRun lock governed dispatch above: that path already resolved
-        // and validated `roleModel` against the live catalog, so trusting an unvalidated
-        // override here would defeat the whole point of the lock.
-        if (!pipelineRunLocked && input.model && providerCatalog.apiType === "openai-compatible") {
-            return {
-                providerCatalog: { ...providerCatalog, models: providerModels },
-                modelId: input.model,
-                projectPresetId: project?.presetId,
-                promptConfigId: promptConfig.id,
-                prePromptTemplate: effectivePrePromptTemplate || undefined,
-                systemPrompt,
-                promptLayers: composedLayers.layers,
-            };
-        }
+        // Rule Zero: the composed prompt must be reconstructable from the log alone.
+        tracePromptLayers({
+            runId: input.pipelineRunId,
+            projectId: input.projectId,
+
+            layers: composedLayers.layers,
+            totalChars: systemPrompt.length,
+        });
 
         if (!roleModel) {
             throw new Error("No active model available for requested role");

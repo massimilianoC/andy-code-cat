@@ -399,7 +399,14 @@ These are enough to ship the first zero-effort flow.
 
 ### Execute the zero-effort pipeline
 
-POST /v1/projects/:projectId/pipelines/zero-effort
+POST /v1/projects/:projectId/pipeline/launch-workspace
+
+> **Superseded 2026-08-27.** This section originally specified
+> `POST /v1/projects/:projectId/pipelines/zero-effort`. That route, along with
+> `/pipelines/guided` and `/pipelines/execute`, launched without creating a `PipelineRun`,
+> so the same user action ran certified or uncertified depending on the URL. All three were
+> removed; `/pipeline/launch-workspace` is the only launch entry point. The input below is
+> unchanged — it is still `launchWorkspacePipelineSchema`.
 
 Input should include:
 

@@ -22,29 +22,12 @@ import { CostTransactionService } from "../../../application/cost/CostTransactio
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { ResourceType } from "../../../domain/entities/CostTransaction";
 import { env } from "../../../config";
+import { resolveComposerCascade } from "../../../application/llm/catalogModels";
 import type { RequestWithContext } from "../types";
 
 function sendSse(res: RequestWithContext["res"], payload: unknown) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (res as any).write(`data: ${JSON.stringify(payload)}\n\n`);
-}
-
-function dedupeModelsById(models: Array<{ id: string; role: string; isDefault?: boolean; isFallback?: boolean; isActive?: boolean }>) {
-    const byId = new Map<string, (typeof models)[number]>();
-    for (const m of models) {
-        if (!m.isActive || !m.id) continue;
-        const prev = byId.get(m.id);
-        if (!prev || (m.isDefault && !prev.isDefault)) byId.set(m.id, m);
-    }
-    return [...byId.values()];
-}
-
-function pickDialogueModel(models: Array<{ id: string; role: string; isDefault?: boolean; isFallback?: boolean; isActive?: boolean }>) {
-    return (
-        models.find((m) => m.role === "dialogue" && m.isDefault && m.isActive) ??
-        models.find((m) => m.role === "dialogue" && m.isFallback && m.isActive) ??
-        models.find((m) => m.isActive)
-    );
 }
 
 async function resolveLlmContext(userId: string) {
@@ -62,21 +45,21 @@ async function resolveLlmContext(userId: string) {
     const user = await userRepo.findById(userId);
     const prefs = user?.llmPreferences;
 
-    const providerCatalog =
-        (prefs?.defaultProvider
-            ? catalog.providers.find((p) => p.provider === prefs.defaultProvider && p.isActive)
-            : undefined) ??
-        catalog.providers.find((p) => p.provider === env.LLM_DEFAULT_PROVIDER) ??
-        catalog.providers[0];
+    // Same cascade the generation composer uses, with the dialogue role pinned — see
+    // resolveComposerCascade in application/llm/catalogModels.ts. This route used to carry its
+    // own copy of both the cascade and dedupeModelsById.
+    const cascade = resolveComposerCascade({
+        providers: catalog.providers,
+        requestedProvider: prefs?.defaultProvider,
+        requestedModel: prefs?.roleModelOverrides?.["dialogue"],
+        pipelineRole: "dialogue",
+        envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
+    });
 
+    const providerCatalog = cascade.providerCatalog;
     if (!providerCatalog) throw new Error("No LLM provider available");
 
-    const models = dedupeModelsById(providerCatalog.models);
-    const roleOverride = prefs?.roleModelOverrides?.["dialogue"];
-    const explicitModel = roleOverride ? models.find((m) => m.id === roleOverride) : undefined;
-    const roleModel =
-        explicitModel ??
-        pickDialogueModel(models);
+    const roleModel = cascade.roleModel;
 
     if (!roleModel) throw new Error("No LLM model available");
 

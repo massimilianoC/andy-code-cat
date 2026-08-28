@@ -154,6 +154,10 @@ export class MongoLlmCatalogRepository implements LlmCatalogRepository {
             priceTier: input.patch.priceTier ?? current?.priceTier,
             priceInputUsdPerM: input.patch.priceInputUsdPerM ?? current?.priceInputUsdPerM,
             priceOutputUsdPerM: input.patch.priceOutputUsdPerM ?? current?.priceOutputUsdPerM,
+            // Availability is established by reconciliation against the provider, never by a
+            // hand edit — carried through so saving an unrelated field does not erase it.
+            availability: current?.availability,
+            availabilityCheckedAt: current?.availabilityCheckedAt,
         };
 
         const models = normalizeModels([
@@ -185,6 +189,100 @@ export class MongoLlmCatalogRepository implements LlmCatalogRepository {
         }
 
         return mapDocument(updated);
+    }
+
+    async setModelsActive(input: {
+        provider: string;
+        models: LlmProviderCatalog["models"];
+        isActive: boolean;
+    }): Promise<LlmProviderCatalog> {
+        const collection = await this.collection();
+        const now = new Date();
+        const existing = await collection.findOne({ provider: input.provider });
+        const existingModels = existing?.models ?? [];
+        const byId = new Map(existingModels.map((model) => [model.id, model]));
+
+        for (const incoming of input.models) {
+            if (!incoming.id) continue;
+            const current = byId.get(incoming.id);
+            byId.set(incoming.id, current
+                // Already stored: the operator has ruled on this one before, so only the
+                // activation changes. Rediscovered metadata must not silently revert a role or a
+                // display name someone set by hand.
+                ? { ...current, isActive: input.isActive }
+                // Only known from live discovery until now. Materialise it, so the decision
+                // survives the next restart — which is the whole point of deciding.
+                : { ...incoming, provider: input.provider, isActive: input.isActive });
+        }
+
+        const models = normalizeModels([...byId.values()]);
+
+        await collection.updateOne(
+            { provider: input.provider },
+            {
+                $set: {
+                    baseUrl: existing?.baseUrl ?? "",
+                    apiType: existing?.apiType ?? "openai-compatible",
+                    authType: existing?.authType ?? "bearer",
+                    isActive: existing?.isActive ?? true,
+                    models,
+                    updatedAt: now,
+                },
+                $setOnInsert: { createdAt: now },
+            },
+            { upsert: true },
+        );
+
+        const updated = await collection.findOne({ provider: input.provider });
+        if (!updated) {
+            throw new Error("Failed to persist LLM model activation");
+        }
+        return mapDocument(updated);
+    }
+
+    async markAvailability(input: {
+        provider: string;
+        liveModelIds: string[];
+        checkedAt: Date;
+    }): Promise<{ live: number; deprecated: number }> {
+        const collection = await this.collection();
+        const existing = await collection.findOne({ provider: input.provider });
+        if (!existing) return { live: 0, deprecated: 0 };
+
+        const liveIds = new Set(input.liveModelIds);
+        let live = 0;
+        let deprecated = 0;
+
+        const models = existing.models.map((model) => {
+            const stillOffered = liveIds.has(model.id);
+            if (stillOffered) live++; else deprecated++;
+            return {
+                ...model,
+                availability: stillOffered ? ("live" as const) : ("deprecated" as const),
+                availabilityCheckedAt: input.checkedAt,
+                // Availability is INFORMATION, not a decision. It records what the provider
+                // last offered so the admin page can show it; it does not switch anything off.
+                //
+                // Discovery used to force `isActive: false` on anything missing from a live
+                // response, which made one field carry two meanings — "the operator approved
+                // this" and "the provider still serves this" — with the second silently
+                // destroying the first. SiliconFlow reported 13 models on one startup and 77
+                // on the next, and every such swing permanently un-approved models the
+                // operator had activated, with nothing recording they had ever been wanted.
+                //
+                // `isActive` now means exactly one thing: the operator wants this usable.
+                // Only an operator changes it. A model the provider has genuinely retired
+                // fails at dispatch and the client is told which model and why — one honest
+                // error at the moment of use, instead of a flag that quietly rewrites intent.
+            };
+        });
+
+        await collection.updateOne(
+            { provider: input.provider },
+            { $set: { models, updatedAt: new Date() } },
+        );
+
+        return { live, deprecated };
     }
 
     async deleteModel(provider: string, modelId: string): Promise<LlmProviderCatalog> {
