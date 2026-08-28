@@ -29,8 +29,25 @@ const MAX_PROMPT_CHARS = 2000;
 //   ceiling   ~23,200 chars ~5,800 tok  (every field at its schema cap)
 // The old 2048 ceiling sat below the realistic case, so the nine expressive fields —
 // written last by design (see the field-order rule below) — were silently truncated away.
+//
+// That budget counts OUTPUT TEXT ONLY, and this is where it broke a second time. A
+// reasoning model spends the same max_tokens allowance on its chain of thought before
+// emitting the first character of JSON, so a 6,000-token cap that is generous for
+// Qwen3-32B (1,951 completion tokens, all 19 fields) is exhausted by DeepSeek-V4-Pro and
+// MiniMax-M3 mid-brief: both hit finish_reason=length at 6,000 and delivered 5 to 8
+// fields. The ceiling therefore has to cover reasoning + the full brief, not the brief
+// alone. Measured: reasoning models need roughly 6-8k of thinking before ~2k of JSON.
+//
+// Why 24k default under a 32k ceiling, and not more: this budget is COMPLETION tokens, so
+// it does not need to grow with the number of attachments — attachments inflate the prompt
+// side (8,603 tokens in the run that failed), while the brief's own length is bounded by
+// the schema caps at ~5,800 tokens. 24k therefore leaves ~18k of thinking room in front of
+// a maximal brief, which is well past anything measured. The remaining headroom to 32k is
+// left to operator config rather than spent by default: the catalog does not record
+// per-model output limits, so a max_tokens above what a model accepts can be rejected by
+// the provider, and a default nobody needs is a default that can only cost us.
 const MIN_TOKENS = 4000;
-const MAX_TOKENS = 8000;
+const MAX_TOKENS = 32000;
 
 // All valid preset IDs from the catalog — kept in sync at startup.
 const VALID_PRESET_IDS: Set<string> = new Set(PRESET_CATALOG.map((p) => p.id));
@@ -784,9 +801,29 @@ export class VibePrefill {
                         provider: providerCatalog.provider,
                         finishReason,
                         filledOptionalFields,
+                        // Without this the cost record shows 6,000 completion tokens for a
+                        // five-field brief and no way to tell that thinking ate the budget.
+                        reasoningTokens: Number(
+                            (usage as { completion_tokens_details?: { reasoning_tokens?: number } } | undefined)
+                                ?.completion_tokens_details?.reasoning_tokens ?? 0,
+                        ),
+                        maxCompletionTokens: Math.min(Math.max(taskSettings.maxCompletionTokens, MIN_TOKENS), MAX_TOKENS),
                     },
                 });
             }
+
+            // A partial brief must never leave here looking like a complete one. This bug has
+            // now shipped four times (max_tokens 768 -> 2048 -> 6000 -> 16000), and every time
+            // it reached the user as "the form only filled two sections" rather than as a
+            // model that ran out of room — because `warnings` was populated only when the
+            // prefill was skipped outright, never when it came back truncated.
+            const truncated = finishReason === "length";
+            const truncationWarning = truncated
+                ? `Il modello ${providerCatalog.provider}/${modelId} ha esaurito lo spazio di risposta `
+                  + `(${filledOptionalFields} campi su 17 compilati): il brief è parziale. `
+                  + `I modelli con ragionamento esteso consumano il budget prima di scrivere il brief — `
+                  + `completa i campi mancanti a mano o riprova con un modello senza reasoning.`
+                : undefined;
 
             return {
                 draft: websitePrefill.draft,
@@ -794,6 +831,7 @@ export class VibePrefill {
                 resolvedMode,
                 confidence,
                 skipped: false,
+                ...(truncationWarning ? { warnings: [truncationWarning] } : {}),
                 ...echoProject,
             };
         } catch (error) {

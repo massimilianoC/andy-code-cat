@@ -110,7 +110,7 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.3,
-        maxCompletionTokens: 6000,
+        maxCompletionTokens: 24000,
         systemTemplate: "",
     },
     // Vibe Mode — final generation step (workspace model when arriving from Vibe Mode expert path)

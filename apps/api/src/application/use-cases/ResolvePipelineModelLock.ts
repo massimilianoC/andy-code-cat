@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { MODEL_NOT_AVAILABLE } from "@andy-code-cat/contracts";
 import type { PipelineEntryMode, PipelineModelLock, OptimizationPolicy, PipelineStage } from "@andy-code-cat/contracts";
 import type { LlmProviderCatalog } from "../../domain/entities/LlmCatalog";
 import type { PipelineRun, PipelineRunBlockedDetail } from "../../domain/entities/PipelineRun";
@@ -84,6 +85,17 @@ export class ResolvePipelineModelLock {
         const activeProviders = catalog.providers.filter((p) => p.isActive);
         const catalogRevision = computeCatalogRevision(activeProviders);
 
+        // A model the user picked by hand is a decision, not a hint. Under "legacy" the
+        // cascade quietly walks past an unresolvable choice to the next candidate and that
+        // substitute becomes the lock — so the run is faithfully frozen onto a model nobody
+        // selected, and every later stage honours it. Observed live: a user selected
+        // moonshotai/Kimi-K3 (inactive in the catalog) and the whole pipeline ran on
+        // deepseek-ai/DeepSeek-V4-Pro-0813, recorded as selectedBy "user".
+        //
+        // "strict" is what `requireOverrideInCatalog` was built for — it has no effect under
+        // "legacy", as its own doc comment says. It applies only when the caller actually
+        // asked for something: an unattended run with no request still cascades as before.
+        const userChoseModel = Boolean(input.requestedProviderId || input.requestedModelId);
         const decision = resolveModelSelection({
             profile: "vibe-cascade",
             activeProviders,
@@ -93,8 +105,29 @@ export class ResolvePipelineModelLock {
             hardcodedFallbackModel: FALLBACK_MODEL,
             requireOverrideInCatalog: true,
             gateOverrideOnOpenAiCompatible: false,
-            policy: "legacy",
+            policy: userChoseModel ? "strict" : "legacy",
         });
+
+        // Refuse, do not substitute (AGENTS.md, Rule Zero's second corollary). The client can
+        // act on this: re-read the catalog, tell the user the model is off, let them pick
+        // another. Freezing a different model instead produces a run nobody chose and a
+        // record that misattributes it.
+        if (decision.blocked) {
+            throw new HttpError(
+                `Requested model ${input.requestedProviderId ?? "?"}/${input.requestedModelId ?? "?"} is not available in the catalog.`,
+                {
+                    statusCode: 409,
+                    code: MODEL_NOT_AVAILABLE,
+                    userMessage: `Il modello selezionato non è attivo nel catalogo: attivalo dal pannello admin oppure scegline un altro.`,
+                    details: {
+                        requestedProvider: input.requestedProviderId,
+                        requestedModel: input.requestedModelId,
+                        reason: decision.blocked.reason,
+                        blockedCode: decision.blocked.code,
+                    },
+                },
+            );
+        }
 
         const modelLock: PipelineModelLock = {
             policy: "legacy",

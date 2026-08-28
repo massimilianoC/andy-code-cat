@@ -260,13 +260,20 @@ export class MongoLlmCatalogRepository implements LlmCatalogRepository {
                 ...model,
                 availability: stillOffered ? ("live" as const) : ("deprecated" as const),
                 availabilityCheckedAt: input.checkedAt,
-                // Deprecation switches the model off. An active model the provider no longer
-                // serves is an offer this platform cannot honour: it stays selectable, gets
-                // picked, and fails at dispatch with a provider error instead of being absent.
-                // The row itself is kept — the id is still referenced by stored model locks and
-                // published builds — but it stops being something anyone can choose.
-                isActive: stillOffered ? model.isActive : false,
-                isDefault: stillOffered ? model.isDefault : false,
+                // Availability is INFORMATION, not a decision. It records what the provider
+                // last offered so the admin page can show it; it does not switch anything off.
+                //
+                // Discovery used to force `isActive: false` on anything missing from a live
+                // response, which made one field carry two meanings — "the operator approved
+                // this" and "the provider still serves this" — with the second silently
+                // destroying the first. SiliconFlow reported 13 models on one startup and 77
+                // on the next, and every such swing permanently un-approved models the
+                // operator had activated, with nothing recording they had ever been wanted.
+                //
+                // `isActive` now means exactly one thing: the operator wants this usable.
+                // Only an operator changes it. A model the provider has genuinely retired
+                // fails at dispatch and the client is told which model and why — one honest
+                // error at the moment of use, instead of a flag that quietly rewrites intent.
             };
         });
 

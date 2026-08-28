@@ -63,7 +63,7 @@ async function reconcileCatalogAvailability(): Promise<void> {
             // the opposite and was reported as such once already.
             console.log(
                 `[llm-catalog] ${provider.provider}: stored rows — ${provider.live} still offered, `
-                + `${provider.deprecated} deprecated and switched off`,
+                + `${provider.deprecated} no longer offered (availability only — activation is the operator's)`,
             );
         }
     } catch (error) {
