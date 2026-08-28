@@ -129,8 +129,12 @@ export function injectRuntimeTags(html: string, tags: string): string {
 
 /** Removes only scripts carrying the platform-owned runtime marker. */
 export function stripPlatformRuntimeTags(html: string): string {
-    return html.replace(
-        /[ \t\r\n]*<script\b(?=[^>]*\bdata-pf-runtime-module\s*=)[^>]*>[\s\S]*?<\/script>\s*/gi,
-        "",
-    );
+    const platformRuntimeTag = /[ \t\r\n]*<script\b(?=[^>]*\bdata-pf-runtime-module\s*=)[^>]*>[\s\S]*?<\/script>\s*/gi;
+    let stripped = html;
+    let previous: string;
+    do {
+        previous = stripped;
+        stripped = previous.replace(platformRuntimeTag, "");
+    } while (stripped !== previous);
+    return stripped;
 }
