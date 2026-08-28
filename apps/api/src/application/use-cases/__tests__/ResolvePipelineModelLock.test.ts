@@ -157,6 +157,7 @@ describe("ResolvePipelineModelLock — createRun", () => {
         });
 
         expect(run.modelLock.selectedBy).toBe("user");
+        expect(run.modelLock.policy).toBe("strict");
         expect(run.modelLock.requested).toEqual({
             providerId: "siliconflow",
             modelId: "MiniMaxAI/MiniMax-M3",

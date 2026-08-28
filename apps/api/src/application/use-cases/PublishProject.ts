@@ -28,16 +28,50 @@ function extractInlineCss(html: string): { html: string; extracted: string } {
     return { html: cleaned, extracted: blocks.join("\n\n") };
 }
 
-function extractInlineJs(html: string): { html: string; extracted: string } {
-    const blocks: string[] = [];
-    const cleaned = html.replace(/<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi, (match, content: string) => {
-        // Tailwind consumes this head configuration immediately after its CDN
-        // runtime. Moving it to script.js would execute it too late.
-        if (/\btailwind\s*\.config\s*=/.test(content)) return match;
-        const trimmed = content.trim();
-        if (trimmed) blocks.push(trimmed);
-        return "";
+const INLINE_SCRIPT_TAG_RE = /<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi;
+const INLINE_SCRIPT_OPEN_RE = /<script(?![^>]*\bsrc\s*=)[^>]*>/i;
+
+function unsafeInlineScriptMarkup(): Error {
+    return Object.assign(new Error("Artifact contains ambiguous inline script markup"), {
+        statusCode: 422,
+        code: "UNSAFE_INLINE_SCRIPT_MARKUP",
     });
+}
+
+export function extractInlineJs(html: string): { html: string; extracted: string } {
+    const blocks: string[] = [];
+    const preserved: Array<{ token: string; tag: string }> = [];
+    let cleaned = html;
+    let previous: string;
+    let pass = 0;
+
+    // Re-apply until stable: removing a nested tag once can join the surrounding characters
+    // into a new <script> tag. A second-pass match is therefore ambiguous and is refused rather
+    // than transformed into plausible output.
+    do {
+        previous = cleaned;
+        cleaned = cleaned.replace(INLINE_SCRIPT_TAG_RE, (match, content: string) => {
+            if (pass > 0 || /<\/?script/i.test(content)) throw unsafeInlineScriptMarkup();
+
+            // Tailwind consumes this head configuration immediately after its CDN runtime.
+            // Preserve the complete tag behind an unguessable placeholder while other inline
+            // scripts are extracted, and reject nested script text inside the preserved block.
+            if (/\btailwind\s*\.config\s*=/.test(content)) {
+                const token = `\u0000pf-tailwind-${randomUUID()}\u0000`;
+                preserved.push({ token, tag: match });
+                return token;
+            }
+
+            const trimmed = content.trim();
+            if (trimmed) blocks.push(trimmed);
+            return "";
+        });
+        pass += 1;
+    } while (cleaned !== previous);
+
+    if (INLINE_SCRIPT_OPEN_RE.test(cleaned)) throw unsafeInlineScriptMarkup();
+    for (const item of preserved) cleaned = cleaned.replace(item.token, item.tag);
+
     return { html: cleaned, extracted: blocks.join("\n\n") };
 }
 

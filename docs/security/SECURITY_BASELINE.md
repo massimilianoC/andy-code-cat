@@ -14,6 +14,16 @@
 - Protected routes require bearer token.
 - Project endpoints require x-project-id and ownership validation.
 
+## Rate Limiting
+
+- Rate limiting runs before authentication on the project pipeline, PipelineRun, and form-service
+  routes so repeated invalid tokens cannot force unbounded authorization work.
+- Pipeline mutations are limited to 30 requests/minute per client address.
+- PipelineRun and form-service routes are limited to 60 requests/minute per client address;
+  pipeline configuration reads are limited to 120 requests/minute.
+- nginx keeps the broader production perimeter limits; application limits remain authoritative
+  even when the API is reached from another internal network path.
+
 ## Isolation
 
 - Double sandbox is mandatory:

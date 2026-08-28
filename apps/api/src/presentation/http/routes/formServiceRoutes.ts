@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { updateProjectFormSettingsSchema } from "@andy-code-cat/contracts";
 import { GetProjectFormSettings, SetProjectFormSettings, toProjectFormSettingsDto } from "../../../application/forms/ProjectFormSettings";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
@@ -13,10 +14,14 @@ export function createFormServiceRoutes(): Router {
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
     const getSettings = new GetProjectFormSettings(projectRepository);
     const setSettings = new SetProjectFormSettings(projectRepository);
+    const formServiceLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        limit: 60,
+        standardHeaders: true,
+        legacyHeaders: false,
+    });
 
-    router.use(authMiddleware);
-
-    router.get("/projects/:projectId/services/forms", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+    router.get("/projects/:projectId/services/forms", formServiceLimiter, authMiddleware, sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const settings = await getSettings.execute(req.sandbox!.projectId, req.auth!.userId);
             res.json({ settings: toProjectFormSettingsDto(settings) ?? null });
@@ -25,7 +30,7 @@ export function createFormServiceRoutes(): Router {
         }
     });
 
-    router.put("/projects/:projectId/services/forms", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
+    router.put("/projects/:projectId/services/forms", formServiceLimiter, authMiddleware, sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const settings = updateProjectFormSettingsSchema.parse(req.body);
             const project = await setSettings.execute(req.sandbox!.projectId, req.auth!.userId, settings);

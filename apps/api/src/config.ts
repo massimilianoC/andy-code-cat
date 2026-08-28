@@ -113,19 +113,6 @@ const envSchema = z.object({
     ENRICHMENT_LAYER_D_MAX_ASSETS: z.coerce.number().int().positive().default(5),
     // ── VibeCore pipeline flags ───────────────────────────────────────────────
     VIBE_CLASSIFIER_ENABLED: z.string().default("true"),
-    // ── SSOT PipelineRun (I7-I8) — master rollback lever ──────────────────────
-    // Additive infrastructure: no existing route or frontend code calls the
-    // pipeline-run endpoints yet, so this flag currently gates dormant surface
-    // area. It exists now so later increments (I9+) that DO wire live traffic
-    // through PipelineRun can be reverted with a single env change + restart,
-    // with no code revert and no data migration. See docs/SSOT_REFACTOR_PROGRESS.md.
-    /**
-     * Strict PipelineRun dispatch. Defaults ON: the frontend no longer has a path that avoids
-     * it, so a false default would leave the API refusing runs the UI unconditionally creates.
-     * Kept as an env var purely as an emergency lever.
-     */
-    PIPELINE_RUN_ENABLED: z.string().default("true"),
-    PIPELINE_MODEL_LOCK_DEFAULT_POLICY: z.enum(["legacy", "strict"]).default("legacy"),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -192,5 +179,4 @@ export const env = {
     enrichmentImageAnalysis: parsed.data.ENRICHMENT_IMAGE_ANALYSIS === "true",
     enrichmentInjectLayerD: parsed.data.ENRICHMENT_INJECT_LAYER_D === "true",
     vibeClassifierEnabled: parsed.data.VIBE_CLASSIFIER_ENABLED === "true",
-    pipelineRunEnabled: parsed.data.PIPELINE_RUN_ENABLED === "true",
 };

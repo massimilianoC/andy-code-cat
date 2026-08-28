@@ -1,11 +1,7 @@
 /**
- * E2E tests for POST /v1/projects/:projectId/pipeline/launch-workspace with
- * PIPELINE_RUN_ENABLED=true (I12 of the SSOT program). Runs against MongoMemoryServer — no
+ * E2E tests for POST /v1/projects/:projectId/pipeline/launch-workspace (I12 of the SSOT program).
+ * Runs against MongoMemoryServer — no
  * Docker required, same strategy as pipelineRunRoutes.e2e.test.ts.
- *
- * The disabled-flag (default) behavior is covered separately in
- * pipelineRoutes.launchWorkspace.disabled.e2e.test.ts — a single test file cannot flip
- * PIPELINE_RUN_ENABLED mid-run because config.ts reads process.env once at import time.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -23,7 +19,6 @@ process.env.JWT_ACCESS_SECRET = TEST_JWT_ACCESS_SECRET;
 process.env.JWT_REFRESH_SECRET = TEST_JWT_REFRESH_SECRET;
 process.env.EXPORT_JWT_SECRET = "test-export-secret-min-32-chars-!!xyz";
 process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/placeholder";
-process.env.PIPELINE_RUN_ENABLED = "true";
 
 function signToken(userId: string, roles: string[] = ["user"]): string {
     return jwt.sign({ sub: userId, roles }, TEST_JWT_ACCESS_SECRET, { expiresIn: "1h" });
@@ -44,7 +39,7 @@ let ownerUserId: string;
 let otherUserId: string;
 let projectId: string;
 
-describe("Pipeline launch-workspace E2E — PIPELINE_RUN_ENABLED=true", () => {
+describe("Pipeline launch-workspace E2E", () => {
     beforeAll(async () => {
         mongod = await MongoMemoryServer.create();
         process.env.MONGODB_URI = mongod.getUri();

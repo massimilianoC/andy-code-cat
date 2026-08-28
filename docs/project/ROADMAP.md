@@ -155,8 +155,8 @@ server-side resolver with user override precedence and fail-closed tests. See
   [PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](../specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md).
 - [x] **P0 regression gate — Vibe → Guided Mode → Workspace model SSOT:** a user-selected
   provider/model is a server-owned strict lock for every text stage; the canonical server brief
-  reaches Workspace without implicit optimization or browser-owned fallback. Live end-to-end as
-  of I15 (behind `PIPELINE_RUN_ENABLED` / `NEXT_PUBLIC_PIPELINE_RUN_UI`, default off). See
+  reaches Workspace without implicit optimization or browser-owned fallback. Live end-to-end on
+  the sole server-owned PipelineRun path; the temporary runtime flags were removed on 2026-08-28. See
   [VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md](../specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md).
 
 **Notes**

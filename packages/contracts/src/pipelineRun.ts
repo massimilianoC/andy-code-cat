@@ -26,9 +26,8 @@ import {
 
 /**
  * "workspace" was previously named "godmode" — renamed 2026-08-19 to align with the
- * product-owner-approved terminology in PR #58 ("God Mode" -> "Workspace"). Safe to rename the
- * literal outright (no data migration): PipelineRun persistence is entirely gated behind
- * PIPELINE_RUN_ENABLED (default false) and has zero production consumers or stored documents.
+ * product-owner-approved terminology in PR #58 ("God Mode" -> "Workspace"). The literal was
+ * renamed before PipelineRun became the sole live launch path.
  */
 export const pipelineEntryModeSchema = z.enum(["vibe", "zero-effort", "workspace"]);
 export type PipelineEntryMode = z.infer<typeof pipelineEntryModeSchema>;
