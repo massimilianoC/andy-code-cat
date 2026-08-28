@@ -69,20 +69,27 @@ function emptyExpressiveFields(draft: Record<string, unknown>): string[] {
     });
 }
 
+/**
+ * `projectId` is sent as `x-project-id` because every project-scoped route enforces the
+ * double sandbox: the JWT proves who you are, the header proves which project you claim, and
+ * the middleware checks you own it. Omitting it is a 400, which is the correct answer.
+ */
 async function apiFetch<T>(
     page: import("@playwright/test").Page,
     method: string,
     urlPath: string,
     body?: unknown,
     token?: string,
+    projectId?: string,
 ): Promise<{ status: number; body: T }> {
     return page.evaluate(
-        async ({ apiUrl, method, urlPath, body, token }) => {
+        async ({ apiUrl, method, urlPath, body, token, projectId }) => {
             const res = await fetch(`${apiUrl}${urlPath}`, {
                 method,
                 headers: {
                     "Content-Type": "application/json",
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    ...(projectId ? { "x-project-id": projectId } : {}),
                 },
                 body: body !== undefined ? JSON.stringify(body) : undefined,
             });
@@ -91,7 +98,7 @@ async function apiFetch<T>(
             try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = { raw: text.slice(0, 500) }; }
             return { status: res.status, body: parsed };
         },
-        { apiUrl: API_URL, method, urlPath, body, token },
+        { apiUrl: API_URL, method, urlPath, body, token, projectId },
     ) as Promise<{ status: number; body: T }>;
 }
 
@@ -222,14 +229,26 @@ test.describe("Release smoke — Zero Effort (guided) mode", () => {
         delete (launchPayload as Record<string, unknown>).templateId;
         delete (launchPayload as Record<string, unknown>).formatHint;
 
-        const launchRes = await apiFetch<{ generate?: unknown }>(
+        const launchRes = await apiFetch<{
+            status?: string; pipelineRunId?: string; jobId?: string; normalizedBrief?: string;
+        }>(
             page, "POST", `/v1/projects/${projectId}/pipeline/launch-workspace`,
             launchPayload,
             token,
+            projectId,
         );
 
-        expect(launchRes.status, JSON.stringify(launchRes.body).slice(0, 400)).toBe(200);
-        expect(launchRes.body.generate, "no generation result on the guided launch response").toBeTruthy();
+        // 201: the launch CREATES a PipelineRun and returns immediately with a job id — the
+        // generation itself runs asynchronously. What must be true synchronously is that the run
+        // exists and the canonical brief was built from the draft, which is the handoff this
+        // release changed.
+        expect(launchRes.status, JSON.stringify(launchRes.body).slice(0, 400)).toBe(201);
+        expect(launchRes.body.status).toBe("prepared");
+        expect(launchRes.body.pipelineRunId, "no PipelineRun was frozen for this launch").toBeTruthy();
+        expect(
+            (launchRes.body.normalizedBrief ?? "").length,
+            "canonical brief is missing or trivially short",
+        ).toBeGreaterThan(200);
 
         await deleteTestProject(page, projectId);
     });
@@ -249,25 +268,25 @@ test.describe("Release smoke — Project mode", () => {
         await expect(textarea).toBeVisible();
         await textarea.fill("A single-page landing site for a local coffee roastery, rustic and inviting.");
 
-        // Switch to PROJECT mode. ModeSelector renders segment labels VIBE / GUIDED / PROJECT.
-        await page.locator("button", { hasText: "PROJECT" }).first().click();
-
         const launchResponse = page.waitForResponse(
             (res) => res.url().includes("/pipeline/launch-workspace") && res.request().method() === "POST",
             { timeout: GENERATION_TIMEOUT_MS },
         );
 
-        const submitButton = page.locator('button[aria-label*="Crea"], button[aria-label*="Create"]').first();
-        await submitButton.click();
+        // Selecting PROJECT is itself the trigger — handleEntryModeChange calls handleProjectMode
+        // directly, which creates the blank project and redirects. There is no separate submit
+        // in this mode, unlike Vibe and Guided.
+        await page.locator("button", { hasText: "PROJECT" }).first().click();
 
         // Confirms the "create blank project, redirect straight to Workspace" half of Project
         // Mode before waiting on the slower generation call.
-        await page.waitForURL(/\/workspace\//, { timeout: 30_000 });
+        await page.waitForURL(/\/workspace\//, { timeout: 60_000 });
 
         const response = await launchResponse;
-        expect(response.status(), "Workspace's own launch-workspace call must succeed").toBe(200);
-        const body = await response.json() as { generate?: unknown };
-        expect(body.generate, "no generation result on the Workspace auto-launch response").toBeTruthy();
+        expect(response.status(), "Workspace's own launch-workspace call must succeed").toBe(201);
+        const body = await response.json() as { status?: string; pipelineRunId?: string };
+        expect(body.status).toBe("prepared");
+        expect(body.pipelineRunId, "no PipelineRun was frozen for the Workspace auto-launch").toBeTruthy();
 
         const projectId = page.url().match(/\/workspace\/([^/?]+)/)?.[1];
         if (projectId) {
