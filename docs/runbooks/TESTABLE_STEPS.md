@@ -73,7 +73,18 @@
 
 - Precondition: `LLM_CATALOG_SOURCE=mongo`
 - `npm run seed:llm`
-- Expected: idempotent upsert in the `llm_providers` collection
+- Expected: idempotent upsert in the `llm_providers` collection. It adds missing code defaults but
+  preserves the operator's provider/model activation, model name, role, prompt fields and manually
+  added or live-discovered models.
+
+### Step 9a - Superadmin Model Activation
+
+- Precondition: login with a user that has role `superadmin`
+- Open `/admin/models`, choose a provider and set one model to `ON`.
+- Expected: the button becomes primary blue, the UI reports `1 model set ON`, and a reload keeps it
+  `ON`.
+- Run `Sync seed → Mongo`, reload the page, and verify that the same model remains `ON` (and an
+  `OFF` model remains `OFF`).
 
 ### Step 10 - Chat Preview
 

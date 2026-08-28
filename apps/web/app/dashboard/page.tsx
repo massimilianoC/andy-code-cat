@@ -21,6 +21,7 @@ import ProjectCard from "../../components/ProjectCard";
 import { TipsFab } from "../../components/TipsPanel";
 import GuideBanner from "../../components/GuideBanner";
 import { LanguageSwitcher } from "../../components/LanguageSwitcher";
+import { VersionBadge } from "@/components/VersionBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -312,6 +313,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-2">
                     <span className="text-xl leading-none">🐱</span>
                     <span className="font-bold text-foreground text-sm tracking-tight">{t("brand.name")}</span>
+                    <VersionBadge className="ml-1" />
                 </div>
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher className="mr-1" />

@@ -63,6 +63,7 @@ export default function AdminModelsPage() {
     const [selectedProvider, setSelectedProvider] = useState("siliconflow");
     const [draft, setDraft] = useState<AdminLlmModelDto>(EMPTY_MODEL);
     const [activating, setActivating] = useState<string | null>(null);
+    const [activationNotice, setActivationNotice] = useState<string | null>(null);
 
     useEffect(() => {
         const token = getToken();
@@ -144,13 +145,15 @@ export default function AdminModelsPage() {
         if (!token || modelIds.length === 0) return;
         setActivating(scope);
         setError(null);
+        setActivationNotice(null);
         try {
             const result = await setAdminLlmModelsActive(token, selectedProvider, modelIds, isActive);
             setProviders(result.providers ?? []);
             setSource(result.source ?? "env");
+            setActivationNotice(`${result.applied.length} model${result.applied.length === 1 ? "" : "s"} set ${isActive ? "ON" : "OFF"}.`);
             const skipped = (result.unknown?.length ?? 0) + (result.deprecated?.length ?? 0);
             if (skipped > 0) {
-                setError(`${skipped} model(s) skipped: the provider no longer offers them.`);
+                setError(`${skipped} model(s) were not found in the provider catalog.`);
             }
         } catch (e) {
             setError(e instanceof Error ? e.message : "Could not change model activation");
@@ -311,7 +314,7 @@ export default function AdminModelsPage() {
     }
 
     return (
-        <div className="flex flex-col gap-6 max-w-[1400px]">
+        <div className="flex w-full max-w-none flex-col gap-6">
             <div>
                 <h1 className="text-[1.375rem] font-bold text-foreground mb-1">Advanced Runtime LLM Catalog</h1>
                 <p className="text-sm text-muted-foreground max-w-4xl">
@@ -326,6 +329,11 @@ export default function AdminModelsPage() {
             {error ? (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                     {error}
+                </div>
+            ) : null}
+            {activationNotice ? (
+                <div aria-live="polite" className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
+                    {activationNotice}
                 </div>
             ) : null}
 
@@ -355,7 +363,7 @@ export default function AdminModelsPage() {
                 </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(480px,0.95fr)_minmax(0,1.05fr)]">
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-base">Providers & Models</CardTitle>
@@ -461,26 +469,30 @@ export default function AdminModelsPage() {
                                     <div className="divide-y divide-border">
                                         {group.models.map((model) => (
                                             <div key={model.id} className="flex items-center gap-2 px-3 py-2">
-                                                <button
+                                                <Button
                                                     type="button"
+                                                    variant="ghost"
                                                     onClick={() => selectProviderModel(selectedProvider, model.id)}
-                                                    className="min-w-0 flex-1 text-left"
+                                                    className="h-auto min-w-0 flex-1 items-start justify-start whitespace-normal px-0 py-1 text-left"
                                                 >
-                                                    <div className="text-sm font-medium text-foreground truncate">
+                                                    <div className="w-full">
+                                                        <div className="text-sm font-medium text-foreground break-words">
                                                         {model.displayName || model.id}
+                                                        </div>
+                                                        <div className="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">
+                                                            {model.id}
+                                                            {model.availability === "deprecated" ? " · no longer offered" : ""}
+                                                        </div>
                                                     </div>
-                                                    <div className="text-[11px] text-muted-foreground truncate">
-                                                        {model.id}
-                                                        {model.availability === "deprecated" ? " · no longer offered" : ""}
-                                                    </div>
-                                                </button>
+                                                </Button>
                                                 <Button
                                                     type="button"
                                                     size="sm"
-                                                    variant="outline"
+                                                    variant={model.isActive ? "default" : "outline"}
                                                     className="h-6 shrink-0 px-2 text-[10px]"
                                                     disabled={activating !== null || (model.availability === "deprecated" && !model.isActive)}
                                                     onClick={() => applyActivation("model:" + model.id, [model.id], !model.isActive)}
+                                                    aria-pressed={model.isActive}
                                                     title={model.availability === "deprecated"
                                                         ? "The provider no longer offers this model"
                                                         : model.isActive ? "Deactivate" : "Activate"}
@@ -488,7 +500,7 @@ export default function AdminModelsPage() {
                                                     {activating === "model:" + model.id
                                                         ? "…"
                                                         : model.availability === "deprecated" ? "gone"
-                                                            : model.isActive ? "on" : "off"}
+                                                            : model.isActive ? "ON" : "OFF"}
                                                 </Button>
                                             </div>
                                         ))}

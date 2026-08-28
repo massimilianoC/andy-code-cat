@@ -25,6 +25,7 @@
     { "provider": "siliconflow", "model": "google/gemma-4-31B-it",     "priceInputUsdPerM": 0.1 },
     { "provider": "siliconflow", "model": "google/gemma-4-26B-A4B-it", "priceInputUsdPerM": 0.07 },
     { "provider": "siliconflow", "model": "MiniMaxAI/MiniMax-M3" },
+    { "provider": "siliconflow", "model": "moonshotai/Kimi-K3", "note": "owner-approved for the Vibe prefill completeness regression test, 2026-08-28" },
     { "provider": "siliconflow", "model": "zai-org/GLM-5.2" },
     { "provider": "siliconflow", "model": "zai-org/GLM-5.3" },
 
