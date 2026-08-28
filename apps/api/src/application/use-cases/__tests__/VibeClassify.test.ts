@@ -223,14 +223,19 @@ describe("VibeClassify", () => {
         expect(String(fetchMock.mock.calls[0]?.[0])).toContain("openrouter");
     });
 
-    it("model resolution: an override model not in the catalog silently falls through to the catalog default model", async () => {
+    // BEHAVIOUR CHANGE, deliberate — see the twin test in VibePrefill.modelSelection.test.ts.
+    // Classification is the first step of the flow the user's model choice governs, so a
+    // substitute here means the template was picked by a model they never selected.
+    it("model resolution: an override model not in the catalog is refused, not silently replaced", async () => {
         const fetchMock = stubLlm({ templateId: null, formatHint: null, confidence: 0, reasoning: "n/a" });
         const { useCase } = createUseCase();
 
-        await useCase.execute({ prompt: "any prompt", model: "not-a-real-model" });
+        const result = await useCase.execute({ prompt: "any prompt", model: "not-a-real-model" });
 
-        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-        expect(requestBody.model).toBe("MiniMaxAI/MiniMax-M3");
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(result.skipped).toBe(true);
+        expect(result.templateId).toBeNull();
+        expect(result.warnings?.join(" ")).toContain("not-a-real-model");
     });
 
     it("model resolution: no override falls through to the first active model when no task setting or isDefault model matches", async () => {

@@ -539,7 +539,7 @@ Minimal example (shape only):
 { "version": "media-manifest-v1", "requests": [ { "key": "hero-main", "kind": "background", "role": "hero", "sourceStrategy": "stock", "semanticQuery": "bright modern design studio workspace", "alt": "Bright modern design studio", "priority": 10, "width": 1600, "height": 900 } ] }
 Place mediaManifest at the TOP LEVEL of the JSON, as a sibling of chat and artifacts — NOT inside artifacts.
 
-- TOTAL OUTPUT MUST stay under 24.000 tokens. Target 8000–32000 tokens for typical requests, up to budget for large/complex outputs. Never repeat the entire artifact if only a small change is needed.
+- TOTAL OUTPUT MUST stay under 64.000 tokens. Target 8000–32000 tokens for typical requests, up to budget for large/complex outputs. Never repeat the entire artifact if only a small change is needed.
 - For chat-preview artifact generation, target roughly 24000–32000 completion tokens total (thinking + final JSON/artifacts) for most requests. Use larger budgets only when artifact complexity genuinely requires it.
 - HTML target: under 30 KB. Factor repeated visual blocks into CSS classes rather than duplicating markup.
 - Keep artifacts concise and functional; avoid unnecessary boilerplate.

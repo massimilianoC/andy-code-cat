@@ -561,7 +561,8 @@ export class VibePrefill {
         | "no-active-provider"
         | "missing-api-key"
         | "provider-http-error"
-        | "provider-exception";
+        | "provider-exception"
+        | "requested-model-unavailable";
         userMessage: string;
         detail?: Record<string, unknown>;
     }): VibePrefillResponse {
@@ -635,9 +636,38 @@ export class VibePrefill {
             hardcodedFallbackModel: FALLBACK_MODEL,
             requireOverrideInCatalog: true,
             gateOverrideOnOpenAiCompatible: false,
-            policy: "legacy",
+            // Same rule as the pipeline lock: a model the caller named is a decision, and under
+            // "legacy" an unresolvable one is walked past in silence. The prefill is part of the
+            // flow the user's selection is supposed to govern, so it must not quietly answer on
+            // a different model than the run will use — that is the two-parallel-lines problem,
+            // not a graceful degradation. With no explicit request there is nothing to honour
+            // and the background task cascades from its own settings exactly as before.
+            policy: (input.provider || input.model) ? "strict" : "legacy",
         };
         const decision = resolveModelSelection(selectionInput);
+
+        // Refuse, do not substitute — but degrade the way this use case already degrades. Every
+        // failure here returns 200 with a manual draft and a visible warning (see fallback's
+        // doc comment); throwing a 409 instead would be a second, contradictory answer to the
+        // same question, so the refusal travels through the existing channel.
+        if (decision.blocked) {
+            return this.fallback({
+                prompt: input.prompt,
+                outputLanguage: resolvedUiLanguage,
+                resolvedMode,
+                attachmentMeta: input.attachmentMeta,
+                echoProject,
+                reason: "requested-model-unavailable",
+                userMessage: `Il modello selezionato (${input.provider ?? "?"}/${input.model ?? "?"}) non è attivo nel catalogo: `
+                    + `attivalo dal pannello admin o scegline un altro. Il brief non è stato precompilato.`,
+                detail: {
+                    requestedProvider: input.provider,
+                    requestedModel: input.model,
+                    blockedCode: decision.blocked.code,
+                    blockedReason: decision.blocked.reason,
+                },
+            });
+        }
         if (input.projectId) {
             observeModelSelectionShadow(selectionInput, decision, { projectId: input.projectId, taskKey: TASK_KEY });
         }
