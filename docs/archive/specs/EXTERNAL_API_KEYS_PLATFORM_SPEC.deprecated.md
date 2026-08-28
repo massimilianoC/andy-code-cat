@@ -12,64 +12,64 @@
 
 > **Status:** Planned — Milestone M-APIKEYS  
 > **Date:** 2026-05-13  
-> **Scope:** Gestione centralizzata delle API key di terze parti a livello platform (superadmin), con architettura BYOK-ready per override utente futuro; integrazione con image services e LLM providers; policy di fallback immagini iniettata nel prompt base.  
-> **Backward compatibility:** massima — nessuna breaking change sulle entity esistenti, nessun cambiamento obbligatorio alla pipeline LLM attiva.
+> **Scope:** Centralized management of third-party API keys at the platform level (superadmin), with a BYOK-ready architecture for a future per-user override; integration with image services and LLM providers; image fallback policy injected into the base prompt.  
+> **Backward compatibility:** maximal — no breaking change to existing entities, no mandatory change to the active LLM pipeline.
 
 ---
 
-## 1. Motivazione
+## 1. Motivation
 
-### 1.1 Problema attuale
+### 1.1 Current problem
 
-Il sistema gestisce le API key esclusivamente tramite variabili d'ambiente (`SILICONFLOW_API_KEY`, `OPEN_ROUTER_API_KEY`, `LLM_PROVIDER_API_KEYS_JSON`). Questo approccio:
+The system manages API keys exclusively through environment variables (`SILICONFLOW_API_KEY`, `OPEN_ROUTER_API_KEY`, `LLM_PROVIDER_API_KEYS_JSON`). This approach:
 
-- non è gestibile dall'UI admin senza accesso SSH/deploy
-- non supporta rotazione delle chiavi senza restart del container
-- non supporta override per-utente (BYOK)
-- non ha audit trail di chi ha inserito/modificato una chiave
-- non copre i servizi immagine (LoremFlickr, Unsplash, Pexels, Pixabay)
-- non ha una politica di fallback dichiarativa per i servizi
+- is not manageable from the admin UI without SSH/deploy access
+- does not support key rotation without restarting the container
+- does not support per-user override (BYOK)
+- has no audit trail of who inserted/modified a key
+- does not cover image services (LoremFlickr, Unsplash, Pexels, Pixabay)
+- has no declarative fallback policy for services
 
-### 1.2 Problema immagini placeholder
+### 1.2 Placeholder image problem
 
-La sezione `## IMAGES` del `DEFAULT_PRE_PROMPT` (in `GetLlmPromptConfig.ts`) ha due difetti critici:
+The `## IMAGES` section of `DEFAULT_PRE_PROMPT` (in `GetLlmPromptConfig.ts`) has two critical flaws:
 
-1. **`source.unsplash.com` è deprecato** dall'aprile 2023 — produce redirect rotti o errori 404
-2. **`picsum.photos/seed/<keyword>`** non è semantico: il parametro `seed` è un hash puro, produce immagini casuali fisse indipendenti dalla keyword — completamente decontestualizzato
+1. **`source.unsplash.com` has been deprecated** since April 2023 — it produces broken redirects or 404 errors
+2. **`picsum.photos/seed/<keyword>`** is not semantic: the `seed` parameter is a pure hash, producing fixed random images independent of the keyword — completely decontextualized
 
-La sezione IMAGES deve essere sostituita con fonti che supportano ricerca per keyword e con una policy di fallback automatica.
-
----
-
-## 2. Obiettivi di questa milestone
-
-1. **`ServiceApiKey` collection** — nuova entità MongoDB per API key esterne, scope platform + scaffold BYOK utente futuro
-2. **Crittografia** — AES-256-GCM con IV randomico; il raw key non viene mai salvato; fingerprint SHA-256 (8 hex chars) visibile in UI
-3. **Seeding da env** — al primo avvio, le chiavi in env vengono migrated automaticamente nella collection (non-destructive)
-4. **Admin UI — tab "Integrations"** — pannello dedicato nel layout `/admin/` con gestione per categoria (LLM, Image, Notification, ...)
-5. **Image service registry** — servizi immagine pre-cablati con policy primary/fallback; bypass API key per servizi che non la richiedono (LoremFlickr, LMStudio)
-6. **Policy fallback immagini** — se il servizio primario risponde non-200, il sistema tenta automaticamente il fallback
-7. **Iniezione nel prompt base** — `DEFAULT_PRE_PROMPT` diventa dinamico: la sezione `## IMAGES` viene generata a runtime leggendo la config DB, con primary + fallback effettivi
-8. **Architettura BYOK-ready** — la struttura dati prevede `scope: "platform" | "user"` e `ownerUserId` opzionale per override futuro per-utente; l'UI è attiva solo per superadmin ora
-9. **Fix urgente** — rimozione di `source.unsplash.com` (morto) e aggiunta di LoremFlickr come fonte no-key-required di fallback
+The IMAGES section must be replaced with sources that support keyword search and have an automatic fallback policy.
 
 ---
 
-## 3. Architettura dati
+## 2. Goals of this milestone
 
-### 3.1 Entità `ServiceApiKey`
+1. **`ServiceApiKey` collection** — new MongoDB entity for external API keys, platform scope + scaffold for a future user BYOK
+2. **Encryption** — AES-256-GCM with random IV; the raw key is never stored; SHA-256 fingerprint (8 hex chars) visible in the UI
+3. **Seeding from env** — on first boot, keys in env are automatically migrated into the collection (non-destructive)
+4. **Admin UI — "Integrations" tab** — dedicated panel in the `/admin/` layout, with management per category (LLM, Image, Notification, ...)
+5. **Image service registry** — pre-wired image services with a primary/fallback policy; API key bypass for services that don't require one (LoremFlickr, LMStudio)
+6. **Image fallback policy** — if the primary service responds non-200, the system automatically tries the fallback
+7. **Injection into the base prompt** — `DEFAULT_PRE_PROMPT` becomes dynamic: the `## IMAGES` section is generated at runtime by reading the DB config, with the effective primary + fallback
+8. **BYOK-ready architecture** — the data structure includes `scope: "platform" | "user"` and an optional `ownerUserId` for a future per-user override; the UI is active for superadmin only for now
+9. **Urgent fix** — removal of `source.unsplash.com` (dead) and addition of LoremFlickr as a no-key-required fallback source
+
+---
+
+## 3. Data architecture
+
+### 3.1 `ServiceApiKey` entity
 
 ```typescript
 // apps/api/src/domain/entities/ServiceApiKey.ts
 
 /**
- * Categoria del servizio esterno.
- * Estendibile senza breaking change aggiungendo valori.
+ * Category of the external service.
+ * Extensible without a breaking change by adding values.
  */
 export type ServiceCategory =
   | "llm"           // LLM text generation providers
   | "image"         // Stock/placeholder image services
-  | "image_gen"     // AI image generation (es. FLUX via SiliconFlow)
+  | "image_gen"     // AI image generation (e.g. FLUX via SiliconFlow)
   | "notification"  // Telegram, email, etc.
   | "payment"       // Stripe, etc.
   | "analytics"     // Google Analytics, etc.
@@ -77,73 +77,73 @@ export type ServiceCategory =
   | "other";
 
 /**
- * Policy di autenticazione del servizio.
- * "none" = servizio accessibile senza chiave (es. LoremFlickr, LMStudio local)
+ * Authentication policy of the service.
+ * "none" = service accessible without a key (e.g. LoremFlickr, LMStudio local)
  */
 export type ServiceKeyPolicy = "api-key" | "bearer" | "none";
 
 /**
- * Scope della chiave.
- * "platform" = installazione globale, gestita dal superadmin.
- * "user"     = override per-utente BYOK (UI non ancora attiva, struttura pronta).
+ * Scope of the key.
+ * "platform" = global installation, managed by the superadmin.
+ * "user"     = per-user BYOK override (UI not yet active, structure ready).
  */
 export type ServiceKeyScope = "platform" | "user";
 
 export interface ServiceApiKey {
-  id: string;                    // UUID stabile
+  id: string;                    // Stable UUID
 
-  /** Identificatore tecnico del servizio: "siliconflow", "unsplash", "pexels", "loremflickr", ... */
+  /** Technical identifier of the service: "siliconflow", "unsplash", "pexels", "loremflickr", ... */
   serviceId: string;
 
   category: ServiceCategory;
 
-  /** Label human-readable mostrato in UI */
+  /** Human-readable label shown in the UI */
   label: string;
 
-  /** Policy auth: se "none", encryptedKey è null e il servizio non viene escluso anche senza chiave */
+  /** Auth policy: if "none", encryptedKey is null and the service is never excluded even without a key */
   keyPolicy: ServiceKeyPolicy;
 
   /**
-   * Chiave cifrata con AES-256-GCM.
-   * Formato: base64("<iv:12B>:<tag:16B>:<ciphertext>")
-   * Null se keyPolicy === "none".
+   * Key encrypted with AES-256-GCM.
+   * Format: base64("<iv:12B>:<tag:16B>:<ciphertext>")
+   * Null if keyPolicy === "none".
    */
   encryptedKey?: string | null;
 
   /**
-   * SHA-256 dei primi 32 byte della chiave raw, in lowercase hex.
-   * Usato come fingerprint visivo in UI (si mostra solo il prefisso: es. "a3f9c1b2...").
-   * Null se keyPolicy === "none".
+   * SHA-256 of the first 32 bytes of the raw key, in lowercase hex.
+   * Used as a visual fingerprint in the UI (only the prefix is shown: e.g. "a3f9c1b2...").
+   * Null if keyPolicy === "none".
    */
   keyFingerprint?: string | null;
 
-  /** Base URL di override. Se null, si usa il default hard-coded del connettore. */
+  /** Base URL override. If null, the connector's hard-coded default is used. */
   baseUrl?: string | null;
 
-  /** Chiave attiva (inclusa nella risoluzione a runtime) */
+  /** Whether the key is active (included in runtime resolution) */
   isActive: boolean;
 
   /**
-   * Servizio primario per la categoria.
-   * Esattamente 1 record per (category + scope + ownerUserId) dovrebbe avere isDefault=true.
-   * Gestito dall'upsert del use-case.
+   * Primary service for the category.
+   * Exactly 1 record per (category + scope + ownerUserId) should have isDefault=true.
+   * Managed by the use-case's upsert.
    */
   isDefault: boolean;
 
   /**
-   * Servizio di fallback per la categoria.
-   * Usato se la chiamata al primario restituisce non-200.
-   * Esattamente 1 record per (category + scope + ownerUserId) dovrebbe avere isFallback=true.
+   * Fallback service for the category.
+   * Used if the call to the primary returns non-200.
+   * Exactly 1 record per (category + scope + ownerUserId) should have isFallback=true.
    */
   isFallback: boolean;
 
-  /** Scope: platform (superadmin) | user (BYOK futuro) */
+  /** Scope: platform (superadmin) | user (future BYOK) */
   scope: ServiceKeyScope;
 
-  /** Null per scope=platform. UserId del proprietario per scope=user (BYOK futuro). */
+  /** Null for scope=platform. Owner's userId for scope=user (future BYOK). */
   ownerUserId?: string | null;
 
-  /** Metadati aggiuntivi estensibili (es: rate limit per-chiave, region, org ID, ...) */
+  /** Extensible additional metadata (e.g. per-key rate limit, region, org ID, ...) */
   metadata?: Record<string, unknown> | null;
 
   createdAt: Date;
@@ -153,15 +153,15 @@ export interface ServiceApiKey {
 }
 ```
 
-### 3.2 Indici MongoDB (collection: `service_api_keys`)
+### 3.2 MongoDB indexes (collection: `service_api_keys`)
 
 ```
-{ serviceId: 1, scope: 1, ownerUserId: 1 }   — unique per combinazione
-{ category: 1, scope: 1, isActive: 1 }        — query per categoria
-{ scope: 1, ownerUserId: 1 }                   — BYOK lookup per utente
+{ serviceId: 1, scope: 1, ownerUserId: 1 }   — unique per combination
+{ category: 1, scope: 1, isActive: 1 }        — query by category
+{ scope: 1, ownerUserId: 1 }                   — BYOK lookup per user
 ```
 
-### 3.3 Entità `ServiceApiKeyPublic` (DTO senza chiave)
+### 3.3 `ServiceApiKeyPublic` entity (key-free DTO)
 
 ```typescript
 // packages/contracts/src/serviceApiKeys.ts
@@ -172,8 +172,8 @@ export interface ServiceApiKeyPublicDto {
   category: ServiceCategory;
   label: string;
   keyPolicy: ServiceKeyPolicy;
-  hasKey: boolean;                // true se encryptedKey presente
-  keyFingerprint?: string | null; // primi 8 hex del SHA-256
+  hasKey: boolean;                // true if encryptedKey is present
+  keyFingerprint?: string | null; // first 8 hex chars of the SHA-256
   baseUrl?: string | null;
   isActive: boolean;
   isDefault: boolean;
@@ -185,19 +185,19 @@ export interface ServiceApiKeyPublicDto {
 }
 ```
 
-> **Regola di sicurezza:** il raw key e l'`encryptedKey` non vengono **mai** restituiti via API. Solo `hasKey` e `keyFingerprint`.
+> **Security rule:** the raw key and the `encryptedKey` are **never** returned via the API. Only `hasKey` and `keyFingerprint`.
 
 ---
 
-## 4. Registro servizi pre-cablati
+## 4. Registry of pre-wired services
 
 ### 4.1 LLM Providers
 
-| serviceId | label | keyPolicy | baseUrl default | Note |
+| serviceId | label | keyPolicy | default baseUrl | Note |
 |-----------|-------|-----------|-----------------|------|
-| `siliconflow` | SiliconFlow | `api-key` | `https://api.siliconflow.cn/v1` | Provider primario |
-| `openrouter` | OpenRouter | `api-key` | `https://openrouter.ai/api/v1` | Provider alternativo |
-| `lmstudio` | LM Studio (local) | `none` | `http://lmstudio:1234/v1` | No API key — bypass automatico |
+| `siliconflow` | SiliconFlow | `api-key` | `https://api.siliconflow.cn/v1` | Primary provider |
+| `openrouter` | OpenRouter | `api-key` | `https://openrouter.ai/api/v1` | Alternative provider |
+| `lmstudio` | LM Studio (local) | `none` | `http://lmstudio:1234/v1` | No API key — automatic bypass |
 
 ### 4.2 Image Services (stock photo / placeholder)
 
@@ -206,17 +206,17 @@ export interface ServiceApiKeyPublicDto {
 | `pexels` | Pexels | `api-key` | `https://api.pexels.com/v1/search?query={kw}&per_page=1` | Keyword search; 200 req/h free |
 | `unsplash` | Unsplash | `api-key` | `https://api.unsplash.com/photos/random?query={kw}` | 50 req/h free |
 | `pixabay` | Pixabay | `api-key` | `https://pixabay.com/api/?key={k}&q={kw}&image_type=photo` | CC0, 100 req/min free |
-| `loremflickr` | LoremFlickr | `none` | `https://loremflickr.com/{w}/{h}/{kw}` | No key — keyword semantico da Flickr CC0 |
-| `picsum` | Lorem Picsum | `none` | `https://picsum.photos/seed/{kw}/{w}/{h}` | No key — deterministico non semantico, solo fallback |
+| `loremflickr` | LoremFlickr | `none` | `https://loremflickr.com/{w}/{h}/{kw}` | No key — semantic keyword from Flickr CC0 |
+| `picsum` | Lorem Picsum | `none` | `https://picsum.photos/seed/{kw}/{w}/{h}` | No key — deterministic, not semantic, fallback only |
 
-**Policy default per immagini:**
+**Default policy for images:**
 
-- **Primary**: `pexels` se API key presente, altrimenti `loremflickr` (no-key bypass)
-- **Fallback**: `loremflickr` (sempre disponibile, no key richiesta)
+- **Primary**: `pexels` if an API key is present, otherwise `loremflickr` (no-key bypass)
+- **Fallback**: `loremflickr` (always available, no key required)
 
-### 4.3 Connettori futuri (scaffold categoria)
+### 4.3 Future connectors (category scaffold)
 
-| serviceId | categoria | keyPolicy | Note |
+| serviceId | category | keyPolicy | Note |
 |-----------|-----------|-----------|------|
 | `telegram` | `notification` | `api-key` | Bot token |
 | `stripe` | `payment` | `api-key` | Secret key |
@@ -225,9 +225,9 @@ export interface ServiceApiKeyPublicDto {
 
 ---
 
-## 5. Crittografia
+## 5. Encryption
 
-### 5.1 Schema AES-256-GCM
+### 5.1 AES-256-GCM scheme
 
 ```
 ENCRYPTION_MASTER_KEY = HKDF-SHA256(
@@ -238,7 +238,7 @@ ENCRYPTION_MASTER_KEY = HKDF-SHA256(
 )
 ```
 
-Il master key è **derivato da variabili già in env** — nessuna nuova variabile obbligatoria.
+The master key is **derived from variables already in env** — no new mandatory variable.
 
 ```
 encrypt(rawKey: string):
@@ -249,41 +249,41 @@ encrypt(rawKey: string):
   stored      = base64url(iv + authTag + ciphertext)   // 12 + 16 + len(rawKey) bytes
 
 fingerprint(rawKey: string):
-  SHA256(rawKey)[0..4].toString("hex")   // 8 caratteri hex
+  SHA256(rawKey)[0..4].toString("hex")   // 8 hex characters
 ```
 
 ### 5.2 Decryption flow (server-side only)
 
-La decryption avviene **esclusivamente** all'interno del `ServiceApiKeyResolver` — adapter infrastrutturale che non espone mai il raw key al di fuori dello strato infra.
+Decryption happens **exclusively** inside `ServiceApiKeyResolver` — an infrastructure adapter that never exposes the raw key outside the infra layer.
 
 ---
 
-## 6. Seeding da env (migrazione non-destructive)
+## 6. Seeding from env (non-destructive migration)
 
-Al bootstrap dell'API (o su chiamata superadmin `POST /admin/service-keys/seed-from-env`), il servizio:
+At API bootstrap (or on the superadmin call `POST /admin/service-keys/seed-from-env`), the service:
 
-1. Legge `env.SILICONFLOW_API_KEY`, `env.OPEN_ROUTER_API_KEY`, `env.LLM_PROVIDER_API_KEYS_JSON`
-2. Per ogni chiave trovata: se esiste già un record `{ serviceId, scope: "platform" }` → skip; altrimenti → inserisce
-3. Non elimina mai record esistenti — è **additive only**
-4. Logga in modo sicuro: "seeded X service keys from env (no values logged)"
+1. Reads `env.SILICONFLOW_API_KEY`, `env.OPEN_ROUTER_API_KEY`, `env.LLM_PROVIDER_API_KEYS_JSON`
+2. For each key found: if a record `{ serviceId, scope: "platform" }` already exists → skip; otherwise → insert
+3. Never deletes existing records — it is **additive only**
+4. Logs safely: "seeded X service keys from env (no values logged)"
 
-Questo garantisce che i deploy esistenti continuino a funzionare identicamente.
+This guarantees that existing deployments keep working identically.
 
 ---
 
 ## 7. Runtime key resolution
 
-### 7.1 Priorità di risoluzione (runtime)
+### 7.1 Resolution priority (runtime)
 
 ```
-1. scope=user, ownerUserId=<currentUser>   (BYOK utente — futuro)
-2. scope=platform, isDefault=true          (chiave platform superadmin)
-3. env.providerApiKeys[serviceId]          (fallback env — retrocompatibilità)
-4. nessuna chiave → servizio con keyPolicy="none" → bypass
-5. nessuna chiave → servizio con keyPolicy="api-key" → skip/log warning
+1. scope=user, ownerUserId=<currentUser>   (user BYOK — future)
+2. scope=platform, isDefault=true          (platform superadmin key)
+3. env.providerApiKeys[serviceId]          (env fallback — backward compatibility)
+4. no key → service with keyPolicy="none" → bypass
+5. no key → service with keyPolicy="api-key" → skip/log warning
 ```
 
-La priorità `env` come step 3 garantisce **zero breaking change**: i deploy che usano solo env continuano a funzionare senza toccare MongoDB.
+Having `env` as priority step 3 guarantees **zero breaking change**: deployments that only use env keep working without touching MongoDB.
 
 ### 7.2 `ServiceApiKeyResolver` (infra adapter)
 
@@ -292,10 +292,10 @@ La priorità `env` come step 3 garantisce **zero breaking change**: i deploy che
 
 export interface ResolvedServiceKey {
   serviceId: string;
-  apiKey: string | null;     // null se keyPolicy="none" o nessuna chiave trovata
+  apiKey: string | null;     // null if keyPolicy="none" or no key found
   baseUrl: string;
   keyPolicy: ServiceKeyPolicy;
-  source: "db" | "env" | "none"; // audit trail interno
+  source: "db" | "env" | "none"; // internal audit trail
 }
 
 export interface ServiceApiKeyResolver {
@@ -307,19 +307,19 @@ export interface ServiceApiKeyResolver {
 
 ---
 
-## 8. Fallback policy immagini
+## 8. Image fallback policy
 
-### 8.1 Comportamento
+### 8.1 Behavior
 
 ```
-1. Risolvi serviceId primario per category="image" dal DB
-2. Se keyPolicy="none" → usa sempre (no API call needed for resolution)
-   Se keyPolicy="api-key" → risolvi apiKey; se nessuna chiave → skip al fallback
-3. Chiama servizio primario con keyword + dimensioni
-4. Se risponde 200 → usa URL ritornata
-5. Se risponde non-200, timeout (3s), o nessuna chiave → chiama fallback
-6. Fallback: loremflickr (sempre disponibile, no key, keyword semantica)
-7. Se anche fallback fallisce → usa picsum deterministico (never fails)
+1. Resolve the primary serviceId for category="image" from the DB
+2. If keyPolicy="none" → always use it (no API call needed for resolution)
+   If keyPolicy="api-key" → resolve apiKey; if no key → skip to fallback
+3. Call the primary service with keyword + dimensions
+4. If it responds 200 → use the returned URL
+5. If it responds non-200, times out (3s), or has no key → call the fallback
+6. Fallback: loremflickr (always available, no key, semantic keyword)
+7. If the fallback also fails → use deterministic picsum (never fails)
 ```
 
 ### 8.2 Image service connector interface
@@ -336,7 +336,7 @@ export interface ImageServiceQuery {
 export interface ImageServiceResult {
   url: string;
   sourceServiceId: string;
-  isPlaceholder: boolean;  // true per picsum/loremflickr
+  isPlaceholder: boolean;  // true for picsum/loremflickr
 }
 
 export interface IImageService {
@@ -346,28 +346,28 @@ export interface IImageService {
 }
 ```
 
-Implementazioni concrete:
+Concrete implementations:
 
-- `PexelsImageService` — GET `/v1/search`, restituisce `photos[0].src.large`
-- `UnsplashImageService` — GET `/photos/random?query=`, restituisce `urls.regular`
-- `PixabayImageService` — GET `/?key=&q=&image_type=photo`, restituisce `hits[0].largeImageURL`
-- `LoremFlickrImageService` — costruisce URL diretto (no HTTP call), keyPolicy=none
-- `PicsumImageService` — costruisce URL diretto (no HTTP call), keyPolicy=none, deterministico
+- `PexelsImageService` — GET `/v1/search`, returns `photos[0].src.large`
+- `UnsplashImageService` — GET `/photos/random?query=`, returns `urls.regular`
+- `PixabayImageService` — GET `/?key=&q=&image_type=photo`, returns `hits[0].largeImageURL`
+- `LoremFlickrImageService` — builds the URL directly (no HTTP call), keyPolicy=none
+- `PicsumImageService` — builds the URL directly (no HTTP call), keyPolicy=none, deterministic
 
 ---
 
-## 9. Iniezione dinamica nel prompt base
+## 9. Dynamic injection into the base prompt
 
-### 9.1 Problema attuale
+### 9.1 Current problem
 
-La sezione `## IMAGES` in `DEFAULT_PRE_PROMPT` (`GetLlmPromptConfig.ts`) è:
+The `## IMAGES` section in `DEFAULT_PRE_PROMPT` (`GetLlmPromptConfig.ts`) is:
 
-- hardcoded con `source.unsplash.com` (endpoint morto dal 2023)
-- non riflette la configurazione effettiva del sistema
+- hardcoded with `source.unsplash.com` (endpoint dead since 2023)
+- not reflective of the system's actual configuration
 
-### 9.2 Soluzione
+### 9.2 Solution
 
-La sezione `## IMAGES` diventa **generata a runtime** dalla funzione:
+The `## IMAGES` section becomes **generated at runtime** by the function:
 
 ```typescript
 // apps/api/src/application/llm/buildImageSourcesBlock.ts
@@ -379,45 +379,45 @@ export async function buildImageSourcesBlock(
 ): Promise<string>
 ```
 
-Questa funzione:
+This function:
 
-1. Risolve il servizio primario (`category="image"`, `isDefault=true`)
-2. Risolve il servizio fallback (`category="image"`, `isFallback=true`)
-3. Costruisce la sezione `## IMAGES` con esempi URL per il servizio attivo
-4. Inietta la policy: "se non disponibile, usa fallback"
+1. Resolves the primary service (`category="image"`, `isDefault=true`)
+2. Resolves the fallback service (`category="image"`, `isFallback=true`)
+3. Builds the `## IMAGES` section with example URLs for the active service
+4. Injects the policy: "if unavailable, use fallback"
 
-### 9.3 Integrazione nel pipeline
+### 9.3 Pipeline integration
 
-`GetLlmPromptConfig.execute()` chiama `buildImageSourcesBlock()` e sostituisce la sezione IMAGES statica nel template.
+`GetLlmPromptConfig.execute()` calls `buildImageSourcesBlock()` and replaces the static IMAGES section in the template.
 
-In alternativa (più pulita architetturalmente), il `DEFAULT_PRE_PROMPT` contiene un marker `{{IMAGE_SOURCES_BLOCK}}` che viene sostituito dalla funzione nel composer.
+Alternatively (architecturally cleaner), `DEFAULT_PRE_PROMPT` contains a `{{IMAGE_SOURCES_BLOCK}}` marker that is replaced by the function in the composer.
 
-### 9.4 Fix urgente (pre-requisito)
+### 9.4 Urgent fix (prerequisite)
 
-**Rimozione immediata** di `source.unsplash.com/random` dal `DEFAULT_PRE_PROMPT` e sostituzione con LoremFlickr come fonte no-key semantica contestuale.
+**Immediate removal** of `source.unsplash.com/random` from `DEFAULT_PRE_PROMPT` and replacement with LoremFlickr as a contextual, no-key semantic source.
 
-Questa fix è separata dall'implementazione DB e può essere eseguita in Wave 0 (fix rapido senza infrastruttura).
+This fix is separate from the DB implementation and can be carried out in Wave 0 (quick fix, no infrastructure needed).
 
 ---
 
-## 10. Admin API — Nuove routes
+## 10. Admin API — New routes
 
-Tutte protette da `authMiddleware + requireSuperAdmin`:
+All protected by `authMiddleware + requireSuperAdmin`:
 
 ```
-GET    /admin/service-keys                          — lista tutte le service keys (no raw key)
-GET    /admin/service-keys/:id                      — dettaglio singola key
-POST   /admin/service-keys                          — crea/aggiorna service key
-PUT    /admin/service-keys/:id                      — aggiorna label/baseUrl/flags
-DELETE /admin/service-keys/:id                      — elimina (soft delete: isActive=false)
-POST   /admin/service-keys/seed-from-env            — seeding non-destructivo da env
-GET    /admin/service-keys/defaults                 — restituisce primary+fallback per categoria
-PATCH  /admin/service-keys/:id/set-default          — imposta come default per categoria
-PATCH  /admin/service-keys/:id/set-fallback         — imposta come fallback per categoria
-PATCH  /admin/service-keys/:id/toggle               — attiva/disattiva
+GET    /admin/service-keys                          — list all service keys (no raw key)
+GET    /admin/service-keys/:id                      — single key detail
+POST   /admin/service-keys                          — create/update a service key
+PUT    /admin/service-keys/:id                      — update label/baseUrl/flags
+DELETE /admin/service-keys/:id                      — delete (soft delete: isActive=false)
+POST   /admin/service-keys/seed-from-env            — non-destructive seeding from env
+GET    /admin/service-keys/defaults                 — returns primary+fallback per category
+PATCH  /admin/service-keys/:id/set-default          — sets as default for the category
+PATCH  /admin/service-keys/:id/set-fallback         — sets as fallback for the category
+PATCH  /admin/service-keys/:id/toggle               — activate/deactivate
 ```
 
-### Schema validazione (Zod) — `packages/contracts/src/serviceApiKeys.ts`
+### Validation schema (Zod) — `packages/contracts/src/serviceApiKeys.ts`
 
 ```typescript
 export const createServiceApiKeySchema = z.object({
@@ -425,7 +425,7 @@ export const createServiceApiKeySchema = z.object({
   category: z.enum(["llm","image","image_gen","notification","payment","analytics","storage","other"]),
   label: z.string().min(1).max(120),
   keyPolicy: z.enum(["api-key", "bearer", "none"]),
-  rawKey: z.string().min(1).optional(),  // solo in create/update, mai in response
+  rawKey: z.string().min(1).optional(),  // create/update only, never in the response
   baseUrl: z.string().url().optional().nullable(),
   isActive: z.boolean().default(true),
   isDefault: z.boolean().default(false),
@@ -434,29 +434,29 @@ export const createServiceApiKeySchema = z.object({
 });
 
 export const updateServiceApiKeySchema = createServiceApiKeySchema.partial().omit({ rawKey: true }).extend({
-  rotateKey: z.string().min(1).optional(),  // nuovo raw key per rotazione
+  rotateKey: z.string().min(1).optional(),  // new raw key for rotation
 });
 ```
 
 ---
 
-## 11. Admin UI — Tab "Integrations"
+## 11. Admin UI — "Integrations" Tab
 
-### 11.1 Collocazione nel layout admin
+### 11.1 Placement in the admin layout
 
 ```typescript
-// apps/web/app/admin/layout.tsx — aggiungere alla nav:
+// apps/web/app/admin/layout.tsx — add to the nav:
 { href: "/admin/integrations", label: "Integrations", icon: "plug" }
 ```
 
-### 11.2 Struttura pagina `/admin/integrations`
+### 11.2 `/admin/integrations` page structure
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │ Integration Hub                                      │
 │ Manage API keys and connectors for external services │
 ├─────────────────────────────────────────────────────┤
-│ [LLM Providers] [Image Services] [Notifications]    │  ← Tabs per categoria
+│ [LLM Providers] [Image Services] [Notifications]    │  ← Tabs per category
 │                 [Payments]       [Other]             │
 ├─────────────────────────────────────────────────────┤
 │ ┌─────────────────────────────────────────────────┐ │
@@ -476,48 +476,48 @@ export const updateServiceApiKeySchema = createServiceApiKeySchema.partial().omi
 └─────────────────────────────────────────────────────┘
 ```
 
-### 11.3 Modal aggiunta/modifica chiave
+### 11.3 Add/edit key modal
 
-Campi: Service (select da registro), Label, API Key (password input, placeholder "••••••••"), Base URL override (opzionale), Default (checkbox), Fallback (checkbox), Active (toggle).
+Fields: Service (select from registry), Label, API Key (password input, placeholder "••••••••"), Base URL override (optional), Default (checkbox), Fallback (checkbox), Active (toggle).
 
-**Regola UI:** L'API key è mostrata solo nel momento dell'inserimento. Dopo il salvataggio, l'input mostra solo `••••••••` + fingerprint ultimi 8 hex.
-
----
-
-## 12. Piano di implementazione a wave
-
-### Dipendenze
-
-```
-Wave 0 → nessuna dipendenza (fix standalone)
-Wave 1 → Wave 0 completata
-Wave 2 → Wave 1 completata
-Wave 3 → Wave 1 + Wave 2 completati
-Wave 4 → Wave 3 completata
-Wave 5 → Wave 4 completata
-Wave 6 → Wave 1 completata (può avanzare in parallelo a Wave 4-5)
-```
+**UI rule:** the API key is shown only at the moment it is entered. After saving, the input shows only `••••••••` + the last 8 hex chars of the fingerprint.
 
 ---
 
-### Wave 0 — Fix urgente prompt (no-infra, standalone)
+## 12. Wave-based implementation plan
 
-**Obiettivo:** rimuovere il riferimento a `source.unsplash.com` (morto) e aggiungere LoremFlickr.  
-**Impatto:** 1 file, ~20 righe, zero rischi di regressione.  
-**Durata stimata:** 1 sessione.
-
-**File da modificare:**
-
-- `apps/api/src/application/use-cases/GetLlmPromptConfig.ts` — sezione `## IMAGES` nel `DEFAULT_PRE_PROMPT`
-
-**Cambiamento:**
+### Dependencies
 
 ```
-RIMUOVERE:
+Wave 0 → no dependency (standalone fix)
+Wave 1 → Wave 0 complete
+Wave 2 → Wave 1 complete
+Wave 3 → Wave 1 + Wave 2 complete
+Wave 4 → Wave 3 complete
+Wave 5 → Wave 4 complete
+Wave 6 → Wave 1 complete (can proceed in parallel with Wave 4-5)
+```
+
+---
+
+### Wave 0 — Urgent prompt fix (no-infra, standalone)
+
+**Goal:** remove the reference to `source.unsplash.com` (dead) and add LoremFlickr.  
+**Impact:** 1 file, ~20 lines, zero regression risk.  
+**Estimated duration:** 1 session.
+
+**Files to change:**
+
+- `apps/api/src/application/use-cases/GetLlmPromptConfig.ts` — `## IMAGES` section in `DEFAULT_PRE_PROMPT`
+
+**Change:**
+
+```
+REMOVE:
   ### Unsplash — high-quality topical photos
   URL pattern: https://source.unsplash.com/random/<W>x<H>?<keyword>   ← DEPRECATED
   
-SOSTITUIRE CON:
+REPLACE WITH:
   ### LoremFlickr — keyword-based contextual images (primary free source)
   URL pattern: https://loremflickr.com/<W>/<H>/<keyword>
   Multi-keyword: https://loremflickr.com/<W>/<H>/<keyword1>,<keyword2>
@@ -529,7 +529,7 @@ SOSTITUIRE CON:
   Use 1-2 keywords derived from the page brief topic — not generic section names.
   No API key required. Returns semantically relevant photos from Flickr CC0.
 
-MANTENERE (come secondo fallback):
+KEEP (as second fallback):
   ### Lorem Picsum — deterministic fallback (use only if LoremFlickr unavailable)
   URL pattern: https://picsum.photos/seed/<word>/<W>/<H>
   Note: seed is a hash, not a semantic search. Use only for decorative/non-topic images.
@@ -537,57 +537,57 @@ MANTENERE (come secondo fallback):
 
 ---
 
-### Wave 1 — Entity + Repository + Crittografia (backend core)
+### Wave 1 — Entity + Repository + Encryption (backend core)
 
-**Obiettivo:** fondamenta dati. Nessuna UI, nessun cambio al pipeline esistente.  
-**Backward compatible:** sì, è tutto additive.
+**Goal:** data foundations. No UI, no change to the existing pipeline.  
+**Backward compatible:** yes, everything is additive.
 
-**File da creare:**
+**Files to create:**
 
 - `apps/api/src/domain/entities/ServiceApiKey.ts`
 - `apps/api/src/domain/repositories/ServiceApiKeyRepository.ts`
-- `apps/api/src/infra/crypto/serviceApiKeyCrypto.ts` — encrypt/decrypt/fingerprint con AES-256-GCM
-- `apps/api/src/infra/repositories/MongoServiceApiKeyRepository.ts` — collection `service_api_keys`
+- `apps/api/src/infra/crypto/serviceApiKeyCrypto.ts` — encrypt/decrypt/fingerprint with AES-256-GCM
+- `apps/api/src/infra/repositories/MongoServiceApiKeyRepository.ts` — `service_api_keys` collection
 - `apps/api/src/infra/adapters/ServiceApiKeyResolver.ts` — priority resolution (db → env → none)
-- `packages/contracts/src/serviceApiKeys.ts` — DTO e Zod schemas
-- `apps/api/src/application/use-cases/SeedServiceKeysFromEnv.ts` — migrazione non-destructiva
+- `packages/contracts/src/serviceApiKeys.ts` — DTOs and Zod schemas
+- `apps/api/src/application/use-cases/SeedServiceKeysFromEnv.ts` — non-destructive migration
 
-**File da modificare:**
+**Files to change:**
 
-- `apps/api/src/config.ts` — aggiungere variabili opzionali immagini (`PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY`, `PIXABAY_API_KEY`) come optional nel Zod schema
-- `apps/api/src/infra/db/mongooseSchemas.ts` (o equivalente) — aggiungere schema `service_api_keys`
-- `apps/api/src/container.ts` (o bootstrap) — registrare i nuovi repository/adapter
+- `apps/api/src/config.ts` — add optional image variables (`PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY`, `PIXABAY_API_KEY`) as optional in the Zod schema
+- `apps/api/src/infra/db/mongooseSchemas.ts` (or equivalent) — add the `service_api_keys` schema
+- `apps/api/src/container.ts` (or bootstrap) — register the new repository/adapter
 
-**Test:**
+**Tests:**
 
-- Unit test `serviceApiKeyCrypto.ts` — encrypt→decrypt roundtrip, fingerprint deterministico
-- Unit test `SeedServiceKeysFromEnv` — verifica che non sovrascriva chiavi esistenti
+- Unit test `serviceApiKeyCrypto.ts` — encrypt→decrypt roundtrip, deterministic fingerprint
+- Unit test `SeedServiceKeysFromEnv` — verifies it does not overwrite existing keys
 
 ---
 
 ### Wave 2 — Admin API routes
 
-**Obiettivo:** CRUD backend per gestione chiavi da UI.
+**Goal:** CRUD backend for key management from the UI.
 
-**File da creare:**
+**Files to create:**
 
 - `apps/api/src/application/use-cases/ManageServiceApiKeys.ts` — use-cases: create, update, delete, setDefault, setFallback
 - `apps/api/src/presentation/http/routes/adminServiceKeyRoutes.ts`
 
-**File da modificare:**
+**Files to change:**
 
-- `apps/api/src/presentation/http/routes/adminRoutes.ts` — mount dei nuovi route handler
-- `packages/contracts/src/admin.ts` — import e re-export dei nuovi schema
+- `apps/api/src/presentation/http/routes/adminRoutes.ts` — mount the new route handler
+- `packages/contracts/src/admin.ts` — import and re-export the new schemas
 
-**Deliverable:** endpoint `GET /admin/service-keys` funzionante e testabile con curl/Postman.
+**Deliverable:** `GET /admin/service-keys` endpoint working and testable with curl/Postman.
 
 ---
 
 ### Wave 3 — Image service connectors + fallback policy
 
-**Obiettivo:** connettori concreti per i servizi immagine con fallback automatico.
+**Goal:** concrete connectors for image services with automatic fallback.
 
-**File da creare:**
+**Files to create:**
 
 - `apps/api/src/infra/adapters/imageServices/IImageService.ts`
 - `apps/api/src/infra/adapters/imageServices/PexelsImageService.ts`
@@ -597,7 +597,7 @@ MANTENERE (come secondo fallback):
 - `apps/api/src/infra/adapters/imageServices/PicsumImageService.ts` — no HTTP call, URL builder
 - `apps/api/src/infra/adapters/imageServices/ImageServiceRegistry.ts` — factory + fallback orchestrator
 
-**Behavior fallback:**
+**Fallback behavior:**
 
 ```
 resolve(keyword, w, h) {
@@ -606,34 +606,34 @@ resolve(keyword, w, h) {
   try { result = await primary.getImageUrl(query, primary.apiKey); return result; }
   catch/non-200 → try fallback
   fallback = resolver.resolveFallback("image")
-  return fallback.getImageUrl(query)  // LoremFlickr o Picsum — always succeeds
+  return fallback.getImageUrl(query)  // LoremFlickr or Picsum — always succeeds
 }
 ```
 
 ---
 
-### Wave 4 — Iniezione dinamica nel prompt
+### Wave 4 — Dynamic injection into the prompt
 
-**Obiettivo:** la sezione `## IMAGES` del pre-prompt riflette la configurazione DB effettiva.
+**Goal:** the `## IMAGES` section of the pre-prompt reflects the actual DB configuration.
 
-**File da creare:**
+**Files to create:**
 
 - `apps/api/src/application/llm/buildImageSourcesBlock.ts`
 
-**File da modificare:**
+**Files to change:**
 
-- `apps/api/src/application/use-cases/GetLlmPromptConfig.ts` — `DEFAULT_PRE_PROMPT` usa `{{IMAGE_SOURCES_BLOCK}}` come marker; la sostituzione avviene in `execute()`
-- `apps/api/src/application/llm/systemPromptComposer.ts` — o alternativamente, la sostituzione avviene qui
+- `apps/api/src/application/use-cases/GetLlmPromptConfig.ts` — `DEFAULT_PRE_PROMPT` uses `{{IMAGE_SOURCES_BLOCK}}` as a marker; the replacement happens in `execute()`
+- `apps/api/src/application/llm/systemPromptComposer.ts` — or alternatively, the replacement happens here
 
-**Note:** se il resolver DB non è disponibile (startup cold path), `buildImageSourcesBlock()` torna alla versione statica con LoremFlickr (Wave 0 output).
+**Note:** if the DB resolver is unavailable (cold startup path), `buildImageSourcesBlock()` falls back to the static version with LoremFlickr (Wave 0 output).
 
 ---
 
-### Wave 5 — Admin UI tab "Integrations"
+### Wave 5 — Admin UI "Integrations" tab
 
-**Obiettivo:** gestione visuale delle API key per il superadmin.
+**Goal:** visual API key management for the superadmin.
 
-**File da creare:**
+**Files to create:**
 
 - `apps/web/app/admin/integrations/page.tsx`
 - `apps/web/components/admin/integrations/ServiceKeyCard.tsx`
@@ -641,78 +641,78 @@ resolve(keyword, w, h) {
 - `apps/web/components/admin/integrations/ServiceKeyCategoryTabs.tsx`
 - `apps/web/lib/api/serviceKeys.ts` — client API hooks
 
-**File da modificare:**
+**Files to change:**
 
-- `apps/web/app/admin/layout.tsx` — aggiungere voce "Integrations" alla nav
-- `apps/web/lib/api/admin.ts` (o equivalente) — aggiungere chiamate al nuovo endpoint
+- `apps/web/app/admin/layout.tsx` — add the "Integrations" entry to the nav
+- `apps/web/lib/api/admin.ts` (or equivalent) — add calls to the new endpoint
 
-**UI rules (da AGENTS.md):**
+**UI rules (from AGENTS.md):**
 
-- Usare `Card`, `Button`, `Input`, `Badge`, `Dialog` da `@/components/ui/`
-- Usare token semantici (`bg-card`, `text-muted-foreground`, `border-border`)
+- Use `Card`, `Button`, `Input`, `Badge`, `Dialog` from `@/components/ui/`
+- Use semantic tokens (`bg-card`, `text-muted-foreground`, `border-border`)
 - No inline styles
 
 ---
 
-### Wave 6 — LLM provider resolution via DB (parallelo a Wave 4-5)
+### Wave 6 — LLM provider resolution via DB (parallel to Wave 4-5)
 
-**Obiettivo:** la risoluzione della API key LLM legge dal DB prima dell'env.  
-**Questo completa il cerchio:** aggiungere una chiave SiliconFlow dall'admin UI → funziona immediatamente nella generazione.
+**Goal:** LLM API key resolution reads from the DB before env.  
+**This closes the loop:** adding a SiliconFlow key from the admin UI → works immediately in generation.
 
-**File da modificare:**
+**Files to change:**
 
-- `apps/api/src/infra/llm/` — ovunque si chiama `env.providerApiKeys[provider]`, sostituire con `ServiceApiKeyResolver.resolve(provider)` che applica la priorità db→env
-- Retrocompatibilità: step 3 del resolver è sempre `env.providerApiKeys[provider]`, quindi i deploy env-only continuano a funzionare
+- `apps/api/src/infra/llm/` — everywhere `env.providerApiKeys[provider]` is called, replace with `ServiceApiKeyResolver.resolve(provider)`, which applies the db→env priority
+- Backward compatibility: resolver step 3 is always `env.providerApiKeys[provider]`, so env-only deployments keep working
 
 ---
 
-## 13. Retrocompatibilità — garanzie
+## 13. Backward compatibility — guarantees
 
-| Comportamento esistente | Impatto di questa milestone |
+| Existing behavior | Impact of this milestone |
 |-------------------------|----------------------------|
-| API key solo in env | Continua a funzionare — step 3 del resolver |
-| LLM generation con env key | Nessun cambiamento fino a Wave 6 |
-| `DEFAULT_PRE_PROMPT` statico | Wave 0 fix, Wave 4 upgrade opzionale |
-| `PlatformConfig` esistente | Non modificata — nuova collection separata |
-| `LlmProviderCatalog` esistente | Non modificata — i provider mantengono la struttura attuale |
-| Deploy senza DB delle service keys | Funziona — il resolver ha fallback env |
-| Utenti senza BYOK | Non impattati — scope="user" non visibile nell'UI ancora |
+| API key in env only | Keeps working — resolver step 3 |
+| LLM generation with env key | No change until Wave 6 |
+| Static `DEFAULT_PRE_PROMPT` | Wave 0 fix, Wave 4 optional upgrade |
+| Existing `PlatformConfig` | Unmodified — new, separate collection |
+| Existing `LlmProviderCatalog` | Unmodified — providers keep their current structure |
+| Deploy without a service-keys DB | Works — the resolver has an env fallback |
+| Users without BYOK | Not impacted — scope="user" not yet visible in the UI |
 
 ---
 
-## 14. Note di sicurezza
+## 14. Security notes
 
-- **Mai loggare raw API key** — nemmeno in debug mode
-- **Mai restituire `encryptedKey`** via API — solo `hasKey` + `keyFingerprint`
-- **Rotazione chiave**: aggiorna il record con `rotateKey` — il vecchio encrypted value viene sovrascritto
-- **Master key derivation** usa `JWT_ACCESS_SECRET` — se questo secret cambia, le chiavi in DB non sono più decriptabili: documentare questo rischio nella runbook
-- **Audit log**: ogni create/update/delete logga userId + serviceId + timestamp (no key value)
-- **Endpoint rate limit**: le route `/admin/service-keys` condividono il rate limit admin globale
-
----
-
-## 15. Aggiornamenti documentazione richiesti
-
-Al completamento di ogni wave:
-
-- `docs/INDEX.md` — aggiungere riferimento a questo spec
-- `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — aggiungere sezione sulla collection `service_api_keys`
-- `docs/runbooks/TESTABLE_STEPS.md` — aggiungere step di smoke test per il nuovo endpoint
-- `.env.example` — aggiungere le variabili opzionali immagini commentate (Wave 1)
-- `docs/agents/CODE_AGENT_INDEX.md` — aggiornare con nuovi file path di questa feature
+- **Never log the raw API key** — not even in debug mode
+- **Never return `encryptedKey`** via the API — only `hasKey` + `keyFingerprint`
+- **Key rotation**: updates the record with `rotateKey` — the old encrypted value is overwritten
+- **Master key derivation** uses `JWT_ACCESS_SECRET` — if this secret changes, keys in the DB are no longer decryptable: document this risk in the runbook
+- **Audit log**: every create/update/delete logs userId + serviceId + timestamp (no key value)
+- **Endpoint rate limit**: the `/admin/service-keys` routes share the global admin rate limit
 
 ---
 
-## 16. Checklist deliverable per milestone chiusa
+## 15. Required documentation updates
 
-- [ ] Wave 0: `source.unsplash.com` rimosso, LoremFlickr aggiunto nel DEFAULT_PRE_PROMPT
-- [ ] Wave 1: `ServiceApiKey` entity + repository + crypto + resolver funzionanti
-- [ ] Wave 1: `SeedServiceKeysFromEnv` non-destructivo funzionante
-- [ ] Wave 2: tutti gli endpoint admin CRUD funzionanti e testabili
-- [ ] Wave 3: connettori immagine con fallback policy testati (primario non-200 → fallback)
-- [ ] Wave 3: LoremFlickr e Picsum bypass no-key funzionante
-- [ ] Wave 4: `buildImageSourcesBlock()` inietta sezione IMAGES dinamica nel pre-prompt
-- [ ] Wave 5: tab "Integrations" visibile e funzionale per superadmin
-- [ ] Wave 5: API key non visibile dopo salvataggio (solo fingerprint)
-- [ ] Wave 6: LLM generation usa DB key se presente, env come fallback
-- [ ] Tutti i deploy env-only continuano a funzionare senza modifiche
+On completion of each wave:
+
+- `docs/INDEX.md` — add a reference to this spec
+- `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` — add a section on the `service_api_keys` collection
+- `docs/runbooks/TESTABLE_STEPS.md` — add a smoke-test step for the new endpoint
+- `.env.example` — add the optional image variables, commented out (Wave 1)
+- `docs/agents/CODE_AGENT_INDEX.md` — update with the new file paths for this feature
+
+---
+
+## 16. Deliverable checklist for milestone closure
+
+- [ ] Wave 0: `source.unsplash.com` removed, LoremFlickr added to `DEFAULT_PRE_PROMPT`
+- [ ] Wave 1: `ServiceApiKey` entity + repository + crypto + resolver working
+- [ ] Wave 1: `SeedServiceKeysFromEnv` non-destructive and working
+- [ ] Wave 2: all admin CRUD endpoints working and testable
+- [ ] Wave 3: image connectors with fallback policy tested (primary non-200 → fallback)
+- [ ] Wave 3: LoremFlickr and Picsum no-key bypass working
+- [ ] Wave 4: `buildImageSourcesBlock()` injects the dynamic IMAGES section into the pre-prompt
+- [ ] Wave 5: "Integrations" tab visible and functional for superadmin
+- [ ] Wave 5: API key not visible after saving (fingerprint only)
+- [ ] Wave 6: LLM generation uses the DB key if present, env as fallback
+- [ ] All env-only deployments keep working without modification

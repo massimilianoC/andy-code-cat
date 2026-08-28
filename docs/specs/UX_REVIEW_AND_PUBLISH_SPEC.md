@@ -1,77 +1,77 @@
-# Andy Code Cat — UX Review + Pubblicazione Persistente (Path UUID)
+# Andy Code Cat — UX Review + Persistent Publishing (Path UUID)
 
-> **Revisione:** 2026-04-07
-> **Scope:** Review UX workspace + Implementazione publishing persistente livello 3 (path UUID)
-> **Prerequisiti:** M0, M0.5, M0.8, M4a completati
+> **Revision:** 2026-04-07
+> **Scope:** Workspace UX review + Level-3 persistent publishing implementation (path UUID)
+> **Prerequisites:** M0, M0.5, M0.8, M4a completed
 
 ---
 
-## 1. UX Review — Stato Attuale del Workspace
+## 1. UX Review — Current State of the Workspace
 
-### 1.1 Flusso utente attuale
+### 1.1 Current user flow
 
 ```
-Login → Dashboard (lista progetti) → Crea/Apri progetto → Workspace
+Login → Dashboard (project list) → Create/Open project → Workspace
 ```
 
-Il workspace è un layout 3-colonne:
+The workspace is a 3-column layout:
 
-| Colonna | Contenuto | Stato |
+| Column | Content | Status |
 |---|---|---|
-| **Sinistra** (chat) | Chat con LLM, focus indicator, prompt config | ✅ Funzionante |
-| **Centro** (preview) | Preview iframe, tabs (HTML/CSS/JS/Prompt), toolbar con Inspect/Edit/Export/Capture | ✅ Funzionante |
-| **Destra** (editor) | Monaco editor per sorgente, snapshot history | ✅ Funzionante |
+| **Left** (chat) | Chat with the LLM, focus indicator, prompt config | ✅ Working |
+| **Center** (preview) | Preview iframe, tabs (HTML/CSS/JS/Prompt), toolbar with Inspect/Edit/Export/Capture | ✅ Working |
+| **Right** (editor) | Monaco editor for source, snapshot history | ✅ Working |
 
-### 1.2 Pain points UX identificati
+### 1.2 UX pain points identified
 
-#### P1 — Nessun percorso "pubblica e condividi"
+#### P1 — No "publish and share" path
 
-L'utente genera un sito, lo affina, ma poi può solo scaricare un ZIP. Non può mostrarlo a qualcuno con un link. Questo rompe il loop di validazione: generare → testare → condividere → iterare.
+The user generates a site, refines it, but can then only download a ZIP. They can't show it to someone with a link. This breaks the validation loop: generate → test → share → iterate.
 
-#### P2 — Inspect mode non è il default dopo la prima generazione
+#### P2 — Inspect mode isn't the default after the first generation
 
-Il focus edit è la feature più potente per risparmiare token, ma richiede attivazione manuale. L'utente novizio non sa che esiste.
+Focus edit is the most powerful feature for saving tokens, but it requires manual activation. First-time users don't know it exists.
 
-#### P3 — Toolbar troppo densa
+#### P3 — Toolbar too dense
 
-Inspect, Edit, Salva Edit, Export ZIP, Cattura JPG/PDF — tutti sulla stessa riga. Manca gerarchia visiva.
+Inspect, Edit, Save Edit, Export ZIP, Capture JPG/PDF — all on the same row. There's no visual hierarchy.
 
-#### P4 — Nessun feedback post-generazione
+#### P4 — No post-generation feedback
 
-Dopo che l'LLM genera, non c'è un call-to-action chiaro: "Il tuo sito è stato generato! Vuoi pubblicarlo o affinarlo?"
+After the LLM generates, there's no clear call-to-action: "Your site has been generated! Do you want to publish it or refine it?"
 
-#### P5 — Manca un'area "stato pubblicazione"
+#### P5 — No "publication status" area
 
-Quando il sito sarà pubblicato, l'utente deve vedere lo stato del deploy e il link condivisibile in modo prominente.
+Once the site is published, the user needs to see the deploy status and the shareable link prominently.
 
-### 1.3 Miglioramenti UX proposti (incrementali)
+### 1.3 Proposed UX improvements (incremental)
 
-| ID | Miglioramento | Priorità | Sprint |
+| ID | Improvement | Priority | Sprint |
 |---|---|---|---|
-| **UX-PUB** | Bottone "Pubblica" + pannello link condivisibile | **Critica** | Questo sprint |
-| **UX-POST-GEN** | Banner post-generazione con CTA ("Pubblica" / "Affina con Inspect") | Alta | Prossimo sprint |
-| **UX-INSPECT-AUTO** | Auto-attivazione Inspect dopo prima generazione | Alta | Prossimo sprint |
-| **UX-TOOLBAR** | Raggruppamento toolbar: [Modalità] [Azioni] [Pubblicazione] | Media | Futuro |
+| **UX-PUB** | "Publish" button + shareable link panel | **Critical** | This sprint |
+| **UX-POST-GEN** | Post-generation banner with CTA ("Publish" / "Refine with Inspect") | High | Next sprint |
+| **UX-INSPECT-AUTO** | Auto-activate Inspect after the first generation | High | Next sprint |
+| **UX-TOOLBAR** | Toolbar grouping: [Mode] [Actions] [Publishing] | Medium | Future |
 
 ---
 
-## 2. Pubblicazione Persistente — Architettura "Livello 3" (Path UUID)
+## 2. Persistent Publishing — "Level 3" Architecture (Path UUID)
 
-### 2.1 Motivazione
+### 2.1 Rationale
 
-La spec originale (`EXPORT_AND_PUBLISH_SPEC.md`) definisce un sistema subdomain-based con nginx dedicato (M4b). È il target finale, ma richiede:
+The original spec (`EXPORT_AND_PUBLISH_SPEC.md`) defines a subdomain-based system with a dedicated nginx instance (M4b). That's the final target, but it requires:
 
-- Servizio nginx in docker-compose
-- Docker socket per reload
+- An nginx service in docker-compose
+- A Docker socket for reload
 - Wildcard DNS/SSL
-- BullMQ per DeployWorker
+- BullMQ for the DeployWorker
 
-**Livello 3** è un approccio intermedio: l'API stessa serve le pagine pubblicate a un path UUID, senza nessuna infrastruttura aggiuntiva.
+**Level 3** is an intermediate approach: the API itself serves the published pages at a UUID path, with no additional infrastructure.
 
 ```
-Livello 1: ZIP Export (download locale)         ✅ Implementato
-Livello 2: Pubblicazione path UUID (API-served)  ← QUESTO SPRINT
-Livello 3: Subdomain nginx (futuro M4b)          📐 Spec definita
+Level 1: ZIP Export (local download)             ✅ Implemented
+Level 2: Path UUID publishing (API-served)        ← THIS SPRINT
+Level 3: nginx subdomain (future M4b)             📐 Spec defined
 ```
 
 ### 2.2 URL Format
@@ -80,45 +80,45 @@ Livello 3: Subdomain nginx (futuro M4b)          📐 Spec definita
 https://{host}/p/{publishId}
 ```
 
-Esempi:
+Examples:
 
 - Dev: `http://localhost:4000/p/a1b2c3d4`
 - Prod: `https://api.Andy Code Cat.io/p/a1b2c3d4`
 
-Il `publishId` è un short-id derivato da UUID (primi 8 caratteri) con collision check.
+The `publishId` is a short id derived from a UUID (first 8 characters) with a collision check.
 
-### 2.3 Flusso utente
+### 2.3 User flow
 
 ```
-1. Utente soddisfatto della preview
-2. Clicca "🌐 Pubblica"
-3. API copia artefatti in /data/www/{publishId}/
-4. Ritorna URL condivisibile
-5. UI mostra link con bottone "Copia link"
-6. Il visitatore apre il link → vede il sito generato
-7. L'utente può aggiornare (re-publish) o rimuovere la pubblicazione
+1. User is satisfied with the preview
+2. Clicks "🌐 Publish"
+3. API copies artifacts to /data/www/{publishId}/
+4. Returns a shareable URL
+5. UI shows the link with a "Copy link" button
+6. The visitor opens the link → sees the generated site
+7. The user can update (re-publish) or remove the publication
 ```
 
-### 2.4 Differenze dal ZIP Export
+### 2.4 Differences from ZIP Export
 
-| Aspetto | ZIP Export | Publish Path UUID |
+| Aspect | ZIP Export | Publish Path UUID |
 |---|---|---|
-| Output | File scaricato | URL live condivisibile |
-| Durata | Fino a download | Persistente (finché non rimosso) |
-| Aggiornamento | Nuovo export | Re-publish sovrascrive |
-| Dipendenze infra | Nessuna | Solo filesystem (`/data/www/`) |
-| Auth visitatore | N/A | Nessuna (pubblico) |
+| Output | Downloaded file | Shareable live URL |
+| Lifetime | Until downloaded | Persistent (until removed) |
+| Update | New export | Re-publish overwrites |
+| Infra dependencies | None | Filesystem only (`/data/www/`) |
+| Visitor auth | N/A | None (public) |
 
 ---
 
-## 3. Design tecnico
+## 3. Technical design
 
-### 3.1 Entità `SiteDeployment`
+### 3.1 `SiteDeployment` entity
 
 ```typescript
 interface SiteDeployment {
     id: string;                    // UUID
-    publishId: string;             // short-id (8 chars, URL-safe)
+    publishId: string;             // short id (8 chars, URL-safe)
     projectId: string;
     userId: string;
     snapshotId: string;
@@ -132,7 +132,7 @@ interface SiteDeployment {
 }
 ```
 
-### 3.2 Repository `SiteDeploymentRepository`
+### 3.2 `SiteDeploymentRepository` repository
 
 ```typescript
 interface SiteDeploymentRepository {
@@ -147,49 +147,49 @@ interface SiteDeploymentRepository {
 }
 ```
 
-### 3.3 Use-case `PublishProject`
+### 3.3 `PublishProject` use-case
 
 ```
 Input: { projectId, userId, snapshotId? }
-Output: SiteDeployment con URL
+Output: SiteDeployment with URL
 
 Steps:
-1. Verifica double sandbox (user owns project)
-2. Recupera snapshot (by ID o active)
-3. Se esiste già un deploy live per il progetto → aggiorna (re-publish)
-4. Genera publishId unique (short UUID, collision check)
-5. Post-processa artefatti (stessa logica di ExportLayer1Zip: separa CSS/JS)
-6. Scrivi file in /data/www/{publishId}/
-7. Crea/aggiorna record SiteDeployment
-8. Ritorna deployment con URL
+1. Verify double sandbox (user owns project)
+2. Retrieve snapshot (by ID or active)
+3. If a live deploy already exists for the project → update it (re-publish)
+4. Generate a unique publishId (short UUID, collision check)
+5. Post-process artifacts (same logic as ExportLayer1Zip: split CSS/JS)
+6. Write files to /data/www/{publishId}/
+7. Create/update the SiteDeployment record
+8. Return the deployment with its URL
 ```
 
-### 3.4 Use-case `UnpublishProject`
+### 3.4 `UnpublishProject` use-case
 
 ```
 Input: { projectId, userId, deploymentId }
 Output: void
 
 Steps:
-1. Verifica ownership
-2. Cancella directory /data/www/{publishId}/
-3. Aggiorna/elimina record SiteDeployment
+1. Verify ownership
+2. Delete the /data/www/{publishId}/ directory
+3. Update/remove the SiteDeployment record
 ```
 
 ### 3.5 API Endpoints
 
 ```
-POST   /v1/projects/:projectId/publish        → Pubblica/aggiorna
-GET    /v1/projects/:projectId/publish         → Stato pubblicazione corrente
-DELETE /v1/projects/:projectId/publish/:id     → Rimuovi pubblicazione
+POST   /v1/projects/:projectId/publish        → Publish/update
+GET    /v1/projects/:projectId/publish         → Current publication status
+DELETE /v1/projects/:projectId/publish/:id     → Remove publication
 
-GET    /p/:publishId                           → Serve index.html (PUBBLICO)
-GET    /p/:publishId/style.css                 → Serve CSS (PUBBLICO)
-GET    /p/:publishId/script.js                 → Serve JS (PUBBLICO)
-GET    /p/:publishId/*                         → Serve qualsiasi file (PUBBLICO)
+GET    /p/:publishId                           → Serves index.html (PUBLIC)
+GET    /p/:publishId/style.css                 → Serves CSS (PUBLIC)
+GET    /p/:publishId/script.js                 → Serves JS (PUBLIC)
+GET    /p/:publishId/*                         → Serves any file (PUBLIC)
 ```
 
-### 3.6 Contratto Zod
+### 3.6 Zod contract
 
 ```typescript
 // packages/contracts/src/publish.ts
@@ -212,11 +212,11 @@ interface SiteDeploymentDto {
 
 ### 3.7 Security
 
-- **Serving pubblico**: il path `/p/:publishId` non richiede autenticazione
-- **Contenuto sanitizzato**: gli artefatti HTML sono quelli generati dall'LLM, già nel sistema
-- **Path traversal prevention**: `publishId` validato come `[a-z0-9]` only, nessun input utente nel path
-- **Double sandbox**: POST/DELETE richiedono auth + project ownership
-- **No directory listing**: solo file specifici serviti, mai `readdir`
+- **Public serving**: the `/p/:publishId` path requires no authentication
+- **Sanitized content**: the HTML artifacts are the ones generated by the LLM, already in the system
+- **Path traversal prevention**: `publishId` is validated as `[a-z0-9]` only, no user input in the path
+- **Double sandbox**: POST/DELETE require auth + project ownership
+- **No directory listing**: only specific files are served, never `readdir`
 
 ### 3.8 Storage layout
 
@@ -231,73 +231,73 @@ data/
 │       ├── index.html
 │       ├── style.css
 │       └── script.js
-├── uploads/          ← asset esistenti
-└── exports/          ← ZIP export esistenti
+├── uploads/          ← existing assets
+└── exports/          ← existing ZIP exports
 ```
 
 ---
 
-## 4. UI Frontend — Componenti
+## 4. UI Frontend — Components
 
-### 4.1 Bottone "Pubblica" nella toolbar
+### 4.1 "Publish" button in the toolbar
 
-Posizionato dopo Export ZIP nella toolbar della preview. Visibile solo quando ci sono artefatti.
+Placed after Export ZIP in the preview toolbar. Only visible when artifacts exist.
 
 ```
-[◎ Inspect] [✎ EDIT] [💾 Salva] | [⬇ ZIP] [📷 Cattura] [🌐 Pubblica]
+[◎ Inspect] [✎ EDIT] [💾 Save] | [⬇ ZIP] [📷 Capture] [🌐 Publish]
 ```
 
-### 4.2 Pannello stato pubblicazione
+### 4.2 Publication status panel
 
-Quando il progetto è pubblicato, mostra un banner sotto la toolbar:
+Once the project is published, shows a banner below the toolbar:
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ 🌐 Pubblicato: http://localhost:4000/p/a1b2c3d4      │
-│ [📋 Copia link]  [🔄 Aggiorna]  [🗑 Rimuovi]         │
-│ Ultimo aggiornamento: 5 min fa                        │
+│ 🌐 Published: http://localhost:4000/p/a1b2c3d4       │
+│ [📋 Copy link]  [🔄 Update]  [🗑 Remove]              │
+│ Last updated: 5 min ago                                │
 └──────────────────────────────────────────────────────┘
 ```
 
-### 4.3 Flusso "Pubblica" (prima volta)
+### 4.3 "Publish" flow (first time)
 
-1. Utente clicca "🌐 Pubblica"
-2. Notification panel: "Pubblicazione in corso…"
-3. API risponde con URL
-4. Banner pubblicazione appare con il link
-5. Notification: "Sito pubblicato! Link copiato."
+1. User clicks "🌐 Publish"
+2. Notification panel: "Publishing in progress…"
+3. API responds with the URL
+4. Publication banner appears with the link
+5. Notification: "Site published! Link copied."
 
-### 4.4 Flusso "Aggiorna" (re-publish)
+### 4.4 "Update" flow (re-publish)
 
-1. Utente modifica il sito (chat, edit, ecc.)
-2. Clicca "🔄 Aggiorna" nel banner pubblicazione
-3. API sovrascrive i file
-4. Banner aggiornato con nuovo timestamp
+1. User modifies the site (chat, edit, etc.)
+2. Clicks "🔄 Update" in the publication banner
+3. API overwrites the files
+4. Banner updates with a new timestamp
 
 ---
 
-## 5. Sequenza implementazione
+## 5. Implementation sequence
 
 ```
 1. Contracts: packages/contracts/src/publish.ts
 2. Entity + Repository interface: domain/entities/SiteDeployment.ts, domain/repositories/SiteDeploymentRepository.ts
 3. MongoDB adapter: infra/repositories/MongoSiteDeploymentRepository.ts
-4. LocalFileStorage: aggiungere metodi publish (wwwDirPath, writePublishFiles, deletePublishDir)
+4. LocalFileStorage: add publish methods (wwwDirPath, writePublishFiles, deletePublishDir)
 5. Use-cases: PublishProject.ts, UnpublishProject.ts, GetSiteDeployment.ts
 6. Routes: publishRoutes.ts (CRUD + static serving)
-7. app.ts: montare routes
-8. Frontend: api.ts functions, workspace UI (bottone + banner)
-9. Test smoke
+7. app.ts: mount routes
+8. Frontend: api.ts functions, workspace UI (button + banner)
+9. Smoke test
 ```
 
 ---
 
-## 6. Compatibilità con evoluzione futura
+## 6. Compatibility with future evolution
 
-Questo livello 3 è compatibile con l'evoluzione verso subdomain nginx (M4b):
+This level 3 is compatible with evolving toward nginx subdomains (M4b):
 
-- `SiteDeployment` entity è la stessa — si aggiunge `type: "path" | "subdomain"`
-- Lo storage `/data/www/{publishId}/` è lo stesso usato da nginx
-- Il passaggio a nginx richiede solo: aggiungere virtual host + cambiare URL format
+- The `SiteDeployment` entity stays the same — it just gains `type: "path" | "subdomain"`
+- The `/data/www/{publishId}/` storage is the same one used by nginx
+- Moving to nginx only requires: adding a virtual host + changing the URL format
 
-Non ci sono breaking changes quando si evolve verso il livello successivo.
+There are no breaking changes when evolving to the next level.

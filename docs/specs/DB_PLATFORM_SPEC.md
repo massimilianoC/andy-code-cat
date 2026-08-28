@@ -19,20 +19,20 @@
 interface User {
   _id: ObjectId;
   
-  // Identità
+  // Identity
   email: string;                    // unique index
   emailVerified: boolean;
-  passwordHash?: string;            // null se solo SSO
+  passwordHash?: string;            // null if SSO only
   
   // SSO
   ssoProviders: Array<{
     provider: 'google' | 'github';
     providerId: string;
-    accessToken?: string;           // cifrato a riposo
+    accessToken?: string;           // encrypted at rest
     refreshToken?: string;
   }>;
   
-  // Profilo
+  // Profile
   profile: {
     firstName?: string;
     lastName?: string;
@@ -52,17 +52,17 @@ interface User {
     deletionRequestedAt?: Date;
   };
   
-  // Crediti e piano
+  // Credits and plan
   billing: {
     plan: 'free' | 'pro' | 'agency';
     planRenewsAt?: Date;
-    credits: number;                // crediti correnti
-    creditsLifetime: number;        // totale crediti mai avuti (analytics)
+    credits: number;                // current credits
+    creditsLifetime: number;        // total credits ever granted (analytics)
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
   };
   
-  // Sicurezza
+  // Security
   security: {
     lastLoginAt?: Date;
     lastLoginIp?: string;
@@ -73,9 +73,9 @@ interface User {
     emailVerificationToken?: string;
   };
   
-  // Impostazioni
+  // Settings
   settings: {
-    defaultProvider?: string;      // provider AI preferito
+    defaultProvider?: string;      // preferred AI provider
     defaultModel?: string;
     notificationsEmail: boolean;
     timezone: string;
@@ -86,7 +86,7 @@ interface User {
   deletedAt?: Date;                 // soft delete
 }
 
-// Indici
+// Indexes
 db.users.createIndex({ email: 1 }, { unique: true });
 db.users.createIndex({ 'ssoProviders.providerId': 1 });
 db.users.createIndex({ 'billing.stripeCustomerId': 1 });
@@ -101,73 +101,73 @@ db.users.createIndex({ deletedAt: 1 });
 interface Project {
   _id: ObjectId;
   
-  // Ownership e collaborazione
+  // Ownership and collaboration
   ownerId: ObjectId;               // ref users
   collaborators: Array<{
     userId: ObjectId;              // ref users
-    email: string;                 // denormalizzato per display rapido
-    canEdit: boolean;              // toggle semplice
+    email: string;                 // denormalized for quick display
+    canEdit: boolean;              // simple toggle
     invitedAt: Date;
     acceptedAt?: Date;
-    inviteToken?: string;          // token per accettare invito via email
+    inviteToken?: string;          // token to accept the invite via email
   }>;
   
-  // Identità progetto
+  // Project identity
   name: string;
   description?: string;
   type: 'landing_page' | 'mini_site' | 'portfolio' | 'ecommerce';
-  lang: string;                    // 'it' | 'en' | ecc.
+  lang: string;                    // 'it' | 'en' | etc.
   
-  // Input originale (wizard)
+  // Original input (wizard)
   wizard: {
     originalPrompt: string;
-    refinedPrompt?: string;        // dopo step 5 (eventuale correzione utente)
-    themeId?: string;              // ref temi libreria
+    refinedPrompt?: string;        // after step 5 (optional user correction)
+    themeId?: string;              // ref theme library
     themeOverride?: ThemeOverride;
     attachments: WizardAttachment[];
-    briefGenerated?: string;       // testo brief mostrato nello step 5
+    briefGenerated?: string;       // brief text shown in step 5
     briefAcceptedAt?: Date;
   };
   
-  // Configurazione AI
+  // AI configuration
   aiConfig: {
     provider: string;
     model: string;
     prepromptProfileId: ObjectId;
     prepromptProfileVersion: string;
-    maxAutoRefinementLoops: number; // configurabile, default 3
+    maxAutoRefinementLoops: number; // configurable, default 3
     qualityCheckEnabled: boolean;
     openCodeConfigOverride?: object;
   };
   
-  // Pubblicazione
+  // Publishing
   site: {
-    // Nome temporaneo generato alla creazione
-    tempSlug: string;              // es. "velvet-phoenix-42"
+    // Temporary name generated at creation
+    tempSlug: string;              // e.g. "velvet-phoenix-42"
     
-    // Nome scelto dall'utente alla pubblicazione
-    publishedSlug?: string;        // es. "pizzeria-napoli" — unique globale
+    // Name chosen by the user at publication
+    publishedSlug?: string;        // e.g. "pizzeria-napoli" — globally unique
     
-    // Dominio personalizzato
+    // Custom domain
     customDomain?: string;
     customDomainVerifiedAt?: Date;
     customDomainSslAt?: Date;
     
-    // Visibilità
+    // Visibility
     visibility: 'private' | 'password' | 'public';
-    passwordHash?: string;         // bcrypt, solo se visibility = 'password'
+    passwordHash?: string;         // bcrypt, only if visibility = 'password'
     
-    // URL finali
-    internalUrl: string;           // https://tempSlug.Andy Code Cat.io (sempre attivo)
-    publicUrl?: string;            // https://publishedSlug.Andy Code Cat.io (dopo publish)
-    customUrl?: string;            // https://customDomain (se configurato)
+    // Final URLs
+    internalUrl: string;           // https://tempSlug.Andy Code Cat.io (always active)
+    publicUrl?: string;            // https://publishedSlug.Andy Code Cat.io (after publish)
+    customUrl?: string;            // https://customDomain (if configured)
     
     publishedAt?: Date;
     unpublishedAt?: Date;
     isPublished: boolean;
   };
   
-  // Git locale (Gitea)
+  // Local Git (Gitea)
   git: {
     repoId?: number;               // Gitea repo ID
     localPath: string;             // /data/repos/{projectId}/
@@ -175,19 +175,19 @@ interface Project {
     currentIteration: number;
   };
   
-  // Stato operativo
+  // Operational state
   status: 'draft' | 'generating' | 'generated' | 'deploying' | 'live' | 'paused_credits' | 'error';
   currentJobId?: string;
   lastError?: string;
   
-  // Metriche crediti
+  // Credit metrics
   credits: {
     totalConsumed: number;
     lastJobConsumed: number;
-    breakdown: CreditBreakdown[];  // per audit
+    breakdown: CreditBreakdown[];  // for audit
   };
   
-  // Badge pubblicazione
+  // Publication badges
   badges: Array<'published' | 'verified' | 'featured'>;
   
   createdAt: Date;
@@ -202,8 +202,8 @@ interface WizardAttachment {
   mimeType: string;
   sizeBytes: number;
   uploadedAt: Date;
-  extractedText?: string;         // per PDF/DOC (estratto al momento dell'upload)
-  aiDescription?: string;         // per immagini (descrizione LLM)
+  extractedText?: string;         // for PDF/DOC (extracted at upload time)
+  aiDescription?: string;         // for images (LLM description)
 }
 
 interface ThemeOverride {
@@ -240,21 +240,21 @@ interface Job {
   _id: ObjectId;
   bullJobId: string;
   projectId: ObjectId;
-  ownerId: ObjectId;               // denormalizzato per query veloci
+  ownerId: ObjectId;               // denormalized for fast queries
   
   type: 'generation' | 'refinement' | 'deploy' | 'image_gen' | 
         'quality_check' | 'export_zip' | 'ssl_provision';
   
   input: {
     prompt?: string;
-    resolvedPrompt?: string;       // dopo preprompt engine
+    resolvedPrompt?: string;       // after preprompt engine
     prepromptProfileId?: ObjectId;
     prepromptProfileVersion?: string;
     attachmentPaths?: string[];
     parentJobId?: string;
     iterationNumber: number;
     
-    // Solo per refinement
+    // Only for refinement
     refinementPrompt?: string;
     targetFiles?: string[];
     
@@ -264,7 +264,7 @@ interface Job {
   
   status: 'waiting' | 'active' | 'completed' | 'failed' | 'stalled' | 'cancelled';
   progress: number;                // 0-100
-  progressLabel?: string;          // "Generazione HTML..." per la UI
+  progressLabel?: string;          // "Generating HTML..." for the UI
   
   opencode?: {
     pid?: number;
@@ -343,9 +343,9 @@ interface Deployment {
   jobId: ObjectId;
   ownerId: ObjectId;
   
-  // Config nginx generata
+  // Generated nginx config
   nginx: {
-    configContent: string;         // testo nginx.conf generato
+    configContent: string;         // generated nginx.conf text
     configPath: string;            // /etc/nginx/sites-available/pf-{slug}.conf
     serverName: string;
     rootPath: string;
@@ -355,7 +355,7 @@ interface Deployment {
     sslExpiresAt?: Date;
   };
   
-  // Visibilità al momento del deploy
+  // Visibility at deploy time
   visibility: 'private' | 'password' | 'public';
   
   // Export
@@ -380,11 +380,11 @@ interface Deployment {
   unpublishedAt?: Date;
   isActive: boolean;
   
-  // Chi ha deployato (sistema automatico o API client di terze parti)
+  // Who deployed (automatic system or third-party API client)
   deployedBy: 'system' | 'api_client';
   apiClientId?: ObjectId;
   
-  // Notifiche
+  // Notifications
   notificationSent: boolean;
   notificationSentAt?: Date;
   
@@ -401,15 +401,15 @@ db.deployments.createIndex({ ownerId: 1, publishedAt: -1 });
 ### 2.5 `sites` (namespace globale slug)
 
 ```typescript
-// Collection separata per garantire unicità globale slug in modo atomico
+// Separate collection to guarantee atomic, globally unique slugs
 interface SiteSlug {
   _id: ObjectId;
-  slug: string;                    // unique globale
+  slug: string;                    // globally unique
   projectId: ObjectId;
   ownerId: ObjectId;
   type: 'temp' | 'published' | 'custom_domain';
   reservedAt: Date;
-  releasedAt?: Date;               // quando il progetto viene eliminato
+  releasedAt?: Date;               // when the project is deleted
 }
 
 db.sites.createIndex({ slug: 1 }, { unique: true });
@@ -428,18 +428,18 @@ interface CreditTransaction {
   type: 'purchase' | 'subscription_grant' | 'signup_bonus' | 
         'job_charge' | 'refund' | 'manual_adjustment';
   
-  amount: number;                  // positivo = accredito, negativo = addebito
+  amount: number;                  // positive = credit, negative = charge
   balanceBefore: number;
   balanceAfter: number;
   
-  // Solo per addebiti job
+  // Only for job charges
   jobId?: ObjectId;
   projectId?: ObjectId;
   jobType?: string;
   
-  // Solo per acquisti
+  // Only for purchases
   stripePaymentIntentId?: string;
-  pricePaid?: number;              // in centesimi EUR
+  pricePaid?: number;              // in EUR cents
   currency?: string;
   
   description: string;
@@ -455,18 +455,18 @@ db.credit_transactions.createIndex({ jobId: 1 }, { sparse: true });
 
 ---
 
-### 2.7 `preprompt_profiles` (già in SPEC.md, qui integrato)
+### 2.7 `preprompt_profiles` (already in SPEC.md, integrated here)
 
 ```typescript
-// Aggiunto rispetto a SPEC.md precedente:
+// Added relative to the earlier SPEC.md:
 interface PrepromptProfile {
-  // ... (vedi SPEC.md §4.2)
+  // ... (see SPEC.md §4.2)
   
-  // Nuovo: visibilità per multi-tenant
+  // New: multi-tenant visibility
   visibility: 'system' | 'private' | 'org_shared';
-  ownerId?: ObjectId;              // null per profili system
+  ownerId?: ObjectId;              // null for system profiles
   
-  // Nuovo: statistiche uso
+  // New: usage statistics
   stats: {
     timesUsed: number;
     avgQualityScore?: number;
@@ -477,7 +477,7 @@ interface PrepromptProfile {
 
 ---
 
-### 2.8 `api_clients` (per terze parti)
+### 2.8 `api_clients` (for third parties)
 
 ```typescript
 interface ApiClient {
@@ -487,21 +487,21 @@ interface ApiClient {
   name: string;
   description?: string;
   
-  // Chiave API
-  keyPrefix: string;               // "pf_live_" o "pf_test_"
-  keyHash: string;                 // SHA-256 della chiave completa
-  keyLastFour: string;             // per display "...ab3f"
+  // API key
+  keyPrefix: string;               // "pf_live_" or "pf_test_"
+  keyHash: string;                 // SHA-256 of the full key
+  keyLastFour: string;             // for display "...ab3f"
   
-  // Permessi
+  // Permissions
   scopes: Array<'generate' | 'deploy' | 'export' | 'read'>;
   
-  // Rate limits specifici
+  // Specific rate limits
   rateLimits: {
     generatePerHour: number;
     deployPerDay: number;
   };
   
-  // Webhook di default per questo client
+  // Default webhook for this client
   webhookUrl?: string;
   webhookSecret?: string;
   
@@ -514,22 +514,22 @@ interface ApiClient {
 
 ---
 
-### 2.9 `themes` (libreria temi)
+### 2.9 `themes` (theme library)
 
 ```typescript
 interface Theme {
   _id: ObjectId;
-  themeId: string;                 // es. "bold-dark"
-  name: string;                    // es. "Midnight"
+  themeId: string;                 // e.g. "bold-dark"
+  name: string;                    // e.g. "Midnight"
   category: 'minimal' | 'bold' | 'elegant' | 'playful' | 'dark' | 'corporate';
   
   previewImagePath: string;        // PNG 300×200
   
   cssVariables: Record<string, string>;   // CSS custom properties
-  fontImports: string[];           // URL Google Fonts
+  fontImports: string[];           // Google Fonts URLs
   
-  // File base per OpenCode
-  cssTemplatePath: string;         // template CSS da iniettare nel prompt
+  // Base file for OpenCode
+  cssTemplatePath: string;         // CSS template to inject into the prompt
   
   isActive: boolean;
   sortOrder: number;
@@ -539,12 +539,12 @@ interface Theme {
 
 ---
 
-## 3. Architettura Servizi
+## 3. Service Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         CLIENT LAYER                             │
-│  Next.js UI  │  Third-party API client  │  Email (notifiche)    │
+│  Next.js UI  │  Third-party API client  │  Email (notifications)    │
 └──────┬──────────────────┬───────────────────────────────────────┘
        │ HTTPS            │ API Key
 ┌──────▼──────────────────▼───────────────────────────────────────┐
@@ -592,64 +592,64 @@ interface Theme {
 └──────┬──────────────────────────────────────────────────────────┘
        │
 ┌──────▼──────────────────────────────────────────────────────────┐
-│                    INFRASTRUTTURA                                 │
+│                    INFRASTRUCTURE                                 │
 │  MongoDB 7   │  Redis 7   │  Gitea   │  nginx   │  MinIO (opt)  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 4. Credit System — Architettura Completa
+## 4. Credit System — Full Architecture
 
-### 4.1 Tabella Costi Operazioni
+### 4.1 Operation Cost Table
 
-| Operazione | Crediti | Note |
+| Operation | Credits | Notes |
 |---|---|---|
-| Generazione landing page (base) | 5 | senza allegati |
-| + PDF allegato | +2 | estrazione + uso nel prompt |
-| + ogni immagine allegata | +0.5 | descrizione vision LLM |
-| + ogni iterazione quality check | +1.5 | Playwright + LLM verifica |
-| + generazione immagini AI reali (Phase 2) | +1 per img | DALL-E/SDXL |
-| Raffinamento (iterazione manuale) | 3 | prompt → OpenCode → deploy |
-| Pubblicazione (primo deploy) | 1 | nginx + SSL |
-| Re-deploy post-modifica | 0 | gratuito |
-| Export ZIP | 0 | gratuito |
+| Landing page generation (base) | 5 | no attachments |
+| + attached PDF | +2 | extraction + use in prompt |
+| + each attached image | +0.5 | vision LLM description |
+| + each quality-check iteration | +1.5 | Playwright + LLM verification |
+| + real AI image generation (Phase 2) | +1 per image | DALL-E/SDXL |
+| Refinement (manual iteration) | 3 | prompt → OpenCode → deploy |
+| Publication (first deploy) | 1 | nginx + SSL |
+| Re-deploy after edit | 0 | free |
+| Export ZIP | 0 | free |
 
-### 4.2 Stima Pre-Job
+### 4.2 Pre-Job Estimate
 
 ```typescript
 function estimateJobCredits(input: JobEstimateInput): CreditEstimate {
   let credits = 5; // base
-  const breakdown: string[] = ['Base generazione: 5 crediti'];
+  const breakdown: string[] = ['Base generation: 5 credits'];
 
   if (input.hasPdf) {
     credits += 2;
-    breakdown.push('+2 PDF allegato');
+    breakdown.push('+2 attached PDF');
   }
 
   credits += input.imageCount * 0.5;
   if (input.imageCount > 0) {
-    breakdown.push(`+${input.imageCount * 0.5} immagini (${input.imageCount}×0.5)`);
+    breakdown.push(`+${input.imageCount * 0.5} images (${input.imageCount}×0.5)`);
   }
 
   const loops = input.maxQualityLoops ?? 3;
   credits += loops * 1.5;
-  breakdown.push(`+${loops * 1.5} verifica qualità (${loops} iterazioni×1.5)`);
+  breakdown.push(`+${loops * 1.5} quality check (${loops} iterations×1.5)`);
 
   return {
     estimated: Math.ceil(credits),
     breakdown,
-    confidence: 'approximate' // stima, non esatta
+    confidence: 'approximate' // estimate, not exact
   };
 }
 ```
 
-### 4.3 Tracking Real-time
+### 4.3 Real-Time Tracking
 
-Ogni step del worker addebita crediti incrementalmente:
+Every worker step charges credits incrementally:
 
 ```typescript
-// In GenerationWorker, dopo ogni step significativo:
+// In GenerationWorker, after each significant step:
 async function chargeCredits(
   userId: ObjectId,
   jobId: ObjectId,
@@ -690,7 +690,7 @@ async function chargeCredits(
     );
   });
   
-  // SSE push al client se connesso
+  // SSE push to the client if connected
   sseManager.emit(userId.toString(), 'credits_updated', {
     credits: user.billing.credits - amount,
     charged: amount,
@@ -699,25 +699,25 @@ async function chargeCredits(
 }
 ```
 
-### 4.4 Gestione Pausa per Crediti Esauriti
+### 4.4 Pause Handling for Exhausted Credits
 
 ```typescript
-// InsufficientCreditsError catturata nel worker:
+// InsufficientCreditsError caught in the worker:
 try {
   await chargeCredits(userId, jobId, projectId, 1.5, 'Quality check loop 2/3');
 } catch (err) {
   if (err instanceof InsufficientCreditsError) {
-    // Salva stato corrente
+    // Save current state
     await Job.updateOne({ _id: jobId }, {
       status: 'paused_credits',
       'opencode.checkpointDir': currentWorkspaceDir
     });
     await Project.updateOne({ _id: projectId }, { status: 'paused_credits' });
     
-    // Notifica utente
+    // Notify user
     await notificationQueue.add('credits_exhausted', { userId, projectId, jobId });
     
-    // NON fallire il job — sospenderlo
+    // Do NOT fail the job — suspend it
     return { paused: true };
   }
   throw err;
@@ -726,7 +726,7 @@ try {
 
 ---
 
-## 5. Quality Check Loop — Architettura
+## 5. Quality Check Loop — Architecture
 
 ```typescript
 // QualityCheckWorker
@@ -736,53 +736,53 @@ async function runQualityLoop(
   workspaceDir: string
 ): Promise<QualityResult> {
   
-  const maxIterations = project.aiConfig.maxAutoRefinementLoops; // configurabile
+  const maxIterations = project.aiConfig.maxAutoRefinementLoops; // configurable
   let iteration = 0;
   
   while (iteration < maxIterations) {
     iteration++;
     
-    // STEP 1: Playwright analisi
+    // STEP 1: Playwright analysis
     const playwrightResult = await runPlaywrightCheck(workspaceDir);
-    // Playwright serve il sito localmente su porta random, poi:
-    // - Controlla che la pagina si carichi senza errori JS
-    // - Screenshot mobile (375px) e desktop (1280px)
-    // - Verifica che tutte le immagini siano caricate (no broken)
-    // - Conta errori console
+    // Playwright serves the site locally on a random port, then:
+    // - Checks that the page loads without JS errors
+    // - Mobile (375px) and desktop (1280px) screenshots
+    // - Verifies that all images loaded (no broken links)
+    // - Counts console errors
     
-    // STEP 2: LLM verifica corrispondenza contenuto
+    // STEP 2: LLM verifies content match
     const llmResult = await runLlmVerification({
       originalBrief: project.wizard.briefGenerated,
       generatedHtml: await fs.readFile(`${workspaceDir}/dist/index.html`, 'utf8'),
       screenshotBase64: playwrightResult.desktopScreenshot
     });
-    // LLM (modello leggero: Haiku) verifica:
-    // - Il sito risponde all'obiettivo del brief?
-    // - Le sezioni richieste ci sono tutte?
-    // - Il tono è corretto?
+    // LLM (lightweight model: Haiku) checks:
+    // - Does the site meet the brief's objective?
+    // - Are all requested sections present?
+    // - Is the tone correct?
     
     const score = calculateScore(playwrightResult, llmResult);
     
-    // STEP 3: Valuta se serve correzione
+    // STEP 3: Decide whether a fix is needed
     if (score >= QUALITY_THRESHOLD) {
-      // Qualità accettabile — esci dal loop
+      // Acceptable quality — exit the loop
       return { passed: true, score, iterationsRun: iteration };
     }
     
     if (iteration >= maxIterations) {
-      // Limite raggiunto — mostra comunque il risultato
+      // Limit reached — return the result anyway
       return { passed: false, score, iterationsRun: iteration, issues: llmResult.issues };
     }
     
-    // STEP 4: Auto-fix con OpenCode
+    // STEP 4: Auto-fix with OpenCode
     const fixPrompt = buildFixPrompt(playwrightResult.issues, llmResult.issues);
     await runOpenCode(workspaceDir, fixPrompt, 'Andy Code Cat-refiner');
     
-    // Addebita crediti per questa iterazione
+    // Charge credits for this iteration
     await chargeCredits(userId, jobId, projectId, 1.5, `Quality check loop ${iteration}/${maxIterations}`);
     
-    // Aggiorna progress UI
-    await updateJobProgress(jobId, `Verifica qualità — iterazione ${iteration}/${maxIterations}`, 
+    // Update progress UI
+    await updateJobProgress(jobId, `Quality check — iteration ${iteration}/${maxIterations}`, 
                             70 + (iteration / maxIterations * 20));
   }
 }
@@ -798,29 +798,29 @@ function buildFixPrompt(
     ...llmIssues.map(i => `- [content] ${i.description}`)
   ].join('\n');
   
-  return `Correggi questi problemi nel sito in dist/:\n${issues}\n\nNon cambiare il design generale, solo correggi i problemi elencati.`;
+  return `Fix these problems in the site under dist/:\n${issues}\n\nDo not change the overall design, only fix the listed problems.`;
 }
 ```
 
 ---
 
-## 6. Pubblicazione Nginx Multi-tenant
+## 6. Multi-tenant Nginx Publication
 
-### 6.1 Struttura File Nginx
+### 6.1 Nginx File Structure
 
 ```
 /etc/nginx/
-├── nginx.conf                          # config principale (non toccare)
+├── nginx.conf                          # main config (do not touch)
 ├── sites-available/
-│   ├── Andy Code Cat-api.conf              # reverse proxy API
-│   ├── pf-velvet-phoenix-42.conf       # temp slug (creato alla creazione progetto)
-│   ├── pf-pizzeria-napoli.conf         # published slug (creato alla pubblicazione)
-│   └── pf-custom-pizzerianapoli-it.conf # custom domain (creato alla verifica DNS)
+│   ├── Andy Code Cat-api.conf              # API reverse proxy
+│   ├── pf-velvet-phoenix-42.conf       # temp slug (created when the project is created)
+│   ├── pf-pizzeria-napoli.conf         # published slug (created at publication)
+│   └── pf-custom-pizzerianapoli-it.conf # custom domain (created at DNS verification)
 └── sites-enabled/
-    └── [symlink a sites-available]
+    └── [symlink to sites-available]
 ```
 
-### 6.2 Config per Sito Pubblico
+### 6.2 Config for a Public Site
 
 ```nginx
 # Auto-generated by Andy Code Cat DeployWorker
@@ -853,7 +853,7 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
-    # SEO: robots noindex se non pubblico
+    # SEO: robots noindex if not public
     location = /robots.txt {
         return 200 "{robots_content}";
     }
@@ -867,7 +867,7 @@ server {
 }
 ```
 
-### 6.3 Config per Sito Protetto da Password
+### 6.3 Config for a Password-Protected Site
 
 ```nginx
 server {
@@ -877,14 +877,14 @@ server {
 
     root /var/www/Andy Code Cat/{projectId}/dist;
 
-    # Endpoint auth gestito da API Andy Code Cat
+    # Auth endpoint handled by the Andy Code Cat API
     location /_pf_auth {
         proxy_pass http://localhost:3001/internal/site-auth/{slug};
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header Cookie $http_cookie;
     }
 
-    # Tutti gli altri path: verifica cookie auth prima
+    # All other paths: verify the auth cookie first
     location / {
         auth_request /_pf_auth;
         error_page 401 = @pf_login;
@@ -895,24 +895,24 @@ server {
         return 302 /_pf_login?redirect=$request_uri;
     }
 
-    # Pagina login servita da API
+    # Login page served by the API
     location /_pf_login {
         proxy_pass http://localhost:3001/internal/site-login-page/{slug};
     }
 
-    # Assets CSS/JS della pagina login (no auth)
+    # Login page CSS/JS assets (no auth)
     location /_pf_assets {
         proxy_pass http://localhost:3001/internal/assets;
     }
 }
 ```
 
-### 6.4 Wildcard SSL per *.Andy Code Cat.io
+### 6.4 Wildcard SSL for *.Andy Code Cat.io
 
-Per i subdomain non è necessario un certificato per ciascuno se si usa un wildcard:
+For subdomains, a per-subdomain certificate isn't needed if you use a wildcard:
 
 ```bash
-# Setup una tantum (DNS challenge via Certbot + plugin DNS)
+# One-time setup (DNS challenge via Certbot + DNS plugin)
 certbot certonly \
   --dns-cloudflare \
   --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
@@ -921,11 +921,11 @@ certbot certonly \
   --agree-tos \
   --email admin@Andy Code Cat.io
 
-# Il certificato wildcard copre tutti *.Andy Code Cat.io automaticamente
-# Nessun certbot per ogni nuovo subdomain!
+# The wildcard certificate automatically covers all *.Andy Code Cat.io
+# No certbot run needed for each new subdomain!
 ```
 
-Per custom domain (richiede certificato dedicato):
+For a custom domain (requires a dedicated certificate):
 
 ```bash
 certbot --nginx \
@@ -937,10 +937,10 @@ certbot --nginx \
 
 ---
 
-## 7. Generazione Nome Temporaneo
+## 7. Temporary Name Generation
 
 ```typescript
-// Lista parole per generazione nome temp
+// Word lists for temp-name generation
 const ADJECTIVES = [
   'velvet', 'cosmic', 'amber', 'silver', 'golden', 'crystal',
   'neon', 'misty', 'wild', 'swift', 'bright', 'dark',
@@ -961,7 +961,7 @@ async function generateUniqueTempSlug(): Promise<string> {
     const num = Math.floor(Math.random() * 99) + 1;
     const slug = `${adj}-${animal}-${num}`;
     
-    // Verifica univocità globale (tutti i progetti di tutti gli utenti)
+    // Verify global uniqueness (across all projects of all users)
     const exists = await SiteSlug.findOne({ slug });
     if (!exists) {
       await SiteSlug.create({ slug, type: 'temp', reservedAt: new Date() });
@@ -969,25 +969,25 @@ async function generateUniqueTempSlug(): Promise<string> {
     }
     attempts++;
   }
-  // Fallback con UUID troncato
+  // Fallback with a truncated UUID
   return `site-${nanoid(8)}`;
 }
 ```
 
 ---
 
-## 8. Piani e Limiti
+## 8. Plans and Limits
 
 | Feature | Free | Pro (€19/mo) | Agency (€49/mo) |
 |---|---|---|---|
-| Crediti iniziali | 50 | 500/mese | 2000/mese |
-| Crediti acquistabili | ✅ | ✅ | ✅ |
-| Progetti simultanei in gen. | 1 | 3 | 10 |
-| Max iterazioni quality check | 2 | 5 | configurabile |
+| Initial credits | 50 | 500/month | 2000/month |
+| Purchasable credits | ✅ | ✅ | ✅ |
+| Concurrent projects generating | 1 | 3 | 10 |
+| Max quality-check iterations | 2 | 5 | configurable |
 | Custom domain | ❌ | ✅ | ✅ |
-| Password sito | ✅ | ✅ | ✅ |
-| Collaboratori per progetto | 0 | 3 | illimitati |
+| Site password | ✅ | ✅ | ✅ |
+| Collaborators per project | 0 | 3 | unlimited |
 | Export ZIP | ✅ | ✅ | ✅ |
-| API access (terze parti) | ❌ | ✅ | ✅ |
+| API access (third parties) | ❌ | ✅ | ✅ |
 | White-label (no Andy Code Cat branding) | ❌ | ❌ | ✅ |
-| Supporto prioritario | ❌ | Email | Dedicato |
+| Priority support | ❌ | Email | Dedicated |
