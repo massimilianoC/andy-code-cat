@@ -61,32 +61,32 @@ The system is designed as an **open platform**: the Andy Code Cat UI is only one
 │                                                               │
 │  ┌──────────────────────────────────────────────────────────┐ │
 │  │  OpenCode Worker                                          │ │
-│  │  - Spawn opencode CLI in working directory del progetto   │ │
-│  │  - Passa prompt wrappato + contesto                       │ │
-│  │  - Monitora output e file generati                        │ │
+│  │  - Spawn the opencode CLI in the project's working dir    │ │
+│  │  - Pass the wrapped prompt + context                      │ │
+│  │  - Monitor output and generated files                     │ │
 │  │  - Auto-approve permissions (--dangerously-skip-perms)    │ │
 │  └──────────────────────────────────────────────────────────┘ │
 │  ┌──────────────────────────────────────────────────────────┐ │
 │  │  Deploy Worker                                            │ │
-│  │  - Copia output in /var/www/{projectId}/                  │ │
-│  │  - Genera nginx.conf per il sottodominio                  │ │
-│  │  - Esegue nginx -t && nginx reload                        │ │
-│  │  - Lancia certbot per SSL                                 │ │
+│  │  - Copy output to /var/www/{projectId}/                   │ │
+│  │  - Generate nginx.conf for the subdomain                  │ │
+│  │  - Run nginx -t && nginx reload                           │ │
+│  │  - Run certbot for SSL                                    │ │
 │  └──────────────────────────────────────────────────────────┘ │
 │  ┌──────────────────────────────────────────────────────────┐ │
 │  │  Image Worker (MVP: placeholder → Phase 2: real gen)      │ │
-│  │  - Scansiona cartella output per mock placeholder         │ │
-│  │  - MVP: copia immagini placeholder SVG/PNG ottimizzate    │ │
-│  │  - Phase 2: chiama API image gen (SDXL/DALL-E/Flux)       │ │
+│  │  - Scan the output folder for mock placeholders           │ │
+│  │  - MVP: copy optimized placeholder SVG/PNG images         │ │
+│  │  - Phase 2: call an image gen API (SDXL/DALL-E/Flux)      │ │
 │  └──────────────────────────────────────────────────────────┘ │
 └───────────────────────────────────────────────────────────────┘
             │
 ┌───────────▼───────────────────────────────────────────────────┐
 │                    PERSISTENCE & INFRA                         │
 │                                                               │
-│  MongoDB (locale)     Gitea (locale)     Redis (BullMQ)       │
-│  - projects           - repo per progetto  - job queue        │
-│  - jobs               - versioning output  - cache            │
+│  MongoDB (local)      Gitea (local)      Redis (BullMQ)       │
+│  - projects           - repo per project   - job queue        │
+│  - jobs               - output versioning  - cache            │
 │  - preprompt configs  - branch per iter.                      │
 │  - users/api-keys     - history diff                          │
 │  - deployments                                                │
@@ -95,48 +95,48 @@ The system is designed as an **open platform**: the Andy Code Cat UI is only one
 
 ---
 
-## 4. Modello Dati (MongoDB)
+## 4. Data Model (MongoDB)
 
 ### 4.1 Collection: `projects`
 
 ```typescript
 interface Project {
   _id: ObjectId;
-  slug: string;                    // ID univoco URL-safe
+  slug: string;                    // unique URL-safe ID
   name: string;
-  ownerId: ObjectId;               // utente o API client
+  ownerId: ObjectId;               // user or API client
   
-  // Configurazione pubblicazione
+  // Publishing configuration
   deployment: {
     mode: 'subdomain' | 'custom_domain' | 'zip_export' | 'nginx_config';
-    subdomain?: string;            // es. "myclient.Andy Code Cat.io"
-    customDomain?: string;         // es. "landing.myclient.com"
-    baseDomain: string;            // dominio base del sistema
-    nginxConfigPath?: string;      // path generato
+    subdomain?: string;            // e.g. "myclient.Andy Code Cat.io"
+    customDomain?: string;         // e.g. "landing.myclient.com"
+    baseDomain: string;            // system's base domain
+    nginxConfigPath?: string;      // generated path
     publishedUrl?: string;
     sslEnabled: boolean;
   };
   
-  // Configurazione AI
+  // AI configuration
   aiConfig: {
     provider: string;              // "anthropic" | "openai" | "ollama" | ...
     model: string;
-    prepromptProfileId: ObjectId;  // riferimento a PrepromptProfile
-    openCodeConfigOverride?: object; // override opencode.json per questo progetto
+    prepromptProfileId: ObjectId;  // reference to PrepromptProfile
+    openCodeConfigOverride?: object; // opencode.json override for this project
   };
   
-  // Stato
+  // State
   status: 'draft' | 'generating' | 'generated' | 'deploying' | 'live' | 'error';
   currentJobId?: string;
   
-  // Repo Git locale
+  // Local Git repo
   gitRepo: {
     giteaRepoId?: number;
     localPath: string;             // /data/repos/{slug}/
     currentBranch: string;
   };
   
-  // Iterazioni
+  // Iterations
   iterationCount: number;
   lastGeneratedAt?: Date;
   
@@ -152,9 +152,9 @@ interface PrepromptProfile {
   _id: ObjectId;
   name: string;
   description: string;
-  version: string;                 // semver es. "1.2.0"
+  version: string;                 // semver e.g. "1.2.0"
   
-  // Scope di applicazione
+  // Application scope
   scope: {
     type: 'global' | 'project' | 'agent_type' | 'output_type';
     projectId?: ObjectId;
@@ -162,19 +162,19 @@ interface PrepromptProfile {
     outputType?: 'html_static' | 'react' | 'nextjs';
   };
   
-  // Layer di wrapping (applicati in ordine)
+  // Wrapping layers (applied in order)
   layers: PrepromptLayer[];
   
-  // Configurazione OpenCode specifica
+  // OpenCode-specific configuration
   openCodeConfig: {
-    agentProfile?: string;         // nome agente opencode custom
-    skills?: string[];             // skill files da iniettare
-    claudeMdTemplate?: string;     // template CLAUDE.md da usare
+    agentProfile?: string;         // custom opencode agent name
+    skills?: string[];             // skill files to inject
+    claudeMdTemplate?: string;     // CLAUDE.md template to use
     forbiddenTools?: string[];
     allowedTools?: string[];
   };
   
-  // Configurazione struttura output attesa
+  // Expected output structure configuration
   outputStructure: {
     expectedDirs: string[];        // ["dist/", "dist/assets/", "dist/images/"]
     entryPoint: string;            // "dist/index.html"
@@ -192,9 +192,9 @@ interface PrepromptLayer {
   order: number;
   name: string;
   type: 'system' | 'context' | 'constraint' | 'format' | 'persona';
-  content: string;                 // template con variabili {{project.name}}, {{input.prompt}}, ecc.
+  content: string;                 // template with variables {{project.name}}, {{input.prompt}}, etc.
   isOptional: boolean;
-  condition?: string;              // espressione JSONata per applicazione condizionale
+  condition?: string;              // JSONata expression for conditional application
 }
 ```
 
@@ -203,16 +203,16 @@ interface PrepromptLayer {
 ```typescript
 interface Job {
   _id: ObjectId;
-  bullJobId: string;               // ID del job in BullMQ
+  bullJobId: string;               // BullMQ job ID
   projectId: ObjectId;
   type: 'generation' | 'deploy' | 'image_gen' | 'refinement' | 'export';
   
   input: {
     prompt?: string;
-    attachments?: JobAttachment[];  // PDF, immagini caricate
+    attachments?: JobAttachment[];  // uploaded PDFs, images
     prepromptProfileId: ObjectId;
-    resolvedPrompt?: string;        // prompt finale dopo wrapping (loggato per debug)
-    parentJobId?: string;           // per job concatenati
+    resolvedPrompt?: string;        // final prompt after wrapping (logged for debugging)
+    parentJobId?: string;           // for chained jobs
   };
   
   status: 'waiting' | 'active' | 'completed' | 'failed' | 'stalled';
@@ -244,10 +244,10 @@ interface Job {
 }
 
 interface ImagePlaceholder {
-  path: string;                    // path relativo es. "images/hero.jpg"
-  description: string;             // descrizione estratta dal placeholder
+  path: string;                    // relative path, e.g. "images/hero.jpg"
+  description: string;             // description extracted from the placeholder
   dimensions: { width: number; height: number };
-  generatedPath?: string;          // dopo image gen
+  generatedPath?: string;          // after image gen
   status: 'pending' | 'generating' | 'done' | 'failed';
 }
 ```
@@ -260,29 +260,29 @@ interface Deployment {
   projectId: ObjectId;
   jobId: ObjectId;
   
-  // Configurazione nginx generata
+  // Generated nginx configuration
   nginxConfig: {
-    content: string;               // contenuto del file nginx.conf generato
+    content: string;               // content of the generated nginx.conf file
     serverName: string;
     rootPath: string;
     sslCertPath?: string;
     sslKeyPath?: string;
   };
   
-  // Pacchetto esportabile
+  // Exportable package
   exportPackage?: {
     zipPath: string;
-    zipUrl: string;                // URL download temporaneo
+    zipUrl: string;                // temporary download URL
     expiresAt: Date;
     size: number;
   };
   
-  // Stato publish
+  // Publish state
   publishedAt?: Date;
   unpublishedAt?: Date;
   isActive: boolean;
   
-  // Per audit/terze parti
+  // For audit/third parties
   deployedBy: 'system' | 'api_client';
   apiClientId?: ObjectId;
   
@@ -292,50 +292,50 @@ interface Deployment {
 
 ---
 
-## 5. API REST — Endpoints MVP
+## 5. REST API — MVP Endpoints
 
-### 5.1 Autenticazione
+### 5.1 Authentication
 
 ```
-POST   /api/v1/auth/register          # registrazione utente
+POST   /api/v1/auth/register          # user registration
 POST   /api/v1/auth/login             # login → JWT
-POST   /api/v1/auth/api-keys          # genera API key per terze parti
-DELETE /api/v1/auth/api-keys/:keyId   # revoca API key
+POST   /api/v1/auth/api-keys          # generate an API key for third parties
+DELETE /api/v1/auth/api-keys/:keyId   # revoke an API key
 ```
 
-### 5.2 Progetti
+### 5.2 Projects
 
 ```
-GET    /api/v1/projects               # lista progetti (paginata)
-POST   /api/v1/projects               # crea nuovo progetto
-GET    /api/v1/projects/:slug         # dettaglio progetto
-PATCH  /api/v1/projects/:slug         # aggiorna config progetto
-DELETE /api/v1/projects/:slug         # elimina progetto e risorse
+GET    /api/v1/projects               # list projects (paginated)
+POST   /api/v1/projects               # create a new project
+GET    /api/v1/projects/:slug         # project detail
+PATCH  /api/v1/projects/:slug         # update project config
+DELETE /api/v1/projects/:slug         # delete project and resources
 
-# Generazione (async)
+# Generation (async)
 POST   /api/v1/projects/:slug/generate
   Body: { prompt, attachments?, prepromptProfileId?, aiConfigOverride? }
   Response: { jobId, status: "queued", estimatedSeconds }
 
-# Raffinamento (async) — continua dal risultato precedente
+# Refinement (async) — continues from the previous result
 POST   /api/v1/projects/:slug/refine
   Body: { prompt, targetFiles? }
   Response: { jobId, status: "queued" }
 
 # Export
-GET    /api/v1/projects/:slug/export/zip        # scarica ZIP del progetto
-GET    /api/v1/projects/:slug/export/nginx      # restituisce nginx.conf
-GET    /api/v1/projects/:slug/export/dns-guide  # istruzioni record A/DNS
+GET    /api/v1/projects/:slug/export/zip        # download the project's ZIP
+GET    /api/v1/projects/:slug/export/nginx      # returns the nginx.conf
+GET    /api/v1/projects/:slug/export/dns-guide  # A/DNS record instructions
 ```
 
 ### 5.3 Jobs
 
 ```
-GET    /api/v1/jobs/:jobId            # stato e dettaglio job
+GET    /api/v1/jobs/:jobId            # job status and detail
 GET    /api/v1/jobs/:jobId/logs       # log streaming (SSE)
-POST   /api/v1/jobs/:jobId/cancel     # cancella job in corso
+POST   /api/v1/jobs/:jobId/cancel     # cancel an in-progress job
 
-# Webhook configuration (per terze parti)
+# Webhook configuration (for third parties)
 POST   /api/v1/projects/:slug/webhooks
   Body: { url, events: ["job.completed", "job.failed", "deploy.live"] }
 ```
@@ -343,13 +343,13 @@ POST   /api/v1/projects/:slug/webhooks
 ### 5.4 Pre-prompt Profiles
 
 ```
-GET    /api/v1/preprompt-profiles             # lista profili
-POST   /api/v1/preprompt-profiles             # crea profilo
-GET    /api/v1/preprompt-profiles/:id         # dettaglio
-PUT    /api/v1/preprompt-profiles/:id         # aggiorna (crea nuova versione)
-DELETE /api/v1/preprompt-profiles/:id         # depreca profilo
-GET    /api/v1/preprompt-profiles/:id/history # storico versioni
-POST   /api/v1/preprompt-profiles/:id/test    # testa wrapping prompt senza eseguire
+GET    /api/v1/preprompt-profiles             # list profiles
+POST   /api/v1/preprompt-profiles             # create a profile
+GET    /api/v1/preprompt-profiles/:id         # detail
+PUT    /api/v1/preprompt-profiles/:id         # update (creates a new version)
+DELETE /api/v1/preprompt-profiles/:id         # deprecate a profile
+GET    /api/v1/preprompt-profiles/:id/history # version history
+POST   /api/v1/preprompt-profiles/:id/test    # test the prompt wrapping without executing
   Body: { samplePrompt, projectContext? }
   Response: { resolvedPrompt, layers: [{name, content}] }
 ```
@@ -357,100 +357,100 @@ POST   /api/v1/preprompt-profiles/:id/test    # testa wrapping prompt senza eseg
 ### 5.5 Deploy
 
 ```
-POST   /api/v1/projects/:slug/deploy          # pubblica su nginx
-DELETE /api/v1/projects/:slug/deploy          # rimuovi da nginx
-GET    /api/v1/projects/:slug/deploy/status   # stato pubblicazione
+POST   /api/v1/projects/:slug/deploy          # publish to nginx
+DELETE /api/v1/projects/:slug/deploy          # remove from nginx
+GET    /api/v1/projects/:slug/deploy/status   # publish status
 ```
 
 ---
 
-## 6. Flusso Operativo End-to-End
+## 6. End-to-End Operational Flow
 
-### 6.1 Generazione (Happy Path)
+### 6.1 Generation (Happy Path)
 
 ```
 1. Client → POST /projects/:slug/generate { prompt, attachments? }
-   └── API crea Job su MongoDB (status: waiting)
-   └── Aggiunge job a BullMQ queue "generation"
-   └── Restituisce { jobId } immediatamente
+   └── API creates a Job in MongoDB (status: waiting)
+   └── Adds the job to the "generation" BullMQ queue
+   └── Returns { jobId } immediately
 
-2. GenerationWorker (BullMQ) riceve il job
-   ├── Recupera Project e PrepromptProfile da MongoDB
+2. GenerationWorker (BullMQ) receives the job
+   ├── Fetches the Project and PrepromptProfile from MongoDB
    ├── PREPROMPT ENGINE:
-   │   ├── Estrae testo da PDF (se allegato) via pdfjs/pymupdf
-   │   ├── Descrive immagini allegate via LLM vision
-   │   ├── Applica layer in ordine: system → context → constraint → format
-   │   ├── Sostituisce variabili template nel prompt
-   │   ├── Salva resolvedPrompt nel Job (per debug e audit)
-   │   └── Genera CLAUDE.md dal template del profilo
+   │   ├── Extracts text from the PDF (if attached) via pdfjs/pymupdf
+   │   ├── Describes attached images via LLM vision
+   │   ├── Applies layers in order: system → context → constraint → format
+   │   ├── Substitutes template variables in the prompt
+   │   ├── Saves resolvedPrompt on the Job (for debugging and audit)
+   │   └── Generates CLAUDE.md from the profile's template
    │
    ├── GIT SETUP:
-   │   ├── Clona/crea repo locale Gitea per il progetto
-   │   ├── Crea branch "iteration-N" (N = iterationCount + 1)
-   │   └── Prepara working directory /data/workspaces/{jobId}/
+   │   ├── Clones/creates the local Gitea repo for the project
+   │   ├── Creates branch "iteration-N" (N = iterationCount + 1)
+   │   └── Prepares the working directory /data/workspaces/{jobId}/
    │
    ├── OPENCODE EXECUTION:
-   │   ├── Scrive opencode.json nella working dir con:
-   │   │   - provider e model dal progetto
-   │   │   - skills dedicate (landing-page, no-confirm, nginx-aware)
-   │   │   - tool permissions auto-approve
-   │   ├── Lancia: opencode run --model {provider}/{model}
+   │   ├── Writes opencode.json in the working dir with:
+   │   │   - provider and model from the project
+   │   │   - dedicated skills (landing-page, no-confirm, nginx-aware)
+   │   │   - auto-approve tool permissions
+   │   ├── Runs: opencode run --model {provider}/{model}
    │   │         --agent {agentProfile} "{resolvedPrompt}"
    │   │         --dangerously-skip-permissions
-   │   │   (oppure: opencode serve + opencode run --attach per sessioni multiple)
-   │   ├── Monitora stdout/stderr → aggiorna Job.progress
-   │   └── Timeout configurabile (default 10 min)
+   │   │   (or: opencode serve + opencode run --attach for multiple sessions)
+   │   ├── Monitors stdout/stderr → updates Job.progress
+   │   └── Configurable timeout (default 10 min)
    │
    ├── POST-PROCESSING:
-   │   ├── Verifica struttura cartelle vs outputStructure del profilo
-   │   ├── Estrae ImagePlaceholder dalla cartella images/
-   │   ├── Git commit + push su branch iteration-N
-   │   ├── Aggiorna Job (status: completed, output)
-   │   └── Aggiunge ImageJob alla queue "image-gen"
+   │   ├── Verifies the folder structure against the profile's outputStructure
+   │   ├── Extracts ImagePlaceholder entries from the images/ folder
+   │   ├── Git commit + push on branch iteration-N
+   │   ├── Updates the Job (status: completed, output)
+   │   └── Adds an ImageJob to the "image-gen" queue
    │
-   └── Emette webhook job.completed se configurato
+   └── Emits the job.completed webhook if configured
 
-3. ImageWorker riceve il job
-   ├── MVP: copia immagini placeholder ottimizzate (SVG generati, stock images)
-   ├── Phase 2: genera immagini reali via API configurata
-   └── Git commit con immagini generate
+3. ImageWorker receives the job
+   ├── MVP: copies optimized placeholder images (generated SVGs, stock images)
+   ├── Phase 2: generates real images via the configured API
+   └── Git commit with the generated images
 
-4. Se deployment.mode == 'subdomain' o 'custom_domain':
-   └── Aggiunge DeployJob alla queue "deploy"
+4. If deployment.mode == 'subdomain' or 'custom_domain':
+   └── Adds a DeployJob to the "deploy" queue
 
 5. DeployWorker:
-   ├── Copia output in /var/www/{projectSlug}/
-   ├── Genera nginx.conf da template Jinja2/Nunjucks
+   ├── Copies the output to /var/www/{projectSlug}/
+   ├── Generates nginx.conf from the Jinja2/Nunjucks template
    ├── nginx -t (test config)
    ├── nginx reload
    ├── certbot --nginx -d {subdomain} --non-interactive
-   ├── Salva Deployment su MongoDB
-   └── Emette webhook deploy.live
+   ├── Saves the Deployment in MongoDB
+   └── Emits the deploy.live webhook
 ```
 
-### 6.2 Modalità Export (Terze Parti)
+### 6.2 Export Mode (Third Parties)
 
-Dopo la generazione, una terza parte può:
+After generation, a third party can:
 
 ```
-# Opzione A: ricevere nginx.conf da usare sul proprio server
+# Option A: receive an nginx.conf to use on their own server
 GET /api/v1/projects/:slug/export/nginx
-→ Restituisce il file nginx.conf con server_name e root già configurati
-  La terza parte imposta il record A del proprio DNS verso il nostro IP
-  e usa questa config sul proprio nginx
+→ Returns the nginx.conf file with server_name and root already configured
+  The third party points their DNS A record at our IP
+  and uses this config on their own nginx
 
-# Opzione B: scaricare il sito come ZIP
+# Option B: download the site as a ZIP
 GET /api/v1/projects/:slug/export/zip
-→ Crea archivio ZIP della cartella /var/www/{slug}/
-  Restituisce signed URL di download (valido 1h)
-  La terza parte ospita il sito dove vuole
+→ Creates a ZIP archive of the /var/www/{slug}/ folder
+  Returns a signed download URL (valid for 1h)
+  The third party hosts the site wherever they want
 ```
 
 ---
 
-## 7. OpenCode — Configurazione e Skills
+## 7. OpenCode — Configuration and Skills
 
-### 7.1 opencode.json per progetto (generato dinamicamente)
+### 7.1 Per-project opencode.json (dynamically generated)
 
 ```json
 {
@@ -463,7 +463,7 @@ GET /api/v1/projects/:slug/export/zip
   },
   "agents": {
     "Andy Code Cat-builder": {
-      "description": "Agente specializzato nella generazione di siti web statici",
+      "description": "Agent specialized in generating static websites",
       "prompt": "{{prepromptProfile.openCodeConfig.claudeMdTemplate}}",
       "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
     }
@@ -471,44 +471,44 @@ GET /api/v1/projects/:slug/export/zip
 }
 ```
 
-### 7.2 CLAUDE.md Template (iniettato via PrepromptProfile)
+### 7.2 CLAUDE.md Template (injected via PrepromptProfile)
 
-Il CLAUDE.md è il documento di "memoria" del progetto per OpenCode. Viene generato dal template del profilo e contiene:
+CLAUDE.md is the project's "memory" document for OpenCode. It is generated from the profile's template and contains:
 
 ```markdown
 # Andy Code Cat Project: {{project.name}}
 
-## Obiettivo
-Genera un sito web statico nella cartella `dist/`.
+## Goal
+Generate a static website in the `dist/` folder.
 
-## Struttura output richiesta
+## Required Output Structure
 - dist/index.html          (entry point)
-- dist/css/style.css       (tutti gli stili)
-- dist/js/main.js          (JavaScript minimale)
-- dist/images/             (placeholder immagini)
-- dist/assets/             (font, icone, ecc.)
+- dist/css/style.css       (all styles)
+- dist/js/main.js          (minimal JavaScript)
+- dist/images/             (image placeholders)
+- dist/assets/             (fonts, icons, etc.)
 
-## Regole CRITICHE
-1. NON chiedere conferme. Procedi sempre autonomamente.
-2. Per ogni immagine usa un placeholder SVG con commento:
-   <!-- IMAGE_PLACEHOLDER: {descrizione dell'immagine richiesta} -->
-3. Il sito deve essere completamente auto-contenuto (no CDN esterni)
-4. Usa CSS custom properties per il tema (colori, font)
-5. Ottimizza per mobile-first (viewport meta, media queries)
-6. Ogni pagina deve avere meta SEO basilari
+## CRITICAL Rules
+1. Do NOT ask for confirmation. Always proceed autonomously.
+2. For every image, use an SVG placeholder with a comment:
+   <!-- IMAGE_PLACEHOLDER: {description of the requested image} -->
+3. The site must be fully self-contained (no external CDNs)
+4. Use CSS custom properties for the theme (colors, fonts)
+5. Optimize for mobile-first (viewport meta, media queries)
+6. Every page must have basic SEO meta tags
 
-## Contesto Progetto
+## Project Context
 {{project.context}}
 
-## Prompt Utente (elaborato)
+## User Prompt (processed)
 {{resolvedPrompt}}
 ```
 
-### 7.3 Skills OpenCode Dedicati
+### 7.3 Dedicated OpenCode Skills
 
-File da inserire in `~/.config/opencode/skills/` o nella working dir:
+Files to place in `~/.config/opencode/skills/` or in the working dir:
 
-**`no-confirm.md`** — previene richieste di conferma
+**`no-confirm.md`** — prevents confirmation requests
 
 ```markdown
 # No Confirmation Policy
@@ -517,7 +517,7 @@ Never pause to ask "should I proceed?" or "is this correct?".
 Complete the task fully and autonomously.
 ```
 
-**`static-site-builder.md`** — guida la generazione
+**`static-site-builder.md`** — guides the generation
 
 ```markdown
 # Static Site Builder Skill
@@ -532,23 +532,23 @@ When building static websites:
 
 ---
 
-## 8. Pre-prompt Engine — Specifiche
+## 8. Pre-prompt Engine — Specification
 
-### 8.1 Struttura Layer
+### 8.1 Layer Structure
 
-Ogni PrepromptProfile applica layer in ordine. I layer sono template con variabili:
+Every PrepromptProfile applies layers in order. Layers are templates with variables:
 
 ```
-{{project.name}}          → nome progetto
-{{project.type}}          → tipo (landing_page, mini_site, ecc.)
-{{input.prompt}}          → prompt originale utente
-{{input.attachments}}     → descrizione allegati estratti
-{{deployment.domain}}     → dominio di destinazione
-{{iteration.number}}      → numero iterazione
-{{iteration.previousOutput}} → sommario output precedente (per refine)
+{{project.name}}          → project name
+{{project.type}}          → type (landing_page, mini_site, etc.)
+{{input.prompt}}          → original user prompt
+{{input.attachments}}     → description of extracted attachments
+{{deployment.domain}}     → target domain
+{{iteration.number}}      → iteration number
+{{iteration.previousOutput}} → summary of the previous output (for refine)
 ```
 
-### 8.2 Esempio Profilo: Landing Page Standard
+### 8.2 Example Profile: Standard Landing Page
 
 ```json
 {
@@ -560,31 +560,31 @@ Ogni PrepromptProfile applica layer in ordine. I layer sono template con variabi
       "order": 1,
       "name": "Persona",
       "type": "system",
-      "content": "Sei un senior web designer con 15 anni di esperienza in landing page ad alta conversione. Il tuo output è sempre codice HTML/CSS/JS pulito, moderno e funzionante."
+      "content": "You are a senior web designer with 15 years of experience in high-conversion landing pages. Your output is always clean, modern, working HTML/CSS/JS code."
     },
     {
       "order": 2,
-      "name": "Contesto Progetto",
+      "name": "Project Context",
       "type": "context",
-      "content": "Stai lavorando al progetto '{{project.name}}'. Il sito sarà pubblicato su {{deployment.domain}}. Questa è l'iterazione numero {{iteration.number}}."
+      "content": "You are working on the project '{{project.name}}'. The site will be published at {{deployment.domain}}. This is iteration number {{iteration.number}}."
     },
     {
       "order": 3,
-      "name": "Vincoli Output",
+      "name": "Output Constraints",
       "type": "constraint",
-      "content": "VINCOLI ASSOLUTI:\n- Output solo nella cartella dist/\n- Nessun framework esterno (React, Vue, Angular)\n- Nessuna dipendenza CDN\n- Placeholder immagini con pattern: <!-- IMAGE_PLACEHOLDER: {descrizione} -->\n- Mobile-first responsive\n- HTML semantico e accessibile"
+      "content": "ABSOLUTE CONSTRAINTS:\n- Output only in the dist/ folder\n- No external frameworks (React, Vue, Angular)\n- No CDN dependencies\n- Image placeholders with the pattern: <!-- IMAGE_PLACEHOLDER: {description} -->\n- Mobile-first responsive\n- Semantic, accessible HTML"
     },
     {
       "order": 4,
-      "name": "Formato Output",
+      "name": "Output Format",
       "type": "format",
-      "content": "Quando hai completato la generazione, crea un file dist/MANIFEST.json con:\n{\n  \"pages\": [lista file HTML],\n  \"images\": [lista placeholder trovati],\n  \"completedAt\": \"{{datetime}}\"\n}"
+      "content": "When you have completed the generation, create a dist/MANIFEST.json file with:\n{\n  \"pages\": [list of HTML files],\n  \"images\": [list of placeholders found],\n  \"completedAt\": \"{{datetime}}\"\n}"
     },
     {
       "order": 5,
-      "name": "Prompt Utente",
+      "name": "User Prompt",
       "type": "context",
-      "content": "RICHIESTA: {{input.prompt}}\n\n{{#if input.attachments}}CONTENUTO ALLEGATI:\n{{input.attachments}}{{/if}}"
+      "content": "REQUEST: {{input.prompt}}\n\n{{#if input.attachments}}ATTACHMENT CONTENT:\n{{input.attachments}}{{/if}}"
     }
   ]
 }
@@ -592,7 +592,7 @@ Ogni PrepromptProfile applica layer in ordine. I layer sono template con variabi
 
 ### 8.3 Versioning
 
-Ogni modifica a un profilo crea una nuova versione (`semver`). I progetti referenziano sempre una versione specifica. Il downgrade è possibile scegliendo una versione precedente.
+Every change to a profile creates a new version (`semver`). Projects always reference a specific version. Downgrading is possible by choosing a previous version.
 
 ---
 
@@ -627,13 +627,13 @@ server {
     gzip_types text/plain text/css application/json
                application/javascript text/xml application/xml;
 
-    # Cache assets statici
+    # Cache static assets
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
 
-    # SPA fallback (se necessario)
+    # SPA fallback (if needed)
     location / {
         try_files $uri $uri/ $uri.html =404;
     }
@@ -647,38 +647,38 @@ server {
 
 ---
 
-## 10. Stack Tecnologico
+## 10. Technology Stack
 
 ### 10.1 Backend API
 
-| Componente | Tecnologia | Note |
+| Component | Technology | Notes |
 |---|---|---|
 | Runtime | Node.js 22 LTS (TypeScript) | — |
-| Framework | Fastify 4 | performance, schema validation nativa |
+| Framework | Fastify 4 | performance, native schema validation |
 | Job Queue | BullMQ + Redis 7 | retry, priority, delayed jobs |
 | ORM/ODM | Mongoose 8 | MongoDB schema + validation |
-| Auth | JWT (access) + refresh token | API Key per client terze parti |
-| Validation | Zod | schema condivisi API/internal |
+| Auth | JWT (access) + refresh token | API Key for third-party clients |
+| Validation | Zod | shared API/internal schemas |
 | Logging | Pino | JSON structured logs |
 | File ops | fs-extra, archiver (ZIP) | — |
-| PDF parsing | pdf-parse / pdfjs-dist | estrazione testo da allegati |
+| PDF parsing | pdf-parse / pdfjs-dist | text extraction from attachments |
 | Template engine | Nunjucks | nginx config, CLAUDE.md |
 
-### 10.2 Infrastruttura
+### 10.2 Infrastructure
 
-| Componente | Tecnologia | Note |
+| Component | Technology | Notes |
 |---|---|---|
-| Database | MongoDB 7 (locale) | replica set singolo nodo per MVP |
-| Cache/Queue | Redis 7 (locale) | BullMQ backend |
-| Git server | Gitea (Docker) | repo privati per progetto |
-| Web server | nginx | deploy siti + reverse proxy API |
+| Database | MongoDB 7 (local) | single-node replica set for MVP |
+| Cache/Queue | Redis 7 (local) | BullMQ backend |
+| Git server | Gitea (Docker) | private per-project repos |
+| Web server | nginx | site deploy + API reverse proxy |
 | SSL | Certbot (Let's Encrypt) | wildcard *.Andy Code Cat.io |
-| Containerizzazione | Docker Compose | tutti i servizi infra |
-| Process manager | PM2 | API server e workers |
+| Containerization | Docker Compose | all infra services |
+| Process manager | PM2 | API server and workers |
 
-### 10.3 Frontend (UI Accessoria — fuori scope MVP backend)
+### 10.3 Frontend (Ancillary UI — out of the backend MVP scope)
 
-| Componente | Tecnologia |
+| Component | Technology |
 |---|---|
 | Framework | Next.js 15 (App Router) |
 | UI | Tailwind CSS + shadcn/ui |
@@ -687,14 +687,14 @@ server {
 
 ---
 
-## 11. Struttura Directory del Progetto
+## 11. Project Directory Structure
 
 ```
 Andy Code Cat/
 ├── apps/
-│   ├── api/                        # Backend API (questo documento)
+│   ├── api/                        # Backend API (this document)
 │   │   ├── src/
-│   │   │   ├── routes/             # Endpoint Fastify
+│   │   │   ├── routes/             # Fastify endpoints
 │   │   │   ├── services/           # Business logic
 │   │   │   │   ├── preprompt/      # Preprompt engine
 │   │   │   │   ├── opencode/       # OpenCode runner
@@ -705,22 +705,22 @@ Andy Code Cat/
 │   │   │   │   ├── deploy.worker.ts
 │   │   │   │   └── image.worker.ts
 │   │   │   ├── models/             # Mongoose models
-│   │   │   ├── lib/                # Utilities condivise
-│   │   │   └── config/             # Configurazione app
+│   │   │   ├── lib/                # Shared utilities
+│   │   │   └── config/             # App configuration
 │   │   └── package.json
-│   └── ui/                         # Frontend (scope separato)
+│   └── ui/                         # Frontend (separate scope)
 │
 ├── data/
-│   ├── workspaces/                 # Working dir per ogni job OpenCode
+│   ├── workspaces/                 # Working dir for each OpenCode job
 │   │   └── {jobId}/
 │   │       ├── opencode.json
 │   │       ├── CLAUDE.md
-│   │       └── dist/               # Output generato
-│   ├── repos/                      # Mirror locale repo Gitea
-│   └── exports/                    # ZIP temporanei
+│   │       └── dist/               # Generated output
+│   ├── repos/                      # Local mirror of the Gitea repo
+│   └── exports/                    # Temporary ZIPs
 │
 ├── config/
-│   ├── preprompt-profiles/         # Profili default in JSON
+│   ├── preprompt-profiles/         # Default profiles in JSON
 │   │   ├── landing-page-b2b.json
 │   │   ├── landing-page-startup.json
 │   │   └── mini-site-portfolio.json
@@ -733,28 +733,28 @@ Andy Code Cat/
 │
 ├── docker-compose.yml              # MongoDB, Redis, Gitea
 ├── nginx/
-│   └── sites-enabled/             # Configurazioni generate
+│   └── sites-enabled/             # Generated configurations
 └── scripts/
-    ├── setup.sh                    # Setup iniziale
+    ├── setup.sh                    # Initial setup
     ├── seed-profiles.ts            # Seed preprompt profiles
     └── rotate-logs.sh
 ```
 
 ---
 
-## 12. Sicurezza
+## 12. Security
 
-- **API Key**: hash SHA-256 in MongoDB, mai in chiaro; prefisso `pf_live_` o `pf_test_`
-- **Isolamento workspace**: ogni job gira in `/data/workspaces/{jobId}/` con permessi limitati
-- **Rate limiting**: 10 req/min per endpoint generate/refine; configurabile per API client
-- **Input sanitization**: prompt sanitizzato (lunghezza max 10.000 char, no script injection)
-- **Nginx**: nessun reload senza `nginx -t` positivo; rollback automatico se test fallisce
-- **Allegati**: scansione MIME type; dimensione max 10MB; tipi permessi: PDF, JPG, PNG, WebP
-- **Signed URLs export**: JWT monouso con scadenza 1h per download ZIP
+- **API Key**: SHA-256 hash in MongoDB, never in plaintext; prefix `pf_live_` or `pf_test_`
+- **Workspace isolation**: each job runs in `/data/workspaces/{jobId}/` with restricted permissions
+- **Rate limiting**: 10 req/min per generate/refine endpoint; configurable per API client
+- **Input sanitization**: prompt sanitized (max length 10,000 chars, no script injection)
+- **Nginx**: no reload without a passing `nginx -t`; automatic rollback if the test fails
+- **Attachments**: MIME type scanning; max size 10MB; allowed types: PDF, JPG, PNG, WebP
+- **Signed export URLs**: single-use JWT with a 1h expiry for ZIP downloads
 
 ---
 
-## 13. Variabili d'Ambiente
+## 13. Environment Variables
 
 ```bash
 # App
@@ -789,10 +789,10 @@ OPENCODE_TIMEOUT_MS=600000
 
 # Image Gen (Phase 2)
 IMAGE_GEN_PROVIDER=disabled  # 'disabled' | 'dalle' | 'sdxl' | 'flux'
-OPENAI_API_KEY=xxx  # se IMAGE_GEN_PROVIDER=dalle
-SDXL_API_URL=http://localhost:7860  # se local
+OPENAI_API_KEY=xxx  # if IMAGE_GEN_PROVIDER=dalle
+SDXL_API_URL=http://localhost:7860  # if local
 
-# Storage temporaneo export
+# Temporary export storage
 EXPORT_BASE_URL=https://api.Andy Code Cat.io
 EXPORT_EXPIRY_SECONDS=3600
 ```
