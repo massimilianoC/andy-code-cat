@@ -108,7 +108,13 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
     vibe_intent_prefill: {
         enabled: true,
         provider: "siliconflow",
-        model: "MiniMaxAI/MiniMax-M3",
+        // MiniMax-M3 does not honour this task's COMPLETENESS CONTRACT. Measured on the
+        // local stack: it returns finish_reason=stop after 5,382 of 32,000 available
+        // tokens with 5 of 17 fields filled — it is not running out of room, it is
+        // stopping early. Kimi-K3 and Qwen3-32B both return all 17 on the same prompt.
+        // The brief is the input to every later stage, so a default that fills a third
+        // of it silently degrades the whole pipeline.
+        model: "moonshotai/Kimi-K3",
         temperature: 0.3,
         maxCompletionTokens: 32000,
         systemTemplate: "",
