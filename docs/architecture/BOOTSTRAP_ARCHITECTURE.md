@@ -400,6 +400,8 @@ Primary implementation references:
 - registration and email-verification runtime controls
 - service/integration management surfaces
 - superadmin user operations with block/reset/role management
+- proportional spec-first delivery through the existing spec and PR path: every non-trivial change
+  names its owning contract, risk tier, observable acceptance and relevant verification evidence
 
 Important nuance:
 

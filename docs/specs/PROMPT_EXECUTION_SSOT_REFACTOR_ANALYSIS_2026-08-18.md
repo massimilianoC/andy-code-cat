@@ -1,5 +1,9 @@
 # Prompt Execution SSOT — Architecture Analysis and Refactor Plan
 
+> **Superseded by [../SSOT_STATUS.md](../SSOT_STATUS.md) (2026-08-31).** The remediation this
+> document plans has shipped; the "Status: active remediation plan" line below is stale. Keep it as
+> the record of the original diagnosis.
+
 **Status:** active remediation plan — no implementation is implied by this document  
 **Date:** 2026-08-18  
 **Planning authority:** this document is the canonical next-step plan for prompt-execution traceability. It supplements, but does not replace, the implemented layer-composition baseline in [PROMPT_LAYER_SSOT_SPEC.md](PROMPT_LAYER_SSOT_SPEC.md).  

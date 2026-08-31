@@ -102,6 +102,43 @@ Not allowed on `release/*` unless explicitly approved:
 | `release/*` | `main`, then back-merge to `develop` |
 | `hotfix/*` | `main`, then back-merge to `develop` |
 
+## Preventing Commit Regressions
+
+Two failure modes were found in production during the 2026-08-31 session and are now hard rules,
+not suggestions.
+
+### Always fetch before trusting local branch state
+
+A local `main`/`develop` ref can silently go stale for weeks — nothing in normal usage forces a
+`git fetch`. Comparing local refs without fetching first produces confidently wrong conclusions
+("production is still on last month's release") that lead to wasted remediation work or, worse,
+a real regression getting re-applied on top of a fix that already shipped.
+
+**Rule**: before any git-log comparison, deploy-status claim, or release decision, run
+`git fetch origin --prune` first. Never state what is/isn't merged or deployed from a local ref
+you haven't just fetched.
+
+### Private, deploy-critical files
+
+Some files are deliberately excluded from this (public) repo's git history — see
+`.deploy/deploy/PRIVATE_CONFIG_GUIDE.md` for the full list and rationale (live server IPs, real
+domain layout). This includes `nginx/sites-enabled/*.conf`, `docker-compose.droplet.yml`,
+`.env.droplet`, `scripts/deploy-to-droplet.sh`, and `scripts/seed-droplet.sh`.
+
+Being gitignored does **not** mean these files are exempt from version control — it means they
+must go through the **private** remote described in `PRIVATE_CONFIG_GUIDE.md`, not `origin`. A
+live edit made directly on the droplet (or locally, then deployed) with no corresponding commit
+anywhere is a silent regression waiting to happen: the next full deploy that rsyncs from a clean
+checkout of this repo will overwrite the live fix with the old, un-fixed version, with no diff to
+review and no way to tell afterwards that it happened.
+
+**Rule**: any edit to a private/gitignored deploy-critical file must be committed to the private
+remote (`git push private <branch>`) in the same session it is made, before or immediately after
+deploying it live. If the private remote is not yet set up, treat setting it up as a prerequisite,
+not an optional follow-up — ask the repository owner rather than leaving the edit uncommitted
+anywhere. Record what changed and why in `docs/project/KNOWN_ISSUES.md` or the relevant runbook
+even when the diff itself can't live in the public repo, so a reader here still has the trail.
+
 ## Local Validation Commands
 
 ```bash

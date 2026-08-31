@@ -235,6 +235,8 @@ When resuming work, check these likely gap areas first:
 - **Contracts:** every HTTP input must be validated with a Zod schema in `packages/contracts/`
 - **Isolation:** every mutable operation must pass through `authMiddleware` + `sandboxMiddleware`
 - **Secrets:** no hardcoded secrets — use only `process.env.*` via `apps/api/src/config.ts`
+- **Delivery evidence:** non-trivial changes identify the owning spec/rules, risk tier, observable
+  acceptance and relevant verification in the existing PR path; do not create parallel trackers
 - **Queue:** workers must never call HTTP routes directly — they use domain/application use-cases
 - **LLM providers:** adding a new provider means adding a `default<Name>Catalog.ts`, updating `GetLlmCatalog`, `SeedLlmCatalog`, `index.ts`, `seed-llm.ts`, and `.env.example`. See `defaultOpenRouterCatalog.ts` as the example.
 - **Gitflow:** every git operation must follow `docs/guides/GITFLOW_RELEASE_POLICY.md`; release versioning uses `RELEASE_VERSION`, not `package.json`.
