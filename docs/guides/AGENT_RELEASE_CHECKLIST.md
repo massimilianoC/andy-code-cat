@@ -2,6 +2,15 @@
 
 Use this checklist when an agent prepares a feature branch, release branch, hotfix, PR, merge, or tag in this repository.
 
+## 0. Fetch First
+
+Run `git fetch origin --prune` before making or reporting any claim about what is merged,
+released, or deployed. A stale local `main`/`develop` ref produces confidently wrong conclusions
+(see `docs/guides/GITFLOW_RELEASE_POLICY.md` §"Preventing Commit Regressions"). If a file under
+`nginx/sites-enabled/`, `docker-compose.droplet.yml`, `.env.droplet`, or `scripts/*-droplet.sh`
+is being touched, read that same section before editing it — those files are intentionally
+gitignored from `origin` and need the private remote, not a normal PR.
+
 ## 1. Confirm Scope
 
 - Confirm whether the work is a feature, fix, docs-only change, chore, refactor, release stabilization, or hotfix.
