@@ -1,5 +1,8 @@
 # Prompt Layer SSOT — Execution Plan (agent-executable)
 
+> **Superseded by [../SSOT_STATUS.md](../SSOT_STATUS.md) (2026-08-31).** The document this file
+> forwarded to for future implementation has itself been retired; go to `SSOT_STATUS.md` instead.
+
 Status: **historical execution record — do not execute as-is**
 Parent spec: [PROMPT_LAYER_SSOT_SPEC.md](PROMPT_LAYER_SSOT_SPEC.md) (rationale, invariants).
 Superseded for future implementation by: [PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md).

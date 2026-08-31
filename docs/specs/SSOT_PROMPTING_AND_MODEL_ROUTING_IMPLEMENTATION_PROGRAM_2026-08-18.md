@@ -1,5 +1,9 @@
 # Programma Unificato SSOT — Prompt Execution, Model Routing e Feedback UI
 
+> **Superseded by [../SSOT_STATUS.md](../SSOT_STATUS.md) (2026-08-31).** `U0`–`U5` are executed
+> except the PromptExecution↔run linkage in §3. This document is no longer the implementation
+> authority; keep it for the design rationale only.
+
 **Stato:** priorità immediata di implementazione e review  
 **Data:** 2026-08-18  
 **Decisione:** questo documento unifica e ordina i due refactor attivi: [Prompt Execution SSOT](PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md) e [Vibe → GodMode Model SSOT](VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md). Per l’implementazione prevale su piani precedenti in conflitto riguardo orchestrazione, fallback, optimizer implicito, handoff browser-owned e modello di pipeline.

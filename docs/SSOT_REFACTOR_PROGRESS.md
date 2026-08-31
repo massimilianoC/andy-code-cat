@@ -1,5 +1,9 @@
 # SSOT Refactor — Progress and Resume Point
 
+> **Superseded by [SSOT_STATUS.md](SSOT_STATUS.md) (2026-08-31).** Read that first — it is verified
+> against the code. This tracker's remaining work (`I18`–`I20`) is defined in no document, and its
+> "resume here" instruction should not be followed.
+
 **Status:** I0–I17 implemented and merged to `develop`; I18–I20 remain  
 **Last updated:** 2026-08-28
 **Resume authority:** [SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md)

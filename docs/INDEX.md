@@ -13,6 +13,7 @@ Read in this order before making changes:
 5. [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) — security, auth, and isolation baseline
 6. [docs/guides/GITFLOW_RELEASE_POLICY.md](guides/GITFLOW_RELEASE_POLICY.md) — branch and release governance
 7. [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) — verification path for current milestones
+8. [docs/SSOT_STATUS.md](SSOT_STATUS.md) — required before touching model selection, prompt composition, or the artifact write path; it supersedes the older SSOT trackers and analyses that `CODE_AGENT_INDEX.md` still lists
 
 ---
 
@@ -24,9 +25,11 @@ Read in this order before making changes:
 | [docs/project/PRODUCT_VISION.md](project/PRODUCT_VISION.md) | Current product vision: interactive artifact platform, VibeCore/Workspace/Didactic modes, Layer S direction, deferred BaaS boundary |
 | [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Current development-state summary: `R1` delivered, `R2`/`R3` active, live cross-cutting tracks |
 | [docs/project/ROADMAP.md](project/ROADMAP.md) | Project roadmap and release direction |
-| [docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md) | **Active prompt-execution remediation plan:** server-authoritative traceability from composition to provider payload, snapshot, and Workshop display |
-| [docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md) | **Immediate P0/P1 implementation authority:** unified model-routing, canonical-brief, execution-trace and Workshop-feedback program |
-| [docs/SSOT_REFACTOR_PROGRESS.md](SSOT_REFACTOR_PROGRESS.md) | **Resume here next session:** current status, exact first implementation slice, and gates for the SSOT refactor |
+| [docs/project/KNOWN_ISSUES.md](project/KNOWN_ISSUES.md) | Cross-cutting defects and small gaps found in real use, queued for the next review/refactor/fix pass |
+| [docs/SSOT_STATUS.md](SSOT_STATUS.md) | **Start here for model routing, prompt composition and artifact versioning:** the single consolidated status of the SSOT programme — what is actually live in code, what is genuinely still open, and which older documents it retires |
+| [docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md) | ⚠️ Superseded by [SSOT_STATUS.md](SSOT_STATUS.md) — historical diagnosis of the prompt-execution traceability gap, since remediated |
+| [docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md) | ⚠️ Superseded by [SSOT_STATUS.md](SSOT_STATUS.md) — the `U0`–`U5` programme, kept for design rationale; no longer the implementation authority |
+| [docs/SSOT_REFACTOR_PROGRESS.md](SSOT_REFACTOR_PROGRESS.md) | ⚠️ Superseded by [SSOT_STATUS.md](SSOT_STATUS.md) — stale progress tracker; its remaining `I18`–`I20` increments are defined in no document |
 | [docs/project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md](project/WORKFLOW_PIPELINE_MODULARIZATION_PLAN.md) | ⚠️ Deferred architecture reference for future generic/node workflows; not the current implementation plan |
 | [docs/PRIVATE_CONFIG_GUIDE.md](PRIVATE_CONFIG_GUIDE.md) | Owner-only guidance for public/private repo hygiene |
 
@@ -93,11 +96,11 @@ Read in this order before making changes:
 | [docs/specs/PREPROMPT_ENGINE_SPEC.md](specs/PREPROMPT_ENGINE_SPEC.md) | ⚠️ Partially historical PrepromptEngine reference; live prompt composition follows the registry/SSOT documentation |
 | [docs/specs/PROMPT_LAYER_SSOT_SPEC.md](specs/PROMPT_LAYER_SSOT_SPEC.md) | Prompt Layer SSOT — canonical layer registry, MongoDB override chain, self-describing markers, persisted trace, 1:1 superadmin/sent/stored/displayed correspondence |
 | [docs/specs/PROMPT_LAYER_COMPACTION_SPEC.md](specs/PROMPT_LAYER_COMPACTION_SPEC.md) | ⏸️ Specified, not implemented — Layer K context compaction: binary threshold on the composed system prompt, contract/evidence layers preserved, deferred with measured evidence |
-| [docs/specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md](specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md) | Historical implementation record for the first Prompt Layer SSOT wave; **not** an executable plan for new work |
+| [docs/specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md](specs/PROMPT_LAYER_SSOT_EXECUTION_PLAN.md) | ⚠️ Superseded by [SSOT_STATUS.md](SSOT_STATUS.md) — historical implementation record for the first Prompt Layer SSOT wave; **not** an executable plan for new work |
 | [docs/specs/WORKFLOWS.md](specs/WORKFLOWS.md) | Automated workflow definitions WF-01 to WF-10 |
 | [docs/specs/UX_SPEC.md](specs/UX_SPEC.md) | End-to-end UX and product screen map |
 | [docs/specs/EXECUTION_LOG_SPEC.md](specs/EXECUTION_LOG_SPEC.md) | Structured operational audit logging |
-| [docs/specs/ARTIFACT_LIFECYCLE_EXECUTION_PLAN.md](specs/ARTIFACT_LIFECYCLE_EXECUTION_PLAN.md) | Wave-by-wave plan to close the `AL-NNN` conformance gaps |
+| [docs/specs/ARTIFACT_LIFECYCLE_EXECUTION_PLAN.md](specs/ARTIFACT_LIFECYCLE_EXECUTION_PLAN.md) | ⚠️ Superseded by [SSOT_STATUS.md](SSOT_STATUS.md) — historical wave-by-wave plan; both batches landed, live status lives in the spec's section 9 |
 | [docs/specs/ARTIFACT_LIFECYCLE_SPEC.md](specs/ARTIFACT_LIFECYCLE_SPEC.md) | **Binding** — artifact versioning, seed/branching, activation, publication, traceability (`AL-NNN`) |
 | [docs/specs/FOCUSED_EDIT_SPEC.md](specs/FOCUSED_EDIT_SPEC.md) | Focused editing behavior and constraints |
 | [docs/specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md](specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md) | Output language control — Layer L, per-mode resolution chain, contract changes, UI selector, Workspace fallback |
@@ -123,8 +126,8 @@ Read in this order before making changes:
 | [docs/specs/SECTION_CONTEXT_OPT_SPEC.md](specs/SECTION_CONTEXT_OPT_SPEC.md) | Section-aware context optimization |
 | [docs/specs/PROMPT_OPTIMIZER_SPEC.md](specs/PROMPT_OPTIMIZER_SPEC.md) | Prompt optimizer UX and guardrails — explicit user action only; not for runs with skip policy |
 | [docs/specs/PROMPTING_SERVICE_PLATFORM_SPEC.md](specs/PROMPTING_SERVICE_PLATFORM_SPEC.md) | Internal prompting platform and audit model |
-| [docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md) | **Current implementation authority:** unified P0/P1 program for prompt-execution SSOT, user model locks, canonical briefs, explicit notifications, and review gates |
-| [docs/specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md](specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md) | **Active P0/P1 remediation:** local Docker regression analysis and refactor plan for a server-owned model lock, canonical brief, no-silent-fallback policy, and Vibe → Zero Effort → GodMode handoff |
+| [docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md](specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md) | ⚠️ Superseded by [SSOT_STATUS.md](SSOT_STATUS.md) — see the Product & Project table above |
+| [docs/specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md](specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md) | ⚠️ Superseded by [SSOT_STATUS.md](SSOT_STATUS.md) — historical analysis of the silent model-substitution regression, since fixed on the locked path |
 | [docs/specs/TEMPLATE_SKILLS_INJECTION_PLAN.md](specs/TEMPLATE_SKILLS_INJECTION_PLAN.md) | ⚠️ Historical implementation plan for Layer S; runtime is implemented and active policy/implementation specs govern future work |
 | [docs/specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md](specs/TEMPLATE_SKILLS_LAYER_S_POLICY.md) | Project policy for filesystem-first Layer S: ownership, source-of-truth files, selection rules, validation workflow, impact evaluation, and rollback |
 | [docs/specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md](specs/TEMPLATE_SKILLS_LAYER_S_IMPLEMENTATION.md) | Implemented filesystem resolver for Layer S: by-template folder loading, env controls, prompt trace, DB logging, Docker packaging, and validation |

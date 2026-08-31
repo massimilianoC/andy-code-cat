@@ -690,6 +690,19 @@ Current automation coverage for this flow is backend-focused. Add Playwright cov
 - Open `docs/guides/AGENT_RELEASE_CHECKLIST.md`
 - Expected: the checklist covers branch selection, release identity, commit hygiene, PR targets, merge order, and back-merge rules
 
+### Step 40 - Proportional Delivery Evidence
+
+- Open `AGENTS.md` and `.github/PULL_REQUEST_TEMPLATE.md`.
+- Expected: a non-trivial change names one owning spec or rule family, one risk tier and observable
+  acceptance; it does not create a parallel requirements or execution tracker.
+- Expected for `routine`: the smallest relevant check is recorded.
+- Expected for `material`: targeted tests and relevant type, lint or build evidence are recorded.
+- Expected for `critical`: relevant negative/security/integration or E2E evidence is recorded, and
+  unresolved product, security, spending or irreversible-risk decisions have explicit human
+  approval in the owning spec or focused proposal.
+- Expected: `N/A` is accepted with a reason; irrelevant live-provider or full-stack checks are not
+  run only to satisfy the template.
+
 ---
 
 ## ARTIFACT MEDIA ORCHESTRATOR — Local Docker Test Procedure

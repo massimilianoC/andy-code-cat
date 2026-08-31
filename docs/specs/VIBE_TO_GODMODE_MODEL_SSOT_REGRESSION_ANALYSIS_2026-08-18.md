@@ -1,5 +1,9 @@
 # Regressione Vibe → Zero Effort → GodMode — Model SSOT e Brief Canonico
 
+> **Superseded by [../SSOT_STATUS.md](../SSOT_STATUS.md) (2026-08-31).** La regressione descritta
+> qui è stata corretta: sul percorso con lock un modello scelto non può più essere sostituito in
+> silenzio. Documento da conservare come analisi storica, non come piano attivo.
+
 **Stato:** analisi attiva e piano di correzione P0/P1 — nessuna implementazione è implicita  
 **Data:** 2026-08-18  
 **Autorità di pianificazione:** questa è la specifica vigente per la coerenza di modello, brief e handoff nel percorso Vibe → Zero Effort → GodMode. Integra [PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md), che rimane l’autorità per la tracciabilità dell’esecuzione e per la trasparenza Workshop.  
