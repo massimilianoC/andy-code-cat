@@ -58,8 +58,11 @@ If the change touches code paths, also run the relevant build, lint, and test co
 - Target `develop` for `feat/*`, `fix/*`, `docs/*`, `chore/*`, and `refactor/*` branches.
 - Target `main` first for `release/*` and `hotfix/*` branches.
 - Include a concise change summary.
-- State the risk level and any rollback concern.
-- List the validation commands that were run.
+- Name the owning spec/rules and state observable acceptance for non-trivial behaviour changes.
+- Classify risk as `routine`, `material`, or `critical` using `AGENTS.md`, and state any recovery or
+  rollback concern.
+- List the proportionate validation commands or manual evidence; use `N/A` with a reason instead of
+  running an irrelevant check.
 
 ## 8. Release Branch Rules
 

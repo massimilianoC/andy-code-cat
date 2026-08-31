@@ -1,5 +1,10 @@
 # Artifact Lifecycle — Execution Plan
 
+> **Superseded by [../SSOT_STATUS.md](../SSOT_STATUS.md) (2026-08-31).** Both batches landed. The
+> live conformance status is maintained in section 9 of
+> [ARTIFACT_LIFECYCLE_SPEC.md](ARTIFACT_LIFECYCLE_SPEC.md), which remains binding; this plan is now
+> a historical record of how the gaps were closed.
+
 > **Authority:** `docs/specs/ARTIFACT_LIFECYCLE_SPEC.md` (`AL-NNN`). This plan closes the
 > conformance gaps in that spec's section 9. It adds no rules; where plan and spec disagree, the
 > spec wins.
