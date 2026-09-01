@@ -143,6 +143,36 @@ assemble      —              —            local     → deterministic valida
 - `plan` output: N sections, each `{ title, contentBrief, mediaIntent, charBudget }`, plus the
   design tokens every child must reuse verbatim. Reuse `vibe_prefill`'s hardened JSON parsing.
 - `generate[i]` input: design tokens + section *i* only. Not the 47k prompt.
+
+### 6.1 Where the 47k actually goes, and what a child needs
+
+Measured on run `f51ee098` by splitting `renderedSystemPrompt` on its own `PF_LAYER` markers:
+
+| Layer | key | chars | needed by a child? |
+|---|---|---|---|
+| A | base-constraints | 7,667 | yes, trimmed |
+| L | output-language | 370 | yes |
+| B | preset-format | 1,532 | yes |
+| S | template-skills | 5,251 | probably |
+| C | style-context | 11,915 | **no** — replaced by the plan's design tokens |
+| D | document-context | 3,262 | **no** — see below |
+| E | preprompt-template | 12,274 | **no** — collapses into the plan |
+| P | output-budget-policy | 4,750 | **no** — replaced by one line: this section's `charBudget` |
+| | **total** | **47,021** | target per child: **~10k** |
+
+Two findings worth stating plainly:
+
+**The attachment is re-injected after prefill already digested it.** `ResolvePromptExecution.ts:177-200`
+builds Layer D from the project's attachments on *every* generation, independent of the fact that
+`vibe_prefill` already extracted a brief from those same attachments. The distilled brief and its
+source both travel in the prompt. Layer D is only 3,262 chars here, so this is not the cause of the
+32,768-token failure — but in the fan-out it would be paid N times, and the plan already carries
+what it says. **Children read the plan, not the attachments.**
+
+**We already spend 4,750 chars telling the model about its output budget** (Layer P), and the run
+still terminated at exactly 2¹⁵. That is the empirical case against solving this with more prompt
+instruction: an output-budget policy nearly 5k characters long did not produce a bounded output.
+Structure bounds output; prose asks nicely.
 - `enable_thinking: false` on children — **requires** adding GLM-5.x to the allowlist in
   `chatRequestAdapter.ts:131-145`, which today lists only the GLM *vision* variants. Without this,
   "no reasoning" is prompt-only and unreliable on a hybrid model.
@@ -164,7 +194,8 @@ and not in the children.
 | 1 | Add `plan` to the stage enum; implement the plan call behind the flag | low — additive enum |
 | 2 | Lock-inheritance for fan-out children (§3.1) | **high — incident-hardened path** |
 | 3 | Bounded-pool fan-out of `generate` + awaiter | medium |
-| 4 | Per-section retry loop with concrete errors (§6) | medium |
+| 4 | Per-section retry loop with concrete errors (§6), time ceiling and placeholder degradation (§8.1) | medium |
+| 5 | Drop Layer D from child composition; children read the plan (§6.1) | low |
 
 Increment 0 ships on its own merit regardless of whether the rest is ever built.
 
@@ -183,16 +214,50 @@ Measured against the recorded baseline (`f51ee098`: 629,546 ms, 32,768 completio
 5. total input tokens across the fan-out **< 40k** (guards §3.2 — the failure mode of this design
    is paying 139k in prompt to save output);
 6. a deliberately truncated section is recorded `failed`, retried, and visible as such — never
-   `succeeded`.
+   `succeeded`;
+7. **first section visible to the user in < 20s**, and every later section rendered as it lands —
+   no section waits for its siblings;
+8. no child call contains Layer D document context (§6.1): the plan is the only carrier of what the
+   attachments said.
 
 Criteria are deterministic and structural. None of them is "the model reports it is done".
 
+### 8.1 Guaranteed result, bounded time
+
+The loop is goal-based, and both bounds are hard:
+
+- **time**: a section that has not returned within its budget is cancelled and retried once; the run
+  has a total wall-clock ceiling after which remaining sections degrade to placeholders rather than
+  extending the run;
+- **result**: the run always terminates with N sections. A section that fails twice ships as a
+  labelled placeholder — a deck with 9 real sections and 1 marked gap is a result; a deck that
+  silently stops at section 6 and reports success is what we have today.
+
+"Guaranteed" here means the outcome is *always* defined and *always* honest about which parts
+degraded — not that every section always succeeds.
+
 ---
 
-## 9. Rollback
+## 9. Native replacement, not a flagged alternative
 
-- All work on `feat/parallel-section-generation`, branched from `develop`.
-- The new path sits behind an env flag (default **off**), mirroring the existing
-  `NEXT_PUBLIC_PIPELINE_RUN_UI` precedent. The monolithic `generate` path stays untouched and
-  remains the default until acceptance §8 is met on the local stack.
-- Rollback after merge is therefore a flag flip, not a revert.
+The fan-out **replaces** the monolithic `generate`. It does not sit beside it behind a flag.
+
+A flag would mean shipping two implementations of the same behaviour and keeping both alive — which
+is what Rule Zero (`AGENTS.md`) exists to forbid, and it is also how the model-selection cascade came
+to exist in three copies in the first place. Every branch we keep "just in case" is a branch that
+drifts, and the second path is the one nobody tests.
+
+Isolation comes from the branch: all work lands on `feat/parallel-section-generation`, off `develop`,
+and does not merge until acceptance §8 is met on the local stack. Until then the old path is exactly
+where it is, on `develop`, untouched — that is what git already gives us, without a runtime
+construct we would then have to remove.
+
+## 10. What this makes unnecessary
+
+Progressive feedback stops being a separate feature. `GENERATION_PROGRESS_INSPECTOR_PLAN.md` exists
+because one long opaque call needs synthetic reassurance; N short calls that land one after another
+*are* the progress signal, and each one is a real completed unit rather than a tip invented next to a
+silent socket. Sections render as they arrive.
+
+The inspector plan should be re-read after this ships, not before: most of what it proposes may be
+answered by the stage journal the fan-out already writes.
