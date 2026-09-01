@@ -91,6 +91,7 @@ export function buildOutputBudgetPolicy(): string {
         "- Keep artifacts concise and functional; avoid unnecessary boilerplate.",
         "- artifacts.css and artifacts.js must be plain code strings without <style> or <script> wrappers.",
         "- Use standard single-backslash JSON escaping: \\\" for quotes inside HTML, \\n for newlines. Never double-escape.",
+        "- Separate every JSON object field with `,`, never `;` — even though artifacts.js is full of `;`-terminated statements, the JSON structure wrapping it never uses semicolons. Double-check this specifically right after closing the html/css/js string values.",
         "",
         "## REASONING / THINKING BUDGET (critical)",
         "- Keep internal reasoning brief (target under 2000 tokens).",

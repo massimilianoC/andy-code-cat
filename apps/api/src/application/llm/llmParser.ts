@@ -162,6 +162,82 @@ function repairPrematureStringTermination(input: string): string {
 }
 
 /**
+ * Some models (observed on smaller/open models without constrained JSON decoding)
+ * emit `;` instead of `,` between object fields — most often right after a long
+ * code-heavy string value (e.g. artifacts.js full of `;`-terminated statements),
+ * where the habitual JS/CSS statement terminator leaks into the surrounding JSON
+ * structure.
+ *
+ * Typical pattern produced:
+ *   "html": "...</html>";      ← STRAY: should be `,` (separates html/css)
+ *   "css": "body{...}";        ← STRAY: should be `,` (separates css/js)
+ *   "js": "...initGame);"      ← valid: last field, no separator needed
+ *
+ * Implemented as a string-aware state machine (matching all other repair
+ * functions in this file): `;` is never valid JSON outside a string, so any
+ * occurrence there is already a syntax error. Two confirmed shapes are repaired:
+ * - followed (after whitespace) by `"` → replace with `,` (separates two fields)
+ * - followed (after whitespace) by `}` or `]` → drop it (trailing separator
+ *   before a closing brace/bracket; plain JSON.parse tolerates neither `;` nor
+ *   a trailing `,` there, so dropping is safer than substituting)
+ * Any other shape is left untouched — not a confirmed case, avoid guessing.
+ */
+function repairSemicolonFieldSeparator(input: string): string {
+    let out = "";
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < input.length; i++) {
+        const ch = input[i]!;
+
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+                out += ch;
+                continue;
+            }
+            if (ch === "\\") {
+                escaped = true;
+                out += ch;
+                continue;
+            }
+            if (ch === '"') {
+                inString = false;
+                out += ch;
+                continue;
+            }
+            out += ch;
+            continue;
+        }
+
+        if (ch === '"') {
+            inString = true;
+            out += ch;
+            continue;
+        }
+
+        if (ch === ";") {
+            let j = i + 1;
+            while (j < input.length && (input[j] === ' ' || input[j] === '\t' || input[j] === '\r' || input[j] === '\n')) j++;
+            const nextCh = j < input.length ? input[j] : "";
+            if (nextCh === '"') {
+                out += ",";
+                continue;
+            }
+            if (nextCh === "}" || nextCh === "]") {
+                continue; // drop the stray trailing separator
+            }
+            out += ch;
+            continue;
+        }
+
+        out += ch;
+    }
+
+    return out;
+}
+
+/**
  * Some models double-encode HTML attribute quotes (emitting `\\\"` in the JSON,
  * which parses to `\"` backslash+quote in the html value) and newlines (`\\n` → `\n`).
  * These break HTML rendering: `lang=\"it\"` is not valid HTML.
@@ -326,14 +402,16 @@ function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredRe
  * Strategy order:
  * 1. Direct JSON.parse — no transformation
  * 2. repairInvalidJsonEscapes — fixes \> and literal control chars inside strings
- * 3. Triple-pass premature-termination + escape repair (gemma \\" pattern)
- * 4. repairTruncatedJson — closes open strings/arrays/objects (max_tokens cut-off)
- * 5. jsonrepair library — broad heuristic, last resort
+ * 3. repairSemicolonFieldSeparator — fixes `;` used instead of `,` between fields
+ * 4. Triple-pass premature-termination + escape repair (gemma \\" pattern)
+ * 5. repairTruncatedJson — closes open strings/arrays/objects (max_tokens cut-off)
+ * 6. jsonrepair library — broad heuristic, last resort
  */
 function tryParseWithRepairs(candidate: string): LlmStructuredResponse | null {
     const strategies: Array<() => string> = [
         () => candidate,
         () => repairInvalidJsonEscapes(candidate),
+        () => repairInvalidJsonEscapes(repairSemicolonFieldSeparator(candidate)),
         () => repairInvalidJsonEscapes(repairPrematureStringTermination(repairInvalidJsonEscapes(candidate))),
         () => repairTruncatedJson(repairInvalidJsonEscapes(candidate)),
         () => jsonrepair(candidate),
