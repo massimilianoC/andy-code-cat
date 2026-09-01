@@ -9,15 +9,21 @@
  *   629,546 ms · 32,768 completion tokens (the provider's cap) · journalled "succeeded" · truncated
  *
  * Usage:
- *   cd apps/api && npx tsx src/scripts/fanout-probe.ts
- *   FANOUT_MODEL="deepseek-ai/DeepSeek-V4-Pro" npx tsx src/scripts/fanout-probe.ts
+ *   npm run fanout:probe -w apps/api
+ *   FANOUT_PROVIDER=openrouter FANOUT_MODEL=deepseek/deepseek-v4-pro npm run fanout:probe -w apps/api
  *
  * Env:
- *   SILICONFLOW_API_KEY   required
- *   SILICONFLOW_BASE_URL  optional, defaults to https://api.siliconflow.com/v1
- *   FANOUT_MODEL          optional, defaults to MiniMaxAI/MiniMax-M2.5
+ *   FANOUT_PROVIDER       optional, "siliconflow" (default) or "openrouter"
+ *   FANOUT_MODEL          optional, defaults to the provider's own default below
  *   FANOUT_CONCURRENCY    optional, defaults to 4
+ *   FANOUT_PLAN_TOKENS    optional, defaults to 6000
+ *   FANOUT_SECTION_TOKENS optional, defaults to 4000
  *   FANOUT_OUT            optional path for the assembled HTML
+ *   plus the chosen provider's key/base-url, read from .env or .env.docker
+ *
+ * Note on reasoning: `enable_thinking: false` is only honoured by SiliconFlow (see
+ * chatRequestAdapter). Against OpenRouter the section calls still ask for no reasoning in prose, but
+ * nothing enforces it — so a run there measures the fan-out's mechanics, not the reasoning split.
  *
  * This talks to a live provider and costs money. It is a probe, not a test.
  */
@@ -49,25 +55,47 @@ for (const candidate of [".env", ".env.docker"]) {
     if (fs.existsSync(file)) dotenv.config({ path: file });
 }
 
-const API_KEY = process.env.SILICONFLOW_API_KEY?.trim() ?? "";
-const BASE_URL = (process.env.SILICONFLOW_BASE_URL ?? "https://api.siliconflow.com/v1").replace(/\/$/, "");
-const MODEL = process.env.FANOUT_MODEL?.trim() || "MiniMaxAI/MiniMax-M2.5";
+const PROVIDER = (process.env.FANOUT_PROVIDER?.trim() || "siliconflow").toLowerCase();
 const CONCURRENCY = parseInt(process.env.FANOUT_CONCURRENCY ?? "4", 10);
 
+const PROVIDERS: Record<string, { baseUrl: string; key: string; defaultModel: string }> = {
+    siliconflow: {
+        baseUrl: process.env.SILICONFLOW_BASE_URL ?? "https://api.siliconflow.com/v1",
+        key: process.env.SILICONFLOW_API_KEY?.trim() ?? "",
+        defaultModel: "MiniMaxAI/MiniMax-M2.5",
+    },
+    openrouter: {
+        baseUrl: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+        // Both spellings are in use across this repo's env files.
+        key: (process.env.OPEN_ROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY)?.trim() ?? "",
+        defaultModel: "deepseek/deepseek-v4-pro",
+    },
+};
+
+const providerConfig = PROVIDERS[PROVIDER];
+if (!providerConfig) {
+    console.error(`Unknown FANOUT_PROVIDER "${PROVIDER}". Use one of: ${Object.keys(PROVIDERS).join(", ")}`);
+    process.exit(1);
+}
+
+const BASE_URL = providerConfig.baseUrl.replace(/\/$/, "");
+const API_KEY = providerConfig.key;
+const MODEL = process.env.FANOUT_MODEL?.trim() || providerConfig.defaultModel;
+
 if (!API_KEY) {
-    console.error("SILICONFLOW_API_KEY is not set. Add it to .env at the monorepo root.");
+    console.error(`No API key for provider "${PROVIDER}". Set it in .env or .env.docker at the monorepo root.`);
     process.exit(1);
 }
 
 // ── Baseline being replaced (run f51ee098) ───────────────────────────────────
 const BASELINE = { durationMs: 629_546, completionTokens: 32_768, promptTokens: 13_938 };
 
-class SiliconFlowDispatcher implements SectionLlmDispatcher {
+class ChatCompletionsDispatcher implements SectionLlmDispatcher {
     constructor(private readonly model: string) { }
 
     async dispatch(call: SectionLlmCall): Promise<SectionLlmReply> {
         const body = buildChatCompletionRequestBody({
-            provider: "siliconflow",
+            provider: PROVIDER,
             model: this.model,
             maxTokens: call.maxTokens,
             temperature: 0.4,
@@ -136,9 +164,9 @@ const BASE_CONSTRAINTS = [
 ].join("\n");
 
 async function main(): Promise<void> {
-    console.log(`\nfan-out probe — ${MODEL} @ concurrency ${CONCURRENCY}\n`);
+    console.log(`\nfan-out probe — ${PROVIDER} / ${MODEL} @ concurrency ${CONCURRENCY}\n`);
 
-    const useCase = new GenerateSectionedArtifact(new SiliconFlowDispatcher(MODEL));
+    const useCase = new GenerateSectionedArtifact(new ChatCompletionsDispatcher(MODEL));
     const startedAt = Date.now();
 
     let result;
@@ -148,8 +176,8 @@ async function main(): Promise<void> {
             deliverable: "a 10-section presentation deck",
             baseConstraints: BASE_CONSTRAINTS,
             concurrency: CONCURRENCY,
-            planMaxTokens: 6000,
-            sectionMaxTokens: 4000,
+            planMaxTokens: parseInt(process.env.FANOUT_PLAN_TOKENS ?? "6000", 10),
+            sectionMaxTokens: parseInt(process.env.FANOUT_SECTION_TOKENS ?? "4000", 10),
             sectionTimeoutMs: 120_000,
             totalTimeoutMs: 300_000,
             maxAttemptsPerSection: 2,

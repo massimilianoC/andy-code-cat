@@ -46,6 +46,10 @@ tests/e2e/report/
 
 # ─── Debug / scratch ─────────────────────────────────────────────────────────
 debug/sample/
+# Probe and diagnostic output lands here (fanout-probe writes assembled artifacts).
+# Generated, often large, and never reviewable — it does not belong in a public repo.
+debug/*.html
+debug/*.json
 health_test.json
 
 # ─── OS / IDE ─────────────────────────────────────────────────────────────────

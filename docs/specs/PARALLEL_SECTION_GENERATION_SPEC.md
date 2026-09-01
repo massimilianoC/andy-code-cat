@@ -1,6 +1,6 @@
 # Parallel Section Generation — Spec
 
-**Status: MVP built, not yet wired into a route, not yet validated against a live provider.**
+**Status: MVP built and measured against live models; not yet wired into a route.**
 On `feat/parallel-section-generation`. Measurements are from the local deploy stack, run `f51ee098`,
 2026-09-01.
 
@@ -18,10 +18,10 @@ takes a resolved model and a dispatcher port, so wiring it to `llmRoutes` and th
 journal is the next step — and that step is where §3.1 has to be answered.
 
 Validation status: §8 is checked on every test run against a simulated truncating provider
-(`GenerateSectionedArtifact.acceptance.test.ts`). It has **not** been run against a real model:
-`npm run fanout:probe -w apps/api` exists for that and currently cannot run — the SiliconFlow
-account returns `402 insufficient balance`, no OpenRouter key is configured, and the LM Studio
-endpoint in `.env.docker` (192.168.1.78:1234) is unreachable from this machine.
+(`GenerateSectionedArtifact.acceptance.test.ts`), **and has been run live** — see §9bis. Two runs via
+OpenRouter: 8.7× faster with all seven criteria passing on a non-reasoning model, 2.9× with three
+degraded sections on a reasoning model whose thinking cannot be switched off there. SiliconFlow,
+which does honour the switch, currently returns `402 insufficient balance` and remains untested.
 
 ---
 
@@ -310,6 +310,42 @@ Isolation comes from the branch: all work lands on `feat/parallel-section-genera
 and does not merge until acceptance §8 is met on the local stack. Until then the old path is exactly
 where it is, on `develop`, untouched — that is what git already gives us, without a runtime
 construct we would then have to remove.
+
+## 9bis. Measured, 2026-09-01
+
+Two live runs of `npm run fanout:probe -w apps/api` against the same ten-section brief, via
+OpenRouter (SiliconFlow was returning `402 insufficient balance`). Baseline is run `f51ee098`.
+
+| | baseline (monolith) | DeepSeek-V4-Pro | Gemini-3.7-Flash |
+|---|---|---|---|
+| wall clock | 629.5s | 219.8s (**2.9×**) | **72.6s (8.7×)** |
+| calls | 1 | 15 | 11 |
+| prompt tokens | 13,938 | 10,163 | **3,907** |
+| largest single call | 32,768 (capped) | 4,001 | 3,806 |
+| truncated calls | 1 (the whole run) | 7 | **0** |
+| sections delivered | truncated, unknown | 10 (3 placeholders) | **10 (0 placeholders)** |
+| acceptance §8 | — | 3 / 7 | **7 / 7** |
+
+The two runs isolate the variable, and the difference between them is the argument of this document.
+
+`enable_thinking: false` is honoured by SiliconFlow and ignored by OpenRouter
+(`chatRequestAdapter.ts`), so the DeepSeek run is the fan-out **without** the reasoning split. Its
+seven truncations all landed at exactly 4,000 completion tokens — the per-section budget — which is
+run `f51ee098`'s failure reproduced in miniature: a reasoning model spending a section's entire
+allowance thinking before it emits any HTML. Decomposition alone still bought 2.9×, and the run
+still terminated with ten sections instead of an unknown fraction of a deck, because the retry and
+placeholder path did its job. But three sections degraded.
+
+The Gemini run is the fan-out with nothing competing for the section budget, and it passes every
+criterion: 8.7× faster, no truncation anywhere, ten sections generated, and **3.6× less prompt
+token spend than the single monolithic call** — the fan-out costs less input in total than the one
+call it replaces, because each child carries its section instead of the whole 47k system prompt
+(§6.1, §6.2).
+
+So the decomposition is validated, and so is the claim that it is not sufficient on its own: on a
+hybrid-reasoning model the reasoning split is what turns 2.9× into 8.7×, and that split needs a
+provider that honours the parameter. Making the fan-out's per-section budget cover reasoning on
+providers that do not is an open question, not a solved one.
 
 ## 10. What this makes unnecessary
 
