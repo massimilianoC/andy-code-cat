@@ -141,13 +141,19 @@ git checkout -b feat/my-feature upstream/develop
 ### 4. Tests
 
 - Add or update tests for changed behaviour.
-- Run `npm run test` before pushing.
+- Classify the change as `routine`, `material`, or `critical` using the proportional delivery policy
+  in `AGENTS.md`.
+- Run the smallest checks that demonstrate the stated acceptance behaviour; material and critical
+  changes require targeted tests and the relevant type, lint, build, integration, security, or E2E
+  evidence.
+- Do not run unrelated expensive or live-provider tests merely to fill a checklist.
 - For E2E, see `playwright.config.ts`.
 
 ### 5. Submit
 
 - Open a PR against **`develop`** (not `main` — `main` is only updated via release merges).
-- Fill in the PR template.
+- Fill in the PR template with the owning spec/rules, observable acceptance, risk tier and
+  verification evidence. `N/A` is acceptable when justified.
 - PRs with failing checks will not be merged.
 - Request a review; at least one approval is required before merging.
 
