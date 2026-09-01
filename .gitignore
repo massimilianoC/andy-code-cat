@@ -24,11 +24,13 @@ yarn-debug.log*
 yarn-error.log*
 
 # ─── Private infrastructure (server IPs, SSH keys, live deploy runbooks) ─────
+# Backed up to the private repo github.com/massimilianoC/andy-code-cat-deploy —
+# see docs/guides/GITFLOW_RELEASE_POLICY.md and .deploy/deploy/PRIVATE_CONFIG_GUIDE.md.
 docker-compose.droplet.yml
 docker-compose.override.yml
-scripts/deploy-to-droplet.sh
-scripts/seed-droplet.sh
-nginx/sites-enabled/
+# Only the production vhost is private (real internal topology/rate limits); local.conf
+# has no such content and stays tracked/public deliberately.
+nginx/sites-enabled/andy-code-cat.conf
 .deploy/
 
 # ─── Private operational docs (not for public repo) ──────────────────────────
@@ -45,8 +47,17 @@ tests/test-results/
 tests/e2e/report/
 
 # ─── Debug / scratch ─────────────────────────────────────────────────────────
-debug/sample/
+# Whole folder — scratch/debug artifacts (validation copies, one-off probes)
+# must never reach the public repo. See AGENTS.md "Repository Hygiene".
+debug/
 health_test.json
+
+# ─── Browser automation session artifacts ─────────────────────────────────────
+.playwright-mcp/
+
+# ─── Stray local env backups (never the pattern we expect, still never public) ─
+.env.docker.bak*
+.env.*.bak*
 
 # ─── OS / IDE ─────────────────────────────────────────────────────────────────
 .DS_Store
