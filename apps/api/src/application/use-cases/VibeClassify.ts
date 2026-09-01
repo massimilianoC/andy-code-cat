@@ -3,6 +3,7 @@ import { PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
+import type { UserPreferencesRepository } from "../../domain/repositories/UserPreferencesRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
 import { FORMAT_HINT_RULES } from "../prompting/formatHintRules";
 import { env } from "../../config";
@@ -161,6 +162,7 @@ export class VibeClassify {
     constructor(
         private readonly platformConfigRepository: PlatformConfigRepository,
         private readonly getLlmCatalog: GetLlmCatalog,
+        private readonly userPreferencesRepository?: UserPreferencesRepository,
     ) { }
 
     async execute(input: VibeClassifyInput): Promise<VibeClassifyResponse> {
@@ -189,13 +191,20 @@ export class VibeClassify {
 
         const catalog = await this.getLlmCatalog.execute();
         const activeProviders = catalog.providers.filter((p) => p.isActive);
+        // The single user-facing model SSOT (UserPreferences.preferredModel, set from /settings)
+        // is the default when this specific call has no explicit override — it sits between an
+        // explicit per-request choice and the platform's per-task default. Never fetched for
+        // anonymous/system-triggered calls (no userId).
+        const userPreferences = input.userId
+            ? await this.userPreferencesRepository?.findByUserId(input.userId).catch(() => null)
+            : null;
         // Never silently fall back to local LM Studio for this background task — see the
         // "lmstudio" exclusion inside resolveModelSelection's vibe-cascade fallback chain.
         const selectionInput: ResolveModelSelectionInput = {
             profile: "vibe-cascade",
             activeProviders,
-            requestedProvider: input.provider,
-            requestedModel: input.model,
+            requestedProvider: input.provider ?? userPreferences?.preferredProvider,
+            requestedModel: input.model ?? userPreferences?.preferredModel,
             taskSettingProvider: taskSettings.provider,
             taskSettingModel: taskSettings.model,
             fallbackProvider: FALLBACK_PROVIDER,

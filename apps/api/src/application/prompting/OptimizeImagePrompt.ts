@@ -2,11 +2,13 @@ import type { CostEstimate } from "../../domain/entities/Conversation";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
+import type { UserPreferencesRepository } from "../../domain/repositories/UserPreferencesRepository";
 import { env } from "../../config";
 import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import type { GetLlmCatalog } from "../use-cases/GetLlmCatalog";
+import { resolveComposerCascade } from "../llm/catalogModels";
 import { buildContextAwareImagePrompt, type ImagePromptContextPacket } from "./buildImagePromptContext";
 import { buildOptimizeImagePromptRequest } from "./optimizeImagePromptInstruction";
 import { CostTransactionService } from "../cost/CostTransactionService";
@@ -63,6 +65,7 @@ export class OptimizeImagePrompt {
         private readonly platformConfigRepository: PlatformConfigRepository,
         private readonly promptExecutionLogRepository: PromptExecutionLogRepository,
         private readonly getLlmCatalog: GetLlmCatalog,
+        private readonly userPreferencesRepository?: UserPreferencesRepository,
     ) { }
 
     async execute(input: {
@@ -138,21 +141,23 @@ export class OptimizeImagePrompt {
 
         try {
             const catalog = await this.getLlmCatalog.execute();
-            const activeProviders = catalog.providers.filter((provider) => provider.isActive);
-            const requestedModel = input.model?.trim();
+            // The single user-facing model SSOT (UserPreferences.preferredModel, set from
+            // /settings) sits between an explicit per-call override and the platform's per-task
+            // default — same priority used in VibeClassify/VibePrefill.
+            const userPreferences = await this.userPreferencesRepository?.findByUserId(input.userId).catch(() => null);
+            // Single shared cascade (see AGENTS.md Rule Zero's second corollary): a caller-supplied
+            // model id is a request, not an authority — resolveComposerCascade verifies it against
+            // the active catalog instead of trusting it verbatim.
+            const cascade = resolveComposerCascade({
+                providers: catalog.providers,
+                requestedProvider: input.provider ?? userPreferences?.preferredProvider,
+                requestedModel: input.model?.trim() || userPreferences?.preferredModel || taskSettings.model,
+                pipelineRole: "dialogue",
+                envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
+            });
 
-            const selectedProviderCatalog =
-                activeProviders.find((provider) => provider.provider === input.provider)
-                ?? (requestedModel
-                    ? activeProviders.find((provider) => provider.models.some((model) => model.isActive && model.id === requestedModel))
-                    : undefined)
-                ?? activeProviders.find((provider) => provider.provider === taskSettings.provider)
-                ?? activeProviders.find((provider) => provider.provider === env.LLM_DEFAULT_PROVIDER)
-                ?? activeProviders.find((provider) => provider.provider === FALLBACK_PROVIDER)
-                ?? activeProviders[0];
-
-            if (!selectedProviderCatalog) {
-                await persistFailure("No active provider configured for image prompt optimization");
+            if (!cascade.providerCatalog || !cascade.roleModel) {
+                await persistFailure("No active provider/model configured for image prompt optimization");
                 return {
                     optimizedPrompt: fallbackPrompt,
                     provider: FALLBACK_PROVIDER,
@@ -164,16 +169,8 @@ export class OptimizeImagePrompt {
                 };
             }
 
-            const providerCatalog = selectedProviderCatalog;
-
-            const activeModels = providerCatalog.models.filter((model) => model.isActive);
-            const modelId =
-                (requestedModel && providerCatalog.apiType === "openai-compatible" ? requestedModel : undefined)
-                || (taskSettings.model && activeModels.some((model) => model.id === taskSettings.model) ? taskSettings.model : undefined)
-                || activeModels.find((model) => model.role === "dialogue" && model.isDefault)?.id
-                || activeModels.find((model) => model.isDefault)?.id
-                || activeModels[0]?.id
-                || FALLBACK_MODEL;
+            const providerCatalog = cascade.providerCatalog;
+            const modelId = cascade.roleModel.id;
 
             const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
             if (!authHeader && providerCatalog.authType !== "none") {

@@ -7,6 +7,7 @@ import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoPr
 import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
 import { MongoUserStyleProfileRepository } from "../../../infra/repositories/MongoUserStyleProfileRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
+import { MongoUserPreferencesRepository } from "../../../infra/repositories/MongoUserPreferencesRepository";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { UploadProjectAsset } from "../../../application/use-cases/UploadProjectAsset";
@@ -210,6 +211,7 @@ export function createProjectAssetRoutes(): Router {
     const serviceKeyRepository = new MongoServiceApiKeyRepository();
     const promptConfigRepository = new MongoLlmPromptConfigRepository();
     const platformConfigRepository = new MongoPlatformConfigRepository();
+    const userPreferencesRepository = new MongoUserPreferencesRepository();
     const llmCatalogRepository = new MongoLlmCatalogRepository();
     const getLlmCatalog = new GetLlmCatalog(
         env.LLM_CATALOG_SOURCE,
@@ -225,11 +227,13 @@ export function createProjectAssetRoutes(): Router {
         platformConfigRepository,
         promptExecutionLogRepository,
         getLlmCatalog,
+        userPreferencesRepository,
     );
     const suggestProjectImageIdea = new SuggestProjectImageIdea(
         platformConfigRepository,
         promptExecutionLogRepository,
         getLlmCatalog,
+        userPreferencesRepository,
     );
     const generateProjectImage = new GenerateProjectImage(
         assetRepository,

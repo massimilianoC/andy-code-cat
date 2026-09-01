@@ -20,6 +20,7 @@ import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../../../application/documents/projectLayerDContext";
 import { buildGroundedDataContextLayer, buildProjectKnowledgeLayer, buildBrandDocumentLayerD } from "../../../application/llm/systemPromptLayers";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
+import { MongoUserPreferencesRepository } from "../../../infra/repositories/MongoUserPreferencesRepository";
 import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../../../application/use-cases/ResolveBrandDocumentContext";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
@@ -91,8 +92,9 @@ export function createVibecoreRoutes(): Router {
         env.providerApiKeys,
         env.LLM_DEFAULT_PROVIDER,
     );
-    const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog);
-    const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog);
+    const userPreferencesRepository = new MongoUserPreferencesRepository();
+    const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog, userPreferencesRepository);
+    const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog, userPreferencesRepository);
     const projectRepository = new MongoProjectRepository();
     const assetRepository = new MongoProjectAssetRepository();
     const resolveBrandDocumentContext = new ResolveBrandDocumentContext(new MongoBrandAssetRepository());

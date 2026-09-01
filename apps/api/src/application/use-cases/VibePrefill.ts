@@ -2,6 +2,7 @@ import type { DataDashboardDraft, VibeGenerationMode, VibePrefillResponse, Attac
 import { guidedLaunchSchema } from "@andy-code-cat/contracts";
 import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/PlatformConfig";
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
+import type { UserPreferencesRepository } from "../../domain/repositories/UserPreferencesRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
@@ -536,6 +537,7 @@ export class VibePrefill {
     constructor(
         private readonly platformConfigRepository: PlatformConfigRepository,
         private readonly getLlmCatalog: GetLlmCatalog,
+        private readonly userPreferencesRepository?: UserPreferencesRepository,
     ) { }
 
     /**
@@ -622,14 +624,20 @@ export class VibePrefill {
 
         const catalog = await this.getLlmCatalog.execute();
         const activeProviders = catalog.providers.filter((p) => p.isActive);
+        // The single user-facing model SSOT (UserPreferences.preferredModel, set from /settings)
+        // is the default when this specific call has no explicit override — see the same
+        // reasoning in VibeClassify.
+        const userPreferences = input.userId
+            ? await this.userPreferencesRepository?.findByUserId(input.userId).catch(() => null)
+            : null;
         // Never silently fall back to local LM Studio for this background task — prefer any
         // reliable cloud provider; LM Studio is used only when explicitly configured (override
         // or superadmin task settings). See resolveModelSelection's vibe-cascade fallback chain.
         const selectionInput: ResolveModelSelectionInput = {
             profile: "vibe-cascade",
             activeProviders,
-            requestedProvider: input.provider,
-            requestedModel: input.model,
+            requestedProvider: input.provider ?? userPreferences?.preferredProvider,
+            requestedModel: input.model ?? userPreferences?.preferredModel,
             taskSettingProvider: taskSettings.provider,
             taskSettingModel: taskSettings.model,
             fallbackProvider: FALLBACK_PROVIDER,
