@@ -137,10 +137,16 @@ function supportsSiliconFlowThinking(model: string) {
         /^zai-org\/GLM-5V-Turbo$/i,
         /^zai-org\/GLM-4\.6V$/i,
         /^zai-org\/GLM-4\.5V$/i,
+        // The GLM 5.x text models are hybrid-reasoning too, and were missing here: run f51ee098
+        // (zai-org/GLM-5.3) spent 10m29s and stopped at exactly 32,768 completion tokens with no
+        // way for us to say anything about its thinking, because this list did not admit it.
+        /^zai-org\/GLM-5(?:\.\d+)?$/i,
+        /^MiniMaxAI\/MiniMax-M\d(?:\.\d+)?$/i,
         /^deepseek-ai\/DeepSeek-V3\.1$/i,
         /^deepseek-ai\/DeepSeek-V3\.1-Terminus$/i,
         /^deepseek-ai\/DeepSeek-V3\.2-Exp$/i,
         /^deepseek-ai\/DeepSeek-V3\.2$/i,
+        /^deepseek-ai\/DeepSeek-V4(?:$|[.-])/i,
     ].some((pattern) => pattern.test(model));
 }
 
@@ -195,6 +201,16 @@ export function buildChatCompletionRequestBody(input: {
     temperature: number;
     stream?: boolean;
     thinkingBudget?: number;
+    /**
+     * Explicitly turns the model's reasoning on or off, where the provider supports it.
+     *
+     * Distinct from `thinkingBudget`, which can only ever enable thinking: leaving both unset means
+     * we say nothing and the model's own default applies — which for a hybrid-reasoning model is
+     * generally "reason", spent from the same completion budget as the answer. The section fan-out
+     * needs the opposite (docs/specs/PARALLEL_SECTION_GENERATION_SPEC.md §6): reasoning on for the
+     * one call that decides the structure, off for the calls that merely execute it.
+     */
+    enableThinking?: boolean;
     structuredOutputMode?: StructuredOutputMode;
     supportedParameters?: string[];
 }) {
@@ -212,16 +228,29 @@ export function buildChatCompletionRequestBody(input: {
         }),
     };
 
-    if (input.thinkingBudget == null) {
+    const providerHonoursThinking =
+        input.provider === "siliconflow" && supportsSiliconFlowThinking(input.model);
+
+    if (!providerHonoursThinking) {
         return body;
     }
 
-    if (input.provider === "siliconflow" && supportsSiliconFlowThinking(input.model)) {
+    // An explicit `false` must reach the provider on its own: without it the model's default wins,
+    // and a hybrid model's default is to reason.
+    if (input.enableThinking === false) {
+        return { ...body, enable_thinking: false };
+    }
+
+    if (input.thinkingBudget != null) {
         return {
             ...body,
             enable_thinking: true,
             thinking_budget: input.thinkingBudget,
         };
+    }
+
+    if (input.enableThinking === true) {
+        return { ...body, enable_thinking: true };
     }
 
     return body;

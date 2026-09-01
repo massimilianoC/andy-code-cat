@@ -46,6 +46,23 @@ export interface PromptExecutionLog {
     mediaResolutionSummary?: PromptExecutionMediaResolutionSummary;
     costEstimate?: CostEstimate;
     status: PromptExecutionStatus;
+    /**
+     * The provider's `finish_reason` for this call, verbatim ("stop", "length", "content_filter", …).
+     *
+     * Recorded because `status: "succeeded"` alone is a lie about truncation: run f51ee098
+     * (2026-09-01) stopped at exactly 32,768 completion tokens — the provider's output cap — and was
+     * journalled as succeeded, while the deck it produced was visibly incomplete. The value was
+     * already parsed in flight and thrown away. `"length"` means the model was cut off, not that it
+     * finished, and no repair pass downstream can restore what was never emitted.
+     */
+    finishReason?: string;
+    /**
+     * The model's own reasoning trace, when the provider streams one (`reasoning_content` /
+     * `reasoning` / `thinking`). Reasoning is charged against the same completion budget as the
+     * answer, so on a truncated call this is often the only record of work already paid for — it is
+     * kept so a retry can resume from it instead of starting the thinking over.
+     */
+    reasoningTrace?: string;
     errorMessage?: string;
     durationMs: number;
     /**
@@ -63,6 +80,7 @@ export interface PromptExecutionLog {
 export type NewPendingPromptExecution = Omit<
     PromptExecutionLog,
     "id" | "createdAt" | "status" | "durationMs" | "usage" | "mediaResolutionSummary" | "costEstimate" | "errorMessage"
+    | "finishReason" | "reasoningTrace"
 >;
 
 export type PromptExecutionCompletion =
@@ -72,12 +90,25 @@ export type PromptExecutionCompletion =
         usage?: PromptExecutionLog["usage"];
         mediaResolutionSummary?: PromptExecutionMediaResolutionSummary;
         costEstimate?: CostEstimate;
+        finishReason?: string;
+        reasoningTrace?: string;
     }
     | {
         status: "failed";
         durationMs: number;
         errorMessage: string;
+        finishReason?: string;
+        reasoningTrace?: string;
     };
+
+/**
+ * True when the provider stopped because it ran out of output budget rather than because the model
+ * was done. The only honest reading of a `"length"` finish: the artifact is incomplete by
+ * construction, regardless of whether a repair pass managed to make it parse.
+ */
+export function wasTruncated(log: Pick<PromptExecutionLog, "finishReason">): boolean {
+    return log.finishReason === "length";
+}
 
 export interface PromptExecutionModelSummary {
     provider: string;

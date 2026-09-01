@@ -1,7 +1,27 @@
 # Parallel Section Generation — Spec
 
-**Status: proposed, not implemented.** Written for review on `feat/parallel-section-generation`.
-Nothing here is built. Measurements are from the local deploy stack, run `f51ee098`, 2026-09-01.
+**Status: MVP built, not yet wired into a route, not yet validated against a live provider.**
+On `feat/parallel-section-generation`. Measurements are from the local deploy stack, run `f51ee098`,
+2026-09-01.
+
+| Increment | State |
+|---|---|
+| 0 — `finishReason` + reasoning persisted | **built** (`PromptExecutionLog`, `llmRoutes`) |
+| 1 — `plan` stage | **built** as `sectionPlan.ts` + `GenerateSectionedArtifact` |
+| 2 — lock inheritance for fan-out children | **not started** — see §3.1, needs a decision |
+| 3 — bounded-pool fan-out | **built** (`boundedPool.ts`) |
+| 4 — retry loop, time ceiling, placeholders | **built** |
+| 5 — drop Layer D from children | **built** in the new path; the monolith is untouched |
+
+What is *not* done: none of this is reachable from the HTTP routes yet. `GenerateSectionedArtifact`
+takes a resolved model and a dispatcher port, so wiring it to `llmRoutes` and the `PipelineRun`
+journal is the next step — and that step is where §3.1 has to be answered.
+
+Validation status: §8 is checked on every test run against a simulated truncating provider
+(`GenerateSectionedArtifact.acceptance.test.ts`). It has **not** been run against a real model:
+`npm run fanout:probe -w apps/api` exists for that and currently cannot run — the SiliconFlow
+account returns `402 insufficient balance`, no OpenRouter key is configured, and the LM Studio
+endpoint in `.env.docker` (192.168.1.78:1234) is unreachable from this machine.
 
 ---
 
@@ -173,6 +193,45 @@ what it says. **Children read the plan, not the attachments.**
 still terminated at exactly 2¹⁵. That is the empirical case against solving this with more prompt
 instruction: an output-budget policy nearly 5k characters long did not produce a bounded output.
 Structure bounds output; prose asks nicely.
+
+### 6.2 Context is split by competence, not copied
+
+The layer stack is composed once and handed whole to whatever call is being made. That is the
+underlying defect, and it is larger than the fan-out: **every layer is paid for by every call,
+including the calls that have no use for it.**
+
+Each layer answers a different question, so each belongs to whichever stage actually asks it:
+
+| Competence | Layer | Who needs it |
+|---|---|---|
+| What may be emitted at all | A base-constraints | plan (trimmed) + every child |
+| Output language | L output-language | every child — it writes the prose |
+| Format of the deliverable | B preset-format | plan; children get only their slice |
+| Domain know-how | S template-skills | plan; a child gets the part its section uses |
+| Brand and visual identity | C style-context | **plan only** — it emerges as design tokens |
+| What the source documents said | D document-context | **plan only** — it emerges as contentBriefs |
+| How to phrase the request | E preprompt-template | **plan only** — it is consumed producing the plan |
+| How long the output may be | P output-budget-policy | **nobody** — replaced by each section's `charBudget` |
+
+The rule this generalises to, and the reason it matters beyond one preset:
+
+> **Context that an earlier stage has already distilled is not re-injected downstream. The
+> distillate is the carrier.**
+
+`vibe_prefill` reads the attachments and produces a brief; `plan` reads the brief and produces
+sections and tokens; a child reads one section. At each hop the previous stage's *input* is dropped
+and only its *output* travels. Today every hop carries everything, which is why a 10,408-char user
+prompt arrives escorted by 47,021 chars of system prompt.
+
+**Project mode is where this compounds.** Zero Effort pays the duplication once, on a single
+generation. A project conversation pays it on every turn: Layer C and Layer D are rebuilt and
+re-sent for turn after turn, describing brand and documents that have not changed since turn one and
+whose consequences are already visible in the artifact being edited. The same rule applies to
+`focused_edit`, which needs the patch target and the design tokens — not the moodboard that produced
+them.
+
+This is the part of the redesign that is not about slideshows. The fan-out is what makes it
+observable; the split is what makes it worth doing.
 - `enable_thinking: false` on children — **requires** adding GLM-5.x to the allowlist in
   `chatRequestAdapter.ts:131-145`, which today lists only the GLM *vision* variants. Without this,
   "no reasoning" is prompt-only and unreliable on a hybrid model.

@@ -985,6 +985,7 @@ export function createLlmRoutes(): Router {
                     mediaResolutionSummary,
                     costEstimate: result.costEstimate,
                     durationMs: result.durationMs,
+                    finishReason: result.finishReason,
                 });
             }
             // ── end I11 journal completion ──────────────────────────────────────
@@ -1212,6 +1213,10 @@ export function createLlmRoutes(): Router {
             const decoder = new TextDecoder();
             let buffer = "";
             let rawReply = "";
+            // Reasoning is billed from the same completion budget as the answer, so on a truncated
+            // call this is the only surviving record of work already paid for. It was previously
+            // forwarded to the client and dropped server-side.
+            let rawThinking = "";
             let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
             let providerCostUsdStream: number | undefined;
             let finishReason: string | undefined;
@@ -1265,6 +1270,7 @@ export function createLlmRoutes(): Router {
                             const content = delta?.content;
 
                             if (thinking) {
+                                rawThinking += String(thinking);
                                 sendSse(res, { type: "thinking", content: String(thinking) });
                             }
 
@@ -1603,6 +1609,10 @@ export function createLlmRoutes(): Router {
                     mediaResolutionSummary,
                     costEstimate: result.costEstimate,
                     durationMs: result.durationMs,
+                    finishReason: result.finishReason,
+                    // Kept only when the call was cut off: on a clean stop the trace is dead weight,
+                    // but on "length" it is the work already paid for that a retry can resume from.
+                    reasoningTrace: finishReason === "length" ? rawThinking.slice(0, 20_000) : undefined,
                 }).catch(() => { });
             }
             // ── end I11 journal completion ──────────────────────────────────────

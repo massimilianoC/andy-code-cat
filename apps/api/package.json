@@ -13,6 +13,7 @@
         "seed:llm": "tsx src/scripts/seed-llm.ts",
         "migrate:db": "tsx src/scripts/migrate-db-rename.ts",
         "sf:probe": "tsx src/scripts/sf-probe.ts",
+    "fanout:probe": "tsx src/scripts/fanout-probe.ts",
         "sf:billing": "tsx src/scripts/sf-billing-import.ts",
         "storage:probe": "npm run build && node dist/scripts/storage-probe.js",
         "storage:migrate": "npm run build && node dist/scripts/migrate-assets-to-storage.js",
