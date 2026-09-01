@@ -9,7 +9,7 @@ Build and evolve a dockerized multi-service platform based on:
 - Node.js
 - Express API
 - Next.js web app
-- MongoDB and Redis services
+- MongoDB service
 
 Architecture goals:
 
@@ -229,14 +229,16 @@ The project must run from one docker-compose.yml with:
 - web
 - api
 - mongodb
-- redis
 - workspace
 
 Mandatory networking rules:
 
 - internal service communication on compose network.
 - host mongo port mapped to non-default 27018 to avoid conflicts.
-- host redis port mapped to non-default 6380.
+
+Redis is not part of the runtime: no code path references `REDIS_URL` or a redis client. Do not
+add a redis service to a compose file without an actual consumer landing in the same change —
+see Rule Zero.
 
 ## CRITICAL: Two Docker Compose Stacks — Never Mix
 
@@ -253,13 +255,13 @@ This project has TWO compose files with DIFFERENT MongoDB storage strategies:
 Non-negotiable rules for agents:
 
 1. NEVER run `docker compose up` (dev file) to apply env changes when the running stack is deploy.
-2. To update env vars on the DEPLOY stack without touching MongoDB or Redis:
+2. To update env vars on the DEPLOY stack without touching MongoDB:
 
    ```
    docker compose -f docker-compose.deploy.yml up -d --no-deps api
    ```
 
-3. To update env vars on the DEV stack without touching MongoDB or Redis:
+3. To update env vars on the DEV stack without touching MongoDB:
 
    ```
    docker compose up -d --no-deps api
@@ -605,4 +607,4 @@ After coding:
 2. If release/versioning rules were touched, update `RELEASE_VERSION`, README, CONTRIBUTING, and agent instructions consistently.
 3. Update documentation index and runbooks when needed.
 4. Report residual risks explicitly.
-5. Never restart MongoDB or Redis to propagate env changes — use `--no-deps` on the correct compose file.
+5. Never restart MongoDB to propagate env changes — use `--no-deps` on the correct compose file.

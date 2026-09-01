@@ -1,5 +1,5 @@
 # Explicit project name keeps volume names stable regardless of directory name.
-# Volumes: andy-code-cat_mongodb_data, andy-code-cat_redis_data
+# Volumes: andy-code-cat_mongodb_data, andy-code-cat_minio_data
 name: andy-code-cat
 
 services:
@@ -13,18 +13,6 @@ services:
     command: ["--bind_ip_all"]
     volumes:
       - mongodb_data:/data/db
-    networks:
-      - andy-code-cat-net
-
-  redis:
-    image: redis:7-alpine
-    container_name: andy-code-cat-redis
-    restart: unless-stopped
-    # Local test profile — host port exposed for direct inspection.
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis_data:/data
     networks:
       - andy-code-cat-net
 
@@ -58,10 +46,8 @@ services:
     environment:
       - NODE_ENV=production
       - MONGODB_URI=mongodb://mongodb:27017/andy-code-cat
-      - REDIS_URL=redis://redis:6379
     depends_on:
       - mongodb
-      - redis
       - minio
     # Local test profile — API port exposed directly on host for curl/smoke tests.
     ports:
@@ -122,7 +108,6 @@ networks:
 
 volumes:
   # project name "andy-code-cat" (from `name:` above) auto-prefixes these to:
-  #   andy-code-cat_mongodb_data  and  andy-code-cat_redis_data
+  #   andy-code-cat_mongodb_data  and  andy-code-cat_minio_data
   mongodb_data:
-  redis_data:
   minio_data:
