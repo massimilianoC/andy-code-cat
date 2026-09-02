@@ -118,6 +118,42 @@ project, and `Conversation` + `PipelineRun` + the journal already hold all three
 `ProjectModeTurn` for symmetry would create a fourth owner for facts that have three. Symmetry is
 not a reason.
 
+### 3.1bis What the review found — the schema does not lack collections, it has duplicate copies
+
+Checking the proposal against the code turned up the opposite of the assumed problem, and cost this
+document one of its own proposals.
+
+**The execution-order shape already exists.** `PipelineStageExecutionRef`
+(`packages/contracts/src/pipelineRun.ts:116`) is an ordered list where each entry names the stage,
+its status, its timestamps and `promptExecutionId` — a pointer to the journal row that did the work.
+`PipelineRun.stages[]` is therefore already "an execution order carrying references to the real
+objects that ran", which is what a redesign would have been trying to build.
+
+**The confirmed Zero Effort intake is already persisted.** `buildCanonicalGenerationBrief` writes
+`sourceFields: { ...input }` into the envelope (`:39` and `:152`), so all nineteen fields already
+live on `PipelineRun.canonicalBrief`, hashed and timestamped, for the derived and hand-edited cases
+alike. A `ZeroEffortForm.confirmed` would have been a straight duplicate — the entity was cut down to
+hold only the prefill proposal and the diff, which nothing owns.
+
+**The artifact already exists in three places.**
+
+| copy | written by |
+|---|---|
+| `preview_snapshots.artifacts` | the snapshot write path |
+| `conversations[].metadata.generatedArtifacts` | the web client, `page.tsx:2384` — and read back as a fallback at `:1901` and `:2146` |
+| `conversations[].metadata.rawResponse` | the web client, `page.tsx:2379` |
+
+This changes the shape of the problem. The instinct to give each modality a strongly-identified
+object is sound, and the pieces that carry it are largely in place; what the schema actually suffers
+from is the same fact stored several times by different writers, which is the failure mode that adding
+collections makes worse rather than better.
+
+The consequence for the new fields in §4: `PromptExecutionLog.rawResponse` overlaps the conversation
+copy **on the `generate` path only**. It is kept deliberately, because the two are not the same fact
+— the conversation copy is what the browser chose to send back, the journal copy is what the server
+received — and because on every other call site (classify, prefill, image, didactic) no copy exists
+at all. That overlap is a knowing one, recorded here rather than discovered later.
+
 ### 3.2 The shape
 
 ```

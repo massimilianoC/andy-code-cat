@@ -1,50 +1,52 @@
 import type { GuidedLaunchInput } from "@andy-code-cat/contracts";
 
 /**
- * The Zero Effort form as the user confirmed it
+ * What the prefill proposed, and what the user changed about it
  * (docs/specs/WORK_SESSION_TRACING_SPEC.md §3.1).
  *
- * `GuidedLaunchInput` (`packages/contracts/src/pipeline.ts:30-61`) is nineteen fields wide and today
- * is a **DTO that is never stored**: it flows through `LaunchGuidedProject`, produces a brief, and
- * disappears. Only the derived brief survives, on `PipelineRun.canonicalBrief`.
+ * **This entity is deliberately smaller than it first looks like it should be.** The obvious design
+ * — store the whole Zero Effort form — is already implemented elsewhere and was nearly duplicated
+ * here: `buildCanonicalGenerationBrief` writes `sourceFields: { ...input }` into the envelope
+ * (`buildCanonicalGenerationBrief.ts:39` and `:152`), so the full nineteen-field confirmed intake is
+ * already persisted on `PipelineRun.canonicalBrief`, hashed and timestamped, for both the derived
+ * and the hand-edited case.
  *
- * That leaves two questions permanently unanswerable, and they are the two worth asking:
+ * So `confirmed` does not live here. What genuinely has no owner is the *other* side of the
+ * comparison: what `VibePrefill` suggested before the user touched it. Without it, one question
+ * stays unanswerable — **did the user accept the model's proposal or overrule it** — and that is the
+ * difference between what the machine thought and what the human decided.
  *
- *   1. what did the form actually contain, as opposed to what the brief says it contained;
- *   2. **did the user change what the prefill proposed** — the difference between the model's
- *      suggestion and the human's decision, which is currently invisible.
- *
- * Question 2 is why `prefilled` and `edited` are separate snapshots rather than one payload with a
- * dirty flag: a diff needs both sides.
+ * One fact, one owner: this object holds the proposal and the diff, and points at the envelope that
+ * already holds the result.
  */
-export interface ZeroEffortForm {
+export interface ZeroEffortFormProposal {
     id: string;
     workSessionId: string;
     userId: string;
     projectId?: string;
 
-    /** What `VibePrefill` proposed. Absent when the user filled the form unaided. */
-    prefilled?: GuidedLaunchInput;
-    /** What was actually submitted. Always present — this is the form that ran. */
-    confirmed: GuidedLaunchInput;
+    /** What `VibePrefill` proposed, before the user saw it. */
+    prefilled: GuidedLaunchInput;
     /**
-     * Field names the user changed between the two. Derived, but stored: recomputing it later means
-     * re-deriving intent from two payloads whose schema may since have moved.
+     * Field names the user changed between the proposal and what they submitted. Stored rather than
+     * recomputed: re-deriving it later means diffing two payloads against a schema that may have
+     * moved in between.
      */
     editedFields: string[];
 
-    /** The prefill call that produced `prefilled`, so its prompt and raw reply stay reachable. */
+    /** The prefill call itself, so its prompt and raw reply stay reachable. */
     prefillPromptExecutionLogId?: string;
     /**
-     * The content hash of the brief this form produced — the same hash `PipelineRun.canonicalBrief`
-     * carries. A reference, so the brief text keeps exactly one owner.
+     * The `contentHash` of the envelope the submitted form produced — the same hash carried by
+     * `PipelineRun.canonicalBrief`, whose `sourceFields` is the confirmed intake. A pointer, so the
+     * result keeps exactly one owner.
      */
     briefContentHash?: string;
 
     createdAt: Date;
 }
 
-export type NewZeroEffortForm = Omit<ZeroEffortForm, "id" | "createdAt">;
+export type NewZeroEffortFormProposal = Omit<ZeroEffortFormProposal, "id" | "createdAt">;
 
 /**
  * Names the fields that differ between what the model proposed and what the user submitted.
