@@ -4,6 +4,7 @@ import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/Platfo
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
 import { CostTransactionService } from "../cost/CostTransactionService";
+import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
 import { ResourceType } from "../../domain/entities/CostTransaction";
 import { estimateCost } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
@@ -528,6 +529,9 @@ export interface VibePrefillInput {
     projectId?: string;
     /** BCP-47 UI language from the client (e.g. "it", "en"). Used as fallback when LLM can't infer language. */
     uiLanguage?: string;
+    /** Correlation keys — see docs/specs/WORK_SESSION_TRACING_SPEC.md §3. */
+    workSessionId?: string;
+    pipelineRunId?: string;
 }
 
 // ── Use-case ──────────────────────────────────────────────────────────────────
@@ -536,6 +540,12 @@ export class VibePrefill {
     constructor(
         private readonly platformConfigRepository: PlatformConfigRepository,
         private readonly getLlmCatalog: GetLlmCatalog,
+        /**
+         * Optional for backward compat, but this is the call whose invisibility mattered most: the
+         * Zero Effort brief is decided here, and until now the journal held its cost and neither its
+         * prompt nor the JSON it returned (docs/specs/WORK_SESSION_TRACING_SPEC.md §2).
+         */
+        private readonly promptExecutionLogRepository?: PromptExecutionLogRepository,
     ) { }
 
     /**
@@ -727,8 +737,28 @@ export class VibePrefill {
         // indefinitely (the catch block below only runs once something actually rejects).
         const providerAbort = new AbortController();
         const providerTimeout = setTimeout(() => providerAbort.abort(), 4.5 * 60 * 1000);
+        const endpoint = `${providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`;
+        const llmStartedAt = Date.now();
+        const pendingLogId = this.promptExecutionLogRepository && input.projectId && input.userId
+            ? await this.promptExecutionLogRepository.createPending({
+                taskKey: TASK_KEY,
+                projectId: input.projectId,
+                userId: input.userId,
+                workSessionId: input.workSessionId,
+                pipelineRunId: input.pipelineRunId,
+                pipelineStage: "vibe_prefill",
+                endpoint,
+                provider: providerCatalog.provider,
+                model: modelId,
+                inputPrompt: input.prompt.slice(0, 2000),
+                renderedSystemPrompt: systemPrompt,
+                renderedUserPrompt: userMessage,
+                contextMeta: { usedMoodboard: false, usedUserProfile: false },
+            }).then((log) => log.id).catch(() => null)
+            : null;
+
         try {
-            const response = await fetch(`${providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+            const response = await fetch(endpoint, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -752,6 +782,13 @@ export class VibePrefill {
                 // yesterday and fails today (rate limit, context overflow, decommissioned id).
                 // Read it before discarding the response — without this the failure is unknowable.
                 const errorBody = await response.text().catch(() => "<body non leggibile>");
+                if (pendingLogId) {
+                    await this.promptExecutionLogRepository!.complete(pendingLogId, {
+                        status: "failed",
+                        durationMs: Date.now() - llmStartedAt,
+                        errorMessage: `provider ${response.status}: ${errorBody.slice(0, 500)}`,
+                    }).catch(() => undefined);
+                }
                 return this.fallback({
                     prompt: input.prompt,
                     outputLanguage: resolvedUiLanguage,
@@ -818,6 +855,22 @@ export class VibePrefill {
                         providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
                     },
                 );
+
+                if (pendingLogId) {
+                    // The brief this call returns is what the whole downstream generation is built
+                    // on, so `rawResponse` holds the JSON exactly as the model emitted it — before
+                    // closeTruncatedJson and the field normalisers get to it. A brief that arrived
+                    // half-written and was repaired into shape is a different fact from one the
+                    // model actually completed, and only this field can tell them apart.
+                    await this.promptExecutionLogRepository!.complete(pendingLogId, {
+                        status: "succeeded",
+                        durationMs: Date.now() - llmStartedAt,
+                        usage: { promptTokens, completionTokens, totalTokens },
+                        costEstimate,
+                        finishReason,
+                        rawResponse: raw,
+                    }).catch(() => undefined);
+                }
 
                 CostTransactionService.instance.record({
                     userId: input.userId,

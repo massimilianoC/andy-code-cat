@@ -24,6 +24,7 @@ import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../.
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
 import { VibePrefill } from "../../../application/use-cases/VibePrefill";
+import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
 import {
     resolveAttachmentPolicyFromConfig,
     resolveDocumentContextPolicyFromConfig,
@@ -91,8 +92,9 @@ export function createVibecoreRoutes(): Router {
         env.providerApiKeys,
         env.LLM_DEFAULT_PROVIDER,
     );
-    const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog);
-    const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog);
+    const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
+    const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
     const projectRepository = new MongoProjectRepository();
     const assetRepository = new MongoProjectAssetRepository();
     const resolveBrandDocumentContext = new ResolveBrandDocumentContext(new MongoBrandAssetRepository());

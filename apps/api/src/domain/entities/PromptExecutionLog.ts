@@ -24,6 +24,30 @@ export interface PromptExecutionLog {
     userId: string;
     conversationId?: string;
     sessionId?: string;
+    /**
+     * The `WorkSession` this call belongs to — the root that spans one user intent from the first
+     * Vibe keystroke to the last edit, across however many generations it takes.
+     *
+     * Without it the journal is a pile of rows that cannot be walked: there was no path from a Vibe
+     * request to the artifact it eventually produced, which is what made the pipeline a black box
+     * even where individual rows were being written.
+     */
+    workSessionId?: string;
+    /**
+     * The `PipelineRun` this call was dispatched under, and which stage of it. A run is ONE
+     * generation (`ResolvePipelineModelLock.dispatch():181-193` depends on that), so these two
+     * place a call precisely: which generation, and which step inside it.
+     */
+    pipelineRunId?: string;
+    pipelineStage?: string;
+    /**
+     * The URL actually POSTed to, e.g. "https://api.siliconflow.com/v1/chat/completions".
+     *
+     * Recorded so the history can answer a question it currently cannot: which endpoints are being
+     * called, and whether any of them bypass the resolved catalog. A model id proves what we
+     * intended; only the endpoint proves where the request went.
+     */
+    endpoint?: string;
     provider: string;
     model: string;
     inputPrompt: string;
@@ -63,6 +87,16 @@ export interface PromptExecutionLog {
      * kept so a retry can resume from it instead of starting the thinking over.
      */
     reasoningTrace?: string;
+    /**
+     * The model's reply exactly as it arrived, BEFORE any parsing, extraction or repair.
+     *
+     * This is not a duplicate of the artifact — the artifact lives in `preview_snapshots`, and that
+     * copy is the *repaired* one. The two answer different questions, and run f51ee098 is why the
+     * difference matters: a reply truncated at the provider's output cap, made parseable by
+     * `llmParser`'s repair chain, and journalled as `succeeded`. Only the raw reply can say whether
+     * a repair fired and what the model had actually produced when it was cut off.
+     */
+    rawResponse?: string;
     errorMessage?: string;
     durationMs: number;
     /**
@@ -80,8 +114,19 @@ export interface PromptExecutionLog {
 export type NewPendingPromptExecution = Omit<
     PromptExecutionLog,
     "id" | "createdAt" | "status" | "durationMs" | "usage" | "mediaResolutionSummary" | "costEstimate" | "errorMessage"
-    | "finishReason" | "reasoningTrace"
+    | "finishReason" | "reasoningTrace" | "rawResponse"
 >;
+
+/**
+ * How long a journal row keeps its full prompt and reply text.
+ *
+ * 120 days, whole, deliberately: the point of the journal is that a run can be reconstructed, and a
+ * row without its prompt reconstructs nothing. The intended direction beyond this window is a
+ * compressed copy that lives indefinitely alongside an expanded copy that ages out and can be
+ * rehydrated from it — recorded in docs/specs/WORK_SESSION_TRACING_SPEC.md §4.1 as a known open
+ * item, not designed here.
+ */
+export const PROMPT_EXECUTION_FULL_TEXT_RETENTION_DAYS = 120;
 
 export type PromptExecutionCompletion =
     | {
@@ -92,6 +137,7 @@ export type PromptExecutionCompletion =
         costEstimate?: CostEstimate;
         finishReason?: string;
         reasoningTrace?: string;
+        rawResponse?: string;
     }
     | {
         status: "failed";
@@ -99,6 +145,7 @@ export type PromptExecutionCompletion =
         errorMessage: string;
         finishReason?: string;
         reasoningTrace?: string;
+        rawResponse?: string;
     };
 
 /**

@@ -13,6 +13,7 @@ import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { ResourceType } from "../../domain/entities/CostTransaction";
 import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
 import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
+import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -155,12 +156,22 @@ export interface VibeClassifyInput {
     userId?: string;
     /** When provided together with userId the LLM cost is recorded in the project ledger. */
     projectId?: string;
+    /** Correlation keys — see docs/specs/WORK_SESSION_TRACING_SPEC.md §3. */
+    workSessionId?: string;
+    pipelineRunId?: string;
 }
 
 export class VibeClassify {
     constructor(
         private readonly platformConfigRepository: PlatformConfigRepository,
         private readonly getLlmCatalog: GetLlmCatalog,
+        /**
+         * Optional so existing callers and tests keep working, but every production wiring should
+         * pass it: without it this call records its cost and nothing else — we would know what the
+         * classifier cost and nothing about what it was asked or what it answered
+         * (docs/specs/WORK_SESSION_TRACING_SPEC.md §2).
+         */
+        private readonly promptExecutionLogRepository?: PromptExecutionLogRepository,
     ) { }
 
     async execute(input: VibeClassifyInput): Promise<VibeClassifyResponse> {
@@ -245,8 +256,33 @@ export class VibeClassify {
             { role: "user" as const, content: userMessage },
         ];
 
+        const endpoint = `${providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`;
+        const startedAt = Date.now();
+
+        // Journalled before dispatch, never after: a record written only on success cannot explain a
+        // call that never came back, and "the process died mid-call" is exactly the case the journal
+        // has to survive. Failing to journal must not fail the classification, which already
+        // degrades to `skipped` on any error — so the id is optional from here on.
+        const pendingLogId = this.promptExecutionLogRepository && input.projectId && input.userId
+            ? await this.promptExecutionLogRepository.createPending({
+                taskKey: TASK_KEY,
+                projectId: input.projectId,
+                userId: input.userId,
+                workSessionId: input.workSessionId,
+                pipelineRunId: input.pipelineRunId,
+                pipelineStage: "vibe_classify",
+                endpoint,
+                provider: providerCatalog.provider,
+                model: modelId,
+                inputPrompt: input.prompt.slice(0, 2000),
+                renderedSystemPrompt: systemPrompt,
+                renderedUserPrompt: userMessage,
+                contextMeta: { usedMoodboard: false, usedUserProfile: false },
+            }).then((log) => log.id).catch(() => null)
+            : null;
+
         try {
-            const response = await fetch(`${providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+            const response = await fetch(endpoint, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -262,6 +298,13 @@ export class VibeClassify {
             });
 
             if (!response.ok) {
+                if (pendingLogId) {
+                    await this.promptExecutionLogRepository!.complete(pendingLogId, {
+                        status: "failed",
+                        durationMs: Date.now() - startedAt,
+                        errorMessage: `provider error ${response.status}`,
+                    }).catch(() => undefined);
+                }
                 return { templateId: null, formatHint: null, confidence: 0, reasoning: `provider error ${response.status}`, skipped: true, ...echoProject };
             }
 
@@ -317,6 +360,22 @@ export class VibeClassify {
                         provider: providerCatalog.provider,
                     },
                 });
+
+                if (pendingLogId) {
+                    // `rawResponse` is the reply before parseClassifyResponse touches it. The parsed
+                    // result records what we concluded; only the raw text records what the model
+                    // actually said — including the cases where it said something we could not read.
+                    await this.promptExecutionLogRepository!.complete(pendingLogId, {
+                        status: "succeeded",
+                        durationMs: Date.now() - startedAt,
+                        usage: { promptTokens, completionTokens, totalTokens },
+                        costEstimate,
+                        finishReason: String(
+                            (payload?.choices as Array<{ finish_reason?: string }>)?.[0]?.finish_reason ?? "",
+                        ) || undefined,
+                        rawResponse: raw,
+                    }).catch(() => undefined);
+                }
             }
 
             // The LLM is the sole selection authority: enforce only the confidence
