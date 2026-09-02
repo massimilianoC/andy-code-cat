@@ -195,8 +195,62 @@ and the gap is a WP4 defect, not a harness defect.
 
 ---
 
-## Sequencing
+## Sequencing, and what may actually run in parallel
 
-WP1 alone first: it is a correctness fix and it touches the same front-end file WP5 will rewrite.
-WP2, WP3 and WP4 may run in parallel — different files, no shared edits — provided WP2 lands its
-contract change before WP3 or WP4 reference cost. WP5 requires WP4. WP6 requires all.
+Parallelism between agents is decided by **file collisions**, not by logical independence. Two
+packages that never touch the same file can run concurrently even if one conceptually depends on the
+other's ideas; two that edit the same file cannot, however unrelated they sound.
+
+### Dependency graph
+
+```
+WP4a  session lifecycle + request context ──┬──> WP4b  silent call sites
+                                            ├──> WP4c  generate records pipelineRunId
+                                            └──> WP3   intake repositories
+WP2   cost record ──────────────────────────────> (WP4b reads it when recording cost)
+WP1   artifact SSOT fix ───────────────────────> WP5  session inspector
+WP4b + WP4c + WP3 + WP5 ───────────────────────> WP6  replay harness
+```
+
+### File-collision matrix
+
+| Package | Files it owns | Collides with |
+|---|---|---|
+| WP1 | `apps/web/app/workspace/[projectId]/page.tsx`, `Conversation.ts` | **WP5** (same page file) |
+| WP2 | `packages/contracts/cost*`, `CostTransactionService.ts`, `PromptExecutionLog.ts` | WP4b lightly (both touch call sites) |
+| WP3 | `infra/repositories/MongoVibeIntake*`, `MongoZeroEffortForm*`, `vibecoreRoutes.ts` | **WP4a** (same route file) |
+| WP4a | `http/types.ts`, new middleware, `OpenWorkSession.ts`, entry routes | **WP3** (same route file) |
+| WP4b | the five silent use cases, one file each | none |
+| WP4c | `llmRoutes.ts` | none |
+| WP5 | `apps/web` inspector components, one read endpoint | **WP1** |
+| WP6 | `apps/api/src/scripts/` | none |
+
+### Practical schedule
+
+**Wave 1 — three agents concurrently, no collisions:**
+- Agent A: **WP4a** (session lifecycle and context) — unblocks the most
+- Agent B: **WP2** (cost record) — contracts-first, so later packages compile against it
+- Agent C: **WP1** (artifact SSOT fix) — front-end only, isolated from both
+
+**Wave 2 — after WP4a lands, four agents concurrently:**
+- **WP4b** splits cleanly into five independent assignments, one call site each, no shared file
+- **WP4c** (`llmRoutes.ts`), **WP3** (route file, now free of WP4a)
+
+**Wave 3:** WP5 (needs WP1 merged and WP4 producing data).
+**Wave 4:** WP6.
+
+### The one ordering that is not negotiable
+
+WP4a before everything that records a session id, and WP2's contract before anything records cost.
+Both are shape definitions: agents writing against a shape that then changes will silently produce
+two shapes, which is the failure this whole programme exists to remove.
+
+### Why the certification pipeline goes first
+
+WP6 is the experiment that decides whether parallelising the pipeline lowers cost and time without
+losing quality. It cannot be trusted before the journal is complete: replaying a session whose
+history has gaps measures the gaps. So the order is not preference — the certification work
+(WP4, WP3, WP2) is a **precondition for the parallelisation results to mean anything**.
+
+WP1 is scheduled early for a different reason: it is a live correctness defect, and it edits the same
+front-end file WP5 will rewrite.

@@ -38,6 +38,8 @@ import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/Mong
 import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
+import { createWorkSessionMiddleware } from "../middlewares/workSessionMiddleware";
+import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
 import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptConfig";
 import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptConfig";
@@ -241,6 +243,10 @@ export function createLlmRoutes(): Router {
     );
 
     router.use(authMiddleware);
+    // Mounted after auth because the session lookup is ownership-scoped. Never rejects: a
+    // missing or foreign session id leaves the request untraced rather than refused
+    // (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md rule 4).
+    router.use(createWorkSessionMiddleware(new MongoWorkSessionRepository()));
 
     const llmCatalogRepository = new MongoLlmCatalogRepository();
     const getLlmCatalog = new GetLlmCatalog(

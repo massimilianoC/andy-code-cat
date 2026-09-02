@@ -10,6 +10,7 @@ import { Router, type RequestHandler } from "express";
 import type { Response, NextFunction } from "express";
 import { z } from "zod";
 import { authMiddleware } from "../middlewares/authMiddleware";
+import { createWorkSessionMiddleware } from "../middlewares/workSessionMiddleware";
 import { HttpError } from "../errors/httpError";
 import type { RequestWithContext } from "../types";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
@@ -25,6 +26,9 @@ import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
 import { VibePrefill } from "../../../application/use-cases/VibePrefill";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
+import { OpenWorkSession } from "../../../application/use-cases/OpenWorkSession";
+import { WORK_SESSION_HEADER } from "../middlewares/workSessionMiddleware";
 import {
     resolveAttachmentPolicyFromConfig,
     resolveDocumentContextPolicyFromConfig,
@@ -93,6 +97,7 @@ export function createVibecoreRoutes(): Router {
         env.LLM_DEFAULT_PROVIDER,
     );
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const openWorkSession = new OpenWorkSession(new MongoWorkSessionRepository());
     const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
     const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
     const projectRepository = new MongoProjectRepository();
@@ -232,6 +237,10 @@ export function createVibecoreRoutes(): Router {
     }
 
     router.use(authMiddleware as RequestHandler);
+    // Mounted after auth because the session lookup is ownership-scoped. Never rejects: a
+    // missing or foreign session id leaves the request untraced rather than refused
+    // (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md rule 4).
+    router.use(createWorkSessionMiddleware(new MongoWorkSessionRepository()) as RequestHandler);
 
     router.get(
         "/vibecore/config",
@@ -276,6 +285,17 @@ export function createVibecoreRoutes(): Router {
                 }
                 const warnings = buildAttachmentWarnings(attachmentMeta, attachmentPolicy);
 
+                // The session opens here, at the first tool the user engages, and its id travels
+                // back so every later request can name it via the x-work-session-id header. A
+                // resubmission carries the previous id and continues the same session rather than
+                // splitting one intent into two histories. Never throws: reuseOrOpen returns null
+                // if the store is unreachable, and the generation proceeds untraced.
+                const headerSessionId = String(req.headers[WORK_SESSION_HEADER] ?? "").trim() || undefined;
+                const workSession = await openWorkSession.reuseOrOpen(
+                    req.workSession?.id ?? headerSessionId,
+                    { userId, entryMode: "vibe", projectId },
+                );
+
                 const result = await vibeClassify.execute({
                     prompt: parsed.data.prompt,
                     attachmentMeta,
@@ -284,6 +304,7 @@ export function createVibecoreRoutes(): Router {
                     model: parsed.data.model,
                     userId,
                     projectId,
+                    workSessionId: workSession?.id,
                 });
 
                 // Persist the Layer T signal on the project so subsequent generation
@@ -302,8 +323,16 @@ export function createVibecoreRoutes(): Router {
                 }
 
                 // Always echo projectId so the client pins follow-up calls
-                // (prefill, generation, conversation) to the same sandbox.
-                res.json({ ...result, projectId, warnings, attachmentPolicy });
+                // (prefill, generation, conversation) to the same sandbox. workSessionId is echoed
+                // for the same reason at a wider scope: the client sends it back as
+                // x-work-session-id so every later call in this intent joins one history.
+                res.json({
+                    ...result,
+                    projectId,
+                    warnings,
+                    attachmentPolicy,
+                    ...(workSession ? { workSessionId: workSession.id } : {}),
+                });
             } catch (error) {
                 next(error);
             }
@@ -414,8 +443,18 @@ export function createVibecoreRoutes(): Router {
                     brandDocuments.forEach((d) => layerDocNames.push(d.title));
                 }
 
+                // Prefill is the second stage of an intent classify already opened, so it reuses
+                // that session rather than starting one; reuseOrOpen only creates when the id is
+                // absent, stale or foreign.
+                const prefillHeaderSessionId = String(req.headers[WORK_SESSION_HEADER] ?? "").trim() || undefined;
+                const prefillWorkSession = await openWorkSession.reuseOrOpen(
+                    req.workSession?.id ?? prefillHeaderSessionId,
+                    { userId, entryMode: "zero-effort", projectId },
+                );
+
                 const result = await vibePrefill.execute({
                     prompt: parsed.data.prompt,
+                    workSessionId: prefillWorkSession?.id,
                     layerDContext,
                     layerXDataContext,
                     generationMode: parsed.data.generationMode,
