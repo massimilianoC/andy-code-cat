@@ -2465,12 +2465,19 @@ function WorkspacePageContent() {
             // to fix line N" — the second is something the user can act on, and it arrives before
             // they go looking for a preview that will never come.
             if (llm.generatedJavaScriptError) {
+                const js = llm.generatedJavaScriptError;
+                // The evidence, not just the verdict. A bare "Unexpected token ')'" leaves the user
+                // scrolling thirty thousand characters of generated code; the line number and the
+                // line itself are something they can paste straight back into the chat.
+                const where = js.line
+                    ? ` — riga ${js.line}${js.column ? `:${js.column}` : ""}${js.sourceLine ? `: ${js.sourceLine}` : ""}`
+                    : "";
                 addNotification({
                     label: t("workspace.notifications.snapshot.invalidJsLabel", "Artefatto danneggiato"),
                     status: "error",
                     message: t("workspace.notifications.snapshot.invalidJs",
                         "Il modello ha prodotto JavaScript non valido, quindi la versione non è stata salvata e l'anteprima resta quella precedente. Chiedi in chat di correggere lo script.")
-                        + ` (${llm.generatedJavaScriptError})`,
+                        + ` (${js.message})${where}`,
                 });
             }
 

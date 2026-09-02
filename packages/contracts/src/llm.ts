@@ -337,7 +337,13 @@ export interface LlmChatPreviewResult {
      * assertGeneratedJavaScriptSyntax), so a caller that ignores this will watch the snapshot
      * write fail later with nothing said, which is exactly how this went unnoticed.
      */
-    generatedJavaScriptError?: string;
+    generatedJavaScriptError?: {
+        message: string;
+        line?: number;
+        column?: number;
+        /** The offending source line, so the user can paste it back and have it fixed. */
+        sourceLine?: string;
+    };
     promptingTrace?: LlmPromptingTrace;
     structured?: LlmStructuredResponse;
     mediaResolution?: MediaResolutionMetadata;

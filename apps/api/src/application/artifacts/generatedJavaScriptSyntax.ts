@@ -29,6 +29,23 @@ export function assertGeneratedJavaScriptSyntax(source: string): void {
 }
 
 /**
+ * Evidence, not just a verdict.
+ *
+ * `new Script(source)` either parses or it does not — the check is fully deterministic, the same
+ * source always gives the same answer — so when it says no it can say exactly where. Returning only
+ * "Unexpected token ')'" makes the user hunt through thirty thousand characters of generated code
+ * for a bracket; returning the line number and the line itself makes it something they can paste
+ * back into the chat and have fixed.
+ */
+export interface GeneratedJavaScriptDiagnosis {
+    message: string;
+    line?: number;
+    column?: number;
+    /** The offending source line, trimmed. Absent when the error carries no location. */
+    sourceLine?: string;
+}
+
+/**
  * The same check, reported instead of thrown.
  *
  * `assertGeneratedJavaScriptSyntax` guards the STORAGE boundaries — snapshot, export, publish —
@@ -41,11 +58,23 @@ export function assertGeneratedJavaScriptSyntax(source: string): void {
  * artifact, and ten minutes of work, over a missing bracket the user could ask the model to fix.
  * So this reports and the caller decides — one guard, two boundaries, opposite correct answers.
  */
-export function describeGeneratedJavaScriptSyntaxError(source: string): string | undefined {
+export function describeGeneratedJavaScriptSyntaxError(source: string): GeneratedJavaScriptDiagnosis | undefined {
     try {
         assertGeneratedJavaScriptSyntax(source);
         return undefined;
     } catch (error) {
-        return error instanceof Error ? error.message : String(error);
+        const err = error instanceof GeneratedJavaScriptSyntaxError
+            ? error
+            : new GeneratedJavaScriptSyntaxError(error);
+        const line = err.diagnostic.line;
+        const sourceLine = line ? source.split(/\r?\n/)[line - 1]?.trim() : undefined;
+        return {
+            message: err.message,
+            line,
+            column: err.diagnostic.column,
+            // Bounded: a generated line can be a whole minified function, and a diagnostic that
+            // scrolls off the screen is no more useful than none.
+            sourceLine: sourceLine ? sourceLine.slice(0, 240) : undefined,
+        };
     }
 }
