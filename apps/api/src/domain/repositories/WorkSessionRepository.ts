@@ -23,6 +23,17 @@ export interface WorkSessionRepository {
      */
     listByUser(userId: string, limit?: number): Promise<WorkSessionRecord[]>;
 
+    /**
+     * The still-open session for this project, if any.
+     *
+     * The fallback that keeps a chain joined when the client does not echo the session id back.
+     * "Open" is the whole condition — a session that has produced its artifact is closed, so an open
+     * one is by definition the intent currently in progress on that project. This is an explicit key
+     * the client already pins its follow-up calls to, not a timestamp correlation, which the
+     * certificate forbids.
+     */
+    findOpenByProject(projectId: string, userId: string): Promise<WorkSessionRecord | null>;
+
     /** Binds the session to the project it produced, once that project exists. */
     attachProject(id: string, projectId: string): Promise<WorkSessionRecord>;
 

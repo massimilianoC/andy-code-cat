@@ -71,6 +71,15 @@ export class MongoWorkSessionRepository implements WorkSessionRepository {
         return docs.map(toEntity);
     }
 
+    async findOpenByProject(projectId: string, userId: string): Promise<WorkSessionRecord | null> {
+        const col = await this.col();
+        const doc = await col.findOne(
+            { projectId, userId, status: "open" } as Filter<WorkSessionDocument>,
+            { sort: { $natural: -1 } },
+        );
+        return doc ? toEntity(doc) : null;
+    }
+
     async attachProject(id: string, projectId: string): Promise<WorkSessionRecord> {
         const col = await this.col();
         const updated = await col.findOneAndUpdate(

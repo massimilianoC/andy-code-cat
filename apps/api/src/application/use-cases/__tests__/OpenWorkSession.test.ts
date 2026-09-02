@@ -19,6 +19,7 @@ function repo(over: Partial<WorkSessionRepository> = {}): WorkSessionRepository 
     return {
         open: vi.fn(async () => record()),
         findByIdForUser: vi.fn(async () => null),
+        findOpenByProject: vi.fn(async () => null),
         listByProject: vi.fn(async () => []),
         listByUser: vi.fn(async () => []),
         attachProject: vi.fn(async () => record()),
@@ -67,6 +68,26 @@ describe("OpenWorkSession", () => {
         const repository = repo({ findByIdForUser: vi.fn(async () => null) });
 
         await new OpenWorkSession(repository).reuseOrOpen("ws-someone-else", input);
+
+        expect(repository.open).toHaveBeenCalled();
+    });
+
+    it("joins the session already open on this project when the client sends no id", async () => {
+        // Without this, one intent opens three sessions — classify, prefill and launch each start
+        // their own — and the certificate's binding condition (eight answers from ONE id) fails.
+        const openOnProject = record({ id: "ws-open-on-project" });
+        const repository = repo({ findOpenByProject: vi.fn(async () => openOnProject) });
+
+        const result = await new OpenWorkSession(repository).reuseOrOpen(undefined, { ...input, projectId: "p1" });
+
+        expect(result!.id).toBe("ws-open-on-project");
+        expect(repository.open).not.toHaveBeenCalled();
+    });
+
+    it("opens a new session when the project has none open", async () => {
+        const repository = repo();
+
+        await new OpenWorkSession(repository).reuseOrOpen(undefined, { ...input, projectId: "p1" });
 
         expect(repository.open).toHaveBeenCalled();
     });

@@ -295,10 +295,13 @@ export function createVibecoreRoutes(): Router {
                 // splitting one intent into two histories. Never throws: reuseOrOpen returns null
                 // if the store is unreachable, and the generation proceeds untraced.
                 const headerSessionId = String(req.headers[WORK_SESSION_HEADER] ?? "").trim() || undefined;
-                const workSession = await openWorkSession.reuseOrOpen(
-                    req.workSession?.id ?? headerSessionId,
-                    { userId, entryMode: "vibe", projectId },
-                );
+                const continuing = req.workSession?.id ?? headerSessionId;
+                // A fresh Vibe prompt IS a new intent, so this stage starts one and closes whatever
+                // was still open on the project — unless the client explicitly named a session to
+                // continue, which only a deliberate resubmission does.
+                const workSession = continuing
+                    ? await openWorkSession.reuseOrOpen(continuing, { userId, entryMode: "vibe", projectId })
+                    : await openWorkSession.startIntent({ userId, entryMode: "vibe", projectId });
 
                 // Recorded BEFORE classify dispatches: a request that dies in the provider must still
                 // prove it was made. Certificate §3 question 1 — nothing else in the database holds

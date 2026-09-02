@@ -37,6 +37,31 @@ export class OpenWorkSession {
     }
 
     /**
+     * Starts a NEW intent, closing whatever was still open on this project.
+     *
+     * Called by the entry stage — a fresh Vibe prompt. The distinction from `reuseOrOpen` is the
+     * whole coherence of the model: submitting a new prompt IS a new intent, while prefill and
+     * launch merely continue the one already running. Without the close, sessions accumulate open
+     * forever and a later intent silently joins an earlier one's history.
+     *
+     * Closing is best-effort. A session that cannot be closed is a stale row, which is a smaller
+     * problem than refusing the user's generation.
+     */
+    async startIntent(input: OpenWorkSessionInput): Promise<WorkSessionRecord | null> {
+        try {
+            if (input.projectId) {
+                const stillOpen = await this.repository.findOpenByProject(input.projectId, input.userId);
+                if (stillOpen) {
+                    await this.repository.setStatus(stillOpen.id, "completed").catch(() => undefined);
+                }
+            }
+            return await this.execute(input);
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * Returns the still-open session with this id if it belongs to the caller, otherwise opens a new
      * one. This is what an entry route should call: it makes a resubmission continue the session it
      * belongs to, and a stale or foreign id start a clean one instead of failing the request.
@@ -51,6 +76,14 @@ export class OpenWorkSession {
             if (existingId) {
                 const existing = await this.repository.findByIdForUser(existingId, input.userId);
                 if (existing && existing.status === "open") return existing;
+            }
+            // Fallback for a client that does not echo the id back. Without it each stage of one
+            // intent opens its own session — classify, prefill and launch would produce three
+            // unrelated histories, and the certificate's binding condition (eight answers from ONE
+            // id) fails outright. An open session on this project IS the intent in progress.
+            if (input.projectId) {
+                const openOnProject = await this.repository.findOpenByProject(input.projectId, input.userId);
+                if (openOnProject) return openOnProject;
             }
             return await this.execute(input);
         } catch {
