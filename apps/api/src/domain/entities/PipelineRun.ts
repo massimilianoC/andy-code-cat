@@ -41,6 +41,14 @@ export interface PipelineRun {
     ownerUserId: string;
     conversationId?: string;
     entryMode: PipelineEntryMode;
+    /**
+     * The WorkSession this generation belongs to. Already persisted (`NewPipelineRun.workSessionId`,
+     * `MongoPipelineRunRepository`'s document shape, and `PipelineRunDto` all carry it) — this
+     * field was simply missing from the domain entity's type, which made it inaccessible to any
+     * caller typed against `PipelineRun` even though the data was already there on every row.
+     * Optional only for runs created before sessions existed.
+     */
+    workSessionId?: string;
     /** Frozen once set — see assertLockImmutable(). Never mutate this field in place. */
     modelLock: PipelineModelLock;
     optimizationPolicy: OptimizationPolicy;

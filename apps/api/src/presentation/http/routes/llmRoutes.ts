@@ -660,6 +660,9 @@ export function createLlmRoutes(): Router {
                     usedUserProfile: false,
                 },
                 idempotencyKey: body.idempotencyKey,
+                // Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — the
+                // only new field a resumed generation adds. Absent on every ordinary turn.
+                resumedFromPromptExecutionId: body.resumedFromPromptExecutionId,
             });
             promptExecutionLogId = pendingLog.id;
             // ── end I11 pending write ───────────────────────────────────────────────────
@@ -1147,6 +1150,9 @@ export function createLlmRoutes(): Router {
                     usedUserProfile: false,
                 },
                 idempotencyKey: body.idempotencyKey,
+                // Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — the
+                // only new field a resumed generation adds. Absent on every ordinary turn.
+                resumedFromPromptExecutionId: body.resumedFromPromptExecutionId,
             });
             promptExecutionLogId = pendingLog.id;
             // ── end I11 pending write ───────────────────────────────────────────────────

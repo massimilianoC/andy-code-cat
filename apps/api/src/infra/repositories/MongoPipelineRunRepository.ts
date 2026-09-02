@@ -138,4 +138,10 @@ export class MongoPipelineRunRepository implements PipelineRunRepository {
         }
         return toEntity(updated);
     }
+
+    async deleteByProject(projectId: string, ownerUserId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId, ownerUserId } as Filter<PipelineRunDocument>);
+        return result.deletedCount ?? 0;
+    }
 }

@@ -207,4 +207,10 @@ export class MongoConversationRepository implements ConversationRepository {
             }
         );
     }
+
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId, userId } as Filter<ConversationDocument>);
+        return result.deletedCount ?? 0;
+    }
 }

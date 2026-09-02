@@ -30,4 +30,18 @@ export interface PromptExecutionLogRepository {
     summarizeCostsByUser(userId: string): Promise<Record<string, number>>;
     listRecentByProject(projectId: string, userId: string, limit?: number): Promise<PromptExecutionLog[]>;
     listRecentAll(limit?: number): Promise<PromptExecutionLog[]>;
+    /**
+     * Every journal row for one WorkSession, oldest first — ownership-scoped like every other
+     * finder here (the `userId` filter is applied in the query, not as an application-layer
+     * afterthought). Added for the Session Inspector (docs/specs/SESSION_INSPECTOR_SPEC.md): the
+     * detail endpoint needs every call a session made, in the order it made them, and nothing
+     * upstream could answer that by workSessionId alone.
+     */
+    listByWorkSession(workSessionId: string, userId: string): Promise<PromptExecutionLog[]>;
+    /**
+     * Discard (INTERRUPTED_RUN_RECOVERY.md §3bis) — deletes every journal row for a project the
+     * owner is discarding. Returns the number of rows removed, so the caller can state what it
+     * actually deleted rather than a vague "done". Ownership-scoped like every other write here.
+     */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
 }

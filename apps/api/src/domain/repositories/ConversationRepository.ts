@@ -41,4 +41,9 @@ export interface ConversationRepository {
         taskId: string,
         update: Partial<Pick<BackgroundTask, 'status' | 'output' | 'error' | 'completedAt' | 'tokenUsage' | 'costEstimate'>>
     ): Promise<void>;
+    /**
+     * Discard (INTERRUPTED_RUN_RECOVERY.md §3bis) — deletes every conversation (and with it every
+     * message) belonging to a project the owner is discarding. Returns the number removed.
+     */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
 }

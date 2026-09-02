@@ -112,4 +112,10 @@ export class MongoWorkSessionRepository implements WorkSessionRepository {
         if (!updated) throw new Error(`WorkSession not found: ${id}`);
         return toEntity(updated);
     }
+
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId, userId } as Filter<WorkSessionDocument>);
+        return result.deletedCount ?? 0;
+    }
 }

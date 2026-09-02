@@ -38,4 +38,9 @@ export interface WorkSessionRepository {
     attachProject(id: string, projectId: string): Promise<WorkSessionRecord>;
 
     setStatus(id: string, status: WorkSessionStatus, failureReason?: string): Promise<WorkSessionRecord>;
+    /**
+     * Discard (INTERRUPTED_RUN_RECOVERY.md §3bis) — deletes every session belonging to a project
+     * the owner is discarding. Returns the number removed.
+     */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
 }

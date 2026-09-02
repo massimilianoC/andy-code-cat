@@ -24,6 +24,7 @@ function repo(over: Partial<WorkSessionRepository> = {}): WorkSessionRepository 
         listByUser: vi.fn(async () => []),
         attachProject: vi.fn(async () => record()),
         setStatus: vi.fn(async () => record()),
+        deleteByProject: vi.fn(async () => 0),
         ...over,
     };
 }

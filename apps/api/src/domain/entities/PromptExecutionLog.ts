@@ -107,6 +107,17 @@ export interface PromptExecutionLog {
      * don't send one simply get no idempotency protection, same as before I11.
      */
     idempotencyKey?: string;
+    /**
+     * Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — the id of the
+     * failed `PromptExecutionLog` row this generation resumed from, when the `inputPrompt` was
+     * built by injecting that row's `rawResponse` and `reasoningTrace` into the original brief.
+     *
+     * A recovery is a project-mode generation with an injected prompt, not a new execution path —
+     * this is the one field that distinguishes it in the journal. Enough to answer "why is there a
+     * second generation here" when reading the history back later; nothing about dispatch, cost or
+     * traceability depends on it.
+     */
+    resumedFromPromptExecutionId?: string;
     createdAt: Date;
 }
 

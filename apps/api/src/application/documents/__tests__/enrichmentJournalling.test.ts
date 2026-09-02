@@ -36,6 +36,8 @@ class RecordingJournal implements PromptExecutionLogRepository {
     async summarizeCostsByUser() { return {}; }
     async listRecentByProject(): Promise<PromptExecutionLog[]> { return []; }
     async listRecentAll(): Promise<PromptExecutionLog[]> { return []; }
+    async listByWorkSession(): Promise<PromptExecutionLog[]> { return []; }
+    async deleteByProject(): Promise<number> { return 0; }
 }
 
 afterEach(() => vi.unstubAllGlobals());

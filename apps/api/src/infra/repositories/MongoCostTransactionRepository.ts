@@ -316,4 +316,11 @@ export class MongoCostTransactionRepository implements ICostTransactionRepositor
             { $set: { status: "voided", voidedByTxId } } as Document,
         );
     }
+
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const db = await getDb();
+        const col = db.collection<CostTransactionDocument>(COLLECTION);
+        const result = await col.deleteMany({ projectId, userId } as unknown as Document);
+        return result.deletedCount ?? 0;
+    }
 }

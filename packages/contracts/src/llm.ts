@@ -119,6 +119,15 @@ export const llmChatPreviewSchema = z.object({
      * modelLock instead of the legacy cascade (see ResolvePromptExecution.execute).
      */
     pipelineRunId: z.string().min(1).max(120).optional(),
+    /**
+     * Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — the id of the
+     * failed `PromptExecutionLog` this turn resumes from, when `message` was built by injecting
+     * that row's partial answer and reasoning into the original brief. Purely a provenance flag:
+     * it changes nothing about how the call is dispatched, journalled or costed — it only answers
+     * "why is there a second generation here" when the journal is read back later. Omitted for
+     * every ordinary turn.
+     */
+    resumedFromPromptExecutionId: z.string().min(1).max(120).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({

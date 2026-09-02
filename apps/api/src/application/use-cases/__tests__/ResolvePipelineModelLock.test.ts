@@ -107,6 +107,17 @@ class InMemoryPipelineRunRepository implements PipelineRunRepository {
         this.runs.set(runId, updated);
         return updated;
     }
+
+    async deleteByProject(projectId: string, ownerUserId: string): Promise<number> {
+        let count = 0;
+        for (const [id, run] of this.runs) {
+            if (run.projectId === projectId && run.ownerUserId === ownerUserId) {
+                this.runs.delete(id);
+                count++;
+            }
+        }
+        return count;
+    }
 }
 
 describe("computeCatalogRevision", () => {
