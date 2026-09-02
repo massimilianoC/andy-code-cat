@@ -1,3 +1,7 @@
+import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
+import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
+import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
 import { Router } from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
@@ -88,7 +92,17 @@ export function createProjectRoutes(): Router {
     const costTransactionRepository = new MongoCostTransactionRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
-    const deleteProject = new DeleteProject(projectRepository, moodboardRepository);
+    // Fully wired: a project deleted from the dashboard must not leave its journal, costs,
+    // conversations, sessions and runs behind pointing at an id nothing resolves.
+    const deleteProject = new DeleteProject(
+        projectRepository,
+        moodboardRepository,
+        new MongoPromptExecutionLogRepository(),
+        new MongoConversationRepository(),
+        new MongoWorkSessionRepository(),
+        new MongoPipelineRunRepository(),
+        new MongoCostTransactionRepository(),
+    );
     const duplicateProject = new DuplicateProject(projectRepository, promptConfigRepository);
     const getProjectMoodboard = new GetProjectMoodboard(moodboardRepository, projectRepository);
     const updateProjectMoodboard = new UpdateProjectMoodboard(moodboardRepository, projectRepository);

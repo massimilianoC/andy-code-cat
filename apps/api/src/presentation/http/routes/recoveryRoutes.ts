@@ -13,6 +13,7 @@ import { MongoCostTransactionRepository } from "../../../infra/repositories/Mong
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { GetZeroEffortRecoveryStatus } from "../../../application/use-cases/GetZeroEffortRecoveryStatus";
 import { DiscardPendingProject } from "../../../application/use-cases/DiscardPendingProject";
+import { DeleteProject } from "../../../application/use-cases/DeleteProject";
 
 /**
  * Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — Feature A.
@@ -48,15 +49,20 @@ export function createRecoveryRoutes(): Router {
     const writeLimiter = rateLimit({ windowMs: 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false });
 
     const getRecoveryStatus = new GetZeroEffortRecoveryStatus(promptExecutionLogRepository, snapshotRepository);
+    // One deletion, fully wired. Discard adds the guard and the counts; the removal itself is
+    // DeleteProject, the same one the dashboard uses.
     const discardPendingProject = new DiscardPendingProject(
         projectRepository,
-        moodboardRepository,
-        promptExecutionLogRepository,
-        conversationRepository,
-        workSessionRepository,
-        pipelineRunRepository,
-        costTransactionRepository,
         snapshotRepository,
+        new DeleteProject(
+            projectRepository,
+            moodboardRepository,
+            promptExecutionLogRepository,
+            conversationRepository,
+            workSessionRepository,
+            pipelineRunRepository,
+            costTransactionRepository,
+        ),
     );
 
     router.get(

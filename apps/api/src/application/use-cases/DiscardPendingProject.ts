@@ -7,6 +7,7 @@ import type { WorkSessionRepository } from "../../domain/repositories/WorkSessio
 import type { PipelineRunRepository } from "../../domain/repositories/PipelineRunRepository";
 import type { ICostTransactionRepository } from "../../domain/repositories/ICostTransactionRepository";
 import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
+import type { DeleteProject } from "./DeleteProject";
 
 /**
  * Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis / §4) — Feature A,
@@ -16,12 +17,13 @@ import type { PreviewSnapshotRepository } from "../../domain/repositories/Previe
  * outright so a failure does not leave a dead entry in the dashboard (98 of 156 projects
  * measured carried no snapshot at all — this is the cleanup path for that).
  *
- * `DeleteProject` (the existing use-case) only removes the project row and its moodboard — it
- * predates the journal, the cost ledger, work sessions and pipeline runs, and leaves all four
- * behind as orphans. This use case is the thorough version discard needs: it removes the
- * project AND everything a Zero Effort attempt wrote for it, and reports counts back so the
- * caller can state exactly what was removed rather than a vague "done"
- * (docs/specs/INTERRUPTED_RUN_RECOVERY.md §4: "it must say what it removes").
+ * It does NOT delete anything itself. `DeleteProject` used to remove only the project row and its
+ * moodboard, leaving the journal, the costs, the sessions and the runs orphaned; that was a defect
+ * in `DeleteProject` rather than a reason for a second deletion, and it has been fixed there. This
+ * use case adds only what a REJECTED run needs on top: the guard, and the counts the caller states
+ * back (docs/specs/INTERRUPTED_RUN_RECOVERY.md §4: "it must say what it removes").
+ *
+ * Two ways to delete a project would eventually disagree about what "deleted" means.
  *
  * Guarded against discarding a project that actually has something: if an artifact already
  * exists, this refuses — discard is for a run the user is rejecting, not a way to lose real
@@ -30,13 +32,8 @@ import type { PreviewSnapshotRepository } from "../../domain/repositories/Previe
 export class DiscardPendingProject {
     constructor(
         private readonly projectRepository: ProjectRepository,
-        private readonly moodboardRepository: ProjectMoodboardRepository,
-        private readonly promptExecutionLogRepository: PromptExecutionLogRepository,
-        private readonly conversationRepository: ConversationRepository,
-        private readonly workSessionRepository: WorkSessionRepository,
-        private readonly pipelineRunRepository: PipelineRunRepository,
-        private readonly costTransactionRepository: ICostTransactionRepository,
         private readonly snapshotRepository: PreviewSnapshotRepository,
+        private readonly deleteProject: DeleteProject,
     ) { }
 
     async execute(input: { projectId: string; userId: string }): Promise<DiscardPendingProjectResult> {
@@ -53,26 +50,11 @@ export class DiscardPendingProject {
             );
         }
 
-        const [journalRows, costTransactions, conversations, workSessions, pipelineRuns] = await Promise.all([
-            this.promptExecutionLogRepository.deleteByProject(input.projectId, input.userId),
-            this.costTransactionRepository.deleteByProject(input.projectId, input.userId),
-            this.conversationRepository.deleteByProject(input.projectId, input.userId),
-            this.workSessionRepository.deleteByProject(input.projectId, input.userId),
-            this.pipelineRunRepository.deleteByProject(input.projectId, input.userId),
-        ]);
+        // The one deletion. Everything above this line is the guard; everything the removal does
+        // belongs to DeleteProject, so a project discarded here and a project deleted from the
+        // dashboard leave the database in the same state.
+        const removed = await this.deleteProject.execute(input.projectId, input.userId);
 
-        // Best effort, matching DeleteProject — a missing moodboard must not block the discard.
-        try {
-            await this.moodboardRepository.deleteByProjectId(input.projectId);
-        } catch {
-            // best effort
-        }
-
-        const deleted = await this.projectRepository.deleteById(input.projectId, input.userId);
-
-        return {
-            deleted,
-            removed: { journalRows, costTransactions, conversations, workSessions, pipelineRuns },
-        };
+        return { deleted: true, removed };
     }
 }
