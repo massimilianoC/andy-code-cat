@@ -328,6 +328,16 @@ export interface LlmChatPreviewResult {
     reply: string;
     rawResponse?: string;
     structuredParseValid?: boolean;
+    /**
+     * Set when the artifact's JavaScript does not compile.
+     *
+     * The generation is still returned — discarding a complete artifact over a missing bracket
+     * would throw away work the user paid for and could ask the model to fix. But the storage
+     * boundaries refuse it (snapshot, export, publish all call
+     * assertGeneratedJavaScriptSyntax), so a caller that ignores this will watch the snapshot
+     * write fail later with nothing said, which is exactly how this went unnoticed.
+     */
+    generatedJavaScriptError?: string;
     promptingTrace?: LlmPromptingTrace;
     structured?: LlmStructuredResponse;
     mediaResolution?: MediaResolutionMetadata;

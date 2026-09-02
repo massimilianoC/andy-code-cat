@@ -2459,6 +2459,21 @@ function WorkspacePageContent() {
 
             let previewVersionSaved = false;
 
+            // The server now diagnoses invalid JavaScript at the moment the artifact is produced,
+            // not only when a write is attempted. Saying so here is the difference between "the
+            // reply arrived and the preview never changed" and "the model broke the script, ask it
+            // to fix line N" — the second is something the user can act on, and it arrives before
+            // they go looking for a preview that will never come.
+            if (llm.generatedJavaScriptError) {
+                addNotification({
+                    label: t("workspace.notifications.snapshot.invalidJsLabel", "Artefatto danneggiato"),
+                    status: "error",
+                    message: t("workspace.notifications.snapshot.invalidJs",
+                        "Il modello ha prodotto JavaScript non valido, quindi la versione non è stata salvata e l'anteprima resta quella precedente. Chiedi in chat di correggere lo script.")
+                        + ` (${llm.generatedJavaScriptError})`,
+                });
+            }
+
             // Persist preview snapshot to DB — only when html is non-empty AND the
             // structured parse succeeded. A parse failure now returns empty artifacts
             // (buildParseFailureStructured) and generationParseError=true; persisting it

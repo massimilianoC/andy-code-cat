@@ -56,6 +56,7 @@ import { ResolveBrandDocumentContext } from "../../../application/use-cases/Reso
 import { ResolvePromptExecution, type LlmRuntimeContext } from "../../../application/use-cases/ResolvePromptExecution";
 import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
 import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
+import { describeGeneratedJavaScriptSyntaxError } from "../../../application/artifacts/generatedJavaScriptSyntax";
 
 type LlmProviderStatus = {
     requiresKey: boolean;
@@ -891,6 +892,11 @@ export function createLlmRoutes(): Router {
                 reply,
                 rawResponse: rawReply,
                 structuredParseValid: parsed.parseValid,
+                // Reported, never thrown here: refusing at the generation boundary would discard a
+                // complete artifact over a syntax slip. The storage boundary still refuses it.
+                generatedJavaScriptError: parsed.structured?.artifacts?.js
+                    ? describeGeneratedJavaScriptSyntaxError(parsed.structured.artifacts.js)
+                    : undefined,
                 promptingTrace: {
                     originalUserMessage: body.message,
                     promptConfigId: context.promptConfigId,
@@ -1537,6 +1543,11 @@ export function createLlmRoutes(): Router {
                 reply,
                 rawResponse: trimmedRaw,
                 structuredParseValid: parsed.parseValid,
+                // Reported, never thrown here: refusing at the generation boundary would discard a
+                // complete artifact over a syntax slip. The storage boundary still refuses it.
+                generatedJavaScriptError: parsed.structured?.artifacts?.js
+                    ? describeGeneratedJavaScriptSyntaxError(parsed.structured.artifacts.js)
+                    : undefined,
                 promptingTrace: {
                     originalUserMessage: body.message,
                     promptConfigId: context.promptConfigId,

@@ -27,3 +27,25 @@ export function assertGeneratedJavaScriptSyntax(source: string): void {
         throw new GeneratedJavaScriptSyntaxError(error);
     }
 }
+
+/**
+ * The same check, reported instead of thrown.
+ *
+ * `assertGeneratedJavaScriptSyntax` guards the STORAGE boundaries — snapshot, export, publish —
+ * where refusing is right: a stored version whose scripts do not compile becomes a dead page and
+ * the base of the next edit. But it was only ever called there, so a generation whose JavaScript
+ * was broken came back to the client looking perfectly fine, and the user learned about it only
+ * when the snapshot write was rejected — after paying for the generation, with nothing said.
+ *
+ * At the GENERATION boundary refusing would be worse than the defect: it would discard a complete
+ * artifact, and ten minutes of work, over a missing bracket the user could ask the model to fix.
+ * So this reports and the caller decides — one guard, two boundaries, opposite correct answers.
+ */
+export function describeGeneratedJavaScriptSyntaxError(source: string): string | undefined {
+    try {
+        assertGeneratedJavaScriptSyntax(source);
+        return undefined;
+    } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+    }
+}
