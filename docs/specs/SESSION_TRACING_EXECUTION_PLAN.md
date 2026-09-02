@@ -24,6 +24,32 @@ Branch: `feat/parallel-section-generation`. Gitflow applies (`docs/guides/GITFLO
 | WP5 session inspector | **open** |
 | WP6 replay harness | **open** — blocked on a real run confirming the certificate |
 
+## Reported from use — to fold into the packages above, not to fix ad hoc
+
+Three things observed while running the product. Each belongs inside a package that is already
+planned; fixing them separately would mean fixing them twice.
+
+**The project cost in the header lags by one refresh.** It shows the total as of the previous load
+rather than the last elaboration. This belongs to **WP2**: once cost is one referential record keyed
+by `promptExecutionId`, the header aggregates on `workSessionId` instead of recomputing a total at
+page load, and the staleness disappears as a consequence rather than as a patch.
+
+**Cost should be inspectable per step, not only as a total.** The data already supports it — every
+journal row carries its own `costEstimate` and every cost row now carries `workSessionId`. What is
+missing is the surface, which is **WP5**. Designing a separate cost panel would produce a second
+place that answers the same question the inspector will answer.
+
+**The prompt panel breaks when rendering a large code block**, apparently when one block is split
+across many accordions. Not yet reproduced — needs the project and section that shows it before it
+can be diagnosed rather than guessed at. **WP5**, once seen.
+
+**Measured, not assumed:** artifact generation is genuinely faster today — 45–167s against 316–630s
+in the preceding week — but that is the model, not this work. `kimi-k2.7-code` sustains 372 tok/s
+where GLM-5.3 managed 52. The tracing work only adds database writes to the hot path, and the fan-out
+that would actually shorten it is still unreachable from the product. What did change is that
+`finishReason` is now recorded: it is `-` on every run before 2026-09-02 and `stop` on every run
+after.
+
 ## 0. The rules that bind every package
 
 These override convenience, deadline and personal judgment. An agent that cannot satisfy one of
