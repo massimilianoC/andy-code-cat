@@ -1376,6 +1376,13 @@ export function createLlmRoutes(): Router {
                         status: "failed",
                         errorMessage: "Generation interrupted (client disconnect or timeout)",
                         durationMs: Date.now() - startedAt,
+                        finishReason: finishReason ?? "interrupted",
+                        // The work already paid for. Both were in scope here and discarded: an
+                        // interrupted generation is precisely the case where the partial answer and
+                        // the reasoning behind it are worth more than the error message, because
+                        // they are what a resumed attempt would start from instead of starting over.
+                        rawResponse: rawReply || undefined,
+                        reasoningTrace: rawThinking ? rawThinking.slice(0, 20_000) : undefined,
                     }).catch(() => { });
                 }
                 if (!res.writableEnded && !res.destroyed) {
@@ -1635,7 +1642,12 @@ export function createLlmRoutes(): Router {
                     finishReason: result.finishReason,
                     // Kept only when the call was cut off: on a clean stop the trace is dead weight,
                     // but on "length" it is the work already paid for that a retry can resume from.
-                    reasoningTrace: finishReason === "length" ? rawThinking.slice(0, 20_000) : undefined,
+                    // Kept whenever the call did not end cleanly, not only on truncation. A "stop"
+                    // finish means the model said what it meant to say and the trace is dead weight;
+                    // anything else means work was cut short, and the trace is the only record of it.
+                    reasoningTrace: finishReason && finishReason !== "stop"
+                        ? rawThinking.slice(0, 20_000)
+                        : undefined,
                     rawResponse: result.rawResponse,
                 }).catch(() => { });
             }

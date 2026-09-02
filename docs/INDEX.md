@@ -113,6 +113,7 @@ Read in this order before making changes:
 | --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
 | [docs/specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md](specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md) | **Proposed, not implemented** — why the first generation feels silent, and an incremental plan for real progress events and an inspector panel |
+| [docs/specs/INTERRUPTED_RUN_RECOVERY.md](specs/INTERRUPTED_RUN_RECOVERY.md) | Resume a broken generation from its own partial answer and reasoning instead of restarting — prerequisite built, offer not |
 | [docs/specs/MULTI_MODEL_PARALLEL_RUNS.md](specs/MULTI_MODEL_PARALLEL_RUNS.md) | **Parked idea** — one input, several models at once, three versioned artifacts to choose from; what already exists for it and what makes it hard |
 | [docs/specs/SESSION_REDUNDANCY_ANALYSIS.md](specs/SESSION_REDUNDANCY_ANALYSIS.md) | Measured on a real exported session — which duplications are harmless, which one diverges, and the two references that were missing |
 | [docs/specs/SESSION_RECONSTRUCTION_CERTIFICATE.md](specs/SESSION_RECONSTRUCTION_CERTIFICATE.md) | **The checkable claim** — eight questions the database must answer from a workSessionId alone, the verification query, and the holes still open |
