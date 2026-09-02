@@ -63,26 +63,31 @@ The last row is the only live correctness defect found. It is WP1.
 
 Suite at the last full run: **646 passing**, tsc clean.
 
-### In flight — four Sonnet agents, spawned in parallel, no shared files
+### Landed since — WP4b + WP4c (commit `18fb11f`)
 
-| Agent | Package | Owns | Progress file |
-|---|---|---|---|
-| A | WP4b didactic | `AskDidacticQuestion.ts`, `GenerateDidacticKnowledge.ts`, `didacticRoutes.ts` | `docs/handoff/WP4B_DIDACTIC_PROGRESS.md` |
-| B | WP4b enrichment | `ImageAnalyzer.ts`, `DocumentBriefExtractor.ts`, `AssetEnrichmentPipeline.ts` | `docs/handoff/WP4B_ENRICHMENT_PROGRESS.md` |
-| C | WP4b image gen | `generateImageWithSiliconFlow.ts`, `GenerateProjectImage.ts` + its route | `docs/handoff/WP4B_IMAGEGEN_PROGRESS.md` |
-| D | WP4c correlation | `llmRoutes.ts` | `docs/handoff/WP4C_GENERATE_CORRELATION_PROGRESS.md` |
+Four Sonnet agents, disjoint file sets, all four green. **Every LLM call site in the product now
+journals.** The audit table in `WORK_SESSION_TRACING_SPEC.md` §2 is now historical: no row in it says
+"no" any more.
 
-Each was told to keep its progress file current and to leave changes **uncommitted** in the working
-tree. **If a progress file exists, read it before touching that package** — it records decisions a
-fresh agent cannot re-derive cheaply.
+| Slice | What it turned out to be |
+|---|---|
+| didactic | Ask recorded nothing at all; knowledge recorded only cost. Knowledge now completes on the raw reply **before** `parseDidacticJson`, so a parse failure cannot rewrite what the model said |
+| enrichment | The vision call had no row. Document brief and dataset appendix **did** have rows — but written only after the fetch resolved, so a call that never returned left no trace. Moved to pending-before-dispatch; `persistPromptExecutionLog` removed rather than left as a second writer |
+| image gen | No row at all for a paid ~30s call. Base64 replaced by a marker: the journal records prompts, not asset bytes. `finish_reason`/usage left undefined rather than fabricated |
+| generate | The endpoint expression was **hoisted out of the fetch** so the journal stores the exact string called, not a re-derivation |
 
-All four copy one pattern: `VibeClassify.ts` lines 164-180 (optional repo param), 259-292 (pending
-write awaited **before** dispatch), 300-310 (failure completion), 366-385 (success completion), with
-`vibeJournalling.test.ts` as the test shape.
+Combined-tree verification after all four landed: **tsc clean, 89 files, 678 tests**. Each agent's own
+run was a snapshot of a tree three others were still editing — the combined run is the one that counts,
+and re-running it is the first thing to do after any future parallel wave.
+
+Per-agent decisions are in `docs/handoff/WP4B_*.md` and `WP4C_*.md`.
+
+**Dead code found in passing, not acted on:** `AskDidacticQuestion.execute()` has zero callers
+repo-wide — only `streamTokens()` is wired. Candidate for the cleanup pass.
 
 ### Not started
 
-- **WP1** — the artifact SSOT violation. Deliberately unassigned: it edits the same workspace page
+- **WP1** — the artifact SSOT violation. **Now the highest-value remaining item.** Deliberately unassigned: it edits the same workspace page
   WP5 will rewrite. Four commits in order, and the field must not be deleted first
 - **WP2** — cost as one referential record keyed by `promptExecutionId`, carrying its rate snapshot
 - **WP3** — Mongo repositories for `VibeIntake` and `ZeroEffortFormProposal` (entities exist; nothing
