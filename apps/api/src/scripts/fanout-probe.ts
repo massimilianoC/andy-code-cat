@@ -87,6 +87,14 @@ if (!API_KEY) {
     process.exit(1);
 }
 
+const DRY_RUN_PLAN = JSON.stringify({
+    designTokens: { palette: ["#0f172a", "#f8fafc"], headingFont: "Inter", styleNote: "editoriale, molto spazio bianco" },
+    sections: [
+        { key: "situazione-attuale", title: "La situazione oggi", contentBrief: "Fotografa entrate, uscite fisse e risparmio residuo, senza giudizio.", charBudget: 1500 },
+        { key: "obiettivi", title: "Gli obiettivi", contentBrief: "Tre obiettivi concreti a 1, 3 e 10 anni.", charBudget: 1200 },
+    ],
+});
+
 // ── Baseline being replaced (run f51ee098) ───────────────────────────────────
 const BASELINE = { durationMs: 629_546, completionTokens: 32_768, promptTokens: 13_938 };
 
@@ -94,6 +102,24 @@ class ChatCompletionsDispatcher implements SectionLlmDispatcher {
     constructor(private readonly model: string) { }
 
     async dispatch(call: SectionLlmCall): Promise<SectionLlmReply> {
+        // FANOUT_DRY_RUN=1 prints the exact request each stage would send and dispatches nothing.
+        // The point of the fan-out is what is in these two strings, so they have to be inspectable
+        // without spending money to see them.
+        if (process.env.FANOUT_DRY_RUN === "1") {
+            console.log(`
+${"═".repeat(78)}
+${call.label}  maxTokens=${call.maxTokens}  disableThinking=${call.disableThinking}`);
+            console.log(`── system (${call.system.length} chars) ──
+${call.system}`);
+            console.log(`── user (${call.user.length} chars) ──
+${call.user}`);
+            return {
+                content: call.label === "plan" ? DRY_RUN_PLAN : "<section><h2>dry run</h2></section>",
+                finishReason: "stop",
+                usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            };
+        }
+
         const body = buildChatCompletionRequestBody({
             provider: PROVIDER,
             model: this.model,
