@@ -58,6 +58,7 @@ function emptyDetail(overrides: Partial<WorkSessionDetailDto>): WorkSessionDetai
         pipelineRuns: [],
         promptExecutionLogs: [],
         costTransactions: [],
+        artifacts: [],
         ...overrides,
     };
 }
