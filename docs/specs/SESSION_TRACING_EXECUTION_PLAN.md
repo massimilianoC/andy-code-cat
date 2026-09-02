@@ -204,6 +204,9 @@ non-null `endpoint`.
 
 ## WP5 — The session inspector, front-end
 
+**Consolidated into `SESSION_INSPECTOR_SPEC.md` — implement from there.** What follows is the
+original sketch, kept for the reasoning behind it.
+
 The prompt tab in the project session becomes a work-session inspector. Modular and reusable,
 because the blocks shown depend on how the session was entered.
 

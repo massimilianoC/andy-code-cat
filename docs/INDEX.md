@@ -113,6 +113,7 @@ Read in this order before making changes:
 | --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
 | [docs/specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md](specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md) | **Proposed, not implemented** — why the first generation feels silent, and an incremental plan for real progress events and an inspector panel |
+| [docs/specs/SESSION_INSPECTOR_SPEC.md](specs/SESSION_INSPECTOR_SPEC.md) | **Feature B, ready to implement** — the Prompt view becomes three collapsible blocks (Vibe / Zero Effort / Generation) reading only what the database already owns |
 | [docs/specs/PROMPT_LAYER_REDUNDANCY_ANALYSIS.md](specs/PROMPT_LAYER_REDUNDANCY_ANALYSIS.md) | **Feature C** — measured on real runs: no literal redundancy exists, 25% of the prompt is static boilerplate that caching handles for free, and the question worth asking instead |
 | [docs/specs/PREFILL_PARALLELISATION_FINDINGS.md](specs/PREFILL_PARALLELISATION_FINDINGS.md) | **Tested and rejected** — splitting the Zero Effort prefill across parallel calls is slower, costlier and less complete; why, and what would change the answer |
 | [docs/specs/INTERRUPTED_RUN_RECOVERY.md](specs/INTERRUPTED_RUN_RECOVERY.md) | Resume a broken generation from its own partial answer and reasoning instead of restarting — prerequisite built, offer not |
