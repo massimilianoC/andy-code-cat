@@ -1857,11 +1857,6 @@ function WorkspacePageContent() {
     // Computed BEFORE hooks that depend on them
     // and before early-return guard so handleSend can access them via closure.
 
-    const assistantSnapshots = (activeConv?.messages ?? [])
-        .filter((m) => m.role === "assistant" && m.metadata?.generatedArtifacts)
-        .slice()
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
     const latestAssistant = (activeConv?.messages ?? [])
         .slice()
         .reverse()
@@ -1933,8 +1928,13 @@ function WorkspacePageContent() {
     const selectedBackendSnapshot =
         previewSnapshots.find((s) => s.id === selectedBackendSnapshotId) ?? activeBaselineSnapshot;
 
-    const artifacts =
-        selectedBackendSnapshot?.artifacts ?? latestAssistant?.metadata?.generatedArtifacts;
+    // WP1 step 2 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — the PreviewSnapshot is the
+    // only source the preview panel reads from. Step 1 guarantees a snapshot already exists (or
+    // that this turn produced none, in which case there is nothing to display anyway) by the
+    // time a message can appear in activeConv, so there is no longer a render window where
+    // falling back to metadata.generatedArtifacts on the conversation's latest message would
+    // pick up a copy that could disagree with the snapshot.
+    const artifacts = selectedBackendSnapshot?.artifacts;
 
     const artifactsKey = selectedBackendSnapshot?.id ?? latestAssistant?.id ?? "no-artifacts";
 
@@ -2176,10 +2176,15 @@ function WorkspacePageContent() {
                 })
                 .filter((m) => m.content.length > 0);
 
+            // WP1 step 2 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — activeBaselineSnapshot
+            // is the sole source of the artifact sent as the base of the next generation. See
+            // the comment on `artifacts` above: step 1 already guarantees a snapshot exists (or
+            // that none does, and there is nothing to send) before a message can enter state, so
+            // metadata.generatedArtifacts is never needed here either.
             const currentArtifactsSource =
                 editorHtml || editorCss || editorJs
                     ? { html: editorHtml, css: editorCss, js: editorJs }
-                    : activeBaselineSnapshot?.artifacts ?? latestAssistant?.metadata?.generatedArtifacts;
+                    : activeBaselineSnapshot?.artifacts;
             // In focused edit mode the server needs the full HTML for section extraction
             // and patch merging (data-pf-id lookup). Use Zod schema max (80K/20K/20K)
             // for focus; server-side buildMessagesWithHistory truncates for the LLM prompt.
