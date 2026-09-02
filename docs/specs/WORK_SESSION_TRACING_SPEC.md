@@ -34,7 +34,14 @@ pipeline.
 
 ---
 
-## 2. Audit — what the 13 LLM call sites record today
+## 2. Audit — what the 13 LLM call sites recorded (historical, closed 2026-09-02)
+
+**This table is the diagnosis, not the current state.** Every row that said "no" has been closed:
+all thirteen call sites now write a journal row carrying both rendered prompts, the raw reply before
+any parsing, the endpoint actually called, `finishReason`, cost and the session it belongs to. Kept
+because it is the evidence that motivated the work, and because "what was missing" is the fastest way
+to understand what the journal is for.
+
 
 | Call site | prompt + response stored | cost recorded |
 |---|---|---|
@@ -54,12 +61,16 @@ pipeline.
 So for the Zero Effort prefill we know what it *cost* and nothing about what it was *asked* or what
 it *answered*. Image generation and the didactic Ask path leave no trace at all.
 
-### 2.1 Two structural gaps
+### 2.1 Two structural gaps — both closed
 
-1. **`prompt_execution_logs` has no `pipelineRunId`.** The rows exist but nothing correlates them.
-   There is no path from a Vibe request to the artifact it eventually produced.
-2. **The endpoint called is not recorded.** So the question "are there endpoints bypassing the
-   SSOT?" cannot be asked of the history at all — the history does not contain the answer.
+1. ~~`prompt_execution_logs` has no `pipelineRunId`~~ — it now carries `workSessionId`,
+   `pipelineRunId`, `pipelineStage` and `endpoint`, so a Vibe request and the artifact it produced
+   are one query apart.
+2. ~~The endpoint called is not recorded~~ — every row now names the URL actually POSTed to, which
+   makes "are there endpoints bypassing the SSOT?" answerable for the first time.
+
+The live claim about what is and is not certified now lives in
+`SESSION_RECONSTRUCTION_CERTIFICATE.md`, which is checkable rather than descriptive.
 
 What *is* already stored: `PipelineRun.canonicalBrief`, content-hashed. The brief is not lost.
 

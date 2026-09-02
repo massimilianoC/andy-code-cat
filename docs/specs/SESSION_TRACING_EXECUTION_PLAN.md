@@ -11,6 +11,19 @@ Branch: `feat/parallel-section-generation`. Gitflow applies (`docs/guides/GITFLO
 
 ---
 
+## Status, 2026-09-02
+
+| Package | State |
+|---|---|
+| WP1 artifact SSOT violation | **open** — the only live correctness defect left |
+| WP2 cost as one referential record | **open** — a `workSessionId` correlation field was added, the restructure was not |
+| WP3 intake objects | **done** — repositories built and wired |
+| WP4a session lifecycle | **done**, plus the one-intent-one-session fix found in coherence review |
+| WP4b silent call sites | **done** — four parallel agents |
+| WP4c generate correlation | **done** |
+| WP5 session inspector | **open** |
+| WP6 replay harness | **open** — blocked on a real run confirming the certificate |
+
 ## 0. The rules that bind every package
 
 These override convenience, deadline and personal judgment. An agent that cannot satisfy one of
