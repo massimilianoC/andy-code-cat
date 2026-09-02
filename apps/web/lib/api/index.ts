@@ -26,3 +26,4 @@ export * from "./brand";
 export * from "./preferences";
 export * from "./didactic";
 export * from "./forms";
+export * from "./workSessions";

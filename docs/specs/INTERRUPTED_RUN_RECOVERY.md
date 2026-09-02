@@ -74,15 +74,36 @@ Found while checking this: `VibePrefill` counted `reasoning_tokens` into the cos
 stored the reasoning text. We knew how much the model had thought and nothing about what. Fixed —
 the trace is now kept whenever the call does not end with a clean `stop`.
 
-### The offer
+### The offer differs, because the destination differs
+
+Both points recover the same material. They do not need the same interface, and giving them one
+would put a model picker next to a model picker.
+
+**From Vibe — a modal, because this is a transition.** The user is not in the workspace yet and has
+no picker in front of them, so the modal has to do two things at once: choose how to continue, and
+carry them there.
 
 > This generation stopped. There are **N tokens** of work already paid for — a partial result and the
-> model's reasoning. **Continue in the workspace with this model**, **with a different one**, or
-> **discard the project**.
+> model's reasoning. **Resume in project mode** with this model, or pick another. Or **discard the
+> project**.
 
-`N` comes from the failed journal row, so it is a fact rather than reassurance.
+Choosing resume navigates to `/workspace/:projectId` carrying the whole recovered context: the
+original prompt, the brief, the attachments, and the interrupted thinking. The backend already
+assembles exactly this — `ZeroEffortRecoveryStatus.resumePrompt` is documented as "ready to send
+verbatim as the `message` of a normal `/llm/chat-preview` turn", which is what makes the transition
+one navigation rather than a new pipeline.
 
-**Discard** deletes the project, because a failure should not sit in the list looking like work.
+`N` comes from the failed journal row, so it is a fact rather than reassurance. **Discard** deletes
+the project, because a failure should not sit in the list looking like work.
+
+**In the workspace — an error and a retry, nothing more.** The user is already at the destination.
+The chat is there, the model picker is there. A modal would offer a second copy of both.
+
+> The generation failed. **Retry** — picking up from what was already produced.
+
+The only thing that button does beyond an ordinary retry is send `resumePrompt` instead of the bare
+message, so the model continues its own reasoning rather than starting it again. That is invisible to
+the user and is the entire point.
 
 ### The list-hygiene problem is real and measurable
 
