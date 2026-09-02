@@ -55,39 +55,53 @@ Suite: **687 passing**, tsc clean on api and web. The local stack runs this code
 
 ---
 
-## 4. Where the two features stand
+## 4. Both features are built, deployed and smoke-tested
 
-Session ended on credits, agents stopped mid-flight. The tree is green: api tsc clean,
-**695 tests**, web tsc clean.
+The local stack runs this code. api tsc clean · **695 api tests** · **62 web tests** · web tsc clean.
 
-### DONE — WP1, the artifact SSOT violation
-Four commits in the order its spec demanded: `714d5a6` (snapshot committed before the assistant
-message can reach state — the window the fallback existed to paper over), `340f69c` (reads removed),
-`f5798fd` (write removed), `af45782` (field removed). `generatedArtifacts` now survives only in the
-comments explaining why it is gone. This was the only measured correctness defect.
+### Session inspector — DONE
+Three collapsible blocks in the workspace Prompt view, rendered only when the session produced them,
+Generation open by default. System prompt split by its existing `PF_LAYER` markers, with a test
+proving the segments reconstruct the original string exactly. Truncation visible in the collapsed
+row. No prompt bodies fetched until a block is expanded.
 
-### DONE — the inspector backend
-`GET /v1/projects/:projectId/work-sessions` (list, no prompt bodies) and `…/:workSessionId`
-(detail, with them). 404 not 403 for another user's session. 8 tests. See
-`docs/handoff/INSPECTOR_BACKEND_PROGRESS.md`.
+Backed by `GET /v1/projects/:id/work-sessions` (list, no bodies) and `…/:workSessionId` (detail).
+Verified live: list returns the session with its stages and cost, detail returns intake, proposal,
+run, four journal rows with their prompts, and cost rows. A session belonging to another user
+returns nothing — ownership scoping confirmed by querying one.
 
-Its DTOs live in the use cases rather than `packages/contracts`, chosen to avoid colliding with two
-concurrent agents. **Promote them into contracts before the frontend mirrors the shape**, or they
-become a second declaration of the same thing.
+`WorkSessionDetailDto.artifacts` carries artifacts **by reference** (snapshot id, the journal row
+that produced it, sizes) — `preview_snapshots` owns the bytes.
 
-### NOT DONE — the inspector frontend
-`SESSION_INSPECTOR_SPEC.md` is the document to implement from; the endpoints it needs now exist. This
-is the next piece of work and it is unblocked.
+### Interrupted-run recovery — DONE
+Two loss points, one destination. A prefill that breaks offers a modal that carries the whole
+recovered context into project mode; the workspace loads it into the composer, removing the storage
+key first so a reload cannot replay it. Prefilled and deliberately not auto-sent.
 
-### PARTIAL — Zero Effort recovery
-Backend groundwork landed: `GetZeroEffortRecoveryStatus`, `DiscardPendingProject`, `recoveryRoutes`,
-`packages/contracts/src/recovery.ts`, and `resumedFromPromptExecutionId` on the journal row. **The
-modal did not.** Nothing calls those routes, so behaviour is unchanged — it is scaffolding waiting
-for a front end. `INTERRUPTED_RUN_RECOVERY.md` §3bis is the constraint that decides its shape.
+`VibePrefill` now keeps its reasoning trace — it counted reasoning tokens and threw the text away.
 
-### Known limitation, not introduced by this work
-`ICostTransactionRepository.findBySourceRef` caps at 50 rows, so a session with more than 50 cost
-rows would undercount its total. Not hit by current data.
+Cancelling the modal deletes the project, so a failure never survives as a dashboard entry. Escape
+and the backdrop do not dismiss: with no "later", dismissing would have to mean one of two acting
+choices.
+
+### The SSOT audit before deploying found one violation, now fixed
+Two project deletions had appeared. `DeleteProject` removed only the project row and its moodboard,
+orphaning the journal, costs, conversations, sessions and runs on **every dashboard delete**;
+`DiscardPendingProject` did the thorough version beside it. Consolidated: one deletion, fully wired
+in both routes, with discard keeping only the guard and the counts.
+
+Verified single-owner: prompt composition + parity (`promptTraceParity` ← `llmRoutes`), journal
+writing (one repository), and the recovery makes no LLM call of its own.
+
+### Stale defect, corrected
+"The assistant reply is missing from the sent-history panel" was already fixed by `bf3fb10`
+(26 Aug) — `PromptTranscriptView:223-224` renders assistant turns with their own label and accent.
+It was almost certainly being observed on a 27-hour-old container image.
+
+### Still open
+The accordion fragmenting a large code block — reported twice, never reproduced, component never
+located. Do not fix it blind. WP2 (cost as one referential record, which also fixes the header cost
+lagging one refresh). The `vibe_intakes.attachments[] → project_assets` link.
 
 ## 5. Tools that exist
 
