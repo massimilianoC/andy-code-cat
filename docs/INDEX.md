@@ -113,6 +113,7 @@ Read in this order before making changes:
 | --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
 | [docs/specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md](specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md) | **Proposed, not implemented** — why the first generation feels silent, and an incremental plan for real progress events and an inspector panel |
+| [docs/specs/WORK_SESSION_TRACING_SPEC.md](specs/WORK_SESSION_TRACING_SPEC.md) | **Proposed** — one work-session id spanning every prompt, response, cost and endpoint of a run; audit of what the 13 LLM call sites record today |
 | [docs/specs/PARALLEL_SECTION_GENERATION_SPEC.md](specs/PARALLEL_SECTION_GENERATION_SPEC.md) | **Proposed, not implemented** — splitting the monolithic `generate` stage into a planned, per-section parallel fan-out; model-lock, cost and coherence constraints |
 | [docs/specs/I18N_ARTIFACTS_SPEC.md](specs/I18N_ARTIFACTS_SPEC.md) | Multilingual support for LLM-generated artifact websites — post-publication translation pipeline |
 | [docs/specs/UX_REVIEW_AND_PUBLISH_SPEC.md](specs/UX_REVIEW_AND_PUBLISH_SPEC.md) | Review workspace and publish flow |
