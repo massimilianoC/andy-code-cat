@@ -14,4 +14,11 @@ export interface VibeIntakeRepository {
     appendPromptExecutionLogId(id: string, promptExecutionLogId: string): Promise<void>;
 
     listByWorkSession(workSessionId: string, userId: string): Promise<VibeIntakeRecord[]>;
+
+    /**
+     * Every intake for a project, oldest first. Project-scoped rather than session-scoped because
+     * the dashboard asks "what did the user type for THIS project", which spans however many
+     * sessions it took.
+     */
+    listByProject(projectId: string, userId: string): Promise<VibeIntakeRecord[]>;
 }

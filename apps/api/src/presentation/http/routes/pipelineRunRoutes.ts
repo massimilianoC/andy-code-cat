@@ -6,6 +6,8 @@ import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import type { RequestWithContext } from "../types";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
+import { MongoVibeIntakeRepository } from "../../../infra/repositories/MongoVibeIntakeRepository";
+import { GetProjectSessionSummary } from "../../../application/use-cases/GetProjectSessionSummary";
 import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
@@ -71,6 +73,30 @@ export function createPipelineRunRoutes(): Router {
                 });
 
                 res.status(201).json({ run: toDto(run) });
+            } catch (error) {
+                next(error);
+            }
+        },
+    );
+
+    /**
+     * What is worth copying out of this project, and what was attached to it.
+     *
+     * The dashboard used to copy `prePromptTemplate` — the template, identical for every project —
+     * because the user's own words were not stored anywhere. They are now.
+     */
+    router.get(
+        "/projects/:projectId/session-summary",
+        pipelineRunLimiter,
+        authMiddleware,
+        sandboxMiddleware,
+        async (req: RequestWithContext, res, next) => {
+            try {
+                const summary = await new GetProjectSessionSummary(
+                    new MongoVibeIntakeRepository(),
+                    pipelineRunRepository,
+                ).execute(req.sandbox!.projectId, req.auth!.userId);
+                res.json(summary);
             } catch (error) {
                 next(error);
             }

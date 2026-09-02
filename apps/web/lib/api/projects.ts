@@ -135,3 +135,28 @@ export function duplicateProject(token: string, projectId: string, name?: string
         { Authorization: `Bearer ${token}`, "x-project-id": projectId }
     );
 }
+
+export interface ProjectSessionSummary {
+    userPrompt?: string;
+    brief?: string;
+    briefContentHash?: string;
+    attachments: Array<{
+        assetId?: string;
+        filename?: string;
+        mimeType?: string;
+        sizeBytes?: number;
+    }>;
+}
+
+/**
+ * What is worth copying out of a project: the user's own words and the brief they became.
+ *
+ * Replaces reading `prePromptTemplate`, which is the same template for every project, and the
+ * 250-char excerpt cached in localStorage, which is per-browser and vanishes on another device.
+ */
+export function getProjectSessionSummary(token: string, projectId: string): Promise<ProjectSessionSummary> {
+    return call<ProjectSessionSummary>("GET", `/v1/projects/${projectId}/session-summary`, undefined, {
+        Authorization: `Bearer ${token}`,
+        "x-project-id": projectId,
+    });
+}

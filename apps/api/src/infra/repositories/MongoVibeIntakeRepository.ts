@@ -54,6 +54,15 @@ export class MongoVibeIntakeRepository implements VibeIntakeRepository {
         );
     }
 
+    async listByProject(projectId: string, userId: string): Promise<VibeIntakeRecord[]> {
+        const col = await this.col();
+        const docs = await col
+            .find({ projectId, userId } as Filter<VibeIntakeDocument>)
+            .sort({ $natural: 1 })
+            .toArray();
+        return docs.map(toEntity);
+    }
+
     async listByWorkSession(workSessionId: string, userId: string): Promise<VibeIntakeRecord[]> {
         const col = await this.col();
         const docs = await col
