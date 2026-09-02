@@ -36,28 +36,39 @@ That is the whole of what is built. It changes nothing a user sees.
 
 ---
 
-## 3. The feature
+## 3. The feature — and it is narrower than it first looked
 
-When a generation breaks, the work is not lost, so the honest thing is to offer it back:
+**Project mode already has recovery, and nothing needs building there.** The workspace has a chat and
+a model picker: typing "riprova" sends a new turn carrying the conversation history, and the picker
+changes the model for it. A user who lands in the workspace after a failure can already resume from
+what exists, with a different model if they want. Adding a button there would be a shortcut to
+something that works.
 
-> Something went wrong. There is a partial result and the model's reasoning up to the break.
-> **Resume from here**, or **discard this project**.
+**Zero Effort has none of that**, and that is the whole feature. There is no chat to type into and no
+turn to send. When a generation breaks on that path the user's options are to start over from the
+beginning, having paid for everything that already happened.
 
-**Resume** starts a generation whose input is the original brief plus the partial answer and the
-reasoning that produced it — the model continues its own train of thought instead of restarting it.
-That is cheap in the way that matters: the expensive part, thinking its way into the problem, is
-already paid for.
+So the offer belongs where the recovery does not already exist:
 
-**Discard** deletes the project. A failed attempt should not sit in the project list looking like
-work; a user's list should contain things they have, not things that broke.
+> This generation stopped. There are **N tokens** of work already paid for — a partial result and
+> the model's reasoning. **Retry with this model**, **retry with a different one** (the existing
+> model selector), or **discard the project**.
 
-### Why this is worth doing
+The token figure is not a guess: `usage.totalTokens`, `rawResponse` and `reasoningTrace` are on the
+journal row, so the modal can state what is actually there rather than promising something vague.
 
-A generation that dies at minute eight has consumed eight minutes of tokens and produced something.
-Today that becomes an error message and a project the user has to clean up by hand. The material to
-do better is now sitting in the journal.
+**Retry** starts a new generation inside the same `WorkSession`, seeded with the original brief plus
+the partial answer and the reasoning — the model continues a train of thought rather than boarding
+it again. Changing the model is the interesting case: a run that GLM abandoned at eight minutes may
+be finishable by a faster model given everything the first one worked out.
 
----
+**Discard** deletes the project.
+
+### The list-hygiene problem is real and measurable
+
+**98 of 156 projects carry no snapshot at all** — no artifact was ever produced. That number
+conflates genuine failures with drafts nobody launched, so it is an upper bound rather than a failure
+count. But it is the shape of what the user sees: a list where most entries are not things they have.
 
 ## 4. What has to be decided before building it
 
@@ -70,15 +81,14 @@ to take unless something contradicts it.
 so it must be journalled as its own row with its own rendered prompts. Reusing the failed row would
 make the journal claim something was sent that never was.
 
-**Not every failure is resumable.** A 402 or an invalid key produced no partial work at all, and
-offering to resume from nothing wastes the user's time and a second call. The offer should appear
-only when a partial answer or a trace actually exists — which is now checkable rather than assumed.
+**Not every failure is resumable.** A 402 or an invalid key produced no partial work at all — the
+five most recent failed rows in the database are enrichment calls with `tok=0`, `raw=0`, `think=0`,
+and there is nothing to resume from. The offer must appear only when the row actually carries
+material, which is now checkable rather than assumed.
 
 **Discard must be genuinely safe.** Deleting a project deletes its journal rows, its costs and its
 session. That is defensible for a run the user is rejecting, and it must not be the default, and it
 must say what it removes.
-
----
 
 ## 5. Relationship to the parallelisation idea
 
