@@ -16,6 +16,7 @@ export interface NewPipelineRun {
     ownerUserId: string;
     conversationId?: string;
     entryMode: PipelineEntryMode;
+    workSessionId?: string;
     modelLock: PipelineModelLock;
     optimizationPolicy: OptimizationPolicy;
     canonicalBrief?: CanonicalBriefEnvelope;

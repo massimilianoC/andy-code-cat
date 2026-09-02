@@ -23,6 +23,7 @@ interface PipelineRunDocument {
     ownerUserId: string;
     conversationId?: string;
     entryMode: PipelineRun["entryMode"];
+    workSessionId?: string;
     modelLock: PipelineRun["modelLock"];
     optimizationPolicy: PipelineRun["optimizationPolicy"];
     canonicalBrief?: CanonicalBriefEnvelope;
@@ -53,6 +54,7 @@ export class MongoPipelineRunRepository implements PipelineRunRepository {
             ownerUserId: run.ownerUserId,
             conversationId: run.conversationId,
             entryMode: run.entryMode,
+            workSessionId: run.workSessionId,
             modelLock: run.modelLock,
             optimizationPolicy: run.optimizationPolicy,
             canonicalBrief: run.canonicalBrief,

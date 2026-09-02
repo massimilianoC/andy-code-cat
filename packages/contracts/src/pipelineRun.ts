@@ -141,6 +141,11 @@ export interface PipelineRunDto {
     ownerUserId: string;
     conversationId?: string;
     entryMode: PipelineEntryMode;
+    /**
+     * The WorkSession this generation belongs to. A session spans many runs; a run belongs to
+     * exactly one. Optional only for runs created before sessions existed — every new run has one.
+     */
+    workSessionId?: string;
     modelLock: PipelineModelLock;
     optimizationPolicy: OptimizationPolicy;
     canonicalBrief?: CanonicalBriefEnvelope;
