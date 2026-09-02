@@ -39,9 +39,16 @@ journal row carries its own `costEstimate` and every cost row now carries `workS
 missing is the surface, which is **WP5**. Designing a separate cost panel would produce a second
 place that answers the same question the inspector will answer.
 
-**The prompt panel breaks when rendering a large code block**, apparently when one block is split
-across many accordions. Not yet reproduced — needs the project and section that shows it before it
-can be diagnosed rather than guessed at. **WP5**, once seen.
+**The prompt panel breaks when rendering a large code block.** Described more precisely on a second
+report: the panel groups code into a collapsible accordion, and certain tags inside the code split
+one block into many accordions. Still not reproduced — the display component has not been located,
+and guessing at a rendering defect produces a fix for the wrong thing. **WP5**, once seen.
+
+**The assistant's reply is missing from the sent-history panel.** Partly diagnosed: the reply IS
+included in what is sent to the model — `page.tsx:2132-2137` maps assistant turns into the history,
+compacted to `chatStructured.summary` plus its bullets, or the raw content when no structured reply
+exists. So the payload is right and the panel is not showing what the payload contains. The defect is
+in the display, not in what was sent, which narrows it usefully. **WP5**.
 
 **Measured, not assumed:** artifact generation is genuinely faster today — 45–167s against 316–630s
 in the preceding week — but that is the model, not this work. `kimi-k2.7-code` sustains 372 tok/s
