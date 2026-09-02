@@ -55,42 +55,39 @@ Suite: **687 passing**, tsc clean on api and web. The local stack runs this code
 
 ---
 
-## 4. The two features to build next
+## 4. Where the two features stand
 
-Both are specified. Neither is started.
+Session ended on credits, agents stopped mid-flight. The tree is green: api tsc clean,
+**695 tests**, web tsc clean.
 
-### A — Interrupted run recovery · `INTERRUPTED_RUN_RECOVERY.md`
+### DONE — WP1, the artifact SSOT violation
+Four commits in the order its spec demanded: `714d5a6` (snapshot committed before the assistant
+message can reach state — the window the fallback existed to paper over), `340f69c` (reads removed),
+`f5798fd` (write removed), `af45782` (field removed). `generatedArtifacts` now survives only in the
+comments explaining why it is gone. This was the only measured correctness defect.
 
-Prerequisite is **built**: an interrupted run now keeps its partial answer and its reasoning trace.
-The feature is the offer to the user — a modal on a broken Zero Effort run stating how many tokens of
-work already exist, with *retry with this model*, *retry with a different one*, or *discard the
-project*.
+### DONE — the inspector backend
+`GET /v1/projects/:projectId/work-sessions` (list, no prompt bodies) and `…/:workSessionId`
+(detail, with them). 404 not 403 for another user's session. 8 tests. See
+`docs/handoff/INSPECTOR_BACKEND_PROGRESS.md`.
 
-Deliberately narrow: **project mode already has recovery** — the workspace has a chat and a model
-picker, so typing "riprova" already resumes with history. Zero Effort has neither, and that is the
-whole gap. The spec carries the four decisions to make first.
+Its DTOs live in the use cases rather than `packages/contracts`, chosen to avoid colliding with two
+concurrent agents. **Promote them into contracts before the frontend mirrors the shape**, or they
+become a second declaration of the same thing.
 
-### B — The session inspector · `SESSION_TRACING_EXECUTION_PLAN.md` WP5 + `SESSION_REDUNDANCY_ANALYSIS.md` §6
+### NOT DONE — the inspector frontend
+`SESSION_INSPECTOR_SPEC.md` is the document to implement from; the endpoints it needs now exist. This
+is the next piece of work and it is unblocked.
 
-Three collapsible blocks — **Vibe**, **Zero Effort**, **Artifact generation** — each rendered only
-when the session produced it, each with its own cost. The data is complete; only the surface is
-missing. §6 of the redundancy analysis describes what each block reads.
+### PARTIAL — Zero Effort recovery
+Backend groundwork landed: `GetZeroEffortRecoveryStatus`, `DiscardPendingProject`, `recoveryRoutes`,
+`packages/contracts/src/recovery.ts`, and `resumedFromPromptExecutionId` on the journal row. **The
+modal did not.** Nothing calls those routes, so behaviour is unchanged — it is scaffolding waiting
+for a front end. `INTERRUPTED_RUN_RECOVERY.md` §3bis is the constraint that decides its shape.
 
-**Before handing this to an agent, consolidate it.** It is currently specified across two documents
-plus scattered notes, and an implementer would have to assemble the spec before writing any code.
-
-Also folded into WP5 and worth doing there rather than separately: the header cost lagging one
-refresh (belongs to WP2), per-step cost inspection, the assistant reply missing from the sent-history
-panel (half-diagnosed — it *is* in the payload at `page.tsx:2132-2137`, so the defect is in the
-display), and the accordion fragmenting a large code block (**not reproduced** — needs to be seen).
-
-### Still open elsewhere
-
-**WP1**, the artifact SSOT violation — the only measured correctness defect, and it edits the same
-workspace page WP5 rewrites, so decide which goes first. **WP2**, cost as one referential record.
-The `vibe_intakes.attachments[] → project_assets` link, so a session can reach a download.
-
----
+### Known limitation, not introduced by this work
+`ICostTransactionRepository.findBySourceRef` caps at 50 rows, so a session with more than 50 cost
+rows would undercount its total. Not hit by current data.
 
 ## 5. Tools that exist
 
