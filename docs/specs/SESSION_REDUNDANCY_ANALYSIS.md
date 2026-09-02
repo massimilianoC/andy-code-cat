@@ -124,3 +124,37 @@ back at that exact row.
 Every block reads from `prompt_execution_logs` for the call detail and from its own mode object for
 the human-facing input. Nothing in the UI needs a new shape: the components select from one session
 export.
+
+---
+
+## 7. Reaching a project's knowledge in one query — measured
+
+Asked directly: from a project, can one query reach everything that was used?
+
+**All attachments of a project: yes, already.** `project_assets` is indexed by `projectId`; one
+query returns the lot, with `originalName`, `mimeType`, `scope` and `useInProject`. The attachment
+badge the dashboard wants is available from this today, with no new data.
+
+**Which attachments entered which prompt: it was one call site out of four.** `contextMeta.assetIds`
+existed on the journal and only `document_brief` filled it:
+
+| call | `assetIds` before | after |
+|---|---|---|
+| `document_brief` | `["583c9b19…"]` | unchanged |
+| `generate` | absent | **recorded** |
+| `vibe_prefill` | absent | absent — it receives Layer D as text, not as assets |
+| `vibe_classify` | absent | absent — sees only attachment metadata, never content |
+
+`generate` was the one that mattered and the one that already knew: it builds Layer D from
+`projectLayerD.assets` and simply never said which. `ResolvePromptExecution` now returns
+`contextAssetIds` and both chat handlers record it, so the artifact's own row names the documents
+that shaped it.
+
+The two remaining absences are honest rather than gaps: prefill is handed the document layer as
+rendered text, and classify only ever sees filenames and sizes. Neither *has* asset ids to record.
+
+### Still open
+
+The link between `vibe_intakes.attachments[]` and the `project_assets` row (§4). A project's assets
+are reachable, and a prompt's assets are now reachable, but what the user *submitted in Vibe* still
+does not name what was *stored* — so there is no path from the intake to a download.

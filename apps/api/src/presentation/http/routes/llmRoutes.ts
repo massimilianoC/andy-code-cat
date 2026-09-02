@@ -655,6 +655,7 @@ export function createLlmRoutes(): Router {
                 renderedUserPrompt: messages[messages.length - 1]?.content,
                 contextMeta: {
                     projectPresetId: context.projectPresetId,
+                    assetIds: context.contextAssetIds,
                     usedMoodboard: false,
                     usedUserProfile: false,
                 },
@@ -1141,6 +1142,7 @@ export function createLlmRoutes(): Router {
                 renderedUserPrompt: messages[messages.length - 1]?.content,
                 contextMeta: {
                     projectPresetId: context.projectPresetId,
+                    assetIds: context.contextAssetIds,
                     usedMoodboard: false,
                     usedUserProfile: false,
                 },

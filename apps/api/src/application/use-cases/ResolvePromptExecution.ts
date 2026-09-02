@@ -47,6 +47,15 @@ import { tracePromptLayers } from "../services/PipelineTrace";
  * became constructor parameters; nothing about the resolution logic itself changed.
  */
 export type LlmRuntimeContext = {
+    /**
+     * The assets whose content actually reached Layer D of this prompt.
+     *
+     * Recorded so the journal can answer "which attachments went into THIS generation". Until now
+     * only the enrichment call could answer that, and only about itself: the generate path already
+     * knew — it built the layer from these very assets — and simply did not say so, leaving the
+     * artifact's own row silent about the documents that shaped it.
+     */
+    contextAssetIds: string[];
     providerCatalog: {
         provider: string;
         baseUrl: string;
@@ -430,6 +439,7 @@ export class ResolvePromptExecution {
             prePromptTemplate: effectivePrePromptTemplate || undefined,
             systemPrompt,
             promptLayers: composedLayers.layers,
+            contextAssetIds: projectLayerD.assets.map((asset) => asset.id).filter(Boolean),
         };
     }
 }
