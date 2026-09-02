@@ -2422,7 +2422,11 @@ function WorkspacePageContent() {
                     promptingTrace: llm.promptingTrace,
                     tokenUsage: llm.usage,
                     costEstimate: llm.costEstimate,
-                    generatedArtifacts: llm.structured?.artifacts,
+                    // WP1 step 3 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — this used to
+                    // write generatedArtifacts here, creating a second, independently-updated
+                    // copy of the artifact alongside the PreviewSnapshot committed a few lines
+                    // below. Steps 1-2 already removed every read of that copy; this stops
+                    // producing it.
                     chatStructured: llm.structuredParseValid ? llm.structured?.chat : undefined,
                 },
             });
