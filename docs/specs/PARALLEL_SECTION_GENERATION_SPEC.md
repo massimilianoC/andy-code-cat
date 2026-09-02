@@ -311,41 +311,90 @@ and does not merge until acceptance §8 is met on the local stack. Until then th
 where it is, on `develop`, untouched — that is what git already gives us, without a runtime
 construct we would then have to remove.
 
+## 9ter. Integration status — read this before believing any number above
+
+**None of the fan-out is reachable from the product.** The only thing that constructs
+`GenerateSectionedArtifact` is `src/scripts/fanout-probe.ts:169`. Verified by grep, and the absence
+is total:
+
+| SSOT component | References from the new code |
+|---|---|
+| `ResolvePromptExecution` (prompt composition, layers) | **0** |
+| `resolveComposerCascade` (model resolution) | **0** |
+| `PromptExecutionLogRepository` (audit + cost journal) | **0** |
+| `ResolvePipelineModelLock` (model lock, stage journal) | **0** |
+| `CostTransactionService` (cost ledger) | **0** |
+| `systemPromptLayers` (Layers A–P) | **0** |
+| `PlatformConfig` (per-task budgets) | **0** |
+
+So the measured runs exercised a **parallel flow**, not the product: the probe passes a model id from
+an env var instead of resolving one, writes no journal entry and no cost transaction, appends no
+pipeline stage, and composes its own prompt instead of the layer stack. The numbers are real — real
+HTTP, real tokens, real money — but they measure the *mechanism*, not an integrated feature.
+
+Two pieces **are** wired into the live path, and are the exception:
+
+- `PromptExecutionLog.finishReason` / `reasoningTrace`, written from `llmRoutes.ts` on the real chat
+  and streaming handlers;
+- `chatRequestAdapter`'s `enableThinking` and the GLM-5.x allowlist entry, in the shared adapter every
+  route already uses.
+
+Wiring the rest means routing it through `ResolvePromptExecution` for composition, the cascade for
+the model, and the journal for cost — and answering §3.1 first.
+
 ## 9bis. Measured, 2026-09-01
 
-Two live runs of `npm run fanout:probe -w apps/api` against the same ten-section brief, via
-OpenRouter (SiliconFlow was returning `402 insufficient balance`). Baseline is run `f51ee098`.
+Five runs of `npm run fanout:probe -w apps/api` against the same ten-section brief, via OpenRouter
+(SiliconFlow returns `402 insufficient balance`). Baseline is run `f51ee098`.
 
-| | baseline (monolith) | DeepSeek-V4-Pro | Gemini-3.7-Flash |
-|---|---|---|---|
-| wall clock | 629.5s | 219.8s (**2.9×**) | **72.6s (8.7×)** |
-| calls | 1 | 15 | 11 |
-| prompt tokens | 13,938 | 10,163 | **3,907** |
-| largest single call | 32,768 (capped) | 4,001 | 3,806 |
-| truncated calls | 1 (the whole run) | 7 | **0** |
-| sections delivered | truncated, unknown | 10 (3 placeholders) | **10 (0 placeholders)** |
-| acceptance §8 | — | 3 / 7 | **7 / 7** |
+Cost uses this repo's own flat-rate formula — `(totalTokens / 1000) * textEurPer1kTokens` with the
+default rate 0.005 (`CostTransactionService.ts:143` and `:71`). It reproduces the baseline's recorded
+`costEstimate.amount` of €0.23353 exactly, which is why it is used here.
 
-The two runs isolate the variable, and the difference between them is the argument of this document.
+| run | model | section budget | calls | prompt tok | completion tok | truncated | degraded | wall | cost | vs baseline |
+|---|---|---|---|---|---|---|---|---|---|---|
+| baseline | GLM-5.3 | monolith, 64k asked | 1 | 13,938 | 32,768 | **the whole run** | — | 629.5s | €0.2335 | 1.00× |
+| A | DeepSeek-V4-Pro | 4k | 15 | 10,163 | 37,909 | 7 | 3 | 219.8s | €0.2404 | 1.03× |
+| B | **Gemini-3.7-Flash** | 4k | 11 | 3,907 | 34,501 | **0** | **0** | **72.6s** | **€0.1920** | **0.82×** |
+| C | GLM-5.3 | 8k | 15 | 10,203 | 79,088 | 6 | 3 | 245.6s | €0.4465 | 1.91× |
+| D | GLM-5.3 | 16k | 10 | 3,835 | 58,912 | **0** | 3 | 257.1s | €0.3137 | 1.34× |
+
+### A bigger per-section budget does not make things worse — that reading was wrong
+
+Runs C and D are the same model at 8k and 16k, and 16k is better on every axis that matters:
+truncation goes from six to **zero**, calls from fifteen to ten, and cost *falls* from €0.4465 to
+€0.3137. The reason is the retry loop: at 8k, six sections were cut off and each bought a second
+attempt, so the smaller budget was paid for twice. Raising the ceiling until the work fits is
+therefore correct, and the earlier claim that it backfires is contradicted by run D.
+
+### What the budget cannot fix
+
+Run D still lost three sections, and not to truncation — to the 120s per-section ceiling
+(`sectionTimeoutMs`), a knob this probe sets, not a model limit. GLM-5.3 was spending 85–130s and
+8,861–15,627 completion tokens on a section whose prompt asks for **roughly 1,500 characters**. That
+is a 10–20× overshoot against the target, and it is reasoning, not prose.
+
+The comparison that isolates it is B against D — same fan-out, same brief, same budgets in spirit:
+
+- **B (no reasoning burn)**: ~3,500 completion tokens per section, zero truncation, 72.6s, every
+  criterion met, and **18% cheaper than the monolith it replaces**.
+- **D (reasoning that cannot be switched off here)**: 4–5× the tokens per section, 3.5× the wall
+  clock, 34% more expensive.
 
 `enable_thinking: false` is honoured by SiliconFlow and ignored by OpenRouter
-(`chatRequestAdapter.ts`), so the DeepSeek run is the fan-out **without** the reasoning split. Its
-seven truncations all landed at exactly 4,000 completion tokens — the per-section budget — which is
-run `f51ee098`'s failure reproduced in miniature: a reasoning model spending a section's entire
-allowance thinking before it emits any HTML. Decomposition alone still bought 2.9×, and the run
-still terminated with ten sections instead of an unknown fraction of a deck, because the retry and
-placeholder path did its job. But three sections degraded.
+(`chatRequestAdapter.ts:216-240`), so every OpenRouter run measures the fan-out **without** the
+reasoning split. The split is not a refinement of this design; on a hybrid-reasoning model it is the
+difference between cheaper-than-before and a third more expensive.
 
-The Gemini run is the fan-out with nothing competing for the section budget, and it passes every
-criterion: 8.7× faster, no truncation anywhere, ten sections generated, and **3.6× less prompt
-token spend than the single monolithic call** — the fan-out costs less input in total than the one
-call it replaces, because each child carries its section instead of the whole 47k system prompt
-(§6.1, §6.2).
+### The prompts the fan-out actually sends
 
-So the decomposition is validated, and so is the claim that it is not sufficient on its own: on a
-hybrid-reasoning model the reasoning split is what turns 2.9× into 8.7×, and that split needs a
-provider that honours the parameter. Making the fan-out's per-section budget cover reasoning on
-providers that do not is an open question, not a solved one.
+`FANOUT_DRY_RUN=1 npm run fanout:probe -w apps/api` prints them without dispatching. Measured:
+
+| | monolith (`f51ee098`) | fan-out section call |
+|---|---|---|
+| system prompt | 47,021 chars | **750 chars** |
+| user prompt | 10,408 chars | **114 chars** |
+| length instruction | Layer P, 4,750 chars | one line: "roughly 1500 characters" |
 
 ## 10. What this makes unnecessary
 
