@@ -997,6 +997,11 @@ export function createLlmRoutes(): Router {
                     costEstimate: result.costEstimate,
                     durationMs: result.durationMs,
                     finishReason: result.finishReason,
+                    // The reply before parsing and repair. Its absence here was a real hole found by
+                    // running the certificate against a live session: the generate row proved WHICH
+                    // prompt produced the artifact but not what the model actually emitted, which is
+                    // the half that says whether a repair fired.
+                    rawResponse: result.rawResponse,
                 });
             }
             // ── end I11 journal completion ──────────────────────────────────────
@@ -1629,6 +1634,7 @@ export function createLlmRoutes(): Router {
                     // Kept only when the call was cut off: on a clean stop the trace is dead weight,
                     // but on "length" it is the work already paid for that a retry can resume from.
                     reasoningTrace: finishReason === "length" ? rawThinking.slice(0, 20_000) : undefined,
+                    rawResponse: result.rawResponse,
                 }).catch(() => { });
             }
             // ── end I11 journal completion ──────────────────────────────────────

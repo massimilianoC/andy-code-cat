@@ -139,12 +139,39 @@ same millisecond share a timestamp, the tie resolves arbitrarily, and the user's
 to a suggestion they never saw. Insertion order is stable for documents that are only inserted and
 updated in place.
 
-### Still not verified against a live run
+### Verified against a live run — 2026-09-02
 
-The code is in place and 685 tests pass, but **no real session has been run through it yet** — the
-API container is still serving an image built before this work. Until the query in §3 is run against
-a session generated from the UI, this document certifies an intention, not an outcome. That run is
-the next step and nothing downstream should be trusted before it.
+Session `931a3cc0-6690-4be9-9efa-888f87837949`, driven end to end against the local deploy stack
+after rebuilding the API image. **All eight questions pass.**
+
+```
+work_sessions 1 · vibe_intakes 1 · zero_effort_form_proposals 1
+pipeline_runs 1 · prompt_execution_logs 4 · cost_transactions 1
+
+vibe_classify  failed      0 tok   (SiliconFlow 402, recorded with its real reason)
+vibe_prefill   failed      0 tok   (same)
+vibe_prefill   succeeded  12,587 tok  (OpenRouter)
+generate       succeeded  19,208 tok  33,167-char system prompt, run id attached
+```
+
+Everything joined by that one id. The two failures matter as much as the successes: a provider
+refusing with HTTP 402 left a complete row naming the model, the endpoint and the provider's own
+words, which is precisely what used to vanish.
+
+### Two defects the live run exposed that the tests did not
+
+**`rawResponse` was empty on the generate row.** The field was wired on the streaming path and not on
+either completion, so the journal proved *which prompt* produced the artifact but not *what the model
+emitted* — the half that says whether a repair fired. Fixed on both handlers. A run is not a
+substitute for a test, but here it caught what 687 tests did not, because no test asserted the field
+end to end on the real route.
+
+**`editedFields` reports nearly every field as changed.** `diffFormFields` compares the prefill's
+`GuidedDraft` against the launch's `GuidedLaunchInput`. Those are different shapes, so structural
+mismatch reads as user intent: the live run reported 20 edited fields including `requestedModelId`
+and `optimizationPolicy`, which no user touched. Question 4 answers, but the answer is currently
+misleading and the diff needs to compare like with like before it can be trusted. Recorded here
+rather than quietly left to be discovered.
 
 ## 5. Why this comes before parallelising anything
 
