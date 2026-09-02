@@ -18,10 +18,11 @@ takes a resolved model and a dispatcher port, so wiring it to `llmRoutes` and th
 journal is the next step — and that step is where §3.1 has to be answered.
 
 Validation status: §8 is checked on every test run against a simulated truncating provider
-(`GenerateSectionedArtifact.acceptance.test.ts`), **and has been run live** — see §9bis. Two runs via
-OpenRouter: 8.7× faster with all seven criteria passing on a non-reasoning model, 2.9× with three
-degraded sections on a reasoning model whose thinking cannot be switched off there. SiliconFlow,
-which does honour the switch, currently returns `402 insufficient balance` and remains untested.
+(`GenerateSectionedArtifact.acceptance.test.ts`), and five live runs are recorded in §9bis.
+
+**Read §9ter first.** None of the fan-out is reachable from the product — the only caller is the
+probe script, and the new code touches no SSOT component. The live numbers measure the mechanism,
+not an integrated feature.
 
 ---
 
