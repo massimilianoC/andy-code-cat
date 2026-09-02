@@ -742,7 +742,10 @@
         "staleBaseLabel": "Version out of date",
         "staleBase": "This edit started from a version that has since changed. The current version has been reloaded — reapply the change on it.",
         "noChangeLabel": "Nothing changed",
-        "noChange": "The content is identical to the current version, so no new version was created."
+        "noChange": "The content is identical to the current version, so no new version was created.",
+        "commitFailedLabel": "The preview was not saved",
+        "commitFailed": "The generation succeeded but the version was not recorded, so the preview still shows the previous one. The reply is in the chat.",
+        "invalidJs": "The model produced invalid JavaScript, so the version was not saved and the preview still shows the previous one. Ask in chat to fix the script."
       },
       "llm": {
         "label": "AI Generation",

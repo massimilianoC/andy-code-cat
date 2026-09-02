@@ -742,7 +742,10 @@
         "staleBaseLabel": "Versione non aggiornata",
         "staleBase": "Questa modifica parte da una versione che nel frattempo è cambiata. La versione corrente è stata ricaricata — riapplica la modifica su quella.",
         "noChangeLabel": "Nessuna modifica",
-        "noChange": "Il contenuto è identico alla versione corrente: nessuna nuova versione creata."
+        "noChange": "Il contenuto è identico alla versione corrente: nessuna nuova versione creata.",
+        "commitFailedLabel": "L'anteprima non è stata salvata",
+        "commitFailed": "La generazione è riuscita ma la versione non è stata registrata, quindi l'anteprima resta quella precedente. La risposta è nella chat.",
+        "invalidJs": "Il modello ha prodotto JavaScript non valido, quindi la versione non è stata salvata e l'anteprima resta quella precedente. Chiedi in chat di correggere lo script."
       },
       "llm": {
         "label": "Generazione AI",

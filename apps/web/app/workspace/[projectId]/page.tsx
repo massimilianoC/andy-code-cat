@@ -2555,8 +2555,55 @@ function WorkspacePageContent() {
                     // AL-042 — a refused base is not "snapshot persistence is optional": the
                     // model produced a version that could not be attached to what the user is
                     // looking at, and they need to know before they build on it.
-                    await handleStaleArtifactBase(err);
-                    // Anything else stays non-blocking — the chat works without the snapshot.
+                    const handled = await handleStaleArtifactBase(err);
+
+                    // Everything else used to be swallowed here, and that was survivable only
+                    // while metadata.generatedArtifacts still held a second copy the preview
+                    // could fall back on. WP1 removed that copy — correctly, the two disagreed —
+                    // so a silent failure now means the generation completes, the user is
+                    // charged, and the preview simply never updates with nothing said. That is
+                    // the worst of both: the work is done, paid for, and invisible.
+                    //
+                    // The chat still works without the snapshot, so this stays non-blocking. But
+                    // it is reported, and it is logged with the payload sizes, because the first
+                    // time this happened the error existed nowhere and the cause had to be
+                    // guessed at from what survived in the database.
+                    if (!handled) {
+                        const detail = err instanceof ApiError
+                            ? (err.userMessage ?? err.message)
+                            : err instanceof Error ? err.message : String(err);
+                        // The commonest real cause, measured: the server refuses to store an
+                        // artifact whose JavaScript does not parse (422
+                        // INVALID_GENERATED_JAVASCRIPT). That refusal is correct — storing it
+                        // would activate a version whose scripts are broken — but it used to be
+                        // invisible twice over: swallowed here, and papered over by the preview
+                        // falling back to metadata.generatedArtifacts, which displayed the very
+                        // artifact the server had just rejected. The fallback is gone; the
+                        // silence must go with it.
+                        const invalidJs = err instanceof ApiError && err.code === "INVALID_GENERATED_JAVASCRIPT";
+                        console.error("[snapshot] commit failed — the preview will not update", {
+                            projectId,
+                            conversationId: convId,
+                            messageId: assistantSaved.message.id,
+                            promptExecutionId: llm.promptExecutionId,
+                            htmlChars: (llm.structured?.artifacts?.html ?? "").length,
+                            cssChars: (llm.structured?.artifacts?.css ?? "").length,
+                            jsChars: (llm.structured?.artifacts?.js ?? "").length,
+                            error: detail,
+                        });
+                        addNotification({
+                            label: t("workspace.notifications.snapshot.commitFailedLabel",
+                                "L'anteprima non è stata salvata"),
+                            status: "error",
+                            message: (invalidJs
+                                ? t("workspace.notifications.snapshot.invalidJs",
+                                    "Il modello ha prodotto JavaScript non valido, quindi la versione non è stata salvata e l'anteprima resta quella precedente. Chiedi in chat di correggere lo script.")
+                                : t("workspace.notifications.snapshot.commitFailed",
+                                    "La generazione è riuscita ma la versione non è stata registrata, quindi l'anteprima resta quella precedente. La risposta è nella chat."))
+                                + ` (${detail})`,
+                        });
+                    }
+
                     // The message was already persisted server-side; it still has to reach
                     // state even though no snapshot backs it this time.
                     addAssistantMessageToConv(assistantSaved.message);
