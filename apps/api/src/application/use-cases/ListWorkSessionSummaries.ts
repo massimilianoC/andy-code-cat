@@ -5,28 +5,10 @@ import type { PromptExecutionLogRepository } from "../../domain/repositories/Pro
 import type { ICostTransactionRepository } from "../../domain/repositories/ICostTransactionRepository";
 import type { WorkSessionStatus } from "../../domain/entities/WorkSession";
 import { wasTruncated } from "../../domain/entities/PromptExecutionLog";
+// The wire shape lives in contracts — the web client renders it, so it cannot be declared here too.
+import type { WorkSessionSummaryDto } from "@andy-code-cat/contracts";
+export type { WorkSessionSummaryDto };
 
-/**
- * The collapsed-row shape for the Session Inspector's session list
- * (docs/specs/SESSION_INSPECTOR_SPEC.md §2).
- *
- * Deliberately excludes every prompt-body field (`inputPrompt`, `renderedSystemPrompt`,
- * `renderedUserPrompt`, `rawResponse`, `reasoningTrace`, `canonicalBrief.content`, …) — a single
- * session's rows carry ~50,000 chars of system prompt each, and this DTO is what renders the
- * collapsed list before any block is expanded. See GetWorkSessionDetail for the full shape.
- */
-export interface WorkSessionSummaryDto {
-    id: string;
-    entryMode: PipelineEntryMode;
-    status: WorkSessionStatus;
-    createdAt: string;
-    /** Unique pipeline stages this session's runs dispatched, first-seen order. */
-    stages: PipelineStage[];
-    totalCostEur: number;
-    totalDurationMs: number;
-    /** True when any journal row in this session has finishReason "length" — §3 "Generation". */
-    truncated: boolean;
-}
 
 export class ListWorkSessionSummaries {
     constructor(

@@ -17,116 +17,30 @@ import type { WorkSessionStatus, WorkSessionConfig } from "../../domain/entities
 import type { VibeAttachmentRef } from "../../domain/entities/VibeIntake";
 import type { PromptExecutionStatus, PromptExecutionMediaResolutionSummary } from "../../domain/entities/PromptExecutionLog";
 import type { CostRatesSnapshot, CostSourceRef, CostUnits } from "../../domain/entities/CostTransaction";
+// The wire shapes live in contracts — the web client renders them, so they cannot be declared here
+// too. See packages/contracts/src/workSession.ts.
+import type {
+    VibeIntakeDetailDto,
+    ZeroEffortFormProposalDetailDto,
+    PipelineRunDetailDto,
+    PromptExecutionLogDetailDto,
+    CostTransactionDetailDto,
+    WorkSessionDetailDto,
+} from "@andy-code-cat/contracts";
+export type {
+    VibeIntakeDetailDto,
+    ZeroEffortFormProposalDetailDto,
+    PipelineRunDetailDto,
+    PromptExecutionLogDetailDto,
+    CostTransactionDetailDto,
+    WorkSessionDetailDto,
+};
 
-/**
- * The full, one-session shape for the Session Inspector's detail view
- * (docs/specs/SESSION_INSPECTOR_SPEC.md §2). Unlike ListWorkSessionSummaries, this DOES carry
- * prompt bodies — the client only fetches this once a block is expanded (spec §5.5).
- *
- * One fact, one owner (spec §5.2): the brief comes from `pipelineRuns[].canonicalBrief`, never
- * copied out of a generate-stage prompt that happens to contain the same text.
- */
 
-export interface VibeIntakeDetailDto {
-    id: string;
-    userId: string;
-    projectId?: string;
-    prompt: string;
-    attachments: VibeAttachmentRef[];
-    requestedProvider?: string;
-    requestedModel?: string;
-    generationMode?: string;
-    options?: Record<string, unknown>;
-    promptExecutionLogIds: string[];
-    createdAt: string;
-}
 
-export interface ZeroEffortFormProposalDetailDto {
-    id: string;
-    prefilled: GuidedLaunchInput;
-    editedFields: string[];
-    prefillPromptExecutionLogId?: string;
-    briefContentHash?: string;
-    createdAt: string;
-}
 
-export interface PipelineRunDetailDto {
-    id: string;
-    projectId: string;
-    entryMode: PipelineEntryMode;
-    modelLock: PipelineModelLock;
-    status: PipelineRunStatus;
-    stages: Array<{
-        stage: PipelineStage;
-        taskKey: string;
-        promptExecutionId?: string;
-        decision: ModelSelectionDecision;
-        status: string;
-        startedAt: string;
-        completedAt?: string;
-    }>;
-    /** The certificate that this text is what was sent — spec §3 "Zero Effort". */
-    canonicalBrief?: CanonicalBriefEnvelope;
-    createdAt: string;
-    updatedAt: string;
-}
 
-export interface PromptExecutionLogDetailDto {
-    id: string;
-    taskKey: string;
-    pipelineRunId?: string;
-    pipelineStage?: string;
-    endpoint?: string;
-    provider: string;
-    model: string;
-    inputPrompt: string;
-    optimizedPrompt?: string;
-    renderedSystemPrompt?: string;
-    renderedUserPrompt?: string;
-    rawResponse?: string;
-    reasoningTrace?: string;
-    finishReason?: string;
-    usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
-    mediaResolutionSummary?: PromptExecutionMediaResolutionSummary;
-    /** Sourced from PromptExecutionLog.contextMeta.assetIds — see the entity for why it lives there. */
-    contextAssetIds?: string[];
-    status: PromptExecutionStatus;
-    durationMs: number;
-    errorMessage?: string;
-    createdAt: string;
-}
 
-export interface CostTransactionDetailDto {
-    id: string;
-    txId: string;
-    resourceType: string;
-    resourceSubtype?: string;
-    totalEur: number;
-    providerCostEur: number;
-    infraCostEur: number;
-    platformMarkupEur: number;
-    ratesSnapshot: CostRatesSnapshot;
-    units: CostUnits;
-    sourceRef: CostSourceRef;
-    status: "settled" | "voided";
-    createdAt: string;
-}
-
-export interface WorkSessionDetailDto {
-    id: string;
-    projectId?: string;
-    entryMode: PipelineEntryMode;
-    status: WorkSessionStatus;
-    config: WorkSessionConfig;
-    failureReason?: string;
-    createdAt: string;
-    updatedAt: string;
-    vibeIntakes: VibeIntakeDetailDto[];
-    zeroEffortFormProposals: ZeroEffortFormProposalDetailDto[];
-    pipelineRuns: PipelineRunDetailDto[];
-    promptExecutionLogs: PromptExecutionLogDetailDto[];
-    costTransactions: CostTransactionDetailDto[];
-}
 
 export class GetWorkSessionDetail {
     constructor(

@@ -1,33 +1,19 @@
+import type { VibeAttachmentRef } from "@andy-code-cat/contracts";
+
+// Declaration moved to packages/contracts — the inspector renders it, so both sides need the shape.
+export type { VibeAttachmentRef };
+
 /**
  * What the user handed the Vibe tool, at the moment they handed it over
  * (docs/specs/WORK_SESSION_TRACING_SPEC.md §3.1).
  *
- * This owns a fact nothing else owns. Today the prompt, the attachments and the model override exist
- * only as an HTTP request body: a Vibe request that fails before producing anything leaves no record
- * that it was ever made, and one that succeeds leaves only its consequences.
+ * This owns a fact nothing else owns. Before it, the prompt, the attachments and the model override
+ * existed only as an HTTP request body: a Vibe request that failed early left no record that it was
+ * ever made, and one that succeeded left only its consequences.
  *
  * It is an **intake**, not a run log. It records what was submitted and points at the journal rows
- * the submission produced; it does not restate their contents. The rendered prompts, the raw
- * replies, the tokens, the cost and the endpoint all belong to `PromptExecutionLog`, and copying
- * them here would give those facts a second owner.
+ * the submission produced; it does not restate their contents.
  */
-
-export interface VibeAttachmentRef {
-    /**
-     * Pointer, not copy — the asset keeps living in its own collection and its own storage.
-     *
-     * Optional because at Vibe intake time it frequently does not exist yet: the classifier receives
-     * `AttachmentMeta` (filename, mime type, size) describing files the user selected, and those
-     * become `ProjectAsset` rows only later in the flow. Recording the metadata without an id still
-     * answers what the user attached, which is the question; demanding an id here would mean either
-     * inventing one or dropping the attachment from the record entirely.
-     */
-    assetId?: string;
-    filename?: string;
-    mimeType?: string;
-    sizeBytes?: number;
-}
-
 export interface VibeIntake {
     id: string;
     workSessionId: string;

@@ -1,4 +1,9 @@
-import type { PipelineEntryMode } from "@andy-code-cat/contracts";
+import type { PipelineEntryMode, WorkSessionConfig, WorkSessionStatus } from "@andy-code-cat/contracts";
+
+// Re-exported so existing importers keep working. The declarations themselves moved to
+// packages/contracts: the web client needs the same shapes, and a type declared in two places is a
+// type that will eventually disagree with itself.
+export type { WorkSessionStatus, WorkSessionConfig };
 
 /**
  * A working session — one user intent, from the first interaction with a tool to the last edit it
@@ -6,39 +11,9 @@ import type { PipelineEntryMode } from "@andy-code-cat/contracts";
  *
  * This is a **certificate, not a container**. It asserts that a session began: by this user, in this
  * organisation, through this tool, at this moment, under this session-scoped configuration. It holds
- * no mode payload.
- *
- * The first cut of this entity carried the Vibe prompt, its attachments and the model override as an
- * `openingInput`, and that was wrong in three ways that only appear in use: a session entered
- * through `workspace` has neither prompt nor attachments, so the field was dead on a third of all
- * sessions; a user who goes back and re-prompts produces two intakes and the shape held one; and it
- * conflated *"a session began"* with *"this is what the Vibe tool was handed"*. Those belong to
- * `VibeIntake`, which is one tool's input/output cycle.
- *
- * What each generation actually did belongs to its `PipelineRun`; what each individual call sent and
- * received belongs to its `PromptExecutionLog` row. One fact, one owner — the session restates none
- * of them, and everything downstream carries its id.
+ * no mode payload — the Vibe prompt and its attachments belong to `VibeIntake`, which is one tool's
+ * input/output cycle, and what each generation actually did belongs to its `PipelineRun`.
  */
-
-export type WorkSessionStatus = "open" | "completed" | "failed" | "abandoned";
-
-/**
- * Configuration true of the session as a whole, as opposed to one tool invocation.
- *
- * Deliberately near-empty today. Anything that varies per call — the model, the prompt, the
- * attachments — is not session-scoped and does not belong here, however tempting the convenience.
- */
-export interface WorkSessionConfig {
-    /** BCP-47, as the client reported it when the session opened. */
-    uiLanguage?: string;
-    /**
-     * Settings that do not exist yet: reasoning-report toggles, default budgets, whatever a later
-     * feature adds. A new session-scoped option should be a value here, not a migration of every
-     * historical session. Anything that graduates into a first-class concern is promoted out.
-     */
-    options?: Record<string, unknown>;
-}
-
 export interface WorkSession {
     id: string;
     userId: string;

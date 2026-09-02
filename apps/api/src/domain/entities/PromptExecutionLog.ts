@@ -1,22 +1,14 @@
 import type { CostEstimate } from "./Conversation";
+import type { PromptExecutionStatus, PromptExecutionMediaResolutionSummary } from "@andy-code-cat/contracts";
+
+// Declarations moved to packages/contracts; the inspector renders these rows.
+export type { PromptExecutionStatus, PromptExecutionMediaResolutionSummary };
 
 /**
- * "pending" — I11 of the SSOT program (see docs/SSOT_REFACTOR_PROGRESS.md): written and AWAITED
- * before the provider call is dispatched, so a durable record of intent exists even if the
- * process crashes mid-call or the client never receives a response. `complete()` transitions a
- * pending record to "succeeded" or "failed" once the provider call resolves.
+ * "pending" — I11 of the SSOT program: written and AWAITED before the provider call is dispatched,
+ * so a durable record of intent exists even if the process crashes mid-call or the client never
+ * receives a response. `complete()` transitions it to "succeeded" or "failed" once the call resolves.
  */
-export type PromptExecutionStatus = "pending" | "succeeded" | "failed";
-
-export interface PromptExecutionMediaResolutionSummary {
-    version: string;
-    resolvedCount: number;
-    failedCount: number;
-    degraded: boolean;
-    mediaKeys?: string[];
-    traceIds?: string[];
-}
-
 export interface PromptExecutionLog {
     id: string;
     taskKey: string;
