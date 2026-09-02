@@ -113,6 +113,7 @@ Read in this order before making changes:
 | --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
 | [docs/specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md](specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md) | **Proposed, not implemented** — why the first generation feels silent, and an incremental plan for real progress events and an inspector panel |
+| [docs/specs/SESSION_RECONSTRUCTION_CERTIFICATE.md](specs/SESSION_RECONSTRUCTION_CERTIFICATE.md) | **The checkable claim** — eight questions the database must answer from a workSessionId alone, the verification query, and the holes still open |
 | [docs/specs/SESSION_TRACING_EXECUTION_PLAN.md](specs/SESSION_TRACING_EXECUTION_PLAN.md) | **Assignment brief for implementing agents** — six work packages closing the artifact SSOT violation, unifying cost into one referential record, completing the journal, and enabling replay experiments |
 | [docs/specs/WORK_SESSION_TRACING_SPEC.md](specs/WORK_SESSION_TRACING_SPEC.md) | **Proposed** — one work-session id spanning every prompt, response, cost and endpoint of a run; audit of what the 13 LLM call sites record today |
 | [docs/specs/PARALLEL_SECTION_GENERATION_SPEC.md](specs/PARALLEL_SECTION_GENERATION_SPEC.md) | **Proposed, not implemented** — splitting the monolithic `generate` stage into a planned, per-section parallel fan-out; model-lock, cost and coherence constraints |
