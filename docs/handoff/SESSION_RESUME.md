@@ -1,21 +1,19 @@
-# Session Resume — prompt certification & pipeline parallelisation
+# Session Resume — prompt certification, and what comes next
 
-**Read this first if you are picking up cold.** It exists because the session that produced this work
-may end before the work does. Everything below was established by reading code or running things, not
-by assumption; where a number appears, it came from a measurement.
+**Read this first if you are picking up cold.** Everything here was established by reading code or
+running things; where a number appears, it came from a measurement.
 
-Branch: `feat/parallel-section-generation`, off `develop`. Nothing pushed — see §6.
+Branch: `feat/parallel-section-generation`, off `develop`. **Nothing is pushed** — see §6.
 
 ---
 
-## 1. What this is all about, in one paragraph
+## 1. The thread, in one paragraph
 
-A ten-section slide deck generated with GLM-5.3 took **10m 29s**, stopped at **exactly 32,768
-completion tokens** (a power of two, so a provider cap and not a model finishing), and was journalled
-as **`succeeded`** while the deck was visibly incomplete. Investigating why produced two threads:
-**(a)** split one long generation into a planned per-section fan-out, and **(b)** first make the
-pipeline record what it actually does, because (a) cannot be judged against the product until (b)
-exists. Thread (b) is the current work.
+A ten-section deck generated with GLM-5.3 took 10m 29s, stopped at exactly 32,768 completion tokens —
+a provider cap, not a model finishing — and was journalled as `succeeded` while the deck was visibly
+incomplete. Chasing that produced two lines of work: make the pipeline record what it actually does,
+and find out whether splitting generations makes them faster. The first is **done and verified
+against a live run**. The second turned out to depend entirely on *which* stage you split.
 
 ---
 
@@ -23,123 +21,92 @@ exists. Thread (b) is the current work.
 
 | Finding | Evidence |
 |---|---|
-| The failing run: 32,768 completion tokens, 629,546 ms, `status: succeeded`, 13,938 prompt tokens | `prompt_execution_logs` doc `f51ee098-161f-4c46-9244-fc018cf9fab7` on the local Mongo |
-| Its 47,021-char system prompt, by layer | A 7,667 · L 370 · B 1,532 · S 5,251 · C 11,915 · D 3,262 · E 12,274 · **P 4,750** · = 47,021 |
-| Layer P spends 4,750 chars on output-budget policy and the run still hit the cap | prose asks for brevity, structure enforces it |
-| **The prompt inspector cannot lie on `generate`** | `promptTraceParity.ts:15` throws unless the system message on the wire is byte-identical to what the inspector shows, layer spans included. Runs at `llmRoutes.ts:606` and `:1081` |
-| `enable_thinking:false` is honoured by SiliconFlow, ignored by OpenRouter | `chatRequestAdapter.ts` — every OpenRouter measurement is the fan-out *without* the reasoning split |
-| Fan-out measured live | Gemini-3.7-Flash 72.6s / 7-of-7 criteria / **18% cheaper** than the monolith; GLM-5.3 @16k 257s / 0 truncations / 3 sections lost to a 120s per-section ceiling; GLM-5.3 @8k was **worse than 16k** because truncation triggered retries |
-| Raising the per-section budget does NOT backfire | 16k beat 8k on every axis including cost. An earlier claim to the contrary was wrong and is corrected in the spec |
-| The confirmed 19-field intake is already persisted | `buildCanonicalGenerationBrief.ts:39` and `:152` write `sourceFields: { ...input }` into `canonicalBrief` |
-| `PipelineRun.stages[]` is already an execution order referencing what ran | `PipelineStageExecutionRef` carries `promptExecutionId` |
-| **The artifact exists in three places, and one is a live second authority** | `preview_snapshots.artifacts`; `conversations[].metadata.generatedArtifacts` written at `page.tsx:2384` and **read at `:1901` (what the preview shows) and `:2146` (what is sent as the next generation's base)**; `metadata.rawResponse` at `:2379` |
-
-The last row is the only live correctness defect found. It is WP1.
+| The failing run: 32,768 completion tokens, 629,546 ms, `succeeded`, 13,938 prompt tokens | `prompt_execution_logs` doc `f51ee098…` |
+| Its 47,021-char system prompt by layer | A 7,667 · L 370 · B 1,532 · S 5,251 · C 11,915 · D 3,262 · E 12,274 · **P 4,750** |
+| Layer P spends 4,750 chars asking for brevity, and the run hit the cap anyway | prose asks, structure enforces |
+| **The prompt inspector cannot lie on `generate`** | `promptTraceParity.ts:15` throws unless the wire matches what it shows, layer spans included |
+| `enable_thinking:false` is honoured by SiliconFlow and ignored by OpenRouter | so every OpenRouter measurement is the fan-out *without* the reasoning split |
+| Artifact fan-out **works**: 8.7× faster, 18% cheaper, 7/7 criteria | `PARALLEL_SECTION_GENERATION_SPEC.md` §9bis |
+| Prefill fan-out **does not**: slower, 2-5× costlier, fields lost | `PREFILL_PARALLELISATION_FINDINGS.md` |
+| The same monolith call measured **104.5 s and 298.2 s** on identical input | why N calls exposed to the maximum is a bad trade |
+| The artifact exists in three places and **they disagree** by 2,181 chars | `SESSION_REDUNDANCY_ANALYSIS.md` §2 — the only live correctness defect |
+| 98 of 156 projects carry no snapshot at all | upper bound on failures; includes never-launched drafts |
 
 ---
 
-## 3. Documents, in reading order
+## 3. What is built and verified
 
-1. `docs/specs/WORK_SESSION_TRACING_SPEC.md` — the design, the 13-call-site audit, and §3 which
-   corrects the first version of its own session model
-2. `docs/specs/SESSION_TRACING_EXECUTION_PLAN.md` — six work packages, binding rules, ownership map,
-   dependency graph, file-collision matrix, four waves
-3. `docs/specs/PARALLEL_SECTION_GENERATION_SPEC.md` — the fan-out; §9ter states plainly that it is
-   **not reachable from the product**, and every measured number in §9bis must be read with that
-   caveat
+The journal now records every LLM call in the product: both rendered prompts, the raw reply before
+parsing, the endpoint actually called, `finishReason`, cost, and the session it belongs to.
 
----
+**Certificate passed live** (`SESSION_RECONSTRUCTION_CERTIFICATE.md`): session
+`931a3cc0-6690-4be9-9efa-888f87837949`, all eight questions answered from one `workSessionId`, six
+collections joined by that id. Two provider failures recorded *with the provider's own words*, which
+is precisely what used to vanish.
 
-## 4. Where the work stands
+Key commits: `6a862f4` (Zero Effort journalling) · `e1a7d0b` `08fbc13` (WorkSession as a certificate,
+VibeIntake, ZeroEffortFormProposal) · `e2f569e` (session opened and carried by request) · `18fb11f`
+(the last five silent call sites, four parallel agents) · `58aa21a` (certificate holes closed) ·
+`7af5709` (one intent one session) · `bfded0f` (live verification) · `1d22600` (interrupted runs keep
+their partial answer and reasoning) · `2a13370` (generate names the documents that shaped it) ·
+`5245029` (dashboard copies the real prompt, not the template).
 
-### Landed on the branch
-
-| Commit | What |
-|---|---|
-| `dac2b10` `dda7506` `29a8d71` | fan-out MVP: `plan` stage, bounded pool, retry/placeholder, live probe, dry-run mode. **Reachable only from `fanout-probe.ts` — a bench, not a feature** |
-| `6a862f4` | `VibeClassify` + `VibePrefill` journal their calls; `PromptExecutionLog` gains `workSessionId`, `pipelineRunId`, `pipelineStage`, `endpoint`, `rawResponse`, `finishReason`, `reasoningTrace` |
-| `e1a7d0b` `08fbc13` | `WorkSession` as a certificate (no mode payload), `VibeIntake`, `ZeroEffortFormProposal`, `workSessionId` on `PipelineRun` |
-| `e2f569e` | **WP4a**: `OpenWorkSession`, `workSessionMiddleware`, `req.workSession`, session opened and echoed by the vibecore routes |
-
-Suite at the last full run: **646 passing**, tsc clean.
-
-### Landed since — WP4b + WP4c (commit `18fb11f`)
-
-Four Sonnet agents, disjoint file sets, all four green. **Every LLM call site in the product now
-journals.** The audit table in `WORK_SESSION_TRACING_SPEC.md` §2 is now historical: no row in it says
-"no" any more.
-
-| Slice | What it turned out to be |
-|---|---|
-| didactic | Ask recorded nothing at all; knowledge recorded only cost. Knowledge now completes on the raw reply **before** `parseDidacticJson`, so a parse failure cannot rewrite what the model said |
-| enrichment | The vision call had no row. Document brief and dataset appendix **did** have rows — but written only after the fetch resolved, so a call that never returned left no trace. Moved to pending-before-dispatch; `persistPromptExecutionLog` removed rather than left as a second writer |
-| image gen | No row at all for a paid ~30s call. Base64 replaced by a marker: the journal records prompts, not asset bytes. `finish_reason`/usage left undefined rather than fabricated |
-| generate | The endpoint expression was **hoisted out of the fetch** so the journal stores the exact string called, not a re-derivation |
-
-Combined-tree verification after all four landed: **tsc clean, 89 files, 678 tests**. Each agent's own
-run was a snapshot of a tree three others were still editing — the combined run is the one that counts,
-and re-running it is the first thing to do after any future parallel wave.
-
-Per-agent decisions are in `docs/handoff/WP4B_*.md` and `WP4C_*.md`.
-
-**Dead code found in passing, not acted on:** `AskDidacticQuestion.execute()` has zero callers
-repo-wide — only `streamTokens()` is wired. Candidate for the cleanup pass.
-
-### Not started
-
-- **WP1** — the artifact SSOT violation. **Now the highest-value remaining item.** Deliberately unassigned: it edits the same workspace page
-  WP5 will rewrite. Four commits in order, and the field must not be deleted first
-- **WP2** — cost as one referential record keyed by `promptExecutionId`, carrying its rate snapshot
-- **WP3** — Mongo repositories for `VibeIntake` and `ZeroEffortFormProposal` (entities exist; nothing
-  persists them)
-- **WP5** — the prompt tab becomes a session inspector, per-mode accordions
-- **WP6** — the replay harness. **This is the point of everything else**: replay a recorded session
-  with a layer removed or a stage skipped, and measure cost, time and quality
+Suite: **687 passing**, tsc clean on api and web. The local stack runs this code.
 
 ---
 
-## 5. Resuming
+## 4. The two features to build next
 
-**To resume an agent:** `SendMessage` to its name with what you want next; a send resumes it from its
-own transcript. If the agents are gone, their progress files are the handoff — read the file, then
-re-spawn with the same brief plus "the progress file records what is already done; continue from
-NEXT".
+Both are specified. Neither is started.
 
-**To verify the tree is sane after any interruption:**
+### A — Interrupted run recovery · `INTERRUPTED_RUN_RECOVERY.md`
 
-```
-cd apps/api && npx tsc -p tsconfig.json --noEmit && npx vitest run
-git status --short
-```
+Prerequisite is **built**: an interrupted run now keeps its partial answer and its reasoning trace.
+The feature is the offer to the user — a modal on a broken Zero Effort run stating how many tokens of
+work already exist, with *retry with this model*, *retry with a different one*, or *discard the
+project*.
 
-Expect 646+ passing. Uncommitted changes under the agents' owned files are expected; anything else is
-a surprise and should be examined before committing.
+Deliberately narrow: **project mode already has recovery** — the workspace has a chat and a model
+picker, so typing "riprova" already resumes with history. Zero Effort has neither, and that is the
+whole gap. The spec carries the four decisions to make first.
 
-**The one ordering that is not negotiable:** WP4a before anything that records a session id, and
-WP2's contract before anything records cost. Both are shape definitions — an agent writing against a
-shape that later changes produces two shapes silently, which is the defect this programme exists to
-remove.
+### B — The session inspector · `SESSION_TRACING_EXECUTION_PLAN.md` WP5 + `SESSION_REDUNDANCY_ANALYSIS.md` §6
 
----
+Three collapsible blocks — **Vibe**, **Zero Effort**, **Artifact generation** — each rendered only
+when the session produced it, each with its own cost. The data is complete; only the surface is
+missing. §6 of the redundancy analysis describes what each block reads.
 
-## 6. Open blockers, none of them code
+**Before handing this to an agent, consolidate it.** It is currently specified across two documents
+plus scattered notes, and an implementer would have to assemble the spec before writing any code.
 
-- **Nothing is pushed.** `git push` cannot run from the agent shell: Git Credential Manager wants an
-  interactive/browser prompt, `gh` is not installed, and there is no `GITHUB_TOKEN`. The user must
-  push. Also pending from earlier: `fix/model-selection-ssot-consolidation`,
-  `docs/gitflow-template-hardening`
-- **SiliconFlow returns 402 insufficient balance.** It is the only provider that honours
-  `enable_thinking:false`, so the reasoning-split half of the fan-out result is still unmeasured
-- **Docker was down** at last check (`docker exec` could not reach the daemon). The stack is needed
-  for any real end-to-end run
-- **`.env.docker` holds `OPEN_ROUTER_API_KEY`** (note the underscore spelling) — that is how the live
-  probes ran
+Also folded into WP5 and worth doing there rather than separately: the header cost lagging one
+refresh (belongs to WP2), per-step cost inspection, the assistant reply missing from the sent-history
+panel (half-diagnosed — it *is* in the payload at `page.tsx:2132-2137`, so the defect is in the
+display), and the accordion fragmenting a large code block (**not reproduced** — needs to be seen).
+
+### Still open elsewhere
+
+**WP1**, the artifact SSOT violation — the only measured correctness defect, and it edits the same
+workspace page WP5 rewrites, so decide which goes first. **WP2**, cost as one referential record.
+The `vibe_intakes.attachments[] → project_assets` link, so a session can reach a download.
 
 ---
 
-## 7. The question all of this is for
+## 5. Tools that exist
 
-Whether the layered prompt carries redundancy that costs money and biases the artifact without
-improving it — and whether splitting the pipeline into smaller focused contexts is cheaper, faster
-and better. WP6 answers it. It cannot be trusted before the journal is complete, because replaying a
-session whose history has gaps measures the gaps.
+- `apps/api/src/scripts/session-export.js` — dumps a whole session to one JSON, and reports how much
+  of it the session id alone can reach. That coverage number found two real gaps.
+- `apps/api/src/scripts/fanout-probe.ts` — section fan-out against a live provider, `FANOUT_DRY_RUN=1`
+  prints the exact prompts without spending.
+- `apps/api/src/scripts/prefill-fanout-probe.ts` — replays a recorded prefill and compares strategies.
+
+---
+
+## 6. Blockers, none of them code
+
+- **Nothing is pushed.** `git push` cannot authenticate from the agent shell (Git Credential Manager
+  wants a browser, no `gh`, no `GITHUB_TOKEN`). Also pending from earlier:
+  `fix/model-selection-ssot-consolidation`, `docs/gitflow-template-hardening`.
+- **SiliconFlow returns 402**, so the reasoning-split half of the artifact fan-out is still unmeasured
+  — it is the only provider that honours `enable_thinking:false`.
+- `.env.docker` holds `OPEN_ROUTER_API_KEY` (underscore spelling); that is how every live probe ran.
