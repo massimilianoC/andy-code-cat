@@ -638,11 +638,16 @@ export function createLlmRoutes(): Router {
                     });
                 }
             }
+            const endpoint = `${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`;
             const pendingLog = await promptExecutionLogRepository.createPending({
                 taskKey: "chat",
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 conversationId: body.conversationId,
+                workSessionId: req.workSession?.id,
+                pipelineRunId: body.pipelineRunId,
+                pipelineStage: "generate",
+                endpoint,
                 provider: context.providerCatalog.provider,
                 model: context.modelId,
                 inputPrompt: body.message.slice(0, 2000),
@@ -658,7 +663,7 @@ export function createLlmRoutes(): Router {
             promptExecutionLogId = pendingLog.id;
             // ── end I11 pending write ───────────────────────────────────────────────────
 
-            const sfRes = await fetch(`${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+            const sfRes = await fetch(endpoint, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -1114,11 +1119,16 @@ export function createLlmRoutes(): Router {
                     });
                 }
             }
+            const endpoint = `${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`;
             const pendingLog = await promptExecutionLogRepository.createPending({
                 taskKey: "chat",
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 conversationId: body.conversationId,
+                workSessionId: req.workSession?.id,
+                pipelineRunId: body.pipelineRunId,
+                pipelineStage: "generate",
+                endpoint,
                 provider: context.providerCatalog.provider,
                 model: context.modelId,
                 inputPrompt: body.message.slice(0, 2000),
@@ -1151,7 +1161,7 @@ export function createLlmRoutes(): Router {
 
             let sfRes: Response;
             try {
-                sfRes = await fetch(`${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+                sfRes = await fetch(endpoint, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",

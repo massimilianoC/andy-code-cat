@@ -10,6 +10,7 @@ import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoDidacticArtifactKnowledgeRepository } from "../../../infra/repositories/MongoDidacticArtifactKnowledgeRepository";
 import { MongoDidacticQnaRepository } from "../../../infra/repositories/MongoDidacticQnaRepository";
+import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
@@ -90,6 +91,7 @@ export function createDidacticRoutes(): Router {
     const knowledgeRepo = new MongoDidacticArtifactKnowledgeRepository();
     const qnaRepo = new MongoDidacticQnaRepository();
     const snapshotRepo = new MongoPreviewSnapshotRepository();
+    const promptExecutionLogRepo = new MongoPromptExecutionLogRepository();
 
     // GET /v1/projects/:projectId/didactic/knowledge?snapshotId=...
     router.get("/projects/:projectId/didactic/knowledge", async (req: RequestWithContext, res, next) => {
@@ -121,7 +123,7 @@ export function createDidacticRoutes(): Router {
             }
 
             const llmContext = await resolveLlmContext(req.auth!.userId);
-            const useCase = new GenerateDidacticKnowledge(knowledgeRepo);
+            const useCase = new GenerateDidacticKnowledge(knowledgeRepo, promptExecutionLogRepo);
             const result = await useCase.execute({
                 projectId,
                 snapshotId: body.snapshotId,
@@ -129,6 +131,7 @@ export function createDidacticRoutes(): Router {
                 snapshot,
                 uiLanguage: body.uiLanguage,
                 llmContext,
+                workSessionId: req.workSession?.id,
             });
 
             res.json({
@@ -155,7 +158,7 @@ export function createDidacticRoutes(): Router {
             }
 
             const llmContext = await resolveLlmContext(req.auth!.userId);
-            const askUseCase = new AskDidacticQuestion(qnaRepo);
+            const askUseCase = new AskDidacticQuestion(qnaRepo, promptExecutionLogRepo);
 
             // SSE setup
             res.setHeader("Content-Type", "text/event-stream");
@@ -178,6 +181,7 @@ export function createDidacticRoutes(): Router {
                     focus: body.focus,
                     uiLanguage: body.uiLanguage,
                     llmContext,
+                    workSessionId: req.workSession?.id,
                 };
 
                 const result = await askUseCase.streamTokens(askInput, (delta) => {

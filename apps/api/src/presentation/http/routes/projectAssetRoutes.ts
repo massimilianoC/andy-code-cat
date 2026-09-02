@@ -238,6 +238,7 @@ export function createProjectAssetRoutes(): Router {
         moodboardRepository,
         userStyleProfileRepository,
         optimizeImagePrompt,
+        promptExecutionLogRepository,
     );
     const getLlmPromptConfig = new GetLlmPromptConfig(promptConfigRepository);
     const getProjectAiAnalytics = new GetProjectAiAnalytics(promptExecutionLogRepository, assetRepository);
@@ -518,6 +519,7 @@ export function createProjectAssetRoutes(): Router {
                     } : undefined,
                     mediaConfig: input.mediaConfig,
                     prePromptTemplate: promptConfig?.enabled ? promptConfig.prePromptTemplate : undefined,
+                    workSessionId: req.workSession?.id,
                 });
 
                 res.status(202).json({
