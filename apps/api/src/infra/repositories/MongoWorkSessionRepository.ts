@@ -10,9 +10,10 @@ const COLLECTION = "work_sessions";
 interface WorkSessionDocument {
     _id: string;
     userId: string;
+    organizationId?: string;
     projectId?: string;
     entryMode: WorkSession["entryMode"];
-    openingInput: WorkSession["openingInput"];
+    config: WorkSession["config"];
     status: WorkSessionStatus;
     failureReason?: string;
     createdAt: Date;

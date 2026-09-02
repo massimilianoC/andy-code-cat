@@ -4,62 +4,46 @@ import type { PipelineEntryMode } from "@andy-code-cat/contracts";
  * A working session — one user intent, from the first interaction with a tool to the last edit it
  * produces (docs/specs/WORK_SESSION_TRACING_SPEC.md §3).
  *
- * This is the root that was missing. `PipelineRun` is deliberately ONE generation — its model lock
- * is consumed by the first dispatch, and `ResolvePipelineModelLock.dispatch():181-193` treats a
- * second stage as proof the run has said everything it can truthfully say. That semantic is
- * incident-hardened (2026-08-26) and must not be widened to mean "a session". A session is the level
- * above: it opens when the user engages one of the three modes, and it holds however many
- * generations, edits and regenerations follow.
+ * This is a **certificate, not a container**. It asserts that a session began: by this user, in this
+ * organisation, through this tool, at this moment, under this session-scoped configuration. It holds
+ * no mode payload.
  *
- * What the session owns is the *starting conditions*. What each generation actually did belongs to
- * its own `PipelineRun`, and what each individual call sent and received belongs to its own
- * `PromptExecutionLog` row. One fact, one owner — the session does not restate them.
+ * The first cut of this entity carried the Vibe prompt, its attachments and the model override as an
+ * `openingInput`, and that was wrong in three ways that only appear in use: a session entered
+ * through `workspace` has neither prompt nor attachments, so the field was dead on a third of all
+ * sessions; a user who goes back and re-prompts produces two intakes and the shape held one; and it
+ * conflated *"a session began"* with *"this is what the Vibe tool was handed"*. Those belong to
+ * `VibeIntake`, which is one tool's input/output cycle.
+ *
+ * What each generation actually did belongs to its `PipelineRun`; what each individual call sent and
+ * received belongs to its `PromptExecutionLog` row. One fact, one owner — the session restates none
+ * of them, and everything downstream carries its id.
  */
 
+export type WorkSessionStatus = "open" | "completed" | "failed" | "abandoned";
+
 /**
- * The user's opening move, photographed.
+ * Configuration true of the session as a whole, as opposed to one tool invocation.
  *
- * "Photographed" is the whole point of this shape: these are the conditions at the moment the
- * session opened, not the conditions in force now. The model in particular can change mid-session —
- * a project conversation lets the user switch models between turns, and over-freezing it is exactly
- * what broke on 2026-08-26. So this records what was chosen *at the start*, and the authority for
- * what any given generation actually dispatched stays where it already lives, in that run's
- * `PipelineRun.modelLock`.
+ * Deliberately near-empty today. Anything that varies per call — the model, the prompt, the
+ * attachments — is not session-scoped and does not belong here, however tempting the convenience.
  */
-export interface WorkSessionOpeningInput {
-    /** The user's own words. Not a rendered prompt — that belongs to the journal row that sent it. */
-    prompt: string;
-    attachments: WorkSessionAttachmentRef[];
-    /** An explicit model override, if the user made one. A record of intent, never an authority. */
-    requestedProvider?: string;
-    requestedModel?: string;
-    /** BCP-47, as the client reported it. */
+export interface WorkSessionConfig {
+    /** BCP-47, as the client reported it when the session opened. */
     uiLanguage?: string;
-    /** The mode the user asked for, where the entry point offers a choice (e.g. "website"). */
-    generationMode?: string;
     /**
-     * Options that do not exist yet.
-     *
-     * Reasoning-report toggles, per-section budgets, whatever a later feature adds: this exists so
-     * adding one is a value in an existing field rather than a migration of every historical
-     * session. Anything that graduates into a first-class concern gets promoted out of here.
+     * Settings that do not exist yet: reasoning-report toggles, default budgets, whatever a later
+     * feature adds. A new session-scoped option should be a value here, not a migration of every
+     * historical session. Anything that graduates into a first-class concern is promoted out.
      */
     options?: Record<string, unknown>;
 }
 
-/** A pointer, not a copy — the asset itself stays in its own collection and storage. */
-export interface WorkSessionAttachmentRef {
-    assetId: string;
-    filename?: string;
-    mimeType?: string;
-    sizeBytes?: number;
-}
-
-export type WorkSessionStatus = "open" | "completed" | "failed" | "abandoned";
-
 export interface WorkSession {
     id: string;
     userId: string;
+    /** The tenant this session belongs to, where the deployment is multi-tenant. */
+    organizationId?: string;
     /**
      * Absent until a project exists. A Vibe session begins before there is anything to attach it
      * to, which is precisely why a conversation could not serve as this root: conversations are
@@ -68,7 +52,7 @@ export interface WorkSession {
     projectId?: string;
     /** Which of the three tools opened it: `vibe`, `zero-effort` or `workspace`. */
     entryMode: PipelineEntryMode;
-    openingInput: WorkSessionOpeningInput;
+    config: WorkSessionConfig;
     status: WorkSessionStatus;
     /** Set when the session ends unhappily — the human-readable reason, not a stack trace. */
     failureReason?: string;
