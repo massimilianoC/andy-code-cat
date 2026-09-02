@@ -36,65 +36,59 @@ That is the whole of what is built. It changes nothing a user sees.
 
 ---
 
-## 3. The feature — and it is narrower than it first looked
+## 3. Two loss points, one destination
 
-**Project mode already has recovery, and nothing needs building there.** The workspace has a chat and
-a model picker: typing "riprova" sends a new turn carrying the conversation history, and the picker
-changes the model for it. A user who lands in the workspace after a failure can already resume from
-what exists, with a different model if they want. Adding a button there would be a shortcut to
-something that works.
+Corrected twice, and the correction is the design.
 
-**Zero Effort has none of that**, and that is the whole feature. There is no chat to type into and no
-turn to send. When a generation breaks on that path the user's options are to start over from the
-beginning, having paid for everything that already happened.
+The first draft put the offer on the Zero Effort path, reasoning that Zero Effort has no chat to
+type "riprova" into. Tracing the flow killed that: the launch page pushes straight to
+`/workspace/:projectId`, so artifact generation happens IN the workspace, which has a chat and a
+picker.
 
-So the offer belongs where the recovery does not already exist:
+But the workspace is not the only place work is lost, and treating it as the only one was the second
+mistake. There are **two** points, with the same problem and the same answer:
 
-> This generation stopped. There are **N tokens** of work already paid for — a partial result and
-> the model's reasoning. **Retry with this model**, **retry with a different one** (the existing
-> model selector), or **discard the project**.
+| Where | What breaks | What is lost |
+|---|---|---|
+| **Vibe → prefill** | the Zero Effort brief call fails or is cut short | the model's reasoning toward a brief. The user lands on an empty form, or stays in Vibe with a warning |
+| **Workspace generation** | the artifact call fails or is interrupted | the partial artifact and the reasoning behind it |
 
-The token figure is not a guess: `usage.totalTokens`, `rawResponse` and `reasoningTrace` are on the
-journal row, so the modal can state what is actually there rather than promising something vague.
+Both funnel to the same destination: **carry the recovered context into workspace project mode and
+continue there.** The workspace is where a generation can be resumed, so a prefill that died on the
+way to it should arrive there carrying what it managed to think, rather than sending the user back
+to an empty form.
 
-**Retry** starts a new generation inside the same `WorkSession`, seeded with the original brief plus
-the partial answer and the reasoning — the model continues a train of thought rather than boarding
-it again. Changing the model is the interesting case: a run that GLM abandoned at eight minutes may
-be finishable by a faster model given everything the first one worked out.
+### Why "riprova" is not already this
 
-**Discard** deletes the project.
+Typing "riprova" resends the conversation history, and a failed generation leaves no assistant
+message in it. The interrupted path sends the client **200 characters** of partial reply
+(`llmRoutes.ts:1402`) and nothing else, while the journal row holds the whole partial answer and the
+reasoning trace.
+
+So a manual retry makes the model start thinking again. A recovery makes it continue. That
+difference is the entire feature.
+
+### The prefill was throwing its thinking away
+
+Found while checking this: `VibePrefill` counted `reasoning_tokens` into the cost meta and never
+stored the reasoning text. We knew how much the model had thought and nothing about what. Fixed —
+the trace is now kept whenever the call does not end with a clean `stop`.
+
+### The offer
+
+> This generation stopped. There are **N tokens** of work already paid for — a partial result and the
+> model's reasoning. **Continue in the workspace with this model**, **with a different one**, or
+> **discard the project**.
+
+`N` comes from the failed journal row, so it is a fact rather than reassurance.
+
+**Discard** deletes the project, because a failure should not sit in the list looking like work.
 
 ### The list-hygiene problem is real and measurable
 
 **98 of 156 projects carry no snapshot at all** — no artifact was ever produced. That number
 conflates genuine failures with drafts nobody launched, so it is an upper bound rather than a failure
 count. But it is the shape of what the user sees: a list where most entries are not things they have.
-
-## 3bis. It must be additive — it reuses the flow, it does not add one
-
-The strongest constraint on this feature, and the one that decides its shape: **a recovery is a
-project-mode generation with an injected prompt.** Nothing about it is new machinery.
-
-The workspace already knows how to take a prompt, a model and a conversation and produce an artifact.
-A recovery hands it the original brief plus the partial answer and the reasoning, with whatever model
-the user picked. So it enters `/llm/chat-preview` like any other turn, is journalled by the row that
-route already writes, joins the `WorkSession` that already exists, and lands in the conversation the
-project already has.
-
-What that buys: the certification is not re-implemented. The resumed call is traced, costed and
-correlated by the same code that traces every other call, and the inspector will show it without
-being taught anything new.
-
-What it needs beyond that is small:
-
-- **one flag** marking that this generation was resumed from a failed one, and naming the row it
-  resumed from. Enough to answer "why is there a second generation here" in the history, and nothing
-  more;
-- **the modal**, on the Zero Effort path only, offering retry-with-this-model, retry-with-another
-  (the existing selector), or discard;
-- **discard deleting the pending project**, so a failure does not leave a dead entry in the dashboard.
-
-Anything larger than that is a sign the feature has drifted away from reusing the existing flow.
 
 ## 4. What has to be decided before building it
 

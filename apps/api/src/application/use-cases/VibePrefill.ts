@@ -815,6 +815,18 @@ export class VibePrefill {
                 (payload?.choices as Array<{ finish_reason?: string }>)?.[0]?.finish_reason ?? "stop"
             );
 
+            // The model's chain of thought, when the provider returns one. Until now this call
+            // COUNTED reasoning tokens for the cost meta and threw the text away — so we knew how
+            // much the model had thought and nothing about what it thought. On a prefill that ends
+            // in `length` that trace is the whole of the work already paid for, and it is what a
+            // resumed attempt continues from instead of starting the thinking over.
+            const reasoningTrace = String(
+                (payload?.choices as Array<{ message?: { reasoning_content?: string; reasoning?: string } }>)
+                    ?.[0]?.message?.reasoning_content
+                ?? (payload?.choices as Array<{ message?: { reasoning?: string } }>)?.[0]?.message?.reasoning
+                ?? "",
+            );
+
             const websitePrefill = parsePrefillResponse(raw, input.prompt, resolvedUiLanguage, input.templateId);
             const dataPrefill = resolvedMode === "data_dashboard"
                 ? parseDataDashboardPrefillResponse(raw, input.prompt, input.attachmentMeta)
@@ -869,6 +881,12 @@ export class VibePrefill {
                         costEstimate,
                         finishReason,
                         rawResponse: raw,
+                        // Kept when the call did not end cleanly. A "stop" finish means the model
+                        // said what it meant to and the trace is dead weight; anything else means
+                        // work was cut short, and then this is the only record of it.
+                        reasoningTrace: finishReason !== "stop" && reasoningTrace
+                            ? reasoningTrace.slice(0, 20_000)
+                            : undefined,
                     }).catch(() => undefined);
                 }
 
