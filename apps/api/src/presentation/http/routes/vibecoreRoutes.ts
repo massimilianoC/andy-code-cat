@@ -28,6 +28,8 @@ import { VibePrefill } from "../../../application/use-cases/VibePrefill";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
 import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
 import { OpenWorkSession } from "../../../application/use-cases/OpenWorkSession";
+import { MongoVibeIntakeRepository } from "../../../infra/repositories/MongoVibeIntakeRepository";
+import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositories/MongoZeroEffortFormProposalRepository";
 import { WORK_SESSION_HEADER } from "../middlewares/workSessionMiddleware";
 import {
     resolveAttachmentPolicyFromConfig,
@@ -98,6 +100,8 @@ export function createVibecoreRoutes(): Router {
     );
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
     const openWorkSession = new OpenWorkSession(new MongoWorkSessionRepository());
+    const vibeIntakeRepository = new MongoVibeIntakeRepository();
+    const zeroEffortFormProposalRepository = new MongoZeroEffortFormProposalRepository();
     const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
     const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
     const projectRepository = new MongoProjectRepository();
@@ -296,6 +300,27 @@ export function createVibecoreRoutes(): Router {
                     { userId, entryMode: "vibe", projectId },
                 );
 
+                // Recorded BEFORE classify dispatches: a request that dies in the provider must still
+                // prove it was made. Certificate §3 question 1 — nothing else in the database holds
+                // the prompt as the user actually typed it. Guarded, because a failure to record the
+                // intake must not cost the user their generation.
+                if (workSession) {
+                    await vibeIntakeRepository.record({
+                        workSessionId: workSession.id,
+                        userId,
+                        projectId,
+                        prompt: parsed.data.prompt,
+                        attachments: attachmentMeta.map((a) => ({
+                            filename: a.filename,
+                            mimeType: a.mimeType,
+                            sizeBytes: a.sizeBytes,
+                        })),
+                        requestedProvider: parsed.data.provider,
+                        requestedModel: parsed.data.model,
+                        generationMode: parsed.data.generationMode,
+                    }).catch(() => undefined);
+                }
+
                 const result = await vibeClassify.execute({
                     prompt: parsed.data.prompt,
                     attachmentMeta,
@@ -471,6 +496,20 @@ export function createVibecoreRoutes(): Router {
                 // Attach document names that contributed to the brief (informational, shown to user)
                 if (layerDocNames.length > 0) {
                     result.draft.attachedDocuments = layerDocNames;
+                }
+
+                // Certificate §3 question 4 — the one fact nothing else in the database holds: what
+                // the model PROPOSED, so that what the user submits can later be diffed against it.
+                // The confirmed side is deliberately not stored here; canonicalBrief.sourceFields
+                // already owns it, and editedFields is filled at launch when both sides exist.
+                if (prefillWorkSession && !result.skipped) {
+                    await zeroEffortFormProposalRepository.record({
+                        workSessionId: prefillWorkSession.id,
+                        userId,
+                        projectId,
+                        prefilled: result.draft as unknown as import("@andy-code-cat/contracts").GuidedLaunchInput,
+                        editedFields: [],
+                    }).catch(() => undefined);
                 }
 
                 // Merge, don't overwrite: `warnings` here are attachment-policy notices, while

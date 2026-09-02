@@ -37,6 +37,8 @@ export class LaunchWorkspacePipeline {
         userId: string;
         projectId: string;
         intake: LaunchWorkspacePipelineInput;
+        /** The session this generation belongs to — see SESSION_RECONSTRUCTION_CERTIFICATE.md §3. */
+        workSessionId?: string;
     }): Promise<{
         pipelineRunId: string;
         conversationId: string;
@@ -57,6 +59,7 @@ export class LaunchWorkspacePipeline {
             ownerUserId: input.userId,
             conversationId: launched.conversationId,
             entryMode: "workspace",
+            workSessionId: input.workSessionId,
             requestedProviderId: input.intake.requestedProviderId,
             requestedModelId: input.intake.requestedModelId,
             optimizationPolicy: input.intake.optimizationPolicy,

@@ -13,8 +13,16 @@
  */
 
 export interface VibeAttachmentRef {
-    /** Pointer, not copy — the asset keeps living in its own collection and its own storage. */
-    assetId: string;
+    /**
+     * Pointer, not copy — the asset keeps living in its own collection and its own storage.
+     *
+     * Optional because at Vibe intake time it frequently does not exist yet: the classifier receives
+     * `AttachmentMeta` (filename, mime type, size) describing files the user selected, and those
+     * become `ProjectAsset` rows only later in the flow. Recording the metadata without an id still
+     * answers what the user attached, which is the question; demanding an id here would mean either
+     * inventing one or dropping the attachment from the record entirely.
+     */
+    assetId?: string;
     filename?: string;
     mimeType?: string;
     sizeBytes?: number;

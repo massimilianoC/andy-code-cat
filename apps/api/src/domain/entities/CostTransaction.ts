@@ -65,6 +65,16 @@ export interface CostSourceRef {
     backgroundJobId?: string;
     exportId?: string;
     sessionId?: string;
+    /**
+     * The WorkSession this cost belongs to (docs/specs/SESSION_RECONSTRUCTION_CERTIFICATE.md §3,
+     * question 8: what did the session cost, call by call).
+     *
+     * Distinct from `sessionId` above, which predates work sessions and is used for other session
+     * notions in this codebase. Overloading it would make the one field that is supposed to make
+     * costs reconstructible mean two different things depending on who wrote the row — which is
+     * precisely the ambiguity this programme exists to remove.
+     */
+    workSessionId?: string;
 }
 
 export interface CostRatesSnapshot {

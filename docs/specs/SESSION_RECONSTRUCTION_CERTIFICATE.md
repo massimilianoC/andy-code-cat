@@ -115,24 +115,36 @@ the expected sequence — `vibe_classify`, `vibe_prefill`, `generate` — is a h
 
 ---
 
-## 4. Known holes, as of 2026-09-02
+## 4. Holes — closed 2026-09-02
 
-Recorded so the certificate is honest about what it does not yet certify.
+All five are closed in code. What each one turned out to need:
 
-| Hole | Consequence |
+| Hole | Closed by |
 |---|---|
-| `vibe_intakes` has no repository — nothing writes it | question 1 fails |
-| `zero_effort_form_proposals` has no repository — nothing writes it | question 4 fails |
-| `PipelineRun` accepts `workSessionId` but no caller passes it | questions 5 and 8 cannot be reached from the session id |
-| The guided/workspace launch routes do not join the session | the second half of the chain is orphaned |
-| `cost_transactions` rows carry no `workSessionId` | question 8 fails |
+| nothing wrote `vibe_intakes` | repository + write in the classify handler, **before** dispatch |
+| nothing wrote `zero_effort_form_proposals` | repository + write when prefill returns; `editedFields` filled at launch, the first moment both sides of the comparison exist |
+| `PipelineRun` took `workSessionId` but no caller passed it | threaded through `CreatePipelineRunInput` → `LaunchWorkspacePipeline` → the launch route |
+| the launch routes did not join the session | `createWorkSessionMiddleware` mounted on all three handlers; `reuseOrOpen` on launch |
+| `cost_transactions` carried no session id | explicit `workSessionId` on `CostSourceRef`, passed from the Vibe call sites |
 
-Questions 2, 3, 6 and 7 already pass — classify, prefill and generate all journal, and all record
-their endpoint.
+Two decisions worth recording, because both were forced by reality rather than chosen:
 
-Closing these five is what makes this document a certificate rather than an aspiration.
+**`VibeAttachmentRef.assetId` became optional.** At Vibe intake the classifier receives
+`AttachmentMeta` — filename, mime type, size — describing files that become `ProjectAsset` rows only
+later. Demanding an id there would have meant inventing one or dropping the attachment from the
+record. The metadata still answers what the user attached, which is the question.
 
----
+**Proposals order by `$natural`, not `createdAt`.** A test caught this: two proposals recorded in the
+same millisecond share a timestamp, the tie resolves arbitrarily, and the user's edits get attributed
+to a suggestion they never saw. Insertion order is stable for documents that are only inserted and
+updated in place.
+
+### Still not verified against a live run
+
+The code is in place and 685 tests pass, but **no real session has been run through it yet** — the
+API container is still serving an image built before this work. Until the query in §3 is run against
+a session generated from the UI, this document certifies an intention, not an outcome. That run is
+the next step and nothing downstream should be trusted before it.
 
 ## 5. Why this comes before parallelising anything
 

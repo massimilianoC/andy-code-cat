@@ -351,6 +351,7 @@ export class VibeClassify {
                     userId: input.userId,
                     projectId: input.projectId,
                     resourceType: ResourceType.LLM_PREPROMPT,
+                    sourceRef: { workSessionId: input.workSessionId, promptExecutionLogId: pendingLogId ?? undefined },
                     resourceSubtype: modelId,
                     providerCostUsd,
                     precomputedTotalEur: costEstimate.amount,

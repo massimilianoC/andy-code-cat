@@ -33,6 +33,8 @@ export interface CreatePipelineRunInput {
     ownerUserId: string;
     conversationId?: string;
     entryMode: PipelineEntryMode;
+    /** The session this generation belongs to. A session holds many runs; a run names one session. */
+    workSessionId?: string;
     requestedProviderId?: string;
     requestedModelId?: string;
     optimizationPolicy: OptimizationPolicy;
@@ -149,6 +151,7 @@ export class ResolvePipelineModelLock {
             ownerUserId: input.ownerUserId,
             conversationId: input.conversationId,
             entryMode: input.entryMode,
+            workSessionId: input.workSessionId,
             modelLock,
             optimizationPolicy: input.optimizationPolicy,
         };

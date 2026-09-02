@@ -876,6 +876,7 @@ export class VibePrefill {
                     userId: input.userId,
                     projectId: input.projectId,
                     resourceType: ResourceType.LLM_BACKGROUND,
+                    sourceRef: { workSessionId: input.workSessionId, promptExecutionLogId: pendingLogId ?? undefined },
                     resourceSubtype: modelId,
                     precomputedTotalEur: costEstimate.amount,
                     units: { promptTokens, completionTokens, totalTokens },
