@@ -176,6 +176,42 @@ function getStringDetail(details: unknown, key: string): string | undefined {
     return typeof value === "string" ? value : undefined;
 }
 
+/**
+ * WP1 step 1 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — the single place that decides
+ * what an assistant message looks like at the moment it is allowed to enter `activeConv` state.
+ * Exported as a pure function (no closures over component state) so the ordering guarantee this
+ * step establishes — a message never reaches state ahead of the PreviewSnapshot it produced —
+ * is testable without rendering the page.
+ *
+ * `snapshot` is `null`/`undefined` in the legitimate cases where this turn produced no
+ * snapshot at all (plain chat reply, parse error, an unapplied focus patch, or a stale-base
+ * refusal). handleSend calls this exactly once per turn, only once the snapshot commit (or the
+ * decision that none applies) has already settled — never before. That is what closes the
+ * window `metadata.generatedArtifacts` used to paper over: there is no intermediate render
+ * where a message exists in state pointing at one artifact while a snapshot committed
+ * moments later disagrees with it.
+ *
+ * Not exported: Next.js's route typing (`.next/types/app/.../page.ts`) requires a page module
+ * to export only what App Router recognizes (the default component, `metadata`, etc.) — any
+ * other named export fails `next build`'s generated type check. Kept top-level (rather than a
+ * closure inside WorkspacePageContent) purely so it stays free of component state, which is
+ * what makes it possible to reason about — and test — in isolation.
+ */
+function buildAssistantMessageForConv(
+    message: MessageDto,
+    snapshot?: Pick<PreviewSnapshot, "id"> & { metadata?: { mediaResolution?: NonNullable<MessageDto["metadata"]>["mediaResolution"] } } | null
+): MessageDto {
+    if (!snapshot) return message;
+    return {
+        ...message,
+        metadata: {
+            ...(message.metadata ?? {}),
+            snapshotId: snapshot.id,
+            mediaResolution: snapshot.metadata?.mediaResolution,
+        },
+    };
+}
+
 function WorkspacePageContent() {
     const { t, i18n } = useTranslation();
     const router = useRouter();
@@ -2386,17 +2422,6 @@ function WorkspacePageContent() {
                 },
             });
 
-            setActiveConv((prev) =>
-                prev
-                    ? {
-                        ...prev,
-                        totalTokens: prev.totalTokens + (llm.usage?.totalTokens ?? 0),
-                        totalCost: (prev.totalCost ?? 0) + (llm.costEstimate?.amount ?? 0),
-                        messages: [...prev.messages, assistantSaved.message],
-                    }
-                    : prev
-            );
-
             // Keep promptOpsSummary in sync so the workspace header total cost
             // reflects chat costs immediately (backend now writes chat to PromptExecutionLog).
             setPromptOpsSummary((prev) => ({
@@ -2404,6 +2429,29 @@ function WorkspacePageContent() {
                 totalTokens: prev.totalTokens + (llm.usage?.totalTokens ?? 0),
                 runs: prev.runs + 1,
             }));
+
+            // WP1 step 1 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — the assistant message
+            // must not reach `activeConv` state until the PreviewSnapshot it produced (if any)
+            // already exists. Before this reorder, the message was pushed into state right here,
+            // and the snapshot commit + list refresh ran afterwards; any render in that gap —
+            // most visibly a conversation's very first generation, when previewSnapshots is still
+            // empty and selectedBackendSnapshot/activeBaselineSnapshot both resolve to nothing —
+            // showed a "latest assistant message" with no snapshot backing it yet. That gap is
+            // exactly what the metadata.generatedArtifacts live fallback existed to paper over.
+            // Committing the snapshot (or establishing that this turn produces none) before the
+            // message enters state closes the gap instead of masking it.
+            const addAssistantMessageToConv = (message: MessageDto) => {
+                setActiveConv((prev) =>
+                    prev
+                        ? {
+                            ...prev,
+                            totalTokens: prev.totalTokens + (llm.usage?.totalTokens ?? 0),
+                            totalCost: (prev.totalCost ?? 0) + (llm.costEstimate?.amount ?? 0),
+                            messages: [...prev.messages, message],
+                        }
+                        : prev
+                );
+            };
 
             let previewVersionSaved = false;
 
@@ -2489,26 +2537,9 @@ function WorkspacePageContent() {
                     setEditorHtml(snapArt?.html ?? llm.structured.artifacts.html ?? "");
                     setEditorCss(snapArt?.css ?? llm.structured.artifacts.css ?? "");
                     setEditorJs(snapArt?.js ?? llm.structured.artifacts.js ?? "");
-                    setActiveConv((prev) => {
-                        if (!prev) return prev;
-                        return {
-                            ...prev,
-                            messages: prev.messages.map((message) => {
-                                if (message.id !== assistantSaved.message.id) {
-                                    return message;
-                                }
-
-                                return {
-                                    ...message,
-                                    metadata: {
-                                        ...(message.metadata ?? {}),
-                                        snapshotId: snap.snapshot.id,
-                                        mediaResolution: snap.snapshot.metadata?.mediaResolution,
-                                    },
-                                };
-                            }),
-                        };
-                    });
+                    // The message enters state already carrying the snapshotId it produced —
+                    // there is no intermediate render where one exists without the other.
+                    addAssistantMessageToConv(buildAssistantMessageForConv(assistantSaved.message, snap.snapshot));
                     // Spinner cleared by iframe onLoad; fallback timeout in case user is on another tab
                     setPreviewRefreshing(true);
                     setPreviewPending(true);
@@ -2522,7 +2553,14 @@ function WorkspacePageContent() {
                     // looking at, and they need to know before they build on it.
                     await handleStaleArtifactBase(err);
                     // Anything else stays non-blocking — the chat works without the snapshot.
+                    // The message was already persisted server-side; it still has to reach
+                    // state even though no snapshot backs it this time.
+                    addAssistantMessageToConv(assistantSaved.message);
                 }
+            } else {
+                // No snapshot applies to this turn (plain chat reply, parse error, or an
+                // unapplied focus patch) — nothing to wait for, add the message directly.
+                addAssistantMessageToConv(assistantSaved.message);
             }
 
             // When focused-mode JSON parsing failed entirely, notify the user
