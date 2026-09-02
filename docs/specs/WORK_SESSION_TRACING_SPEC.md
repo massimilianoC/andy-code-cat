@@ -65,29 +65,84 @@ What *is* already stored: `PipelineRun.canonicalBrief`, content-hashed. The brie
 
 ---
 
-## 3. What a session is
+## 3. What a session is — revised after review
 
-`PipelineRun` is **one generation**, deliberately: its model lock is consumed by the first dispatch,
-and `dispatch():181-193` treats a second stage as proof the run has said all it can. That semantic is
-incident-hardened (2026-08-26) and must not be widened to mean "a session".
+The first version of this section put the user's prompt, attachments and model override on
+`WorkSession` itself, as an `openingInput`. That was wrong, for three reasons that only show up once
+you try to use it:
 
-A working session is the level above it, and it already has a vocabulary in the codebase:
-`pipelineEntryModeSchema = ["vibe", "zero-effort", "workspace"]`
-(`packages/contracts/src/pipelineRun.ts:32`) — the three places a session can begin.
+- a session entered through **workspace** has no Vibe prompt and no attachments, so the field is
+  meaningless on a third of all sessions;
+- a user who goes back and re-prompts produces **two** intakes and the shape can hold one;
+- it conflates two different assertions — *"a session began"* and *"this is what the Vibe tool was
+  handed"*. The first is about identity; the second is one tool's input/output cycle.
+
+`WorkSession` is a **certificate**, and holds only what is true of the session as a whole: which
+user, which organisation, which entry mode, when, and session-scoped configuration. No mode payload.
+
+### 3.1 Which new objects are actually justified
+
+A new collection has to earn itself by owning a fact nothing else owns. Most of what a per-mode
+object would naturally contain is already owned:
+
+| Fact | Existing owner |
+|---|---|
+| the composed system prompt actually sent | `prompt_execution_logs.renderedSystemPrompt`, and on `generate` it is byte-checked against the inspector by `assertPromptTraceParity` |
+| the raw reply, the thinking trace | `prompt_execution_logs.rawResponse` / `.reasoningTrace` |
+| tokens, cost, duration, finish_reason, endpoint | `prompt_execution_logs` |
+| which model a generation was locked to | `PipelineRun.modelLock` |
+| stage dispatch history, blocking | `PipelineRun.stages[]` |
+| the canonical brief | `PipelineRun.canonicalBrief`, content-hashed |
+| conversation turns | `Conversation` |
+| the artifact | `PreviewSnapshot` |
+
+So a `VibeModeRun` that stored "the system prompt sent and the JSON received" would be a second copy
+of a journal row. The mode objects must **reference** journal rows by id, never restate them.
+
+What is genuinely **unowned** today, and therefore justifies a collection:
+
+**`VibeIntake`** — the user's prompt, the attachment references, the model override and the options,
+as they were at the moment the button was pressed. Today this exists only as an HTTP request body:
+nothing persists it. A Vibe request that dies before producing anything currently leaves no trace
+that it was ever made.
+
+**`ZeroEffortForm`** — the nineteen-field intake (`guidedLaunchSchema`,
+`packages/contracts/src/pipeline.ts:30-61`) as the user confirmed it. Today it is a DTO that flows
+through `LaunchGuidedProject` and is never stored; only the brief *derived* from it is
+(`canonicalBrief`). Two questions are therefore unanswerable: **what did the form actually contain**,
+and **did the user change what the prefill proposed**. That second one is the difference between the
+model's suggestion and the user's decision, and it is invisible.
+
+**Project mode does not justify a fourth object.** Its turn is a user prompt plus a model against a
+project, and `Conversation` + `PipelineRun` + the journal already hold all three. Adding
+`ProjectModeTurn` for symmetry would create a fourth owner for facts that have three. Symmetry is
+not a reason.
+
+### 3.2 The shape
 
 ```
-WorkSession                      one per user intent, from first Vibe keystroke to last edit
- ├─ originating input            the Vibe text, the attachment ids
- ├─ PipelineRun[]                one per generation (existing entity, gains sessionId)
- │   ├─ stages[]                 vibe_classify → vibe_prefill → brief_build → optimize → generate
- │   └─ canonicalBrief           the distilled brief, hashed (existing)
- └─ PromptExecutionLog[]         one per LLM call (existing entity, gains sessionId + runId + stage + endpoint)
+WorkSession                       certificate: user, org, entryMode, timestamps, session config
+ ├─ VibeIntake        (new)       prompt as typed · attachment refs · model override · options
+ │                                → promptExecutionLogIds[] for classify and prefill
+ ├─ ZeroEffortForm    (new)       the 19 fields as confirmed · prefilled vs edited
+ │                                → briefRef (PipelineRun.canonicalBrief hash)
+ ├─ PipelineRun[]     (existing)  one per generation · modelLock · stages · canonicalBrief
+ └─ PromptExecutionLog[] (existing)  one per LLM call · prompts · raw reply · cost · endpoint
 ```
 
-A conversation cannot be this root: it is project-scoped, and a session starts before a project
-exists.
+Every one of these carries `workSessionId`. The mode objects hold **what the user did and got**; the
+journal holds **what went on the wire**. Two different facts, one owner each, joined by id.
 
----
+### 3.3 Inheritance without refactoring the tools
+
+Every tool invoked inside a session must record its membership — image generation, prompt
+optimisation, didactic answers, all of them. Threading `workSessionId` manually through thirteen
+call sites and their constructors is the refactor we are trying to avoid.
+
+The codebase already solves this shape: routes read `req.auth!.userId` and `req.sandbox!.projectId`
+from a request-scoped context populated by middleware. `workSessionId` joins them there. A tool then
+receives it the same way it already receives `projectId` — as part of the call it is already being
+given — rather than through a new constructor dependency.
 
 ## 4. What gets written, and what deliberately does not
 
