@@ -571,6 +571,14 @@ export default function GuidedLaunchPage() {
     // AI-prefilled review mode
     const [aiPrefilled, setAiPrefilled] = useState(false);
     const [prefillTemplateId, setPrefillTemplateId] = useState<string | null>(searchParams?.get("templateId") ?? null);
+    /**
+     * Warnings handed over from the Vibe entry, read unconditionally.
+     *
+     * Deliberately NOT gated on `?prefilled=1`: that flag is absent precisely when the prefill
+     * FAILED, which is the case where the user most needs to be told. Reading it only on the happy
+     * path is why a refused model used to land the user on a blank manual form in silence.
+     */
+    const [handoffWarnings, setHandoffWarnings] = useState<string[]>([]);
     const [prefillFormatHint, setPrefillFormatHint] = useState<string | null>(searchParams?.get("formatHint") ?? null);
 
     // brief editor
@@ -636,6 +644,22 @@ export default function GuidedLaunchPage() {
             .catch(() => setError("Unable to load the project."))
             .finally(() => setLoading(false));
     }, [projectId, router]);
+
+    // On mount: surface why the automatic prefill did not happen, if it did not.
+    useEffect(() => {
+        if (!projectId) return;
+        try {
+            const raw = sessionStorage.getItem(`guided_warnings_${projectId}`);
+            if (!raw) return;
+            sessionStorage.removeItem(`guided_warnings_${projectId}`);
+            const parsed = JSON.parse(raw) as unknown;
+            if (Array.isArray(parsed)) {
+                setHandoffWarnings(parsed.filter((w): w is string => typeof w === "string"));
+            }
+        } catch {
+            // A malformed handoff is not worth breaking the form over.
+        }
+    }, [projectId]);
 
     // On mount: read sessionStorage prefill draft if ?prefilled=1 is present
     useEffect(() => {
@@ -923,6 +947,25 @@ export default function GuidedLaunchPage() {
     return (
         <div className="min-h-screen bg-background text-foreground">
             <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8 md:px-6">
+
+                {/* Why the automatic prefill did not fill this form in. Shown before the form
+                    itself, because arriving at a blank wizard with no explanation reads as the
+                    product being broken rather than a model having refused. */}
+                {handoffWarnings.length > 0 && (
+                    <div
+                        role="alert"
+                        className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100"
+                    >
+                        <p className="mb-1 font-medium">
+                            {t("launch.prefillDegradedTitle", "La precompilazione automatica non è riuscita")}
+                        </p>
+                        <ul className="list-disc space-y-1 pl-5">
+                            {handoffWarnings.map((warning) => (
+                                <li key={warning}>{warning}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
 
                 {/* Header */}
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

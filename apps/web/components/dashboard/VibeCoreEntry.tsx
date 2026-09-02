@@ -627,6 +627,10 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 }
                 return null;
             });
+            const serverWarningsForHandoff = [
+                ...(classification?.warnings ?? []),
+                ...(prefillResult?.warnings ?? []),
+            ].filter((w, i, a) => a.indexOf(w) === i);
             if (prefillResult?.warnings?.length) {
                 setServerWarnings((prev) => [...new Set([...prev, ...prefillResult.warnings!])]);
             }
@@ -655,6 +659,22 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     );
                 } catch {
                     // sessionStorage unavailable — launch page falls back to manual wizard
+                }
+            }
+
+            // Hand the warnings to the launch page the same way the draft is handed over.
+            // Without this they die here: they are set into state and this component navigates away
+            // in the same tick, so the banner that renders them never gets shown. A prefill that
+            // failed then looks identical to one that was never attempted — the user lands on the
+            // manual form with no idea the model refused.
+            if (serverWarningsForHandoff.length > 0) {
+                try {
+                    sessionStorage.setItem(
+                        `guided_warnings_${projectId}`,
+                        JSON.stringify(serverWarningsForHandoff),
+                    );
+                } catch {
+                    // sessionStorage unavailable — the warning is lost, which is the status quo ante
                 }
             }
 
