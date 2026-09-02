@@ -70,6 +70,32 @@ be finishable by a faster model given everything the first one worked out.
 conflates genuine failures with drafts nobody launched, so it is an upper bound rather than a failure
 count. But it is the shape of what the user sees: a list where most entries are not things they have.
 
+## 3bis. It must be additive — it reuses the flow, it does not add one
+
+The strongest constraint on this feature, and the one that decides its shape: **a recovery is a
+project-mode generation with an injected prompt.** Nothing about it is new machinery.
+
+The workspace already knows how to take a prompt, a model and a conversation and produce an artifact.
+A recovery hands it the original brief plus the partial answer and the reasoning, with whatever model
+the user picked. So it enters `/llm/chat-preview` like any other turn, is journalled by the row that
+route already writes, joins the `WorkSession` that already exists, and lands in the conversation the
+project already has.
+
+What that buys: the certification is not re-implemented. The resumed call is traced, costed and
+correlated by the same code that traces every other call, and the inspector will show it without
+being taught anything new.
+
+What it needs beyond that is small:
+
+- **one flag** marking that this generation was resumed from a failed one, and naming the row it
+  resumed from. Enough to answer "why is there a second generation here" in the history, and nothing
+  more;
+- **the modal**, on the Zero Effort path only, offering retry-with-this-model, retry-with-another
+  (the existing selector), or discard;
+- **discard deleting the pending project**, so a failure does not leave a dead entry in the dashboard.
+
+Anything larger than that is a sign the feature has drifted away from reusing the existing flow.
+
 ## 4. What has to be decided before building it
 
 **Is a resumed run the same session or a new one?** It continues one intent, which argues for the
