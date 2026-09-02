@@ -1066,6 +1066,9 @@
       "truncated": "TRUNCATED",
       "noGeneration": "This session has no generation yet.",
       "noActivity": "This session has nothing to show yet."
+    },
+    "recovery": {
+      "resumeLoaded": "Context recovered from the interrupted generation: the brief, the partial answer and the model's reasoning. Send to continue from there."
     }
   },
   "aiUsagePanel": {
@@ -1100,5 +1103,22 @@
     "technicalSummarySubtitle": "Useful for admin/support review without opening raw logs",
     "requestId": "Request ID",
     "imageSize": "Image size"
+  },
+  "recovery": {
+    "title": "The generation stopped",
+    "body": "There are {{tokens}} tokens of work already done — a partial result and the model's reasoning. You can resume from there instead of starting over.",
+    "failedModel": "Model that stopped",
+    "reasoningKept": "Reasoning kept",
+    "partialKept": "Partial answer kept",
+    "pickModel": "Retry with a different model",
+    "pickModelHint": "A faster model can finish what the first one left half-done. The prompt, the brief, the attachments and the interrupted reasoning come with you.",
+    "resume": "Resume in project mode",
+    "resumeOther": "Resume in project mode with this model",
+    "retrying": "Resuming…",
+    "cancelAndDelete": "Cancel and delete the project",
+    "discardConfirmTitle": "Delete the project?",
+    "discardConfirmBody": "Removes the project, its prompt history, its recorded costs and its work session. This cannot be undone, and the already-paid work you were about to resume goes with it.",
+    "discardConfirm": "Yes, delete",
+    "backToChoice": "Go back"
   }
 }

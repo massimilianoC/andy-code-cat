@@ -1066,6 +1066,9 @@
       "truncated": "TRONCATO",
       "noGeneration": "Questa sessione non ha ancora una generazione.",
       "noActivity": "Questa sessione non ha ancora nulla da mostrare."
+    },
+    "recovery": {
+      "resumeLoaded": "Contesto recuperato dalla generazione interrotta: il brief, la risposta parziale e il ragionamento del modello. Invia per continuare da lì."
     }
   },
   "aiUsagePanel": {
@@ -1100,5 +1103,22 @@
     "technicalSummarySubtitle": "Utile per admin/support senza aprire i log grezzi",
     "requestId": "ID richiesta",
     "imageSize": "Dimensione immagine"
+  },
+  "recovery": {
+    "title": "La generazione si è interrotta",
+    "body": "Ci sono {{tokens}} token di lavoro già fatto — una risposta parziale e il ragionamento del modello. Puoi riprendere da lì invece di ricominciare.",
+    "failedModel": "Modello che si è fermato",
+    "reasoningKept": "Ragionamento conservato",
+    "partialKept": "Risposta parziale conservata",
+    "pickModel": "Riprova con un altro modello",
+    "pickModelHint": "Un modello più veloce può finire il lavoro che il primo ha lasciato a metà. Il prompt, il brief, gli allegati e il ragionamento interrotto vengono portati con te.",
+    "resume": "Riprendi in project mode",
+    "resumeOther": "Riprendi in project mode con questo modello",
+    "retrying": "Riprendo…",
+    "cancelAndDelete": "Annulla ed elimina il progetto",
+    "discardConfirmTitle": "Eliminare il progetto?",
+    "discardConfirmBody": "Rimuove il progetto, la sua cronologia dei prompt, i costi registrati e la sessione di lavoro. Non è reversibile. Il lavoro già pagato che stavi per riprendere va perso con lui.",
+    "discardConfirm": "Sì, elimina",
+    "backToChoice": "Torna indietro"
   }
 }

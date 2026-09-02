@@ -233,6 +233,34 @@ function WorkspacePageContent() {
     const [presetCatalog, setPresetCatalog] = useState<ProjectPreset[]>([]);
 
     const [prompt, setPrompt] = useState("");
+    /** True once a recovered prompt has been loaded, so the composer can say why it is prefilled. */
+    const [recoveryResumePending, setRecoveryResumePending] = useState(false);
+
+    /**
+     * A generation that broke in Vibe hands its recovered context over through sessionStorage
+     * (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3). Reading it here is what makes "riprendi in
+     * project mode" continue the model's own reasoning instead of restarting it — without this the
+     * navigation lands the user in the workspace and nothing happens, which is worse than not
+     * offering the recovery at all.
+     *
+     * The key is removed BEFORE the prompt is placed, so a page reload cannot replay a resumption
+     * the user already took.
+     */
+    useEffect(() => {
+        if (!projectId) return;
+        try {
+            const key = `recovery_resume_${projectId}`;
+            const resumePrompt = sessionStorage.getItem(key);
+            if (!resumePrompt) return;
+            sessionStorage.removeItem(key);
+            setPrompt(resumePrompt);
+            setRecoveryResumePending(true);
+        } catch {
+            // sessionStorage unavailable — the user still lands here with their project, and can
+            // retry by hand. Degraded, not broken.
+        }
+    }, [projectId]);
+
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
     const [activeOperation, setActiveOperation] = useState<"chat" | "prompt-optimizer" | null>(null);
     const [promptRestoreValue, setPromptRestoreValue] = useState<string | null>(null);
@@ -3465,6 +3493,28 @@ function WorkspacePageContent() {
                             if (files && files.length > 0) void handleChatFileAttach(files);
                         }}
                     />
+
+                    {/* A prefilled composer with no explanation is the same silence this programme
+                        removed elsewhere: the user would see text they did not type. Prefilled and
+                        not auto-sent on purpose — the resumption is theirs to fire, and a paid
+                        generation should not start itself on a navigation. */}
+                    {recoveryResumePending && (
+                        <div
+                            role="status"
+                            style={{
+                                margin: "0 0 0.5rem",
+                                padding: "0.45rem 0.7rem",
+                                fontSize: "0.75rem",
+                                borderRadius: "0.5rem",
+                                color: "#a78bfa",
+                                background: "rgba(167,139,250,0.08)",
+                                border: "1px solid rgba(167,139,250,0.25)",
+                            }}
+                        >
+                            {t("workspace.recovery.resumeLoaded",
+                                "Contesto recuperato dalla generazione interrotta: il brief, la risposta parziale e il ragionamento del modello. Invia per continuare da lì.")}
+                        </div>
+                    )}
 
                     {/* Main input row: textarea + vertical action buttons */}
                     <div className="workspace-input-row">
