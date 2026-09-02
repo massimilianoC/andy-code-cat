@@ -917,6 +917,7 @@
       "promptPanelUserMessage": "User message",
       "promptPanelAssistantMessage": "Assistant message (history)",
       "promptPanelNoGenYet": "No generation yet — preview of what will be sent on the next request.",
+      "promptPanelCurrentTurnTitle": "Current turn — full conversation sent",
       "stream": {
         "optimizing": "Optimizing prompt...",
         "analysingOptimizer": "Analysing optimizer...",
@@ -1055,6 +1056,16 @@
         "errorBadge": "Error",
         "errorHint": "No version was saved — the project is unchanged."
       }
+    },
+    "inspector": {
+      "loading": "Loading history…",
+      "empty": "No activity recorded for this project yet.",
+      "vibeTitle": "Vibe",
+      "zeroEffortTitle": "Zero Effort",
+      "generationTitle": "Generation",
+      "truncated": "TRUNCATED",
+      "noGeneration": "This session has no generation yet.",
+      "noActivity": "This session has nothing to show yet."
     }
   },
   "aiUsagePanel": {

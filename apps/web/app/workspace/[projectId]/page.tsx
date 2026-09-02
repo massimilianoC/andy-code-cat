@@ -14,12 +14,10 @@ import {
     getLlmProviders,
     logBackgroundTask,
     getLlmPromptConfig,
-    getLlmPromptPreview,
     setLlmPromptConfig,
     streamOptimizePrompt,
     getPromptUsageSummary,
     getPipelineRun,
-    type PromptPreviewResponse,
     listPreviewSnapshots,
     createPreviewSnapshot,
     activatePreviewSnapshot,
@@ -75,6 +73,7 @@ import { buildPreviewDoc } from "@/lib/preview/buildPreviewDoc";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
 import PromptLayersView from "@/components/PromptLayersView";
 import PromptTranscriptView from "@/components/PromptTranscriptView";
+import { SessionInspectorPanel } from "@/components/workspace/inspector/SessionInspectorPanel";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
 import { DidacticPanel } from "../../../components/didactic/DidacticPanel";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
@@ -345,8 +344,6 @@ function WorkspacePageContent() {
     const [promptTemplate, setPromptTemplate] = useState("");
     const [promptEnabled, setPromptEnabled] = useState(true);
     const [isSavingPrompt, setIsSavingPrompt] = useState(false);
-    const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
-    const [loadingPromptPreview, setLoadingPromptPreview] = useState(false);
     const [previewSnapshots, setPreviewSnapshots] = useState<PreviewSnapshot[]>([]);
     const [selectedBackendSnapshotId, setSelectedBackendSnapshotId] = useState<string | null>(null);
     const [loadingSnapshots, setLoadingSnapshots] = useState(false);
@@ -523,29 +520,6 @@ function WorkspacePageContent() {
             setIsSavingPrompt(false);
         }
     }, [token, projectId, promptTemplate, promptEnabled, promptConfigVersion]);
-
-    const loadPromptPreview = useCallback(async () => {
-        if (!token) return;
-        setLoadingPromptPreview(true);
-        try {
-            // Mirror exactly what the next chat-preview generation will send (provider, model,
-            // pipelineRole, capability) so the dry-run resolves the same model + Layer E template.
-            const data = await getLlmPromptPreview(token, projectId, {
-                provider: selectedProvider || undefined,
-                model: selectedModel || undefined,
-                pipelineRole: chatDefaults.pipelineRole,
-                capability: chatDefaults.capability,
-                uiLanguage: i18n.language?.split("-")[0] || undefined,
-            });
-            setPromptPreview(data);
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-            }
-        } finally {
-            setLoadingPromptPreview(false);
-        }
-    }, [token, projectId, selectedProvider, selectedModel, chatDefaults.pipelineRole, chatDefaults.capability, i18n.language]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const thinkingFlowRef = useRef<HTMLDivElement>(null);
@@ -840,13 +814,6 @@ function WorkspacePageContent() {
         setPreferredModelResolutionComplete(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [preferredModelResolutionComplete, providersCatalog]);
-
-    // Auto-load prompt preview when user opens the prompt tab
-    useEffect(() => {
-        if (previewTab === "prompt" && token && !promptPreview && !loadingPromptPreview) {
-            void loadPromptPreview();
-        }
-    }, [previewTab, token, promptPreview, loadingPromptPreview, loadPromptPreview]);
 
     // Track user scroll direction: only set isUserScrolled = true when scrolling UP,
     // reset to false when reaching the bottom. This prevents programmatic smooth-scroll
@@ -3222,30 +3189,7 @@ function WorkspacePageContent() {
             >
                 <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
                     {t("workspace.ui.promptPanelDesc")}
-                    {promptPreview && (
-                        <span style={{ color: "var(--accent, #7dd3fc)", marginLeft: "0.75rem" }}>
-                            {`~${promptPreview.tokenEstimate} token · ${promptPreview.provider}/${promptPreview.model}`}
-                        </span>
-                    )}
                 </span>
-                <button
-                    type="button"
-                    disabled={loadingPromptPreview}
-                    onClick={() => void loadPromptPreview()}
-                    style={{
-                        marginLeft: "auto",
-                        fontSize: "0.78rem",
-                        padding: "0.25rem 0.75rem",
-                        background: "transparent",
-                        color: "var(--accent, #7dd3fc)",
-                        border: "1px solid var(--accent, #7dd3fc)",
-                        borderRadius: "var(--radius)",
-                        cursor: loadingPromptPreview ? "wait" : "pointer",
-                        fontWeight: 600,
-                    }}
-                >
-                    {loadingPromptPreview ? t("workspace.ui.promptPanelLoading") : t("workspace.ui.promptPanelReload")}
-                </button>
             </div>
             <div
                 style={{
@@ -3254,16 +3198,15 @@ function WorkspacePageContent() {
                     padding: "1rem",
                 }}
             >
-                {!lastSentTrace?.effectiveSystemPrompt && !promptPreview && !loadingPromptPreview && (
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
-                        {t("workspace.ui.promptPanelHint")}
-                    </p>
-                )}
-                {!lastSentTrace?.effectiveSystemPrompt && loadingPromptPreview && (
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.ui.promptPanelLoading")}</p>
-                )}
-                {lastSentTrace?.effectiveSystemPrompt ? (
-                    <>
+                {/* Session Inspector (docs/specs/SESSION_INSPECTOR_SPEC.md): the project's Vibe /
+                    Zero Effort / Generation history, read from the work-sessions endpoints. */}
+                <SessionInspectorPanel projectId={projectId} />
+
+                {lastSentTrace?.effectiveSystemPrompt && (
+                    <div style={{ marginTop: "1.5rem", paddingTop: "1rem", borderTop: "1px solid #1f2a3c" }}>
+                        <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "0.5rem" }}>
+                            {t("workspace.ui.promptPanelCurrentTurnTitle", "Turno corrente — conversazione completa inviata")}
+                        </div>
                         <PromptLayersView
                             mode="sent"
                             fullText={lastSentTrace.effectiveSystemPrompt}
@@ -3283,20 +3226,8 @@ function WorkspacePageContent() {
                                 system: "System",
                             }}
                         />
-                    </>
-                ) : promptPreview ? (
-                    <>
-                        <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: "0.75rem" }}>
-                            {t("workspace.ui.promptPanelNoGenYet", "Nessuna generazione ancora — anteprima di cosa verrà inviato alla prossima request.")}
-                        </p>
-                        <PromptLayersView
-                            mode="dry-run"
-                            fullText={promptPreview.effectiveSystemPrompt}
-                            layers={promptPreview.layers}
-                            subtitle={`${promptPreview.provider}/${promptPreview.model}`}
-                        />
-                    </>
-                ) : null}
+                    </div>
+                )}
             </div>
         </div>
     );

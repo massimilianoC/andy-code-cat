@@ -917,6 +917,7 @@
       "promptPanelUserMessage": "Messaggio utente",
       "promptPanelAssistantMessage": "Messaggio assistant (cronologia)",
       "promptPanelNoGenYet": "Nessuna generazione ancora — anteprima di cosa verrà inviato alla prossima request.",
+      "promptPanelCurrentTurnTitle": "Turno corrente — conversazione completa inviata",
       "stream": {
         "optimizing": "Ottimizzazione prompt in corso...",
         "analysingOptimizer": "Analisi optimizer...",
@@ -1055,6 +1056,16 @@
         "errorBadge": "Errore",
         "errorHint": "Nessuna versione salvata — il progetto non è stato modificato."
       }
+    },
+    "inspector": {
+      "loading": "Caricamento cronologia…",
+      "empty": "Nessuna attività registrata per questo progetto.",
+      "vibeTitle": "Vibe",
+      "zeroEffortTitle": "Zero Effort",
+      "generationTitle": "Generation",
+      "truncated": "TRONCATO",
+      "noGeneration": "Questa sessione non ha ancora una generazione.",
+      "noActivity": "Questa sessione non ha ancora nulla da mostrare."
     }
   },
   "aiUsagePanel": {

@@ -12,6 +12,7 @@ import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/M
 import { MongoCostTransactionRepository } from "../../../infra/repositories/MongoCostTransactionRepository";
 import { ListWorkSessionSummaries } from "../../../application/use-cases/ListWorkSessionSummaries";
 import { GetWorkSessionDetail } from "../../../application/use-cases/GetWorkSessionDetail";
+import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 
 /**
  * Session Inspector — the two read endpoints (docs/specs/SESSION_INSPECTOR_SPEC.md §2).
@@ -57,6 +58,7 @@ export function createWorkSessionRoutes(): Router {
         pipelineRunRepository,
         promptExecutionLogRepository,
         costTransactionRepository,
+        new MongoPreviewSnapshotRepository(),
     );
 
     router.get(

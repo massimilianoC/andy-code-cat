@@ -17,6 +17,7 @@ import type { WorkSessionStatus, WorkSessionConfig } from "../../domain/entities
 import type { VibeAttachmentRef } from "../../domain/entities/VibeIntake";
 import type { PromptExecutionStatus, PromptExecutionMediaResolutionSummary } from "../../domain/entities/PromptExecutionLog";
 import type { CostRatesSnapshot, CostSourceRef, CostUnits } from "../../domain/entities/CostTransaction";
+import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
 // The wire shapes live in contracts — the web client renders them, so they cannot be declared here
 // too. See packages/contracts/src/workSession.ts.
 import type {
@@ -50,6 +51,12 @@ export class GetWorkSessionDetail {
         private readonly pipelineRunRepository: PipelineRunRepository,
         private readonly promptExecutionLogRepository: PromptExecutionLogRepository,
         private readonly costTransactionRepository: ICostTransactionRepository,
+        /**
+         * Optional so existing wiring keeps compiling. Without it the session still describes every
+         * prompt that ran and simply cannot say which artifact any of them produced — the inspector
+         * then shows the generation without its result, which is a gap rather than a failure.
+         */
+        private readonly previewSnapshotRepository?: PreviewSnapshotRepository,
     ) {}
 
     /**
@@ -69,6 +76,32 @@ export class GetWorkSessionDetail {
             this.promptExecutionLogRepository.listByWorkSession(workSessionId, userId),
             this.costTransactionRepository.findBySourceRef({ workSessionId }),
         ]);
+
+        // Snapshots point BACK at the journal row that produced them
+        // (preview_snapshots.metadata.promptExecutionId === prompt_execution_logs._id), because the
+        // generate route cannot know a snapshot id the client writes afterwards. So the join runs
+        // from the project's snapshots inward, filtered to this session's rows.
+        const rowIds = new Set(promptExecutionLogs.map((row) => row.id));
+        const snapshots = this.previewSnapshotRepository
+            ? await this.previewSnapshotRepository.listByProject(projectId).catch(() => [])
+            : [];
+        const artifacts = snapshots
+            .map((snap) => {
+                const producedBy = (snap.metadata as { promptExecutionId?: string } | undefined)?.promptExecutionId;
+                if (!producedBy || !rowIds.has(producedBy)) return null;
+                return {
+                    snapshotId: snap.id,
+                    promptExecutionId: producedBy,
+                    isActive: Boolean(snap.isActive),
+                    // Sizes, not content: preview_snapshots owns the bytes, and a session detail
+                    // already carries several 50,000-character prompts.
+                    htmlChars: (snap.artifacts?.html ?? "").length,
+                    cssChars: (snap.artifacts?.css ?? "").length,
+                    jsChars: (snap.artifacts?.js ?? "").length,
+                    createdAt: new Date(snap.createdAt).toISOString(),
+                };
+            })
+            .filter((a): a is NonNullable<typeof a> => a !== null);
 
         const pipelineRuns = allRuns.filter((run) => run.workSessionId === workSessionId);
 
@@ -136,6 +169,7 @@ export class GetWorkSessionDetail {
                 errorMessage: log.errorMessage,
                 createdAt: log.createdAt.toISOString(),
             })),
+            artifacts,
             costTransactions: costTxs.map((tx) => ({
                 id: tx.id,
                 txId: tx.txId,

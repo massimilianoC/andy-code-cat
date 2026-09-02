@@ -212,6 +212,29 @@ export interface CostTransactionDetailDto {
     createdAt: string;
 }
 
+/**
+ * The artifact a generation produced — by reference, never by value.
+ *
+ * `preview_snapshots` owns the bytes and this does not restate them: the inspector needs to say
+ * "this prompt produced that artifact" and link to it, not carry 17,000 characters of HTML through
+ * a session detail that already holds several 50,000-character prompts.
+ *
+ * The join is `preview_snapshots.metadata.promptExecutionId === prompt_execution_logs._id`, which is
+ * the direction the link naturally runs: the generate route cannot know a snapshot id because the
+ * client writes the snapshot afterwards, so the reference belongs to the snapshot.
+ */
+export interface SessionArtifactRefDto {
+    snapshotId: string;
+    /** The journal row whose reply became this artifact. */
+    promptExecutionId: string;
+    isActive: boolean;
+    /** Sizes rather than content, so the panel can show weight without downloading it. */
+    htmlChars: number;
+    cssChars: number;
+    jsChars: number;
+    createdAt: string;
+}
+
 export interface WorkSessionDetailDto {
     id: string;
     projectId?: string;
@@ -226,6 +249,8 @@ export interface WorkSessionDetailDto {
     pipelineRuns: PipelineRunDetailDto[];
     promptExecutionLogs: PromptExecutionLogDetailDto[];
     costTransactions: CostTransactionDetailDto[];
+    /** Artifacts produced by this session's generate calls, by reference. */
+    artifacts: SessionArtifactRefDto[];
 }
 
 export interface WorkSessionSummaryListResponse {
