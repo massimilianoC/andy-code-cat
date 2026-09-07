@@ -526,14 +526,26 @@ export class OptimizeUserPrompt {
             // operator looking for a configuration problem that is not there. The user picked a
             // model the catalog does not offer; say that, and say which.
             if (decision.blocked) {
-                throw new HttpError(
-                    `Prompt optimization blocked: ${decision.blocked.reason}`,
+                // lockedProviderId/lockedModelId follow the convention the strict-dispatch throw
+                // sites already use, so `extractLockedModelFields` can record what was actually
+                // targeted. Without them persistFailureLog falls back to the hardcoded
+                // FALLBACK_PROVIDER/FALLBACK_MODEL constants and the journal claims the call aimed
+                // at siliconflow/MiniMax-M3 — a model nobody named — which is precisely the
+                // corruption that helper exists to prevent.
+                throw Object.assign(
+                    new HttpError(
+                        `Prompt optimization blocked: ${decision.blocked.reason}`,
+                        {
+                            statusCode: 409,
+                            code: "SELECTED_MODEL_UNAVAILABLE",
+                            userMessage: `Il modello selezionato (${input.provider ?? "?"}/${requestedModel ?? "?"}) non è attivo nel catalogo: `
+                                + "attivalo dal pannello admin o scegline un altro dal selettore.",
+                            details: { blockedCode: decision.blocked.code, blockedReason: decision.blocked.reason },
+                        },
+                    ),
                     {
-                        statusCode: 409,
-                        code: "SELECTED_MODEL_UNAVAILABLE",
-                        userMessage: `Il modello selezionato (${input.provider ?? "?"}/${requestedModel ?? "?"}) non è attivo nel catalogo: `
-                            + "attivalo dal pannello admin o scegline un altro dal selettore.",
-                        details: { blockedCode: decision.blocked.code, blockedReason: decision.blocked.reason },
+                        lockedProviderId: decision.requested.provider ?? input.provider,
+                        lockedModelId: decision.requested.model ?? requestedModel,
                     },
                 );
             }

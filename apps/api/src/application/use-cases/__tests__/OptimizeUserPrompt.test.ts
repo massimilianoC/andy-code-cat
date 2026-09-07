@@ -310,6 +310,28 @@ describe("OptimizeUserPrompt", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it("model resolution: the refusal journals the model that was actually asked for", async () => {
+        // persistFailureLog falls back to the hardcoded FALLBACK_PROVIDER/FALLBACK_MODEL when no
+        // execution context exists yet, so a throw that does not carry the attempted target makes
+        // the journal claim the call aimed at siliconflow/MiniMax-M3 — a model nobody named.
+        vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+        const { useCase, promptExecutionLogRepository } = createUseCase();
+
+        await expect(useCase.execute({
+            projectId: "project-1",
+            userId: "user-1",
+            rawPrompt: "Landing page",
+            provider: "openrouter",
+            model: "definitely/not-real",
+        })).rejects.toMatchObject({ code: "SELECTED_MODEL_UNAVAILABLE" });
+
+        const logged = (promptExecutionLogRepository.create as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)?.[0] as
+            { provider?: string; model?: string; status?: string } | undefined;
+        expect(logged?.status).toBe("failed");
+        expect(logged?.provider).toBe("openrouter");
+        expect(logged?.model).toBe("definitely/not-real");
+    });
+
     it("model resolution: no override falls through to the active dialogue-role default model", async () => {
         const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
             choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
