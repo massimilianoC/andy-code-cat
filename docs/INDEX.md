@@ -51,6 +51,7 @@ Read in this order before making changes:
 
 | Document | Description |
 | --- | --- |
+| [docs/handoff/SESSION_RESUME.md](handoff/SESSION_RESUME.md) | **Restore point — read first when picking up cold.** Current branch state, findings not to re-derive, what is verified live and what is not |
 | [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) | Primary entry point for coding agents |
 | [docs/agents/LLM_PROVIDER_HANDOFF_RECAP.md](agents/LLM_PROVIDER_HANDOFF_RECAP.md) | LLM provider and chat-preview implementation notes |
 | [docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md](agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md) | Layer ownership map and collision-prevention rules for parallel agents |

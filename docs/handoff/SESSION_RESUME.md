@@ -1,19 +1,21 @@
-# Session Resume — prompt certification, and what comes next
+# Session Resume — the model you choose is the model that runs
 
 **Read this first if you are picking up cold.** Everything here was established by reading code or
-running things; where a number appears, it came from a measurement.
+running things against the live stack; where a number appears, it came from a measurement.
 
-Branch: `feat/parallel-section-generation`, off `develop`. **Nothing is pushed** — see §6.
+Branch: `feat/parallel-section-generation`, off `develop`. **Nothing is pushed** — see §7.
 
 ---
 
 ## 1. The thread, in one paragraph
 
-A ten-section deck generated with GLM-5.3 took 10m 29s, stopped at exactly 32,768 completion tokens —
-a provider cap, not a model finishing — and was journalled as `succeeded` while the deck was visibly
-incomplete. Chasing that produced two lines of work: make the pipeline record what it actually does,
-and find out whether splitting generations makes them faster. The first is **done and verified
-against a live run**. The second turned out to depend entirely on *which* stage you split.
+"Didactic mode says fetch failed" turned out to be an expired TLS certificate on the configured
+provider. Fixing the provider surfaced the real problem underneath: the didactic generation was
+running on a model nobody had chosen, priced at a flat rate while the provider had reported the
+actual cost, and the reason it picked that model was that **the superadmin catalog was silently
+destroying the operator's configuration on every read**. Chasing that one thread closed nine
+defects, four of them user-visible, and produced one architectural rule that now governs the whole
+pipeline: *the model the user selects is the model every user-initiated request uses.*
 
 ---
 
@@ -21,103 +23,142 @@ against a live run**. The second turned out to depend entirely on *which* stage 
 
 | Finding | Evidence |
 |---|---|
-| The failing run: 32,768 completion tokens, 629,546 ms, `succeeded`, 13,938 prompt tokens | `prompt_execution_logs` doc `f51ee098…` |
-| Its 47,021-char system prompt by layer | A 7,667 · L 370 · B 1,532 · S 5,251 · C 11,915 · D 3,262 · E 12,274 · **P 4,750** |
-| Layer P spends 4,750 chars asking for brevity, and the run hit the cap anyway | prose asks, structure enforces |
-| **The prompt inspector cannot lie on `generate`** | `promptTraceParity.ts:15` throws unless the wire matches what it shows, layer spans included |
-| `enable_thinking:false` is honoured by SiliconFlow and ignored by OpenRouter | so every OpenRouter measurement is the fan-out *without* the reasoning split |
-| Artifact fan-out **works**: 8.7× faster, 18% cheaper, 7/7 criteria | `PARALLEL_SECTION_GENERATION_SPEC.md` §9bis |
-| Prefill fan-out **does not**: slower, 2-5× costlier, fields lost | `PREFILL_PARALLELISATION_FINDINGS.md` |
-| The same monolith call measured **104.5 s and 298.2 s** on identical input | why N calls exposed to the maximum is a bad trade |
-| The artifact exists in three places and **they disagree** by 2,181 chars | `SESSION_REDUNDANCY_ANALYSIS.md` §2 — the only live correctness defect |
-| 98 of 156 projects carry no snapshot at all | upper bound on failures; includes never-launched drafts |
+| SiliconFlow's cert for `api.siliconflow.com` expired **Sep 7 10:12:23 GMT**; first failure 10:51:27 | `tls.connect` from inside the api container |
+| It has since been replaced (valid to Dec 2026) but **completions still 402** | `{"code":30001,"message":"Sorry, your account balance is insufficient"}` — `/v1/models` is free and returns 200, which is what makes this look fixed |
+| `api.siliconflow.cn` is **not** a fallback | same key → `401 "Api key is invalid"`; the key is region-bound |
+| **Hydration destroyed 6 of 7 role defaults on every read** | Mongo said 7 role defaults, `GET /v1/admin/llm-registry` returned 1, both `quality_check` |
+| The superadmin activation toggle **never survived a round trip** | write landed (`isActive=true` in Mongo), same response and every later GET said `false` |
+| Cause: the live-model cache is keyed `provider\|baseUrl\|hasAuth` — curated state is not in the key | three consecutive GETs: 57/34/46 ms vs ~900 ms for real discovery |
+| **Setting a model as default was a silent no-op** | `normalizeModels` kept the FIRST `isDefault`; `upsertModel` appends the edited record LAST |
+| `LLM_DEFAULT_MAX_COMPLETION_TOKENS=167000` breaks any model with a smaller window | `400 maximum context length is 128000 … you requested about 167515 (167000 in the output)` |
+| Didactic generation really costs ~EUR 0.022 and uses 4,348–6,076 completion tokens | measured runs; the 16,000 ceiling is set from these |
+| The optimizer honoured a model override **without ever checking catalog membership** | `gateOverrideOnOpenAiCompatible` checked only `apiType`; its `false` branch was `Boolean(requestedModel)` — no verification in either branch |
+| OpenRouter dropped `minimax/minimax-m3:free` mid-session (430 → 428 live models) | not a regression; hydration correctly stops presenting it as active |
+| `sessions` and `execution_logs` must **not** be cascaded on project delete | auth state, and a 90-day audit trail documented to survive the actions it records |
 
 ---
 
-## 3. What is built and verified
+## 3. What is fixed and verified
 
-The journal now records every LLM call in the product: both rendered prompts, the raw reply before
-parsing, the endpoint actually called, `finishReason`, cost, and the session it belongs to.
+Thirteen commits. Suite: **97 files / 737 tests**, tsc clean on api, web and contracts. The local
+deploy stack runs this code.
 
-**Certificate passed live** (`SESSION_RECONSTRUCTION_CERTIFICATE.md`): session
-`931a3cc0-6690-4be9-9efa-888f87837949`, all eight questions answered from one `workSessionId`, six
-collections joined by that id. Two provider failures recorded *with the provider's own words*, which
-is precisely what used to vanish.
+### The catalog now tells the truth — `372c476`, `d776bff`
+Hydration keeps one default **per role**, matching what storage has always written; the three
+mutating admin routes clear the live cache and re-read with `forceRefresh`. The duplicate-default
+tie-break is last-wins, so the operator's own choice survives the write that made it.
 
-Key commits: `6a862f4` (Zero Effort journalling) · `e1a7d0b` `08fbc13` (WorkSession as a certificate,
-VibeIntake, ZeroEffortFormProposal) · `e2f569e` (session opened and carried by request) · `18fb11f`
-(the last five silent call sites, four parallel agents) · `58aa21a` (certificate holes closed) ·
-`7af5709` (one intent one session) · `bfded0f` (live verification) · `1d22600` (interrupted runs keep
-their partial answer and reasoning) · `2a13370` (generate names the documents that shaped it) ·
-`5245029` (dashboard copies the real prompt, not the template).
+Verified live with the same script before and after:
 
-Suite: **687 passing**, tsc clean on api and web. The local stack runs this code.
+```
+before   openrouter  isDefault=1 [quality_check]   toggle: false / false
+after    openrouter  isDefault=3 [quality_check,dialogue,vision]   toggle: true / true
+         openrouter dialogue default -> openai/gpt-4o-mini
+```
 
----
+### One costing model, and Didactic follows it — `f3685e1`
+`resolveLlmCallCost` owns the three pricing steps that were hand-written at six call sites. Didactic
+skipped steps 1 and 2 entirely: it never read `usage.cost`, billed at flat rate, recorded
+`providerCostUsd: 0`, and returned a hardcoded `{ providerCostEur: 0, totalEur: 0 }` to the panel.
 
-## 4. Both features are built, deployed and smoke-tested
+```
+before   source=flat-rate  providerCostUsd=0        EUR 0.024585   panel showed 0
+after    source=provider   providerCostUsd=0.0220248 EUR 0.022289  journal = ledger = panel
+```
 
-The local stack runs this code. api tsc clean · **695 api tests** · **62 web tests** · web tsc clean.
+### The selected model is the model that runs — `372c476`, `efb3b32`, `2694c75`
+An audit of all seven model-resolution call sites found the rule already implemented in four —
+`VibeClassify`, `VibePrefill`, `ResolvePipelineModelLock` share the idiom
+`policy: (chose) ? "strict" : "legacy"`, and `ResolvePromptExecution` verifies against the catalog.
+Didactic and the optimizer were the two exceptions; both now refuse an unresolvable choice with
+`409 SELECTED_MODEL_UNAVAILABLE` naming the model, rather than substituting in silence.
 
-### Session inspector — DONE
-Three collapsible blocks in the workspace Prompt view, rendered only when the session produced them,
-Generation open by default. System prompt split by its existing `PF_LAYER` markers, with a test
-proving the segments reconstruct the original string exactly. Truncation visible in the collapsed
-row. No prompt bodies fetched until a block is expanded.
+The rule, for every future change: **a user-initiated request uses the user's current selection.
+Only background tasks the superadmin configures may differ.**
 
-Backed by `GET /v1/projects/:id/work-sessions` (list, no bodies) and `…/:workSessionId` (detail).
-Verified live: list returns the session with its stages and cost, detail returns intake, proposal,
-run, four journal rows with their prompts, and cost rows. A session belonging to another user
-returns nothing — ownership scoping confirmed by querying one.
+### Evidence instead of verdicts — `0118858`, `88f7352`
+`describeGeneratedJavaScriptSyntaxError` reports line, column and the offending source line.
+`describeError` walks the cause chain, so `fetch failed` became
+`fetch failed <- CERT_HAS_EXPIRED: certificate has expired` — the answer was one dereference away
+at every logging site.
 
-`WorkSessionDetailDto.artifacts` carries artifacts **by reference** (snapshot id, the journal row
-that produced it, sizes) — `preview_snapshots` owns the bytes.
+### Project deletion stops leaving orphans — `40baf50`
+Nine collections added, files on disk and MinIO removed through the existing single-item primitives.
+`project_assets` excludes `scope: user|global` so the reusable library survives.
 
-### Interrupted-run recovery — DONE
-Two loss points, one destination. A prefill that breaks offers a modal that carries the whole
-recovered context into project mode; the workspace loads it into the composer, removing the storage
-key first so a reload cannot replay it. Prefilled and deliberately not auto-sent.
-
-`VibePrefill` now keeps its reasoning trace — it counted reasoning tokens and threw the text away.
-
-Cancelling the modal deletes the project, so a failure never survives as a dashboard entry. Escape
-and the backdrop do not dismiss: with no "later", dismissing would have to mean one of two acting
-choices.
-
-### The SSOT audit before deploying found one violation, now fixed
-Two project deletions had appeared. `DeleteProject` removed only the project row and its moodboard,
-orphaning the journal, costs, conversations, sessions and runs on **every dashboard delete**;
-`DiscardPendingProject` did the thorough version beside it. Consolidated: one deletion, fully wired
-in both routes, with discard keeping only the guard and the counts.
-
-Verified single-owner: prompt composition + parity (`promptTraceParity` ← `llmRoutes`), journal
-writing (one repository), and the recovery makes no LLM call of its own.
-
-### Stale defect, corrected
-"The assistant reply is missing from the sent-history panel" was already fixed by `bf3fb10`
-(26 Aug) — `PromptTranscriptView:223-224` renders assistant turns with their own label and accent.
-It was almost certainly being observed on a 27-hour-old container image.
-
-### Still open
-The accordion fragmenting a large code block — reported twice, never reproduced, component never
-located. Do not fix it blind. WP2 (cost as one referential record, which also fixes the header cost
-lagging one refresh). The `vibe_intakes.attachments[] → project_assets` link.
-
-## 5. Tools that exist
-
-- `apps/api/src/scripts/session-export.js` — dumps a whole session to one JSON, and reports how much
-  of it the session id alone can reach. That coverage number found two real gaps.
-- `apps/api/src/scripts/fanout-probe.ts` — section fan-out against a live provider, `FANOUT_DRY_RUN=1`
-  prints the exact prompts without spending.
-- `apps/api/src/scripts/prefill-fanout-probe.ts` — replays a recorded prefill and compares strategies.
+### Didactic tracing and parsing — `ded0994`, `6579006`, `14926bd`
+`pipelineRunId` carried end to end; `parseDidacticJson` uses the shared five-strategy repair chain
+(the gap was **candidate selection**, not repair capability: prose before the JSON plus a truncation
+made both old candidates `null`); the completion budget is clamped to 16,000.
 
 ---
 
-## 6. Blockers, none of them code
+## 4. Behaviour changes an operator will notice
+
+1. **The dialogue default is now in force.** `openai/gpt-4o-mini` for openrouter — what was
+   configured in Mongo all along. Change it from the admin console; the toggle works now.
+2. **A model that is not in the catalog stops the request** with a 409 instead of quietly running
+   something else. This is on the busiest path (auto-optimize runs on every message).
+3. The admin editor shows a "Default for {role}" badge and disables the toggle when unchecking it
+   would only be reverted.
+
+---
+
+## 5. Verified against the live stack, and what was not
+
+Verified: the admin round trip (write → read → render), didactic generation end to end on a real
+provider, the cost row matching journal and ledger, the optimizer accepting a valid selection
+(`200`) and refusing an invalid one (`409`, no dispatch), and the failure row naming the model
+actually requested.
+
+**Not verified live:** `pipelineRunId`. The wiring compiles and is complete, but no test exercises
+it — the e2e specs call the API directly without it. It is only observable by using Didactic mode
+from the UI after entering through a pipeline handoff.
+
+A coherence pass checked three regression risks and found the first two clean (no spurious 409;
+the role-less `find(isActive && isDefault)` consumers still resolve the same model as before) and
+`normalizeModels` running only on writes. It found one real defect — a refused optimization
+journalling the hardcoded fallback constants instead of the model asked for — fixed in `2694c75`.
+**That defect was found by reading rows a live check produced, not by a failing test.**
+
+---
+
+## 6. Still open
+
+- `preview_snapshots` thumbnails are not deleted with the snapshot (pre-existing, not made worse).
+- `LLM_DEFAULT_MAX_COMPLETION_TOKENS=167000` is still read raw by `llmMessageBuilder.ts:56`.
+  `.env.docker` was deliberately not modified — that is an operator decision.
+- The accordion fragmenting a large code block: reported twice, never reproduced, component never
+  located. **Do not fix it blind.**
+- WP2: cost as one referential record (also fixes the header cost lagging one refresh).
+- `vibe_intakes.attachments[] → project_assets` link.
+- Auto-optimize does not re-enable after the first artifact when the snapshot was refused:
+  `page.tsx:2713` gates `restoreAutoOptimizeAfterAutomatedArtifact()` on `previewVersionSaved`.
+
+---
+
+## 7. Environment and blockers
 
 - **Nothing is pushed.** `git push` cannot authenticate from the agent shell (Git Credential Manager
-  wants a browser, no `gh`, no `GITHUB_TOKEN`). Also pending from earlier:
+  wants a browser; no `gh`, no `GITHUB_TOKEN`). Also pending:
   `fix/model-selection-ssot-consolidation`, `docs/gitflow-template-hardening`.
-- **SiliconFlow returns 402**, so the reasoning-split half of the artifact fan-out is still unmeasured
-  — it is the only provider that honours `enable_thinking:false`.
-- `.env.docker` holds `OPEN_ROUTER_API_KEY` (underscore spelling); that is how every live probe ran.
+- **SiliconFlow is unusable** (402, no balance). OpenRouter is the only working provider; every user
+  in the database still has `llmPreferences.defaultProvider: siliconflow` except the two moved this
+  session (`superadmin@andy-code-cat.local`, `bot@andy-code-cat-e2e.invalid`).
+- `.env.docker` holds `OPEN_ROUTER_API_KEY` (underscore spelling).
+- A **test superadmin** was left in the local database: `sa-e2e@andy-code-cat.local`, created
+  through the real `/v1/auth/register` flow and promoted by setting `roles` only. Delete it when it
+  is no longer useful.
+- Local stack is the **deploy** compose file. Update services with
+  `docker compose -f docker-compose.deploy.yml up -d --no-deps api web`, never the dev file.
+
+## 8. Tests worth running before a release
+
+```bash
+cd apps/api && npx vitest run                                  # 97 files / 737 tests, ~11s
+npx playwright test tests/e2e/didactic-knowledge.spec.ts       # real provider, ~25s
+npx playwright test tests/e2e/release-smoke-three-modes.spec.ts # VIBE / ZERO EFFORT / PROJECT
+```
+
+The e2e specs spend real money and use the bot account, which now points at OpenRouter. Half of
+`tests/config/authorized-test-models.json` lists SiliconFlow models that cannot run today.
