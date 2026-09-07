@@ -89,6 +89,7 @@ const noopKnowledgeRepo: DidacticArtifactKnowledgeRepository = {
     findByProjectAndSnapshot: async () => null,
     upsert: async (k) => k,
     deleteBySnapshot: async () => undefined,
+    deleteByProject: async () => 0,
 };
 
 function sseChunk(obj: unknown): string {

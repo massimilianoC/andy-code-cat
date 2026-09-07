@@ -21,4 +21,7 @@ export interface VibeIntakeRepository {
      * sessions it took.
      */
     listByProject(projectId: string, userId: string): Promise<VibeIntakeRecord[]>;
+
+    /** Delete-project cascade — removes every intake recorded for a project. Returns the number removed. */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
 }

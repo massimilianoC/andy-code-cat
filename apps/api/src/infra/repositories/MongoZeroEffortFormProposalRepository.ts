@@ -87,4 +87,10 @@ export class MongoZeroEffortFormProposalRepository implements ZeroEffortFormProp
             .toArray();
         return docs.map(toEntity);
     }
+
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId, userId } as Filter<ZeroEffortFormProposalDocument>);
+        return result.deletedCount;
+    }
 }

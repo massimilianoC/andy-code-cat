@@ -71,4 +71,10 @@ export class MongoVibeIntakeRepository implements VibeIntakeRepository {
             .toArray();
         return docs.map(toEntity);
     }
+
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId, userId } as Filter<VibeIntakeDocument>);
+        return result.deletedCount;
+    }
 }

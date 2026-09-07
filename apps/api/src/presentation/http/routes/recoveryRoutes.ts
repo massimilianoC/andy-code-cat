@@ -11,6 +11,15 @@ import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWor
 import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
 import { MongoCostTransactionRepository } from "../../../infra/repositories/MongoCostTransactionRepository";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
+import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
+import { MongoVibeIntakeRepository } from "../../../infra/repositories/MongoVibeIntakeRepository";
+import { MongoPublishHistoryRepository } from "../../../infra/repositories/MongoPublishHistoryRepository";
+import { MongoWysiwygEditSessionRepository } from "../../../infra/repositories/MongoWysiwygEditSessionRepository";
+import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositories/MongoZeroEffortFormProposalRepository";
+import { MongoDidacticArtifactKnowledgeRepository } from "../../../infra/repositories/MongoDidacticArtifactKnowledgeRepository";
+import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
+import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
+import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { GetZeroEffortRecoveryStatus } from "../../../application/use-cases/GetZeroEffortRecoveryStatus";
 import { DiscardPendingProject } from "../../../application/use-cases/DiscardPendingProject";
 import { DeleteProject } from "../../../application/use-cases/DeleteProject";
@@ -62,6 +71,16 @@ export function createRecoveryRoutes(): Router {
             workSessionRepository,
             pipelineRunRepository,
             costTransactionRepository,
+            snapshotRepository,
+            new MongoMediaResolutionTraceRepository(),
+            new MongoVibeIntakeRepository(),
+            new MongoPublishHistoryRepository(),
+            new MongoWysiwygEditSessionRepository(),
+            new MongoZeroEffortFormProposalRepository(),
+            new MongoDidacticArtifactKnowledgeRepository(),
+            new MongoProjectAssetRepository(),
+            new MongoSiteDeploymentRepository(),
+            getFileStorage(),
         ),
     );
 

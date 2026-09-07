@@ -15,6 +15,14 @@ import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoP
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoCostTransactionRepository } from "../../../infra/repositories/MongoCostTransactionRepository";
+import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
+import { MongoVibeIntakeRepository } from "../../../infra/repositories/MongoVibeIntakeRepository";
+import { MongoPublishHistoryRepository } from "../../../infra/repositories/MongoPublishHistoryRepository";
+import { MongoWysiwygEditSessionRepository } from "../../../infra/repositories/MongoWysiwygEditSessionRepository";
+import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositories/MongoZeroEffortFormProposalRepository";
+import { MongoDidacticArtifactKnowledgeRepository } from "../../../infra/repositories/MongoDidacticArtifactKnowledgeRepository";
+import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
+import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { DeleteProject } from "../../../application/use-cases/DeleteProject";
 import { DuplicateProject } from "../../../application/use-cases/DuplicateProject";
 import { GetProjectMoodboard } from "../../../application/use-cases/GetProjectMoodboard";
@@ -93,7 +101,10 @@ export function createProjectRoutes(): Router {
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
     // Fully wired: a project deleted from the dashboard must not leave its journal, costs,
-    // conversations, sessions and runs behind pointing at an id nothing resolves.
+    // conversations, sessions, runs, snapshots, media traces, intakes, publish history, WYSIWYG
+    // sessions, form proposals, didactic knowledge, assets or deployments behind pointing at an id
+    // nothing resolves. See DeleteProject's own doc comment for what is deliberately excluded
+    // (auth sessions, execution_logs) and why.
     const deleteProject = new DeleteProject(
         projectRepository,
         moodboardRepository,
@@ -102,6 +113,16 @@ export function createProjectRoutes(): Router {
         new MongoWorkSessionRepository(),
         new MongoPipelineRunRepository(),
         new MongoCostTransactionRepository(),
+        previewSnapshotRepository,
+        new MongoMediaResolutionTraceRepository(),
+        new MongoVibeIntakeRepository(),
+        new MongoPublishHistoryRepository(),
+        new MongoWysiwygEditSessionRepository(),
+        new MongoZeroEffortFormProposalRepository(),
+        new MongoDidacticArtifactKnowledgeRepository(),
+        new MongoProjectAssetRepository(),
+        siteDeploymentRepository,
+        getFileStorage(),
     );
     const duplicateProject = new DuplicateProject(projectRepository, promptConfigRepository);
     const getProjectMoodboard = new GetProjectMoodboard(moodboardRepository, projectRepository);

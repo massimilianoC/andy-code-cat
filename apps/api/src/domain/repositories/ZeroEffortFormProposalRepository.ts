@@ -20,4 +20,7 @@ export interface ZeroEffortFormProposalRepository {
     ): Promise<void>;
 
     listByWorkSession(workSessionId: string, userId: string): Promise<ZeroEffortFormProposalRecord[]>;
+
+    /** Delete-project cascade — removes every proposal recorded for a project. Returns the number removed. */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
 }

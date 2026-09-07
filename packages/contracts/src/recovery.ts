@@ -44,6 +44,15 @@ export const discardPendingProjectResultSchema = z.object({
         conversations: z.number().nonnegative(),
         workSessions: z.number().nonnegative(),
         pipelineRuns: z.number().nonnegative(),
+        previewSnapshots: z.number().nonnegative(),
+        mediaResolutionTraces: z.number().nonnegative(),
+        vibeIntakes: z.number().nonnegative(),
+        publishHistoryEntries: z.number().nonnegative(),
+        wysiwygEditSessions: z.number().nonnegative(),
+        zeroEffortFormProposals: z.number().nonnegative(),
+        didacticArtifactKnowledge: z.number().nonnegative(),
+        projectAssets: z.number().nonnegative(),
+        siteDeployments: z.number().nonnegative(),
     }),
 });
 export type DiscardPendingProjectResult = z.infer<typeof discardPendingProjectResultSchema>;
