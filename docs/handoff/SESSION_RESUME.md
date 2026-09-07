@@ -109,7 +109,14 @@ made both old candidates `null`); the completion budget is clamped to 16,000.
 Verified: the admin round trip (write → read → render), didactic generation end to end on a real
 provider, the cost row matching journal and ledger, the optimizer accepting a valid selection
 (`200`) and refusing an invalid one (`409`, no dispatch), and the failure row naming the model
-actually requested.
+actually requested — `openrouter / definitely/not-real`, where it used to record
+`siliconflow / MiniMaxAI/MiniMax-M3`.
+
+One methodological note worth keeping: that last check first appeared to fail. The container image
+was sixteen minutes older than the commit, so the measurement was taken against code that did not
+contain the fix. **Compare `docker image inspect andy-code-cat-api --format '{{.Created}}'` against
+the commit timestamp before trusting any live verification here** — a background rebuild that has
+not landed looks exactly like a fix that does not work.
 
 **Not verified live:** `pipelineRunId`. The wiring compiles and is complete, but no test exercises
 it — the e2e specs call the API directly without it. It is only observable by using Didactic mode
