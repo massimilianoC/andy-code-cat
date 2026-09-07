@@ -25,6 +25,8 @@ interface DidacticAskTabProps {
     /** The model the user currently has selected in the workspace — inherited, never re-derived. */
     provider?: string;
     model?: string;
+    /** Correlation key — see the same prop on DidacticPanel. */
+    pipelineRunId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +200,7 @@ export function DidacticAskTab({
     onCostUpdated,
     provider,
     model,
+    pipelineRunId,
 }: DidacticAskTabProps) {
     const [question, setQuestion] = useState("");
     const [displayedAnswer, setDisplayedAnswer] = useState("");
@@ -253,6 +256,7 @@ export function DidacticAskTab({
                     uiLanguage: "it",
                     provider,
                     model,
+                    pipelineRunId,
                 },
                 (event) => {
                     if (event.type === "token") {

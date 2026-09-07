@@ -3982,6 +3982,7 @@ function WorkspacePageContent() {
                     onCostUpdated={refreshProjectDbCost}
                     provider={selectedProvider || undefined}
                     model={selectedModel || undefined}
+                    pipelineRunId={pipelineRunIdRef.current || undefined}
                 />
             )}</aside>
 

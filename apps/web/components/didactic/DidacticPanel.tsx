@@ -41,6 +41,13 @@ interface DidacticPanelProps {
      */
     provider?: string;
     model?: string;
+    /**
+     * Correlation key for the run this artifact came from, so the didactic call joins the same
+     * chain as the generation that produced what it is explaining
+     * (docs/specs/WORK_SESSION_TRACING_SPEC.md §3). Absent when the workspace was not entered
+     * through a pipeline handoff.
+     */
+    pipelineRunId?: string;
 }
 
 export function DidacticPanel({
@@ -53,6 +60,7 @@ export function DidacticPanel({
     onCostUpdated,
     provider,
     model,
+    pipelineRunId,
 }: DidacticPanelProps) {
     const [activeTab, setActiveTab] = useState<"analyze" | "quiz" | "ask">("analyze");
     const [statusDto, setStatusDto] = useState<DidacticKnowledgeStatusDto | null>(null);
@@ -100,7 +108,7 @@ export function DidacticPanel({
         );
 
         try {
-            const res = await generateDidacticKnowledge(token, projectId, { snapshotId, uiLanguage: "it", provider, model });
+            const res = await generateDidacticKnowledge(token, projectId, { snapshotId, uiLanguage: "it", provider, model, pipelineRunId });
             setStatusDto({ status: "ready", knowledge: res.knowledge });
             setActiveTab("analyze");
             onCostUpdated?.();
@@ -237,6 +245,7 @@ export function DidacticPanel({
                         onCostUpdated={onCostUpdated}
                         provider={provider}
                         model={model}
+                        pipelineRunId={pipelineRunId}
                     />
                 )}
             </div>

@@ -69,6 +69,9 @@ const knowledgeRepo: DidacticArtifactKnowledgeRepository = {
     findByProjectAndSnapshot: async () => null,
     upsert: async (k) => { saved = k; return k; },
     deleteBySnapshot: async () => undefined,
+    // Part of the repository contract since project deletion started cascading here; this test
+    // never exercises it.
+    deleteByProject: async () => 0,
 };
 
 function mkTopic(i: number): DidacticTopic {

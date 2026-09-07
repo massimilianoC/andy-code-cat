@@ -8,7 +8,6 @@ import { parseJsonWithRepairs } from "../llm/llmParser";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ExecutionLogger } from "../services/ExecutionLogger";
 import { ResourceType } from "../../domain/entities/CostTransaction";
-import { estimateCost } from "../llm/costPolicy";
 import type { DidacticArtifactKnowledge, DidacticTopic, DidacticQuiz } from "../../domain/entities/DidacticArtifactKnowledge";
 import type { DidacticArtifactKnowledgeRepository } from "../../domain/repositories/DidacticArtifactKnowledgeRepository";
 import type { PreviewSnapshot } from "../../domain/entities/PreviewSnapshot";
