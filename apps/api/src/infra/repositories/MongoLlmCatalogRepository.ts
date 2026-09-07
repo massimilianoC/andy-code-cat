@@ -38,16 +38,22 @@ function normalizeModels(models: LlmProviderCatalog["models"]): LlmProviderCatal
 
         if (indexes.length === 0) continue;
 
-        let defaultFound = false;
-        for (const { model, index } of indexes) {
-            if (model.isDefault && !defaultFound) {
-                defaultFound = true;
-                next[index] = { ...model, isFallback: false };
-                continue;
-            }
-
-            if (model.isDefault && defaultFound) {
-                next[index] = { ...model, isDefault: false, isFallback: true };
+        // When a write leaves more than one isDefault:true for this role, the LAST one in write
+        // order keeps it — not the first. upsertModel rebuilds this array by filtering the edited
+        // model out and appending the merged result last, so "first wins" meant the untouched
+        // pre-existing default always outranked the one an operator had just set: clicking
+        // "Set default" on a different model silently reverted on save, with no error and no
+        // visible sign anything had failed. "Last wins" makes the write's own intent the one that
+        // sticks, while a role that already had exactly one default (the steady-state case on
+        // every read) is unaffected — there is nothing to break the tie between.
+        const defaultIndexes = indexes.filter(({ model }) => model.isDefault);
+        const defaultFound = defaultIndexes.length > 0;
+        if (defaultFound) {
+            const keeperIndex = defaultIndexes[defaultIndexes.length - 1]!.index;
+            for (const { model, index } of defaultIndexes) {
+                next[index] = index === keeperIndex
+                    ? { ...model, isFallback: false }
+                    : { ...model, isDefault: false, isFallback: true };
             }
         }
 
