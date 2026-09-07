@@ -33,6 +33,27 @@ function sendSse(res: RequestWithContext["res"], payload: unknown) {
 }
 
 /**
+ * The completion budget for a didactic generation, clamped the way the chat preview clamps its own
+ * (`resolveChatPreviewMaxTokens` in llmRoutes.ts).
+ *
+ * `LLM_DEFAULT_MAX_COMPLETION_TOKENS` is a global "as much as the biggest model allows" figure —
+ * 167000 on this deployment. This route passed it through raw, so every request asked for a
+ * 167k-token completion regardless of what the chosen model can hold. It only ever worked because
+ * the model being resolved happened to have a large enough window; the moment a 128k model was
+ * selected the provider answered `400 maximum context length is 128000 tokens ... you requested
+ * about 167515 (515 of text input, 167000 in the output)` before generating a single token.
+ *
+ * A didactic knowledge payload is a bounded object — topics and quizzes for one artifact. Measured
+ * runs used 4348 and 6076 completion tokens, so this ceiling is generous by more than a factor of
+ * two while fitting inside any model with a 32k window.
+ */
+const DIDACTIC_COMPLETION_CEILING = 16_000;
+
+function resolveDidacticMaxTokens(): number {
+    return Math.min(env.LLM_DEFAULT_MAX_COMPLETION_TOKENS || DIDACTIC_COMPLETION_CEILING, DIDACTIC_COMPLETION_CEILING);
+}
+
+/**
  * @param selected the provider/model the user currently has selected in the workspace. It is a
  * request, not an authority (AGENTS.md, Rule Zero's corollary): the cascade resolves it against the
  * catalog, and an unavailable choice is refused rather than quietly replaced — silently running a
@@ -100,7 +121,7 @@ async function resolveLlmContext(userId: string, selected?: { provider?: string;
         baseUrl: providerCatalog.baseUrl,
         apiKey,
         temperature: 0.4,
-        maxTokens: env.LLM_DEFAULT_MAX_COMPLETION_TOKENS ? Number(env.LLM_DEFAULT_MAX_COMPLETION_TOKENS) : 4096,
+        maxTokens: resolveDidacticMaxTokens(),
     };
 }
 
