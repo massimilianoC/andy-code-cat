@@ -182,6 +182,7 @@ export function createDidacticRoutes(): Router {
                 uiLanguage: body.uiLanguage,
                 llmContext,
                 workSessionId: req.workSession?.id,
+                pipelineRunId: body.pipelineRunId,
             });
 
             res.json({
@@ -232,6 +233,7 @@ export function createDidacticRoutes(): Router {
                     uiLanguage: body.uiLanguage,
                     llmContext,
                     workSessionId: req.workSession?.id,
+                    pipelineRunId: body.pipelineRunId,
                 };
 
                 const result = await askUseCase.streamTokens(askInput, (delta) => {

@@ -1,10 +1,10 @@
 import { createHash } from "crypto";
-import { jsonrepair } from "jsonrepair";
 import { describeError } from "../errors/describeError";
 import { resolveLlmCallCost, toUserFacingCost } from "../cost/resolveLlmCallCost";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { instrumentArtifactHtml, validateAnchors } from "../didactic/instrumentArtifactHtml";
 import { buildDidacticPrompt } from "../llm/didacticPrompts";
+import { parseJsonWithRepairs } from "../llm/llmParser";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ExecutionLogger } from "../services/ExecutionLogger";
 import { ResourceType } from "../../domain/entities/CostTransaction";
@@ -51,28 +51,29 @@ function computeGroundingHash(snapshot: PreviewSnapshot): string {
     return createHash("sha256").update(html + css + js + traceStr).digest("hex").slice(0, 32);
 }
 
-function extractFirstJsonObject(text: string): string | null {
-    const start = text.indexOf("{");
-    if (start < 0) return null;
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    for (let i = start; i < text.length; i++) {
-        const ch = text[i];
-        if (inString) {
-            if (escaped) escaped = false;
-            else if (ch === "\\") escaped = true;
-            else if (ch === '"') inString = false;
-            continue;
-        }
-        if (ch === '"') { inString = true; continue; }
-        if (ch === "{") depth++;
-        if (ch === "}") { depth--; if (depth === 0) return text.slice(start, i + 1); }
-    }
-    return null;
+type DidacticJsonShape = { overview: string; topics: DidacticTopic[]; quizzes: DidacticQuiz[] };
+
+function isDidacticJsonShape(value: unknown): value is DidacticJsonShape {
+    return (
+        typeof value === "object" && value !== null
+        && typeof (value as Record<string, unknown>).overview === "string"
+        && Array.isArray((value as Record<string, unknown>).topics)
+        && Array.isArray((value as Record<string, unknown>).quizzes)
+    );
 }
 
-function parseDidacticJson(raw: string): { overview: string; topics: DidacticTopic[]; quizzes: DidacticQuiz[] } | null {
+/**
+ * Reuses the artifact parser's repair chain (`parseJsonWithRepairs`, `application/llm/llmParser.ts`)
+ * rather than growing a third copy of it — see `parseSectionPlan` (`application/llm/sectionPlan.ts`)
+ * for the same pattern. This call used to carry its own 3-of-5 strategy subset, missing
+ * `repairTruncatedJson` — the most likely failure mode here, since measured runs produce 4000-6000
+ * completion tokens of JSON and a `max_tokens` cutoff lands mid-object.
+ *
+ * Fence-stripping stays local: `parseJsonWithRepairs` operates on a single already-delimited
+ * candidate and does not know about ```json fences — that extraction is the caller's job on every
+ * consumer of the shared chain, `parseSectionPlan` included.
+ */
+function parseDidacticJson(raw: string): DidacticJsonShape | null {
     let trimmed = raw.trim();
     if (trimmed.startsWith("```")) {
         trimmed = trimmed.replace(/^```(?:json)?\s*\n?/i, "");
@@ -80,32 +81,24 @@ function parseDidacticJson(raw: string): { overview: string; topics: DidacticTop
         if (lastFence > 0) trimmed = trimmed.slice(0, lastFence).trim();
     }
 
-    const candidates: (string | null)[] = [
-        extractFirstJsonObject(trimmed),
-        trimmed.startsWith("{") ? trimmed : null,
-    ];
+    const firstBrace = trimmed.indexOf("{");
+    const lastBrace = trimmed.lastIndexOf("}");
+    const candidates = [
+        trimmed,
+        firstBrace >= 0 && lastBrace > firstBrace ? trimmed.slice(firstBrace, lastBrace + 1) : null,
+        // A truncated reply (max_tokens cutoff) never closes its last brace — hand the chain the
+        // open remainder too, so repairTruncatedJson gets a candidate it can actually close.
+        firstBrace >= 0 ? trimmed.slice(firstBrace) : null,
+    ].filter((c): c is string => c !== null);
 
     for (const candidate of candidates) {
-        if (!candidate) continue;
-        const strategies = [
-            () => candidate,
-            () => jsonrepair(candidate),
-            () => candidate.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t"),
-        ];
-        for (const getText of strategies) {
-            try {
-                const text = getText();
-                const parsed = JSON.parse(text);
-                if (!parsed.overview || !Array.isArray(parsed.topics) || !Array.isArray(parsed.quizzes)) continue;
-                return {
-                    overview: String(parsed.overview),
-                    topics: parsed.topics as DidacticTopic[],
-                    quizzes: parsed.quizzes as DidacticQuiz[],
-                };
-            } catch {
-                continue;
-            }
-        }
+        const parsed = parseJsonWithRepairs(candidate, isDidacticJsonShape);
+        if (!parsed) continue;
+        return {
+            overview: String(parsed.value.overview),
+            topics: parsed.value.topics,
+            quizzes: parsed.value.quizzes,
+        };
     }
     return null;
 }

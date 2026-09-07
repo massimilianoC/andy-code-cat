@@ -96,10 +96,19 @@ const selectedModelFields = {
     model: z.string().min(1).optional(),
 };
 
+/**
+ * Correlation key — see docs/specs/WORK_SESSION_TRACING_SPEC.md §3. Optional: omitting it means
+ * the journal row for this call carries no pipelineRunId, matching pre-tracing behavior exactly.
+ */
+const pipelineRunIdField = {
+    pipelineRunId: z.string().min(1).max(120).optional(),
+};
+
 export const generateDidacticKnowledgeSchema = z.object({
     snapshotId: z.string().min(1),
     uiLanguage: z.enum(["it", "en"]).default("it"),
     ...selectedModelFields,
+    ...pipelineRunIdField,
 });
 
 export const askDidacticQuestionSchema = z.object({
@@ -108,6 +117,7 @@ export const askDidacticQuestionSchema = z.object({
     focus: didacticQnaFocusSchema.optional(),
     uiLanguage: z.enum(["it", "en"]).default("it"),
     ...selectedModelFields,
+    ...pipelineRunIdField,
 });
 
 export type DidacticAnchor = z.infer<typeof didacticAnchorSchema>;
