@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { jsonrepair } from "jsonrepair";
-import { env } from "../../config";
 import { describeError } from "../errors/describeError";
+import { resolveLlmCallCost, toUserFacingCost } from "../cost/resolveLlmCallCost";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { instrumentArtifactHtml, validateAnchors } from "../didactic/instrumentArtifactHtml";
 import { buildDidacticPrompt } from "../llm/didacticPrompts";
@@ -200,19 +200,21 @@ export class GenerateDidacticKnowledge {
                 : undefined;
             const finishReason = String(json.choices?.[0]?.finish_reason ?? "") || undefined;
 
+            // The one costing model, not a fourth hand-rolled copy of it. This call used to price
+            // itself at the flat rate and record a provider cost of zero, on what is the single
+            // most expensive operation the product performs.
+            const callCost = usage
+                ? resolveLlmCallCost({
+                    provider: llmContext.provider,
+                    modelId: llmContext.model,
+                    providerUsage: json.usage,
+                    usage,
+                    capability: "chat",
+                })
+                : undefined;
+
             if (pendingLogId) {
-                const journalCostEstimate = usage
-                    ? estimateCost(
-                        { capability: "chat", tokenUsage: usage },
-                        {
-                            textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                            imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                            videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                            usdToEurRate: env.COST_POLICY_USD_TO_EUR_RATE,
-                            providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
-                        },
-                    )
-                    : undefined;
+                const journalCostEstimate = callCost?.estimate;
 
                 // `rawResponse` is the reply exactly as the provider sent it, before
                 // parseDidacticJson's repair chain touches it — see the field's own doc comment on
@@ -277,7 +279,9 @@ export class GenerateDidacticKnowledge {
 
             // 7. Cost + log
             const durationMs = Date.now() - startMs;
-            const costEstimate = { providerCostEur: 0, totalEur: 0 }; // actual cost computed by CostTransactionService
+            // What was actually spent, not a placeholder. This returned zero unconditionally, so
+            // the panel told the user a generation costing several cents had cost nothing.
+            const costEstimate = callCost ? toUserFacingCost(callCost) : undefined;
 
             ExecutionLogger.instance.emit({
                 projectId: input.projectId,
@@ -303,7 +307,10 @@ export class GenerateDidacticKnowledge {
                 projectId: input.projectId,
                 resourceType: ResourceType.LLM_DIDACTIC_KNOWLEDGE,
                 resourceSubtype: llmContext.model,
-                providerCostUsd: 0,
+                providerCostUsd: callCost?.providerCostUsd,
+                // The ledger keeps this total rather than recomputing, so the row, the journal and
+                // the number returned to the panel are the same number.
+                precomputedTotalEur: callCost?.estimate.amount,
                 units: usage ? {
                     promptTokens: usage.promptTokens,
                     completionTokens: usage.completionTokens,

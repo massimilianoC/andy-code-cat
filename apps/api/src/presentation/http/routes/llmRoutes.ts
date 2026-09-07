@@ -20,7 +20,7 @@ import {
 import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
 import { estimateCost } from "../../../application/llm/costPolicy";
-import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
+import { readProviderCostUsd } from "../../../application/cost/resolveLlmCallCost";
 import { env } from "../../../config";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
@@ -872,21 +872,12 @@ export function createLlmRoutes(): Router {
             });
             userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => { });
 
-            // OpenRouter (and compatible providers) may return usage.cost in USD.
-            const rawProviderCost = sfJson?.usage?.cost;
-            let providerCostUsd: number | undefined =
-                typeof rawProviderCost === "number" ? rawProviderCost
-                    : typeof rawProviderCost === "string" ? (parseFloat(rawProviderCost) || undefined)
-                        : undefined;
-            // SiliconFlow does not return cost in the API response; compute from per-model pricing table.
-            if (providerCostUsd === undefined && context.providerCatalog.provider === "siliconflow") {
-                const sfPrice = getSiliconFlowPrice(context.modelId);
-                if (sfPrice && sfPrice.priceUnit === "per_m_tokens") {
-                    providerCostUsd =
-                        (resolvedUsage.promptTokens / 1_000_000) * sfPrice.input +
-                        (resolvedUsage.completionTokens / 1_000_000) * sfPrice.output;
-                }
-            }
+            const providerCostUsd = readProviderCostUsd({
+                provider: context.providerCatalog.provider,
+                modelId: context.modelId,
+                providerUsage: sfJson?.usage,
+                usage: resolvedUsage,
+            });
 
             const result: LlmChatPreviewResult = {
                 reply,
@@ -1356,14 +1347,15 @@ export function createLlmRoutes(): Router {
 
             res.off("close", onClientClose);
 
-            // SiliconFlow does not return cost in the stream; compute from per-model pricing table.
-            if (providerCostUsdStream === undefined && context.providerCatalog.provider === "siliconflow" && usage) {
-                const sfPrice = getSiliconFlowPrice(context.modelId);
-                if (sfPrice && sfPrice.priceUnit === "per_m_tokens") {
-                    providerCostUsdStream =
-                        (usage.promptTokens / 1_000_000) * sfPrice.input +
-                        (usage.completionTokens / 1_000_000) * sfPrice.output;
-                }
+            // The stream carries no final usage object, so whatever was accumulated from the chunks
+            // is passed in as the explicit figure; the shared rule supplies the fallback.
+            if (usage) {
+                providerCostUsdStream = readProviderCostUsd({
+                    provider: context.providerCatalog.provider,
+                    modelId: context.modelId,
+                    usage,
+                    explicitCostUsd: providerCostUsdStream,
+                });
             }
 
             if (streamAborted || res.destroyed || res.writableEnded) {
