@@ -39,7 +39,11 @@ test.describe("didactic knowledge", () => {
     let projectId: string;
 
     test.afterEach(async ({ page }) => {
-        if (projectId) await deleteTestProject(page, projectId);
+        // E2E_KEEP_PROJECT leaves the project behind so its journal and cost rows can be read
+        // directly; teardown cascades both away (DeleteProject.ts), which makes an after-the-fact
+        // inspection impossible. Off by default — the suite must not accumulate projects.
+        if (projectId && !process.env.E2E_KEEP_PROJECT) await deleteTestProject(page, projectId);
+        if (process.env.E2E_KEEP_PROJECT) console.log(`E2E_KEEP_PROJECT: kept project ${projectId}`);
     });
 
     test("generates knowledge for a snapshot and reports why when it cannot", async ({ page }) => {
