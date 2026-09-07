@@ -23,6 +23,7 @@ import { CostTransactionService } from "../../../application/cost/CostTransactio
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { ResourceType } from "../../../domain/entities/CostTransaction";
 import { env } from "../../../config";
+import { HttpError } from "../errors/httpError";
 import { resolveComposerCascade } from "../../../application/llm/catalogModels";
 import type { RequestWithContext } from "../types";
 
@@ -31,7 +32,13 @@ function sendSse(res: RequestWithContext["res"], payload: unknown) {
     (res as any).write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-async function resolveLlmContext(userId: string) {
+/**
+ * @param selected the provider/model the user currently has selected in the workspace. It is a
+ * request, not an authority (AGENTS.md, Rule Zero's corollary): the cascade resolves it against the
+ * catalog, and an unavailable choice is refused rather than quietly replaced — silently running a
+ * different model is precisely the defect this parameter exists to close.
+ */
+async function resolveLlmContext(userId: string, selected?: { provider?: string; model?: string }) {
     const catalog = await new GetLlmCatalog(
         env.LLM_CATALOG_SOURCE,
         env.SILICONFLOW_BASE_URL,
@@ -49,13 +56,35 @@ async function resolveLlmContext(userId: string) {
     // Same cascade the generation composer uses, with the dialogue role pinned — see
     // resolveComposerCascade in application/llm/catalogModels.ts. This route used to carry its
     // own copy of both the cascade and dedupeModelsById.
+    // The user's live selection wins over the stored preference; the preference is the fallback for
+    // a request that arrives before the picker has resolved.
+    const requestedProvider = selected?.provider ?? prefs?.defaultProvider;
+    const requestedModel = selected?.model ?? prefs?.roleModelOverrides?.["dialogue"];
+
     const cascade = resolveComposerCascade({
         providers: catalog.providers,
-        requestedProvider: prefs?.defaultProvider,
-        requestedModel: prefs?.roleModelOverrides?.["dialogue"],
+        requestedProvider,
+        requestedModel,
         pipelineRole: "dialogue",
         envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
     });
+
+    // Only when the user asked explicitly. A stale stored preference should still degrade to the
+    // cascade's default — it is not a choice the user made for this request.
+    if (selected?.provider && cascade.requestedProviderUnavailable) {
+        throw new HttpError(`The selected provider "${selected.provider}" is not available.`, {
+            statusCode: 409,
+            code: "SELECTED_PROVIDER_UNAVAILABLE",
+            userMessage: `Il provider selezionato (${selected.provider}) non è disponibile. Scegline un altro dal selettore in alto.`,
+        });
+    }
+    if (selected?.model && cascade.requestedModelUnavailable) {
+        throw new HttpError(`The selected model "${selected.model}" is not available.`, {
+            statusCode: 409,
+            code: "SELECTED_MODEL_UNAVAILABLE",
+            userMessage: `Il modello selezionato (${selected.model}) non è disponibile. Scegline un altro dal selettore in alto.`,
+        });
+    }
 
     const providerCatalog = cascade.providerCatalog;
     if (!providerCatalog) throw new Error("No LLM provider available");
@@ -122,7 +151,7 @@ export function createDidacticRoutes(): Router {
                 return;
             }
 
-            const llmContext = await resolveLlmContext(req.auth!.userId);
+            const llmContext = await resolveLlmContext(req.auth!.userId, { provider: body.provider, model: body.model });
             const useCase = new GenerateDidacticKnowledge(knowledgeRepo, promptExecutionLogRepo);
             const result = await useCase.execute({
                 projectId,
@@ -157,7 +186,7 @@ export function createDidacticRoutes(): Router {
                 return;
             }
 
-            const llmContext = await resolveLlmContext(req.auth!.userId);
+            const llmContext = await resolveLlmContext(req.auth!.userId, { provider: body.provider, model: body.model });
             const askUseCase = new AskDidacticQuestion(qnaRepo, promptExecutionLogRepo);
 
             // SSE setup

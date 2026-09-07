@@ -3349,21 +3349,12 @@ function WorkspacePageContent() {
             style={{ gridTemplateColumns: `${leftWidth}% 8px minmax(0, 1fr)` }}
         >
             <aside className="workspace-chat-panel">
-                {workMode === "build" ? (<>
-                <div className="workspace-chat-header">
-                    {/* Project name + cog */}
-                    <div className="row" style={{ gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem" }}>
-                        <span style={{ flex: 1, fontSize: "0.92rem", fontWeight: 700, color: "var(--text-foreground, #fff)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {projectName || "…"}
-                        </span>
-                        <button
-                            onClick={() => setConfigOpen(true)}
-                            title={t("workspace.ui.configureProject")}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "0.15rem", display: "flex", alignItems: "center", opacity: 0.7 }}
-                        >
-                            <Settings size={15} />
-                        </button>
-                    </div>
+                {/* The model selector belongs to the SESSION, not to Build mode. It used to live
+                    inside the build branch below, so switching to Didactic mode hid it and the
+                    didactic calls silently re-derived a model from stored preferences — spending
+                    the user's money on compute they had not chosen. Rendered here it stays visible
+                    and stays the one answer both modes use. */}
+                <div className="workspace-chat-header" style={{ paddingBottom: "0.5rem" }}>
                     <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                         <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                             {t("workspace.ui.chatTitle")}
@@ -3382,6 +3373,22 @@ function WorkspacePageContent() {
                             placeholder={t("workspace.ui.providerPlaceholder")}
                             className="min-w-[18rem] flex-1"
                         />
+                    </div>
+                </div>
+                {workMode === "build" ? (<>
+                <div className="workspace-chat-header">
+                    {/* Project name + cog */}
+                    <div className="row" style={{ gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem" }}>
+                        <span style={{ flex: 1, fontSize: "0.92rem", fontWeight: 700, color: "var(--text-foreground, #fff)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {projectName || "…"}
+                        </span>
+                        <button
+                            onClick={() => setConfigOpen(true)}
+                            title={t("workspace.ui.configureProject")}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "0.15rem", display: "flex", alignItems: "center", opacity: 0.7 }}
+                        >
+                            <Settings size={15} />
+                        </button>
                     </div>
                     {currentProviderMissingKey && currentProvider && (
                         <div
@@ -3973,6 +3980,8 @@ function WorkspacePageContent() {
                     token={token ?? ""}
                     onAnchorFocus={(kind) => setPreviewTab(kind)}
                     onCostUpdated={refreshProjectDbCost}
+                    provider={selectedProvider || undefined}
+                    model={selectedModel || undefined}
                 />
             )}</aside>
 

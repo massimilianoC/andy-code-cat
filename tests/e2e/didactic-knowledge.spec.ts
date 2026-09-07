@@ -139,4 +139,66 @@ test.describe("didactic knowledge", () => {
         expect(JSON.stringify(traced.cost), "the run must appear in the project cost")
             .toContain("llm.didactic.knowledge");
     });
+
+    test("uses the model the user selected, and refuses one that is not available", async ({ page }) => {
+        // The rule this pins: a model the user picks is the model the request runs on. Didactic
+        // Mode used to re-derive one from stored preferences, so the user chose a model in the
+        // workspace header and paid for a different one.
+        test.setTimeout(240_000);
+
+        await loginTestUser(page);
+        projectId = await createTestProject(page, `didactic-model-${Date.now()}`);
+        const snapshotId = await createTestPreviewSnapshot(page, projectId, "didactic-model-v1");
+        const token = await getAccessToken(page);
+
+        const post = (body: Record<string, unknown>) => page.evaluate(
+            async ({ apiUrl, token, projectId, body }) => {
+                const res = await fetch(`${apiUrl}/v1/projects/${projectId}/didactic/knowledge/generate`, {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                        "x-project-id": projectId,
+                    },
+                    body: JSON.stringify(body),
+                });
+                return { status: res.status, body: await res.text() };
+            },
+            { apiUrl: API_URL, token, projectId, body },
+        );
+
+        // An explicitly requested model the catalog does not offer must be refused, never swapped
+        // for a working one — a silent substitution is the exact failure being prevented.
+        const refused = await post({
+            snapshotId,
+            uiLanguage: "it",
+            provider: "openrouter",
+            model: "definitely/not-a-real-model",
+        });
+        expect(refused.status, `expected a refusal, got ${refused.body.slice(0, 300)}`).toBe(409);
+        expect(refused.body).toContain("SELECTED_MODEL_UNAVAILABLE");
+
+        // A model that IS offered must be the one the journal records.
+        const chosen = await page.evaluate(
+            async ({ apiUrl, token }) => {
+                const res = await fetch(`${apiUrl}/v1/llm/providers`, { headers: { Authorization: `Bearer ${token}` } });
+                const json = await res.json();
+                const providers = json.providers ?? json;
+                const openrouter = providers.find((p: { provider: string }) => p.provider === "openrouter");
+                // Cheapest authorized model on the list (tests/config/authorized-test-models.json)
+                // that this catalog actually offers, so the assertion does not fund an expensive run.
+                const preferred = ["google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it", "minimax/minimax-m3"];
+                const active = (openrouter?.models ?? []).filter((m: { isActive: boolean }) => m.isActive);
+                const pick = preferred.map((id) => active.find((m: { id: string }) => m.id === id)).find(Boolean);
+                return pick?.id as string | undefined;
+            },
+            { apiUrl: API_URL, token },
+        );
+        test.skip(!chosen, "no authorized openrouter model is active in this catalog");
+
+        const ok = await post({ snapshotId, uiLanguage: "it", provider: "openrouter", model: chosen });
+        expect(ok.status, `generate failed: ${ok.body.slice(0, 400)}`).toBeLessThan(300);
+        expect(JSON.parse(ok.body).knowledge.model, "the run must use the selected model, not a re-derived one")
+            .toBe(chosen);
+    });
 });

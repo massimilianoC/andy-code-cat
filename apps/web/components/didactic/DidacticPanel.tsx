@@ -34,6 +34,13 @@ interface DidacticPanelProps {
     onAnchorFocus?: (kind: "html" | "css" | "js", lineRange?: [number, number]) => void;
     /** Called after a successful generate or ask operation so callers can refresh cost totals. */
     onCostUpdated?: () => void;
+    /**
+     * The model the user currently has selected in the workspace, inherited rather than re-derived.
+     * Didactic Mode is the same session looking at the same artifact: resolving a different model
+     * server-side would spend the user's money on compute they did not choose.
+     */
+    provider?: string;
+    model?: string;
 }
 
 export function DidacticPanel({
@@ -44,6 +51,8 @@ export function DidacticPanel({
     onClearFocus,
     onAnchorFocus,
     onCostUpdated,
+    provider,
+    model,
 }: DidacticPanelProps) {
     const [activeTab, setActiveTab] = useState<"analyze" | "quiz" | "ask">("analyze");
     const [statusDto, setStatusDto] = useState<DidacticKnowledgeStatusDto | null>(null);
@@ -91,7 +100,7 @@ export function DidacticPanel({
         );
 
         try {
-            const res = await generateDidacticKnowledge(token, projectId, { snapshotId, uiLanguage: "it" });
+            const res = await generateDidacticKnowledge(token, projectId, { snapshotId, uiLanguage: "it", provider, model });
             setStatusDto({ status: "ready", knowledge: res.knowledge });
             setActiveTab("analyze");
             onCostUpdated?.();
@@ -226,6 +235,8 @@ export function DidacticPanel({
                         focus={focus}
                         onClearFocus={onClearFocus}
                         onCostUpdated={onCostUpdated}
+                        provider={provider}
+                        model={model}
                     />
                 )}
             </div>

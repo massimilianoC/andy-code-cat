@@ -79,9 +79,27 @@ export const didacticQnaEntrySchema = z.object({
     createdAt: z.string().datetime().or(z.date()),
 });
 
+/**
+ * The model the user currently has selected, carried on every didactic request.
+ *
+ * Didactic Mode is not a separate tool with its own model: it is the same session, looking at the
+ * same artifact, and the user chose a model for that session. Resolving a different one from stored
+ * preferences — which is what happened before these fields existed — means the compute power and
+ * the price the user picked are not the ones they get.
+ *
+ * Optional because a request may legitimately arrive before the picker has resolved; the server
+ * then falls back to the user's preference. Never a free-form value: the server resolves it against
+ * the catalog and refuses an unavailable one rather than silently substituting.
+ */
+const selectedModelFields = {
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+};
+
 export const generateDidacticKnowledgeSchema = z.object({
     snapshotId: z.string().min(1),
     uiLanguage: z.enum(["it", "en"]).default("it"),
+    ...selectedModelFields,
 });
 
 export const askDidacticQuestionSchema = z.object({
@@ -89,6 +107,7 @@ export const askDidacticQuestionSchema = z.object({
     question: z.string().min(1).max(2000),
     focus: didacticQnaFocusSchema.optional(),
     uiLanguage: z.enum(["it", "en"]).default("it"),
+    ...selectedModelFields,
 });
 
 export type DidacticAnchor = z.infer<typeof didacticAnchorSchema>;

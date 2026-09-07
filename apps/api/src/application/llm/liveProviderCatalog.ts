@@ -332,20 +332,30 @@ export async function hydrateProviderCatalog(
             return { ...providerCatalog, models: fallbackModels };
         }
 
-        // At most one default per provider, and it must be a live-discovered model the operator
-        // has actually activated: keep the first such default, strip isDefault from every other
-        // entry. This prevents a stale seed default that is no longer in the provider's live
-        // /models list from coexisting with a promoted one.
-        let discoveredDefaultSeen = false;
+        // At most one default PER ROLE, and it must be a live-discovered model the operator has
+        // actually activated: keep the first such default for each role, strip isDefault from every
+        // other entry of that role. This prevents a stale seed default that is no longer in the
+        // provider's live /models list from coexisting with a promoted one.
+        //
+        // Per role, not per provider. It used to track a single boolean, so hydration kept the
+        // first default it met and demoted every other — while `normalizeModels` in
+        // MongoLlmCatalogRepository writes one default per role. Storage and hydration therefore
+        // enforced two different invariants, and the reader won: on 2026-09-07 openrouter had 7
+        // role defaults stored and returned exactly one, `quality_check`. `dialogue` — the role
+        // every user-facing generation resolves through — had none, so both cascades fell through
+        // to `isFallback` and picked by list order. Didactic Mode landed on the most expensive
+        // authorized model that way, and modelSelection.ts ran a quality_check model for dialogue.
+        const defaultSeenByRole = new Set<string>();
         for (let index = 0; index < mapped.length; index += 1) {
             const model = mapped[index]!;
-            if (model.isDefault && model.isActive && !discoveredDefaultSeen) {
-                discoveredDefaultSeen = true;
+            const roleKey = model.role ?? "";
+            if (model.isDefault && model.isActive && !defaultSeenByRole.has(roleKey)) {
+                defaultSeenByRole.add(roleKey);
             } else if (model.isDefault) {
                 mapped[index] = { ...model, isDefault: false, isFallback: true };
             }
         }
-        if (!discoveredDefaultSeen) {
+        if (defaultSeenByRole.size === 0) {
             // Promote the first ACTIVE model, not simply the first. Promoting index 0 blindly —
             // which is what this did while everything arrived active — now nominates a model
             // nobody approved, and every role cascade in catalogModels.ts looks for
