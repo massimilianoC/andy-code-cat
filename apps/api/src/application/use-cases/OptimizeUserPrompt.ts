@@ -1,3 +1,4 @@
+import { HttpError } from "../../presentation/http/errors/httpError";
 import type { LlmPromptingTrace } from "@andy-code-cat/contracts";
 import { PRESET_CATALOG } from "../../domain/entities/ProjectPreset";
 import type { ProjectRepository } from "../../domain/repositories/ProjectRepository";
@@ -502,17 +503,40 @@ export class OptimizeUserPrompt {
                 envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
                 fallbackProvider: FALLBACK_PROVIDER,
                 hardcodedFallbackModel: FALLBACK_MODEL,
-                requireOverrideInCatalog: false,
-                // Preserved exactly as-is (out of scope to "fix" here): an override is only honored
-                // when the resolved provider's apiType === "openai-compatible".
+                requireOverrideInCatalog: true,
+                // An override is honored when the provider is openai-compatible AND the model is an
+                // active entry of that provider's catalog. The apiType check alone used to be the
+                // whole gate, so an id belonging to no provider went out unverified.
                 gateOverrideOnOpenAiCompatible: true,
-                policy: "legacy",
+                // Strict exactly when the user actually chose — the same idiom VibeClassify,
+                // VibePrefill and ResolvePipelineModelLock already use. The workspace sends the
+                // live selection here (page.tsx sends selectedProvider/selectedModel to the
+                // optimize call), so a model that cannot be resolved is a choice the product
+                // cannot honor, and saying so beats optimizing the user's prompt on a model they
+                // did not pick. With no choice made, the cascade still falls back as before.
+                policy: (input.provider || requestedModel) ? "strict" : "legacy",
             };
             const decision = resolveModelSelection(selectionInput);
             observeModelSelectionShadow(selectionInput, decision, {
                 projectId: input.projectId,
                 taskKey: input.taskKey ?? TASK_KEY,
             });
+
+            // A blocked decision is not a missing provider, and reporting it as one sends the
+            // operator looking for a configuration problem that is not there. The user picked a
+            // model the catalog does not offer; say that, and say which.
+            if (decision.blocked) {
+                throw new HttpError(
+                    `Prompt optimization blocked: ${decision.blocked.reason}`,
+                    {
+                        statusCode: 409,
+                        code: "SELECTED_MODEL_UNAVAILABLE",
+                        userMessage: `Il modello selezionato (${input.provider ?? "?"}/${requestedModel ?? "?"}) non è attivo nel catalogo: `
+                            + "attivalo dal pannello admin o scegline un altro dal selettore.",
+                        details: { blockedCode: decision.blocked.code, blockedReason: decision.blocked.reason },
+                    },
+                );
+            }
 
             if (!decision.providerCatalog) {
                 throw new Error("No active LLM provider configured for prompt optimization");

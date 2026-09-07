@@ -284,27 +284,30 @@ describe("OptimizeUserPrompt", () => {
 
     // ── resolveModelSelection pin: byte-identical (provider, model) vs. pre-refactor inline cascade ──
 
-    it("model resolution: honors a request-override model because the resolved provider is openai-compatible", async () => {
-        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({
-            choices: [{ message: { content: "Prompt ottimizzato." }, finish_reason: "stop" }],
-            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    // DELIBERATE BEHAVIOR CHANGE, 2026-09-07. This used to assert the KNOWN-DIVERGENCE: an
+    // override model was forwarded to the provider without ever checking it was in the catalog.
+    // The workspace sends the user's live selection to this call, so that meant the user's prompt
+    // could be optimized by a model id no provider offers. The catalog is now verified, and a
+    // choice that cannot be honored is refused instead of substituted.
+    it("model resolution: refuses an override model that is not in the catalog, and says which", async () => {
+        const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
         vi.stubGlobal("fetch", fetchMock);
 
         const { useCase } = createUseCase();
 
-        await useCase.execute({
+        await expect(useCase.execute({
             projectId: "project-1",
             userId: "user-1",
             rawPrompt: "Landing page",
             provider: "siliconflow",
             model: "some-other-model-not-in-catalog",
+        })).rejects.toMatchObject({
+            statusCode: 409,
+            code: "SELECTED_MODEL_UNAVAILABLE",
         });
 
-        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-        // KNOWN-DIVERGENCE (future work): the override model is honored WITHOUT verifying it is
-        // active in the catalog, because the resolved provider's apiType is openai-compatible.
-        expect(requestBody.model).toBe("some-other-model-not-in-catalog");
+        // Refused before spending anything: no request ever reached the provider.
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("model resolution: no override falls through to the active dialogue-role default model", async () => {
