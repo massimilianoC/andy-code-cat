@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { jsonrepair } from "jsonrepair";
 import { env } from "../../config";
+import { describeError } from "../errors/describeError";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { instrumentArtifactHtml, validateAnchors } from "../didactic/instrumentArtifactHtml";
 import { buildDidacticPrompt } from "../llm/didacticPrompts";
@@ -318,7 +319,10 @@ export class GenerateDidacticKnowledge {
                 await this.promptExecutionLogRepository!.complete(pendingLogId, {
                     status: "failed",
                     durationMs: Date.now() - startMs,
-                    errorMessage: error instanceof Error ? error.message : String(error),
+                    // Not `error.message`: a network failure's message is always "fetch failed",
+                    // and a journal row that records only that cannot tell a DNS miss from an
+                    // expired certificate weeks later.
+                    errorMessage: describeError(error),
                 }).catch(() => undefined);
             }
             throw error;

@@ -14,6 +14,7 @@ import { PRESET_MAP, PRESET_CATALOG } from "../../domain/entities/ProjectPreset"
 import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatalog";
 import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
 import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
+import { describeError } from "../errors/describeError";
 import { ExecutionLogger } from "../services/ExecutionLogger";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -956,7 +957,8 @@ export class VibePrefill {
                     aborted,
                     errorName: error instanceof Error ? error.name : typeof error,
                     errorMessage: error instanceof Error ? error.message : String(error),
-                    errorCause: error instanceof Error && error.cause ? String(error.cause) : undefined,
+                    // describeError keeps the socket/TLS code, which String(cause) drops.
+                    errorCause: error instanceof Error && error.cause ? describeError(error.cause) : undefined,
                 },
             });
         } finally {
