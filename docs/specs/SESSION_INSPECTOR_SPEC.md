@@ -15,7 +15,22 @@ collapsible blocks:
 ▸ Vibe            what the user typed, what they attached, what the classifier decided
 ▸ Zero Effort     the form as filled, what the model proposed vs what the user changed, the brief
 ▾ Generation      the layered prompt, the raw reply, the artifact          ← open by default
+▸ Conversation    the turns sent after the generation, and that turn's own layers
 ```
+
+**Amended 2026-09-09.** This section originally named three blocks, and said the existing Prompt
+view *becomes* this history. The flat section it was meant to replace was left standing beneath the
+panel instead, so the view showed two stacks of prompt layers: the generation's, inside Generation,
+and the current turn's, loose at the bottom. They read as a duplicate and are not one — after a few
+chat turns the current turn's system prompt is no longer the generation's.
+
+Conversation absorbs that section. The transcript is its content; the current turn's layers sit
+above it as a collapsed accordion, because deleting them would make "exactly what was sent" —
+the one thing Rule Zero exists to keep knowable — unknowable for every turn after the first.
+
+Unlike the other three, Conversation renders from state the workspace page already holds, not from
+the work-sessions endpoint. It therefore does NOT participate in the detail fetch gate of §5.5:
+opening it must not trigger a fetch it has no use for.
 
 **A block appears only if the session produced it.** A project created directly in the workspace has
 no Vibe block and no Zero Effort block, and rendering empty ones would teach the user that the panel

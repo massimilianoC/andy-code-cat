@@ -71,8 +71,6 @@ import { Separator } from "@/components/ui/separator";
 import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { buildPreviewDoc } from "@/lib/preview/buildPreviewDoc";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
-import PromptLayersView from "@/components/PromptLayersView";
-import PromptTranscriptView from "@/components/PromptTranscriptView";
 import { SessionInspectorPanel } from "@/components/workspace/inspector/SessionInspectorPanel";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
 import { DidacticPanel } from "../../../components/didactic/DidacticPanel";
@@ -3297,34 +3295,25 @@ function WorkspacePageContent() {
             >
                 {/* Session Inspector (docs/specs/SESSION_INSPECTOR_SPEC.md): the project's Vibe /
                     Zero Effort / Generation history, read from the work-sessions endpoints. */}
-                <SessionInspectorPanel projectId={projectId} />
+                {/* Session Inspector (docs/specs/SESSION_INSPECTOR_SPEC.md): the project's Vibe /
+                    Zero Effort / Generation history, read from the work-sessions endpoints, plus
+                    the sent conversation as a fourth block.
 
-                {lastSentTrace?.effectiveSystemPrompt && (
-                    <div style={{ marginTop: "1.5rem", paddingTop: "1rem", borderTop: "1px solid #1f2a3c" }}>
-                        <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "0.5rem" }}>
-                            {t("workspace.ui.promptPanelCurrentTurnTitle", "Turno corrente — conversazione completa inviata")}
-                        </div>
-                        <PromptLayersView
-                            mode="sent"
-                            fullText={lastSentTrace.effectiveSystemPrompt}
-                            layers={lastSentTrace.layers ?? []}
-                            defaultRaw={!lastSentTrace.layers?.length}
-                        />
-                        {/* I16: every non-system message in the trace (user AND assistant history
-                            turns), not just role:user — prior assistant replies are part of what
-                            was actually sent and were being dropped from this view before.
-                            Folded: once an artifact exists each turn carries the full generated
-                            markup, which used to bury the conversation under thousands of lines. */}
-                        <PromptTranscriptView
-                            messages={lastSentMessages}
-                            labels={{
-                                user: t("workspace.ui.promptPanelUserMessage", "Messaggio utente"),
-                                assistant: t("workspace.ui.promptPanelAssistantMessage", "Messaggio assistant (cronologia)"),
-                                system: "System",
-                            }}
-                        />
-                    </div>
-                )}
+                    The conversation used to render below this panel as a flat section, which meant
+                    the Prompt view showed two stacks of prompt layers — the generation's inside the
+                    Generation block, and the current turn's loose at the bottom. They read as a
+                    duplicate and are not one: after a few chat turns the current turn's system
+                    prompt is no longer the generation's. Both now live in the block they belong to
+                    (§1: this view "becomes" that history, rather than sitting beside it). */}
+                <SessionInspectorPanel
+                    projectId={projectId}
+                    conversation={lastSentTrace?.effectiveSystemPrompt || lastSentMessages.length
+                        ? {
+                            messages: lastSentMessages,
+                            currentTurnSystemPrompt: lastSentTrace?.effectiveSystemPrompt,
+                        }
+                        : undefined}
+                />
             </div>
         </div>
     );

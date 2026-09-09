@@ -9,13 +9,24 @@ import { InspectorBlock } from "./InspectorBlock";
 import { VibeBlock } from "./VibeBlock";
 import { ZeroEffortBlock } from "./ZeroEffortBlock";
 import { GenerationBlock } from "./GenerationBlock";
+import { ConversationBlock } from "./ConversationBlock";
+import type { PromptTranscriptMessage } from "@/components/PromptTranscriptView";
 import { pickLatestSession, latestLogForStage, costForLog, canonicalBriefOf, blocksPresent, shouldFetchSessionDetail } from "./sessionSelectors";
 
 interface SessionInspectorPanelProps {
     projectId: string;
+    /**
+     * The most recent turn actually sent, owned by the workspace page rather than the journal.
+     * Rendered as the fourth block so the Prompt view is one ordered history instead of the
+     * inspector plus a loose section beneath it (SESSION_INSPECTOR_SPEC.md §1).
+     */
+    conversation?: {
+        messages: PromptTranscriptMessage[];
+        currentTurnSystemPrompt?: string;
+    };
 }
 
-type BlockKey = "vibe" | "zeroEffort" | "generation";
+type BlockKey = "vibe" | "zeroEffort" | "generation" | "conversation";
 
 /**
  * The Prompt view's Session Inspector (docs/specs/SESSION_INSPECTOR_SPEC.md).
@@ -31,7 +42,7 @@ type BlockKey = "vibe" | "zeroEffort" | "generation";
  * as part of mounting, and Vibe/Zero Effort reuse the same already-fetched detail without any
  * further request when the user opens them.
  */
-export function SessionInspectorPanel({ projectId }: SessionInspectorPanelProps) {
+export function SessionInspectorPanel({ projectId, conversation }: SessionInspectorPanelProps) {
     const { t } = useTranslation();
     const [sessions, setSessions] = useState<WorkSessionSummaryDto[] | null>(null);
     const [sessionsError, setSessionsError] = useState<string | null>(null);
@@ -41,7 +52,7 @@ export function SessionInspectorPanel({ projectId }: SessionInspectorPanelProps)
     const [detailLoading, setDetailLoading] = useState(false);
     const [detailError, setDetailError] = useState<string | null>(null);
 
-    const [open, setOpen] = useState<Record<BlockKey, boolean>>({ vibe: false, zeroEffort: false, generation: true });
+    const [open, setOpen] = useState<Record<BlockKey, boolean>>({ vibe: false, zeroEffort: false, generation: true, conversation: false });
 
     // Step 1: the list only — no prompt bodies anywhere in this response.
     useEffect(() => {
@@ -61,6 +72,8 @@ export function SessionInspectorPanel({ projectId }: SessionInspectorPanelProps)
     }, [projectId]);
 
     const latestSession = sessions ? pickLatestSession(sessions) : undefined;
+    // Conversation is deliberately excluded: it renders from props the page already holds, so
+    // opening it must not be what triggers the session detail fetch.
     const anyBlockOpen = open.vibe || open.zeroEffort || open.generation;
 
     // Step 2: the one detail fetch, gated on a block actually being open (spec §5.5). Generation
@@ -187,6 +200,28 @@ export function SessionInspectorPanel({ projectId }: SessionInspectorPanelProps)
                             {t("workspace.inspector.noGeneration", "Questa sessione non ha ancora una generazione.")}
                         </p>
                     )}
+                </InspectorBlock>
+            )}
+
+            {(conversation?.messages.length || conversation?.currentTurnSystemPrompt) && (
+                <InspectorBlock
+                    title={t("workspace.inspector.conversationTitle", "Cronologia inviata")}
+                    subtitle={t("workspace.inspector.conversationSubtitle", "I turni successivi alla generazione, come sono stati inviati")}
+                    open={open.conversation}
+                    onToggle={() => toggle("conversation")}
+                >
+                    <ConversationBlock
+                        messages={conversation.messages}
+                        currentTurnSystemPrompt={conversation.currentTurnSystemPrompt}
+                        layersTitle={t("workspace.inspector.conversationLayers", "System prompt del turno corrente, per layer")}
+                        transcriptTitle={t("workspace.inspector.conversationTranscript", "Messaggi inviati")}
+                        emptyLabel={t("workspace.inspector.conversationEmpty", "Nessun turno inviato dopo la generazione.")}
+                        labels={{
+                            user: t("workspace.ui.promptPanelUserMessage", "Messaggio utente"),
+                            assistant: t("workspace.ui.promptPanelAssistantMessage", "Messaggio assistant (cronologia)"),
+                            system: "System",
+                        }}
+                    />
                 </InspectorBlock>
             )}
 
