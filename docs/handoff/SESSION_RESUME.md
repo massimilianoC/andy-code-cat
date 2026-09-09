@@ -130,6 +130,27 @@ journalling the hardcoded fallback constants instead of the model asked for — 
 
 ---
 
+## 5bis. The release gate is RED — read this before deploying
+
+`tests/e2e/release-smoke-three-modes.spec.ts` is the repo's own pre-release gate. Run on
+2026-09-09 for the first time: **VIBE and ZERO EFFORT pass and both reach a real artifact.
+PROJECT MODE fails.**
+
+One cause was found and fixed (`16fe15f`): the test clicked a project *card* instead of the mode
+pill, because `hasText` is a case-insensitive substring match and the bot account now owns twelve
+projects, one named "Default Project". Proven from the page snapshot Playwright saves on failure.
+
+**A second cause remains and is not identified.** After the selector fix the run gets materially
+further — 1 minute to the full 5-minute generation timeout — but still no `POST /v1/projects`
+reaches the API. Nothing on this branch touches `handleProjectMode` (`VibeCoreEntry.tsx:361`), and
+the other two modes exercise the same launch endpoint successfully, so the evidence does not
+implicate the product path. It is not proof that the product is fine.
+
+Do not read a green suite as a green release: the unit suites and the didactic e2e all pass while
+this gate is red.
+
+---
+
 ## 6. Still open
 
 - `preview_snapshots` thumbnails are not deleted with the snapshot (pre-existing, not made worse).
