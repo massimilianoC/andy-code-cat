@@ -191,6 +191,7 @@ export function createDidacticRoutes(): Router {
                     generatedAt: result.knowledge.generatedAt.toISOString(),
                 },
                 costEstimate: result.costEstimate,
+                shortfall: result.shortfall,
             });
         } catch (err) {
             next(err);

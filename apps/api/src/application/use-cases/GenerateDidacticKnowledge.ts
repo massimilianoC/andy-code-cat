@@ -3,7 +3,7 @@ import { describeError } from "../errors/describeError";
 import { resolveLlmCallCost, toUserFacingCost } from "../cost/resolveLlmCallCost";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import { instrumentArtifactHtml, validateAnchors } from "../didactic/instrumentArtifactHtml";
-import { buildDidacticPrompt } from "../llm/didacticPrompts";
+import { buildDidacticPrompt, DIDACTIC_OUTPUT_CONTRACT } from "../llm/didacticPrompts";
 import { parseJsonWithRepairs } from "../llm/llmParser";
 import { CostTransactionService } from "../cost/CostTransactionService";
 import { ExecutionLogger } from "../services/ExecutionLogger";
@@ -39,6 +39,31 @@ interface Input {
 interface Output {
     knowledge: DidacticArtifactKnowledge;
     costEstimate?: { providerCostEur: number; totalEur: number };
+    /** Set only when the reply carried less than DIDACTIC_OUTPUT_CONTRACT requires. */
+    shortfall?: {
+        topics: number;
+        quizzes: number;
+        expectedTopics: { min: number; max: number };
+        expectedQuizzes: number;
+    };
+}
+
+/**
+ * Compares what came back against what the prompt demanded.
+ *
+ * Returns undefined when the reply is complete, so the field is absent on the happy path rather
+ * than always present and usually zero. The counts are the CLEANED ones: a topic whose anchors were
+ * all dropped as invalid is still a topic the user can read, so it counts.
+ */
+function measureShortfall(topics: number, quizzes: number) {
+    const { minTopics, maxTopics, quizzes: expectedQuizzes } = DIDACTIC_OUTPUT_CONTRACT;
+    if (topics >= minTopics && quizzes >= expectedQuizzes) return undefined;
+    return {
+        topics,
+        quizzes,
+        expectedTopics: { min: minTopics, max: maxTopics },
+        expectedQuizzes,
+    };
 }
 
 function computeGroundingHash(snapshot: PreviewSnapshot): string {
@@ -242,6 +267,7 @@ export class GenerateDidacticKnowledge {
 
             // Replace anchors in topics/quizzes with only valid ones (drop invalid)
             const validAnchorSet = new Set(validAnchors);
+
             const cleanTopics = parsed.topics.map((t) => ({
                 ...t,
                 anchors: t.anchors.filter((a) => validAnchorSet.has(a)),
@@ -250,6 +276,12 @@ export class GenerateDidacticKnowledge {
                 ...q,
                 anchors: q.anchors.filter((a) => validAnchorSet.has(a)),
             }));
+
+            // The knowledge is kept either way: a thin answer is still worth more to the user than
+            // an error, and re-asking would double the cost of a call that already read the whole
+            // artifact. It is reported, not discarded — the same choice the generated-JavaScript
+            // check makes at this boundary.
+            const shortfall = measureShortfall(cleanTopics.length, cleanQuizzes.length);
 
             // 6. Persist
             const groundingHash = computeGroundingHash(snapshot);
@@ -291,6 +323,9 @@ export class GenerateDidacticKnowledge {
                     topicsCount: cleanTopics.length,
                     quizzesCount: cleanQuizzes.length,
                     droppedAnchors: droppedAnchors.length,
+                    // Recorded on the run itself so "the didactic panel looked thin" is answerable
+                    // from the journal weeks later, without re-running anything.
+                    shortfall: shortfall ?? undefined,
                 },
             });
 
@@ -312,7 +347,7 @@ export class GenerateDidacticKnowledge {
                 meta: { provider: llmContext.provider, model: llmContext.model, snapshotId: input.snapshotId },
             });
 
-            return { knowledge: saved, costEstimate };
+            return { knowledge: saved, costEstimate, shortfall };
         } catch (error) {
             if (pendingLogId && !journalResolved) {
                 await this.promptExecutionLogRepository!.complete(pendingLogId, {

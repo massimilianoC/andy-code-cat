@@ -68,6 +68,9 @@ export function DidacticPanel({
     const [generating, setGenerating] = useState(false);
     const [generatingPhase, setGeneratingPhase] = useState("");
     const [error, setError] = useState<string | null>(null);
+    // Not an error: the knowledge is usable, it is just thinner than the prompt required. Kept
+    // separate so it renders as a notice rather than replacing the result with a failure.
+    const [shortfall, setShortfall] = useState<string | null>(null);
     const phaseTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
     const load = async () => {
@@ -110,9 +113,15 @@ export function DidacticPanel({
         try {
             const res = await generateDidacticKnowledge(token, projectId, { snapshotId, uiLanguage: "it", provider, model, pipelineRunId });
             setStatusDto({ status: "ready", knowledge: res.knowledge });
+            setShortfall(res.shortfall
+                ? `Il modello ha prodotto ${res.shortfall.topics} argomenti e ${res.shortfall.quizzes} quiz, `
+                  + `a fronte di ${res.shortfall.expectedTopics.min}–${res.shortfall.expectedTopics.max} argomenti `
+                  + `e ${res.shortfall.expectedQuizzes} quiz richiesti. Prova a rigenerare con un altro modello.`
+                : null);
             setActiveTab("analyze");
             onCostUpdated?.();
         } catch (e) {
+            setShortfall(null);
             setError(e instanceof Error ? e.message : "Errore generazione");
         } finally {
             phaseTimersRef.current.forEach(clearTimeout);
@@ -218,6 +227,16 @@ export function DidacticPanel({
                         <Button type="button" size="sm" variant="outline" onClick={load}>
                             Riprova
                         </Button>
+                    </div>
+                )}
+
+                {/* A notice, not an error: the analysis below is real and usable, it is simply
+                    thinner than the prompt required. Before this, a model that returned one topic
+                    instead of six produced a panel that looked complete and said nothing. */}
+                {snapshotId && !error && shortfall && (
+                    <div className="mx-3 mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                        <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-600" />
+                        <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">{shortfall}</p>
                     </div>
                 )}
 

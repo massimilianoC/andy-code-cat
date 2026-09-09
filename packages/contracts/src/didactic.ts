@@ -140,4 +140,18 @@ export interface DidacticKnowledgeResponseDto {
         providerCostEur: number;
         totalEur: number;
     };
+    /**
+     * Present only when the model returned less than the prompt required.
+     *
+     * The prompt asks for 6-10 topics and exactly 5 quizzes, but nothing can force it: `strict`
+     * JSON-schema mode does not support array cardinality. So a lazy model produces a reply that is
+     * valid against the schema and poor as a product — one topic, one quiz — and without this the
+     * user is simply shown less and told nothing. Reporting costs no extra call.
+     */
+    shortfall?: {
+        topics: number;
+        quizzes: number;
+        expectedTopics: { min: number; max: number };
+        expectedQuizzes: number;
+    };
 }
