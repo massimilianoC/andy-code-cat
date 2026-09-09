@@ -329,7 +329,15 @@ export class GenerateDidacticKnowledge {
                 },
             });
 
-            CostTransactionService.instance.record({
+            // Awaited, unlike almost every other call site, because this response tells the panel
+            // to re-read the ledger the moment it arrives. `record()` is fire-and-forget by
+            // design, so the HTTP reply raced the insert and the refresh that followed it read the
+            // ledger a beat too early: the didactic cost was correct in Mongo, correct in the
+            // header total, and missing from the transactions list the drawer had already fetched.
+            // A read-after-write cannot be served by a write nobody waited for. The catch keeps
+            // the original guarantee — a ledger failure never fails a generation that is already
+            // paid for and already persisted.
+            await CostTransactionService.instance.recordAsync({
                 userId: input.userId,
                 projectId: input.projectId,
                 resourceType: ResourceType.LLM_DIDACTIC_KNOWLEDGE,
@@ -345,6 +353,8 @@ export class GenerateDidacticKnowledge {
                 } : {},
                 sourceRef: { promptExecutionLogId: pendingLogId ?? undefined },
                 meta: { provider: llmContext.provider, model: llmContext.model, snapshotId: input.snapshotId },
+            }).catch((err: unknown) => {
+                console.error("[GenerateDidacticKnowledge] cost ledger write failed:", describeError(err));
             });
 
             return { knowledge: saved, costEstimate, shortfall };
