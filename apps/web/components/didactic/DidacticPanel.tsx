@@ -183,8 +183,16 @@ export function DidacticPanel({
                 )}
             </div>
 
-            {/* Content */}
-            <div className="flex-1 min-h-0 relative">
+            {/* Content — a flex column, not a plain block: the shortfall/error banners above
+                are siblings of the scrollable area, and only a flex column lets them claim
+                their own height while the scrollable area gets exactly what's left via
+                `flex-1 min-h-0` (the same pattern MediaGrid uses). Before this, the banners
+                were laid out in-flow while the ScrollArea below them was sized with `h-full`
+                (100% of this container, ignoring the banner already sitting above it), so the
+                ScrollArea's box ran past the bottom of this panel by exactly the banner's
+                height — silently clipped by `.workspace-chat-panel`'s `overflow: hidden`
+                (apps/web/app/globals.css). That clipped strip was never reachable by scrolling. */}
+            <div className="flex-1 min-h-0 relative flex flex-col">
                 {/* No snapshot yet — guard against null snapshotId so we never fire
                     requests with ?snapshotId=null. The user must first generate or
                     select an artifact version in Build mode. */}
@@ -222,7 +230,7 @@ export function DidacticPanel({
                 )}
 
                 {snapshotId && error && (
-                    <div className="p-4 space-y-2">
+                    <div className="p-4 space-y-2 shrink-0">
                         <p className="text-sm text-destructive">{error}</p>
                         <Button type="button" size="sm" variant="outline" onClick={load}>
                             Riprova
@@ -234,14 +242,14 @@ export function DidacticPanel({
                     thinner than the prompt required. Before this, a model that returned one topic
                     instead of six produced a panel that looked complete and said nothing. */}
                 {snapshotId && !error && shortfall && (
-                    <div className="mx-3 mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                    <div className="mx-3 mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 shrink-0">
                         <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-600" />
                         <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">{shortfall}</p>
                     </div>
                 )}
 
                 {snapshotId && activeTab !== "ask" && (
-                    <ScrollArea className="h-full">
+                    <ScrollArea className="flex-1 min-h-0">
                         <DidacticExploreTab
                             status={statusDto?.status ?? "absent"}
                             knowledge={statusDto?.knowledge}
@@ -255,17 +263,19 @@ export function DidacticPanel({
                 )}
 
                 {snapshotId && activeTab === "ask" && (
-                    <DidacticAskTab
-                        projectId={projectId}
-                        snapshotId={snapshotId}
-                        token={token}
-                        focus={focus}
-                        onClearFocus={onClearFocus}
-                        onCostUpdated={onCostUpdated}
-                        provider={provider}
-                        model={model}
-                        pipelineRunId={pipelineRunId}
-                    />
+                    <div className="flex-1 min-h-0">
+                        <DidacticAskTab
+                            projectId={projectId}
+                            snapshotId={snapshotId}
+                            token={token}
+                            focus={focus}
+                            onClearFocus={onClearFocus}
+                            onCostUpdated={onCostUpdated}
+                            provider={provider}
+                            model={model}
+                            pipelineRunId={pipelineRunId}
+                        />
+                    </div>
                 )}
             </div>
         </div>
