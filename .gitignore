@@ -44,13 +44,41 @@ test-results/
 tests/test-results/
 tests/e2e/report/
 
+# ─── Test outputs from MCP-driven browser sessions ───────────────────────────
+# Accessibility dumps written by the Playwright MCP server. 56 of these were once
+# committed; they are session scratch, never a deliverable.
+.playwright-mcp/
+
 # ─── Debug / scratch ─────────────────────────────────────────────────────────
-debug/sample/
-# Probe and diagnostic output lands here (fanout-probe writes assembled artifacts).
-# Generated, often large, and never reviewable — it does not belong in a public repo.
-debug/*.html
-debug/*.json
+# The whole folder, not just debug/sample/. Probe and diagnostic output, ad-hoc
+# screenshots, and one-off exports land here — generated, often large, and never
+# reviewable. None of it belongs in a public repo.
+debug/
 health_test.json
+
+# ─── Build artifacts ─────────────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ─── Editor and one-off backups ──────────────────────────────────────────────
+*.bak
+*.orig
+*.rej
+*~
+
+# ─── Screenshots at the repository root ──────────────────────────────────────
+# Documentation images belong under docs/. A PNG in the root is a leftover from
+# a manual verification run — six of them once shipped to the public repo.
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+
+# ─── Local working notes (operator scratch, never published) ────────────────
+# Italian analysis notes, drafts, and other local-only scratch documents live
+# here. Gitignored on purpose: see "Local working notes" in
+# docs/guides/PUBLIC_REPO_CHECKLIST.md.
+/notes/
 
 # ─── OS / IDE ─────────────────────────────────────────────────────────────────
 .DS_Store
