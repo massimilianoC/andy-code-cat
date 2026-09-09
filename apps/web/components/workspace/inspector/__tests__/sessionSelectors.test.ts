@@ -4,7 +4,7 @@ import type {
     PromptExecutionLogDetailDto,
     CostTransactionDetailDto,
 } from "@andy-code-cat/contracts";
-import { pickLatestSession, latestLogForStage, costForLog, canonicalBriefOf, blocksPresent } from "../sessionSelectors";
+import { pickLatestSession, latestLogForStage, costForLog, canonicalBriefOf, blocksPresent, shouldFetchSessionDetail } from "../sessionSelectors";
 
 function log(overrides: Partial<PromptExecutionLogDetailDto>): PromptExecutionLogDetailDto {
     return {
@@ -177,5 +177,36 @@ describe("canonicalBriefOf / blocksPresent", () => {
 
     it("a session with nothing recorded yet (still-open, no logs) shows no blocks", () => {
         expect(blocksPresent(emptyDetail({}))).toEqual({ vibe: false, zeroEffort: false, generation: false });
+    });
+});
+
+describe("shouldFetchSessionDetail", () => {
+    const base = { sessionId: "s1", anyBlockOpen: true, fetchedFor: null, inFlightFor: null };
+
+    it("fetches when a block is open and nothing has been fetched yet", () => {
+        expect(shouldFetchSessionDetail(base)).toBe(true);
+    });
+
+    it("does not fetch while a request for the same session is already out", () => {
+        // The regression: the panel used component state for this and put it in the effect's own
+        // dependency array, so setting it re-ran the effect, whose cleanup cancelled the request
+        // in flight — and the cancelled `finally` never cleared the flag. "Caricamento cronologia…"
+        // stayed on screen forever while the server had already answered 200.
+        expect(shouldFetchSessionDetail({ ...base, inFlightFor: "s1" })).toBe(false);
+    });
+
+    it("does fetch a DIFFERENT session even while one is in flight", () => {
+        // Switching project mid-flight must not be blocked by the previous request.
+        expect(shouldFetchSessionDetail({ ...base, sessionId: "s2", inFlightFor: "s1" })).toBe(true);
+    });
+
+    it("does not re-fetch what it already has", () => {
+        expect(shouldFetchSessionDetail({ ...base, fetchedFor: "s1" })).toBe(false);
+        expect(shouldFetchSessionDetail({ ...base, sessionId: "s2", fetchedFor: "s1" })).toBe(true);
+    });
+
+    it("waits until a block is actually open, and needs a session", () => {
+        expect(shouldFetchSessionDetail({ ...base, anyBlockOpen: false })).toBe(false);
+        expect(shouldFetchSessionDetail({ ...base, sessionId: undefined })).toBe(false);
     });
 });

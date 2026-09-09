@@ -69,3 +69,28 @@ export function blocksPresent(detail: WorkSessionDetailDto): InspectorBlocksPres
         generation: latestLogForStage(detail.promptExecutionLogs, "generate") !== undefined,
     };
 }
+
+/**
+ * Whether the detail fetch should start for `sessionId`.
+ *
+ * Extracted from the effect that used to decide this inline, because deciding it inline is what
+ * broke it: the effect guarded on its own `detailLoading` state, which it also set, so React
+ * re-ran it, the cleanup cancelled the request in flight, and the guarded `finally` never cleared
+ * the flag. The panel then showed "Caricamento cronologia…" indefinitely while the network had
+ * already answered 200.
+ *
+ * `fetchedFor` is durable (we have the data), `inFlightFor` is transient (a request is out). Both
+ * are compared against the session id rather than treated as booleans, so switching projects mid
+ * flight starts the new fetch instead of being blocked by the old one.
+ */
+export function shouldFetchSessionDetail(input: {
+    sessionId: string | undefined;
+    anyBlockOpen: boolean;
+    fetchedFor: string | null;
+    inFlightFor: string | null;
+}): boolean {
+    if (!input.sessionId || !input.anyBlockOpen) return false;
+    if (input.fetchedFor === input.sessionId) return false;
+    if (input.inFlightFor === input.sessionId) return false;
+    return true;
+}

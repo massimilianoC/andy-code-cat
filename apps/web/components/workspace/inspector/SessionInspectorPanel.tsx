@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { WorkSessionDetailDto, WorkSessionSummaryDto } from "@andy-code-cat/contracts";
 import { listWorkSessions, getWorkSessionDetail } from "@/lib/api/workSessions";
@@ -9,7 +9,7 @@ import { InspectorBlock } from "./InspectorBlock";
 import { VibeBlock } from "./VibeBlock";
 import { ZeroEffortBlock } from "./ZeroEffortBlock";
 import { GenerationBlock } from "./GenerationBlock";
-import { pickLatestSession, latestLogForStage, costForLog, canonicalBriefOf, blocksPresent } from "./sessionSelectors";
+import { pickLatestSession, latestLogForStage, costForLog, canonicalBriefOf, blocksPresent, shouldFetchSessionDetail } from "./sessionSelectors";
 
 interface SessionInspectorPanelProps {
     projectId: string;
@@ -66,28 +66,48 @@ export function SessionInspectorPanel({ projectId }: SessionInspectorPanelProps)
     // Step 2: the one detail fetch, gated on a block actually being open (spec §5.5). Generation
     // starts open, so this fires right after the session id is known — that IS "expanding a
     // block", just the one that starts pre-expanded.
+    // The in-flight guard is a ref, not state, and `detailLoading` is deliberately NOT a dependency.
+    //
+    // It used to be both: the effect called setDetailLoading(true), which changed a value it
+    // depended on, so React re-ran it — and the cleanup of the first pass set `cancelled = true`.
+    // The request itself completed (the server answered 200 with the whole detail), but `.then`
+    // and `.finally` are both guarded by `cancelled`, so the result was discarded and
+    // `detailLoading` was never set back to false. The panel showed "Caricamento cronologia…"
+    // forever, on every project, while the network tab showed one successful response.
+    const inFlightFor = useRef<string | null>(null);
+
     useEffect(() => {
-        if (!latestSession || !anyBlockOpen) return;
-        if (detailFetchedFor === latestSession.id || detailLoading) return;
+        const sessionId = latestSession?.id;
+        if (!shouldFetchSessionDetail({
+            sessionId,
+            anyBlockOpen,
+            fetchedFor: detailFetchedFor,
+            inFlightFor: inFlightFor.current,
+        })) return;
+
         let cancelled = false;
+        inFlightFor.current = sessionId!;
         setDetailLoading(true);
         setDetailError(null);
-        getWorkSessionDetail(projectId, latestSession.id)
+        getWorkSessionDetail(projectId, sessionId!)
             .then((res) => {
                 if (cancelled) return;
                 setDetail(res);
-                setDetailFetchedFor(latestSession.id);
+                setDetailFetchedFor(sessionId!);
             })
             .catch((err) => {
                 if (!cancelled) setDetailError(err instanceof Error ? err.message : String(err));
             })
             .finally(() => {
+                // Cleared whether or not this pass was cancelled: leaving the flag set would block
+                // every later attempt, which is the failure this replaced.
+                if (inFlightFor.current === sessionId) inFlightFor.current = null;
                 if (!cancelled) setDetailLoading(false);
             });
         return () => {
             cancelled = true;
         };
-    }, [projectId, latestSession, anyBlockOpen, detailFetchedFor, detailLoading]);
+    }, [projectId, latestSession, anyBlockOpen, detailFetchedFor]);
 
     function toggle(block: BlockKey) {
         setOpen((prev) => ({ ...prev, [block]: !prev[block] }));
