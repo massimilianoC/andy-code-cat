@@ -184,4 +184,66 @@ describe("POST /projects/:projectId/llm/chat-preview — journal correlation (WP
         expect(typeof row.endpoint).toBe("string");
         expect(row.endpoint as string).toMatch(/\/chat\/completions$/);
     }, 30_000);
+
+    it("opens a work session when a generation starts without one — Project Mode", async () => {
+        // Project Mode creates a blank project and sends the browser straight to the workspace,
+        // which dispatches the first prompt through this route. Nothing upstream opens a session:
+        // Vibe opens one at classify/prefill, the guided handoff opens one at launch-workspace,
+        // and Project Mode passes through neither. So the generation that produced the artifact was
+        // journalled with no session, and the Prompt tab said "no activity recorded yet" about a
+        // project the user had just watched being built.
+        //
+        // Measured in production on 2026-09-10: two `generate` rows minutes apart, the Vibe one
+        // carrying a session and the Project Mode one carrying none, and not one work session whose
+        // entryMode was anything but `vibe`.
+        //
+        // No x-work-session-id header here, and no session open on the project — exactly the
+        // Project Mode shape.
+        const token = signToken(ownerUserId);
+        const bareProjectId = new ObjectId().toHexString();
+
+        const { getDb } = await import("../../../../infra/db/mongo");
+        const db = await getDb();
+        await db.collection("projects").insertOne({
+            _id: new ObjectId(bareProjectId),
+            // ObjectId, not the hex string — sandboxMiddleware matches on the stored shape, and a
+            // string here makes the project simply not resolve.
+            ownerUserId: new ObjectId(ownerUserId),
+            name: "Project Mode blank project",
+            presetId: "landing",
+            createdAt: new Date(),
+        } as never);
+
+        const before = await db.collection("work_sessions").countDocuments({ projectId: bareProjectId });
+        expect(before, "no session exists for this project yet — that is the whole premise").toBe(0);
+
+        const fetchSpy = vi.spyOn(global, "fetch").mockImplementation(async (input: unknown, init?: unknown) => {
+            const url = typeof input === "string" ? input : String((input as { url?: string })?.url ?? input);
+            if (url.endsWith("/chat/completions")) {
+                return new Response(JSON.stringify({ error: "stubbed provider failure" }), {
+                    status: 500, headers: { "Content-Type": "application/json" },
+                });
+            }
+            return realFetch(input as never, init as never);
+        });
+
+        try {
+            await request(app)
+                .post(`/v1/projects/${bareProjectId}/llm/chat-preview`)
+                .set("Authorization", `Bearer ${token}`)
+                .set("x-project-id", bareProjectId)
+                .send({ message: "A landing page for a coffee roastery." });
+        } finally {
+            fetchSpy.mockRestore();
+        }
+
+        const sessions = await db.collection("work_sessions").find({ projectId: bareProjectId }).toArray();
+        expect(sessions.length, "a generation is an intent; it must have a session to belong to").toBe(1);
+
+        const row = await db.collection("prompt_execution_logs")
+            .findOne({ projectId: bareProjectId, pipelineStage: "generate" });
+        expect(row, "the generate row must exist").toBeTruthy();
+        expect(row?.workSessionId, "and it must carry the session that was just opened")
+            .toBe(sessions[0]!._id);
+    });
 });
