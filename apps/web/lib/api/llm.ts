@@ -80,68 +80,12 @@ export interface LlmChatInput {
  */
 export type PromptLayerEntryDto = PromptLayerTraceEntryDto;
 
-export interface LlmChatPreviewResult {
-    reply: string;
-    rawResponse?: string;
-    structuredParseValid?: boolean;
-    /** Canonical shape from packages/contracts/src/llm.ts — see LlmPromptingTrace. */
-    promptingTrace?: LlmPromptingTrace;
-    /**
-     * AL-026 — id of the durable PromptExecutionLog record this response was persisted under
-     * (packages/contracts/src/llm.ts LlmChatPreviewResult.promptExecutionId, populated at
-     * llmRoutes.ts:913/:1532). Callers that create a PreviewSnapshot store this as an FK.
-     */
-    promptExecutionId?: string;
-    structured?: {
-        chat: {
-            summary: string;
-            bullets: string[];
-            nextActions: string[];
-        };
-        artifacts: {
-            html: string;
-            css: string;
-            js: string;
-        };
-        serviceManifest?: import("@andy-code-cat/contracts").ServiceManifestV1;
-    };
-    mediaResolution?: {
-        version: "media-resolution-v1";
-        traceIds: string[];
-        assetIds: string[];
-        mediaKeys: string[];
-        degraded: boolean;
-    };
-    provider: string;
-    model: string;
-    finishReason?: string;
-    usage?: {
-        promptTokens: number;
-        completionTokens: number;
-        totalTokens: number;
-    };
-    costEstimate?: {
-        currency: "EUR";
-        amount: number;
-        breakdown: {
-            tokenCost: number;
-            imageCost: number;
-            videoCost: number;
-        };
-        unitRates: {
-            textEurPer1kTokens: number;
-            imageEurPerAsset: number;
-            videoEurPerAsset: number;
-        };
-        providerCostUsd?: number;
-    };
-    durationMs: number;
-    simulated: boolean;
-    focusPatchApplied?: boolean;
-    focusPatchParseError?: boolean;
-    /** true when a NON-focused generation could not be parsed. structured.artifacts is empty; no snapshot must be created. */
-    generationParseError?: boolean;
-}
+// Re-exported, not re-declared. This file used to carry its own copy of the shape — a byte-for-byte
+// duplicate of the contract, kept aligned by hand — and the drift showed up the moment the contract
+// gained a field: the API compiled, the web did not see it, and a diagnosis the server was already
+// sending was invisible to the only code that could act on it.
+import type { LlmChatPreviewResult } from "@andy-code-cat/contracts";
+export type { LlmChatPreviewResult };
 
 export interface LlmChatDefaults {
     temperature: number;

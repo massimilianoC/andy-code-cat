@@ -25,6 +25,46 @@ describe("buildChatCompletionRequestBody", () => {
         expect(body).not.toHaveProperty("thinking");
     });
 
+    it("sends an explicit disable, because silence lets a hybrid model reason by default", () => {
+        // The section fan-out needs reasoning off for the calls that only execute a decided plan;
+        // omitting the field would leave the model's own default in charge, and for a hybrid model
+        // that default spends the section's budget thinking before it emits any HTML.
+        const body = buildChatCompletionRequestBody({
+            ...baseInput,
+            enableThinking: false,
+        });
+
+        expect(body).toMatchObject({ enable_thinking: false });
+        expect(body).not.toHaveProperty("thinking_budget");
+    });
+
+    it("says nothing about thinking when the caller expressed no preference", () => {
+        const body = buildChatCompletionRequestBody(baseInput);
+
+        expect(body).not.toHaveProperty("enable_thinking");
+        expect(body).not.toHaveProperty("thinking_budget");
+    });
+
+    it("admits the GLM 5.x text models, whose absence made run f51ee098 uncontrollable", () => {
+        const body = buildChatCompletionRequestBody({
+            ...baseInput,
+            model: "zai-org/GLM-5.3",
+            enableThinking: false,
+        });
+
+        expect(body).toMatchObject({ enable_thinking: false });
+    });
+
+    it("stays silent for a model the provider does not accept the field for", () => {
+        const body = buildChatCompletionRequestBody({
+            ...baseInput,
+            model: "Qwen/Qwen2.5-72B-Instruct",
+            enableThinking: false,
+        });
+
+        expect(body).not.toHaveProperty("enable_thinking");
+    });
+
     it("does not emit unsupported custom thinking payloads for OpenRouter", () => {
         const body = buildChatCompletionRequestBody({
             ...baseInput,

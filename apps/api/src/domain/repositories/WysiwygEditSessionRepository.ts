@@ -43,4 +43,7 @@ export interface WysiwygEditSessionRepository {
         projectId: string,
         committedSnapshotId: string
     ): Promise<WysiwygEditSession | null>;
+
+    /** Delete-project cascade — removes every edit session for a project. Returns the number removed. */
+    deleteByProject(projectId: string): Promise<number>;
 }

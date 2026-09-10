@@ -135,4 +135,10 @@ export class MongoWysiwygEditSessionRepository implements WysiwygEditSessionRepo
         );
         return result ? toEntity(result) : null;
     }
+
+    async deleteByProject(projectId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId } as Filter<WysiwygEditSessionDocument>);
+        return result.deletedCount;
+    }
 }

@@ -50,4 +50,14 @@ export interface PreviewSnapshotRepository {
      * given projectIds. Returned as a Map keyed by projectId.
      */
     getActiveForProjects(projectIds: string[]): Promise<Map<string, PreviewSnapshot>>;
+
+    /**
+     * Delete-project cascade — removes every snapshot for a project. Returns the number removed.
+     *
+     * Leaves any thumbnail file behind, same as `deleteById` always has: neither this repository
+     * nor `DeletePreviewSnapshot` has ever called `IFileStorage.deleteThumbnailFile`, so a snapshot
+     * row disappearing without its thumbnail is the existing single-delete behaviour, not a
+     * regression introduced by the cascade.
+     */
+    deleteByProject(projectId: string): Promise<number>;
 }

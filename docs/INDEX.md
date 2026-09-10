@@ -51,6 +51,7 @@ Read in this order before making changes:
 
 | Document | Description |
 | --- | --- |
+| [docs/handoff/SESSION_RESUME.md](handoff/SESSION_RESUME.md) | **Restore point — read first when picking up cold.** Current branch state, findings not to re-derive, what is verified live and what is not |
 | [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) | Primary entry point for coding agents |
 | [docs/agents/LLM_PROVIDER_HANDOFF_RECAP.md](agents/LLM_PROVIDER_HANDOFF_RECAP.md) | LLM provider and chat-preview implementation notes |
 | [docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md](agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md) | Layer ownership map and collision-prevention rules for parallel agents |
@@ -113,6 +114,16 @@ Read in this order before making changes:
 | --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
 | [docs/specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md](specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md) | **Proposed, not implemented** — why the first generation feels silent, and an incremental plan for real progress events and an inspector panel |
+| [docs/specs/SESSION_INSPECTOR_SPEC.md](specs/SESSION_INSPECTOR_SPEC.md) | **Feature B, ready to implement** — the Prompt view becomes three collapsible blocks (Vibe / Zero Effort / Generation) reading only what the database already owns |
+| [docs/specs/PROMPT_LAYER_REDUNDANCY_ANALYSIS.md](specs/PROMPT_LAYER_REDUNDANCY_ANALYSIS.md) | **Feature C** — measured on real runs: no literal redundancy exists, 25% of the prompt is static boilerplate that caching handles for free, and the question worth asking instead |
+| [docs/specs/PREFILL_PARALLELISATION_FINDINGS.md](specs/PREFILL_PARALLELISATION_FINDINGS.md) | **Tested and rejected** — splitting the Zero Effort prefill across parallel calls is slower, costlier and less complete; why, and what would change the answer |
+| [docs/specs/INTERRUPTED_RUN_RECOVERY.md](specs/INTERRUPTED_RUN_RECOVERY.md) | Resume a broken generation from its own partial answer and reasoning instead of restarting — prerequisite built, offer not |
+| [docs/specs/MULTI_MODEL_PARALLEL_RUNS.md](specs/MULTI_MODEL_PARALLEL_RUNS.md) | **Parked idea** — one input, several models at once, three versioned artifacts to choose from; what already exists for it and what makes it hard |
+| [docs/specs/SESSION_REDUNDANCY_ANALYSIS.md](specs/SESSION_REDUNDANCY_ANALYSIS.md) | Measured on a real exported session — which duplications are harmless, which one diverges, and the two references that were missing |
+| [docs/specs/SESSION_RECONSTRUCTION_CERTIFICATE.md](specs/SESSION_RECONSTRUCTION_CERTIFICATE.md) | **The checkable claim** — eight questions the database must answer from a workSessionId alone, the verification query, and the holes still open |
+| [docs/specs/SESSION_TRACING_EXECUTION_PLAN.md](specs/SESSION_TRACING_EXECUTION_PLAN.md) | **Assignment brief for implementing agents** — six work packages closing the artifact SSOT violation, unifying cost into one referential record, completing the journal, and enabling replay experiments |
+| [docs/specs/WORK_SESSION_TRACING_SPEC.md](specs/WORK_SESSION_TRACING_SPEC.md) | **Proposed** — one work-session id spanning every prompt, response, cost and endpoint of a run; audit of what the 13 LLM call sites record today |
+| [docs/specs/PARALLEL_SECTION_GENERATION_SPEC.md](specs/PARALLEL_SECTION_GENERATION_SPEC.md) | **Proposed, not implemented** — splitting the monolithic `generate` stage into a planned, per-section parallel fan-out; model-lock, cost and coherence constraints |
 | [docs/specs/I18N_ARTIFACTS_SPEC.md](specs/I18N_ARTIFACTS_SPEC.md) | Multilingual support for LLM-generated artifact websites — post-publication translation pipeline |
 | [docs/specs/UX_REVIEW_AND_PUBLISH_SPEC.md](specs/UX_REVIEW_AND_PUBLISH_SPEC.md) | Review workspace and publish flow |
 | [docs/specs/WYSIWYG_EDIT_MODE_SPEC.md](specs/WYSIWYG_EDIT_MODE_SPEC.md) | WYSIWYG editor architecture and milestones |

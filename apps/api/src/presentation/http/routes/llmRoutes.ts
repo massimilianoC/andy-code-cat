@@ -20,7 +20,7 @@ import {
 import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
 import { estimateCost } from "../../../application/llm/costPolicy";
-import { getSiliconFlowPrice } from "../../../application/llm/siliconflowPricing";
+import { readProviderCostUsd } from "../../../application/cost/resolveLlmCallCost";
 import { env } from "../../../config";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
@@ -38,6 +38,8 @@ import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/Mong
 import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
+import { createWorkSessionMiddleware } from "../middlewares/workSessionMiddleware";
+import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
 import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptConfig";
 import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptConfig";
@@ -54,6 +56,7 @@ import { ResolveBrandDocumentContext } from "../../../application/use-cases/Reso
 import { ResolvePromptExecution, type LlmRuntimeContext } from "../../../application/use-cases/ResolvePromptExecution";
 import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
 import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
+import { describeGeneratedJavaScriptSyntaxError } from "../../../application/artifacts/generatedJavaScriptSyntax";
 
 type LlmProviderStatus = {
     requiresKey: boolean;
@@ -241,6 +244,10 @@ export function createLlmRoutes(): Router {
     );
 
     router.use(authMiddleware);
+    // Mounted after auth because the session lookup is ownership-scoped. Never rejects: a
+    // missing or foreign session id leaves the request untraced rather than refused
+    // (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md rule 4).
+    router.use(createWorkSessionMiddleware(new MongoWorkSessionRepository()));
 
     const llmCatalogRepository = new MongoLlmCatalogRepository();
     const getLlmCatalog = new GetLlmCatalog(
@@ -632,11 +639,16 @@ export function createLlmRoutes(): Router {
                     });
                 }
             }
+            const endpoint = `${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`;
             const pendingLog = await promptExecutionLogRepository.createPending({
                 taskKey: "chat",
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 conversationId: body.conversationId,
+                workSessionId: req.workSession?.id,
+                pipelineRunId: body.pipelineRunId,
+                pipelineStage: "generate",
+                endpoint,
                 provider: context.providerCatalog.provider,
                 model: context.modelId,
                 inputPrompt: body.message.slice(0, 2000),
@@ -644,15 +656,19 @@ export function createLlmRoutes(): Router {
                 renderedUserPrompt: messages[messages.length - 1]?.content,
                 contextMeta: {
                     projectPresetId: context.projectPresetId,
+                    assetIds: context.contextAssetIds,
                     usedMoodboard: false,
                     usedUserProfile: false,
                 },
                 idempotencyKey: body.idempotencyKey,
+                // Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — the
+                // only new field a resumed generation adds. Absent on every ordinary turn.
+                resumedFromPromptExecutionId: body.resumedFromPromptExecutionId,
             });
             promptExecutionLogId = pendingLog.id;
             // ── end I11 pending write ───────────────────────────────────────────────────
 
-            const sfRes = await fetch(`${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+            const sfRes = await fetch(endpoint, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -856,26 +872,22 @@ export function createLlmRoutes(): Router {
             });
             userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => { });
 
-            // OpenRouter (and compatible providers) may return usage.cost in USD.
-            const rawProviderCost = sfJson?.usage?.cost;
-            let providerCostUsd: number | undefined =
-                typeof rawProviderCost === "number" ? rawProviderCost
-                    : typeof rawProviderCost === "string" ? (parseFloat(rawProviderCost) || undefined)
-                        : undefined;
-            // SiliconFlow does not return cost in the API response; compute from per-model pricing table.
-            if (providerCostUsd === undefined && context.providerCatalog.provider === "siliconflow") {
-                const sfPrice = getSiliconFlowPrice(context.modelId);
-                if (sfPrice && sfPrice.priceUnit === "per_m_tokens") {
-                    providerCostUsd =
-                        (resolvedUsage.promptTokens / 1_000_000) * sfPrice.input +
-                        (resolvedUsage.completionTokens / 1_000_000) * sfPrice.output;
-                }
-            }
+            const providerCostUsd = readProviderCostUsd({
+                provider: context.providerCatalog.provider,
+                modelId: context.modelId,
+                providerUsage: sfJson?.usage,
+                usage: resolvedUsage,
+            });
 
             const result: LlmChatPreviewResult = {
                 reply,
                 rawResponse: rawReply,
                 structuredParseValid: parsed.parseValid,
+                // Reported, never thrown here: refusing at the generation boundary would discard a
+                // complete artifact over a syntax slip. The storage boundary still refuses it.
+                generatedJavaScriptError: parsed.structured?.artifacts?.js
+                    ? describeGeneratedJavaScriptSyntaxError(parsed.structured.artifacts.js)
+                    : undefined,
                 promptingTrace: {
                     originalUserMessage: body.message,
                     promptConfigId: context.promptConfigId,
@@ -985,6 +997,12 @@ export function createLlmRoutes(): Router {
                     mediaResolutionSummary,
                     costEstimate: result.costEstimate,
                     durationMs: result.durationMs,
+                    finishReason: result.finishReason,
+                    // The reply before parsing and repair. Its absence here was a real hole found by
+                    // running the certificate against a live session: the generate row proved WHICH
+                    // prompt produced the artifact but not what the model actually emitted, which is
+                    // the half that says whether a repair fired.
+                    rawResponse: result.rawResponse,
                 });
             }
             // ── end I11 journal completion ──────────────────────────────────────
@@ -1107,11 +1125,16 @@ export function createLlmRoutes(): Router {
                     });
                 }
             }
+            const endpoint = `${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`;
             const pendingLog = await promptExecutionLogRepository.createPending({
                 taskKey: "chat",
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 conversationId: body.conversationId,
+                workSessionId: req.workSession?.id,
+                pipelineRunId: body.pipelineRunId,
+                pipelineStage: "generate",
+                endpoint,
                 provider: context.providerCatalog.provider,
                 model: context.modelId,
                 inputPrompt: body.message.slice(0, 2000),
@@ -1119,10 +1142,14 @@ export function createLlmRoutes(): Router {
                 renderedUserPrompt: messages[messages.length - 1]?.content,
                 contextMeta: {
                     projectPresetId: context.projectPresetId,
+                    assetIds: context.contextAssetIds,
                     usedMoodboard: false,
                     usedUserProfile: false,
                 },
                 idempotencyKey: body.idempotencyKey,
+                // Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — the
+                // only new field a resumed generation adds. Absent on every ordinary turn.
+                resumedFromPromptExecutionId: body.resumedFromPromptExecutionId,
             });
             promptExecutionLogId = pendingLog.id;
             // ── end I11 pending write ───────────────────────────────────────────────────
@@ -1144,7 +1171,7 @@ export function createLlmRoutes(): Router {
 
             let sfRes: Response;
             try {
-                sfRes = await fetch(`${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+                sfRes = await fetch(endpoint, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -1212,6 +1239,10 @@ export function createLlmRoutes(): Router {
             const decoder = new TextDecoder();
             let buffer = "";
             let rawReply = "";
+            // Reasoning is billed from the same completion budget as the answer, so on a truncated
+            // call this is the only surviving record of work already paid for. It was previously
+            // forwarded to the client and dropped server-side.
+            let rawThinking = "";
             let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
             let providerCostUsdStream: number | undefined;
             let finishReason: string | undefined;
@@ -1265,6 +1296,7 @@ export function createLlmRoutes(): Router {
                             const content = delta?.content;
 
                             if (thinking) {
+                                rawThinking += String(thinking);
                                 sendSse(res, { type: "thinking", content: String(thinking) });
                             }
 
@@ -1315,14 +1347,15 @@ export function createLlmRoutes(): Router {
 
             res.off("close", onClientClose);
 
-            // SiliconFlow does not return cost in the stream; compute from per-model pricing table.
-            if (providerCostUsdStream === undefined && context.providerCatalog.provider === "siliconflow" && usage) {
-                const sfPrice = getSiliconFlowPrice(context.modelId);
-                if (sfPrice && sfPrice.priceUnit === "per_m_tokens") {
-                    providerCostUsdStream =
-                        (usage.promptTokens / 1_000_000) * sfPrice.input +
-                        (usage.completionTokens / 1_000_000) * sfPrice.output;
-                }
+            // The stream carries no final usage object, so whatever was accumulated from the chunks
+            // is passed in as the explicit figure; the shared rule supplies the fallback.
+            if (usage) {
+                providerCostUsdStream = readProviderCostUsd({
+                    provider: context.providerCatalog.provider,
+                    modelId: context.modelId,
+                    usage,
+                    explicitCostUsd: providerCostUsdStream,
+                });
             }
 
             if (streamAborted || res.destroyed || res.writableEnded) {
@@ -1347,6 +1380,13 @@ export function createLlmRoutes(): Router {
                         status: "failed",
                         errorMessage: "Generation interrupted (client disconnect or timeout)",
                         durationMs: Date.now() - startedAt,
+                        finishReason: finishReason ?? "interrupted",
+                        // The work already paid for. Both were in scope here and discarded: an
+                        // interrupted generation is precisely the case where the partial answer and
+                        // the reasoning behind it are worth more than the error message, because
+                        // they are what a resumed attempt would start from instead of starting over.
+                        rawResponse: rawReply || undefined,
+                        reasoningTrace: rawThinking ? rawThinking.slice(0, 20_000) : undefined,
                     }).catch(() => { });
                 }
                 if (!res.writableEnded && !res.destroyed) {
@@ -1495,6 +1535,11 @@ export function createLlmRoutes(): Router {
                 reply,
                 rawResponse: trimmedRaw,
                 structuredParseValid: parsed.parseValid,
+                // Reported, never thrown here: refusing at the generation boundary would discard a
+                // complete artifact over a syntax slip. The storage boundary still refuses it.
+                generatedJavaScriptError: parsed.structured?.artifacts?.js
+                    ? describeGeneratedJavaScriptSyntaxError(parsed.structured.artifacts.js)
+                    : undefined,
                 promptingTrace: {
                     originalUserMessage: body.message,
                     promptConfigId: context.promptConfigId,
@@ -1603,6 +1648,16 @@ export function createLlmRoutes(): Router {
                     mediaResolutionSummary,
                     costEstimate: result.costEstimate,
                     durationMs: result.durationMs,
+                    finishReason: result.finishReason,
+                    // Kept only when the call was cut off: on a clean stop the trace is dead weight,
+                    // but on "length" it is the work already paid for that a retry can resume from.
+                    // Kept whenever the call did not end cleanly, not only on truncation. A "stop"
+                    // finish means the model said what it meant to say and the trace is dead weight;
+                    // anything else means work was cut short, and the trace is the only record of it.
+                    reasoningTrace: finishReason && finishReason !== "stop"
+                        ? rawThinking.slice(0, 20_000)
+                        : undefined,
+                    rawResponse: result.rawResponse,
                 }).catch(() => { });
             }
             // ── end I11 journal completion ──────────────────────────────────────

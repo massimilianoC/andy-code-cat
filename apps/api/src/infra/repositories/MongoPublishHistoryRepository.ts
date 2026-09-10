@@ -53,4 +53,10 @@ export class MongoPublishHistoryRepository implements PublishHistoryRepository {
             .toArray();
         return docs.map(toEntity);
     }
+
+    async deleteByProject(projectId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId });
+        return result.deletedCount;
+    }
 }

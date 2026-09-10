@@ -23,6 +23,11 @@ import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { PrepareGenerationWorkspace } from "../../../application/use-cases/PrepareGenerationWorkspace";
 import { LaunchGuidedProject } from "../../../application/use-cases/LaunchGuidedProject";
 import { LaunchWorkspacePipeline } from "../../../application/use-cases/LaunchWorkspacePipeline";
+import { OpenWorkSession } from "../../../application/use-cases/OpenWorkSession";
+import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
+import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositories/MongoZeroEffortFormProposalRepository";
+import { createWorkSessionMiddleware, WORK_SESSION_HEADER } from "../middlewares/workSessionMiddleware";
+import { diffFormFields } from "../../../domain/entities/ZeroEffortForm";
 import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import type { GenerationWorkspace } from "../../../domain/entities/GenerationWorkspace";
@@ -95,6 +100,8 @@ export function createPipelineRoutes(): Router {
         env.LLM_DEFAULT_PROVIDER,
     );
     const resolvePipelineModelLock = new ResolvePipelineModelLock(pipelineRunRepository, getLlmCatalog);
+    const openWorkSession = new OpenWorkSession(new MongoWorkSessionRepository());
+    const zeroEffortFormProposalRepository = new MongoZeroEffortFormProposalRepository();
     const launchWorkspacePipeline = new LaunchWorkspacePipeline(
         launchGuidedProject,
         resolvePipelineModelLock,
@@ -146,6 +153,7 @@ export function createPipelineRoutes(): Router {
         pipelineReadLimiter,
         authMiddleware,
         sandboxMiddleware,
+        createWorkSessionMiddleware(new MongoWorkSessionRepository()),
         getGuidedPipelineConfig,
     );
 
@@ -164,6 +172,7 @@ export function createPipelineRoutes(): Router {
         pipelineWriteLimiter,
         authMiddleware,
         sandboxMiddleware,
+        createWorkSessionMiddleware(new MongoWorkSessionRepository()),
         async (req: RequestWithContext, res: Response, next: NextFunction) => {
             try {
                 const intake = launchWorkspacePipelineSchema.parse(req.body);
@@ -175,11 +184,40 @@ export function createPipelineRoutes(): Router {
                     }).catch(() => {});
                 }
 
+                // The launch is the second half of an intent Vibe already opened, so it joins that
+                // session rather than starting one. Without this the brief, the run and the artifact
+                // are orphaned from everything upstream of them (certificate §4, hole D).
+                const launchSessionId = String(req.headers[WORK_SESSION_HEADER] ?? "").trim() || undefined;
+                const launchSession = await openWorkSession.reuseOrOpen(
+                    req.workSession?.id ?? launchSessionId,
+                    { userId: req.auth!.userId, entryMode: "workspace", projectId: req.sandbox!.projectId },
+                );
+
                 const result = await launchWorkspacePipeline.execute({
                     userId: req.auth!.userId,
                     projectId: req.sandbox!.projectId,
                     intake,
+                    workSessionId: launchSession?.id,
                 });
+
+                // Certificate §3 question 4: this is the first moment both sides of the comparison
+                // exist — the proposal recorded at prefill, and the form as the user submitted it.
+                if (launchSession) {
+                    await zeroEffortFormProposalRepository.listByWorkSession(launchSession.id, req.auth!.userId)
+                        .then(async (proposals) => {
+                            const latest = proposals[proposals.length - 1];
+                            if (!latest) return;
+                            await zeroEffortFormProposalRepository.recordDecision(
+                                launchSession.id,
+                                req.auth!.userId,
+                                {
+                                    editedFields: diffFormFields(latest.prefilled, intake),
+                                    projectId: req.sandbox!.projectId,
+                                },
+                            );
+                        })
+                        .catch(() => undefined);
+                }
 
                 ExecutionLogger.instance.emit({
                     projectId: req.sandbox!.projectId,
@@ -232,6 +270,7 @@ export function createPipelineRoutes(): Router {
         pipelineWriteLimiter,
         authMiddleware,
         sandboxMiddleware,
+        createWorkSessionMiddleware(new MongoWorkSessionRepository()),
         async (req: RequestWithContext, res: Response, next: NextFunction) => {
             try {
                 const intake = previewCanonicalBriefSchema.parse(req.body);

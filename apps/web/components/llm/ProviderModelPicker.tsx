@@ -29,7 +29,7 @@ type PickerModel = {
     priceTier?: "free" | "€" | "€€" | "€€€" | "€€€€";
 };
 
-type PickerProvider = {
+export type PickerProvider = {
     provider: string;
     isActive: boolean;
     requiresKey?: boolean;

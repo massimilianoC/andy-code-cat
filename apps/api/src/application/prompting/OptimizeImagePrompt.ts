@@ -3,13 +3,12 @@ import { resolvePromptTaskSettingFromConfig } from "../../domain/entities/Platfo
 import type { PlatformConfigRepository } from "../../domain/repositories/PlatformConfigRepository";
 import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
 import { env } from "../../config";
-import { estimateCost } from "../llm/costPolicy";
-import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import type { GetLlmCatalog } from "../use-cases/GetLlmCatalog";
 import { buildContextAwareImagePrompt, type ImagePromptContextPacket } from "./buildImagePromptContext";
 import { buildOptimizeImagePromptRequest } from "./optimizeImagePromptInstruction";
 import { CostTransactionService } from "../cost/CostTransactionService";
+import { resolveLlmCallCost } from "../cost/resolveLlmCallCost";
 import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "optimize_image_prompt";
@@ -223,28 +222,13 @@ export class OptimizeImagePrompt {
                 }
                 : estimateTokens({ messages: [...messages], outputText: optimizedPrompt });
 
-            let providerCostUsd: number | undefined = undefined;
-            if (typeof payload?.usage?.cost === "number") {
-                providerCostUsd = payload.usage.cost;
-            } else if (providerCatalog.provider === "siliconflow") {
-                const sfPrice = getSiliconFlowPrice(modelId);
-                if (sfPrice && sfPrice.priceUnit === "per_m_tokens") {
-                    providerCostUsd =
-                        (usage.promptTokens / 1_000_000) * sfPrice.input +
-                        (usage.completionTokens / 1_000_000) * sfPrice.output;
-                }
-            }
-
-            const costEstimate = estimateCost(
-                { capability: "chat", tokenUsage: usage, providerCostUsd },
-                {
-                    textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                    imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                    videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                    usdToEurRate: env.COST_POLICY_USD_TO_EUR_RATE,
-                    providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
-                },
-            );
+            const { providerCostUsd, estimate: costEstimate } = resolveLlmCallCost({
+                provider: providerCatalog.provider,
+                modelId,
+                providerUsage: payload?.usage,
+                usage,
+                capability: "chat",
+            });
 
             await this.promptExecutionLogRepository.create({
                 taskKey: TASK_KEY,

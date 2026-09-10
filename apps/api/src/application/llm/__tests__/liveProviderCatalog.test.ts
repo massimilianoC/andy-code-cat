@@ -192,4 +192,48 @@ describe("hydrateProviderCatalog", () => {
             expect(hydrated.models.find((m) => m.id === "still/offered")?.availability).toBeUndefined();
         });
     });
+
+    it("keeps one default PER ROLE, not one per provider", async () => {
+        // Pinned against a measured regression. On 2026-09-07 the stored openrouter catalog held 7
+        // role defaults and GET /v1/admin/llm-registry returned exactly one, `quality_check`. The
+        // `dialogue` default was stripped on read, so every cascade that looks for
+        // `role === "dialogue" && isDefault` missed and fell through to `isFallback`, picking by
+        // list order — Didactic Mode ran on the most expensive authorized model that way.
+        const providerCatalog: LlmProviderCatalog = {
+            provider: "openrouter",
+            baseUrl: "https://openrouter.ai/api/v1",
+            apiType: "openai-compatible",
+            authType: "bearer",
+            isActive: true,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+            models: [
+                { id: "a/dialogue-default", provider: "openrouter", role: "dialogue", capabilities: ["chat"], isDefault: true, isFallback: false, isActive: true },
+                { id: "a/vision-default", provider: "openrouter", role: "vision", capabilities: ["chat"], isDefault: true, isFallback: false, isActive: true },
+                { id: "a/quality-default", provider: "openrouter", role: "quality_check", capabilities: ["chat"], isDefault: true, isFallback: false, isActive: true },
+                // A second default for a role that already has one: this one must still be demoted.
+                { id: "a/dialogue-extra", provider: "openrouter", role: "dialogue", capabilities: ["chat"], isDefault: true, isFallback: false, isActive: true },
+            ],
+        };
+
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                data: [
+                    { id: "a/dialogue-default", architecture: { modality: "text->text" } },
+                    { id: "a/vision-default", architecture: { modality: "text->text" } },
+                    { id: "a/quality-default", architecture: { modality: "text->text" } },
+                    { id: "a/dialogue-extra", architecture: { modality: "text->text" } },
+                ],
+            }),
+        }));
+
+        const hydrated = await hydrateProviderCatalog(providerCatalog, "test-key");
+        const defaults = hydrated.models.filter((model) => model.isDefault && model.isActive);
+
+        expect(defaults.map((model) => model.role).sort()).toEqual(["dialogue", "quality_check", "vision"]);
+        expect(defaults.map((model) => model.id)).toContain("a/dialogue-default");
+        // The duplicate within a role is still demoted — the invariant is one per role, not any number.
+        expect(hydrated.models.find((model) => model.id === "a/dialogue-extra")?.isDefault).toBe(false);
+    });
 });

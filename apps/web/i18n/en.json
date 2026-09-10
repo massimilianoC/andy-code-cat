@@ -1,1092 +1,1128 @@
 {
-    "brand": {
-        "name": "ANDY",
-        "tagline": "The cat that codes for you."
-    },
-    "nav": {
-        "login": "Sign in",
-        "register": "Get started"
-    },
-    "home": {
-        "sub": "Build extraordinary websites with AI.",
-        "cta": {
-            "login": "Sign in",
-            "register": "Get started"
-        }
-    },
-    "login": {
-        "title": "Sign in",
-        "description": "Enter your email and password to access your account.",
-        "email": "Email *",
-        "password": "Password *",
-        "submit": "Sign in",
-        "submitting": "Signing in...",
-        "failed": "Login failed",
-        "noAccount": "Don't have an account?",
-        "createAccount": "Get started →"
-    },
-    "register": {
-        "title": "Create account",
-        "description": "A default project is created automatically at the end of registration.",
-        "firstName": "First name",
-        "lastName": "Last name",
-        "email": "Email *",
-        "password": "Password *",
-        "passwordHint": "(min 12 chars, upper/lowercase, number, symbol)",
-        "submit": "Create account",
-        "submitting": "Creating...",
-        "haveAccount": "Already have an account?",
-        "login": "Sign in →"
-    },
-    "dashboard": {
-        "newProject": "New project",
-        "logout": "Logout",
-        "superadmin": "Superadmin",
-        "guidedMode": "Guided Mode",
-        "hero": {
-            "title": "Projects",
-            "empty": "No projects yet. Create the first one from a preset below.",
-            "count_one": "{{count}} project in workspace",
-            "count_other": "{{count}} projects in workspace"
-        },
-        "presets": {
-            "title": "New project from preset"
-        },
-        "projects": {
-            "title": "Your projects",
-            "empty": "No projects yet",
-            "createFirst": "Create first project"
-        },
-        "footer": {
-            "count_one": "{{count}} project",
-            "count_other": "{{count}} projects"
-        },
-        "modal": {
-            "title": "New project",
-            "descPreset": "Preset: {{preset}}. Give the project a name.",
-            "descBlank": "Enter a name (min 3 characters). You can also start from a preset.",
-            "placeholder": "Project name (min 3 chars)",
-            "cancel": "Cancel",
-            "create": "Create",
-            "creating": "Creating...",
-            "startGuided": "Start Guided Mode"
-        },
-        "confirm": {
-            "delete": "Delete project \"{{name}}\"? This operation is irreversible."
-        },
-        "toast": {
-            "loadError": "Error loading projects",
-            "created": "Project \"{{name}}\" created",
-            "deleted": "Project \"{{name}}\" deleted",
-            "deleteError": "Error deleting project",
-            "duplicateError": "Error duplicating",
-            "promptCopied": "Prompt copied to clipboard",
-            "noPrompt": "No prompt configured for this project"
-        }
-    },
-    "onboarding": {
-        "loading": "Loading...",
-        "skipAll": "Skip all →",
-        "styleProfile": "Style profiling",
-        "step": "Step",
-        "of": "of",
-        "saveError": "Save error. Please try again.",
-        "back": "← Back",
-        "skip": "Skip",
-        "next": "Next →",
-        "complete": "Complete →",
-        "saving": "Saving...",
-        "steps": {
-            "0": {
-                "title": "Who are you?",
-                "subtitle": "Select the tags that best describe your identity and sector."
-            },
-            "1": {
-                "title": "Your visual style",
-                "subtitle": "How do you want your site to look? Choose the tags closest to your aesthetic vision."
-            },
-            "2": {
-                "title": "For whom and how",
-                "subtitle": "Define the target audience, tone, and most important features for your project."
-            }
-        },
-        "catLabels": {
-            "TC-IDENTITY": "Brand identity",
-            "TC-SECTOR": "Sector / Industry",
-            "TC-AUDIENCE": "Target audience",
-            "TC-VISUAL": "Visual style",
-            "TC-PALETTE": "Color palette",
-            "TC-TYPOGRAPHY": "Typography",
-            "TC-LAYOUT": "Layout",
-            "TC-TONE": "Communication tone",
-            "TC-REFERENCE": "Style references",
-            "TC-FEATURE": "Priority features"
-        }
-    },
-    "card": {
-        "openWorkspace": "Open workspace →",
-        "openWorkspaceHover": "Open workspace →",
-        "options": "Project options",
-        "version_one": "{{count}} version",
-        "version_other": "{{count}} versions",
-        "menu": {
-            "open": "Open",
-            "openData": "Data dashboard",
-            "duplicate": "Duplicate",
-            "copyPrompt": "Copy prompt",
-            "delete": "Delete"
-        }
-    },
-    "admin": {
-        "experimental": {
-            "title": "Experimental",
-            "dataDashboardLabel": "Data Dashboard Alpha",
-            "dataDashboardDescription": "Detached superadmin-only console for grounded dataset experiments outside the main UX."
-        }
-    },
-    "guide": {
-        "title": "How to get started with ANDY",
-        "subtitle": "Watch the quick guide and create your first site in minutes.",
-        "cta": "Watch tutorial"
-    },
-    "tips": {
-        "chip": "Tips",
-        "title": "Tips & News",
-        "closePanel": "Close panel",
-        "fabLabel": "Open tips and news",
-        "markRead": "Mark as read",
-        "items": {
-            "style_profile": {
-                "title": "Complete your style profile",
-                "body": "Select style tags in onboarding to get AI generations that match your visual identity."
-            },
-            "duplicate": {
-                "title": "Duplicate before you experiment",
-                "body": "Use 'Duplicate' from the project menu to keep a safe copy before making big changes."
-            },
-            "prompt_reuse": {
-                "title": "Reuse your best prompts",
-                "body": "Use 'Copy prompt' to transfer your instruction system to a new project without rewriting it."
-            },
-            "iterative": {
-                "title": "Describe changes naturally",
-                "body": "Just tell the AI what to change: 'Make it more minimal', 'Add a CTA', 'Use warmer colors'. No code needed."
-            },
-            "workspace_isolation": {
-                "title": "Organize projects by workspace",
-                "body": "Create separate workspaces for each client or brand to keep prompts and styles isolated."
-            },
-            "streaming": {
-                "title": "Real-time AI streaming",
-                "body": "Responses now appear progressively as they are generated — no more waiting for the full output."
-            },
-            "publish": {
-                "title": "Publish your site in one click",
-                "body": "Project ready? Hit 'Publish' in the editor to make it live instantly on your subdomain."
-            },
-            "model_choice": {
-                "title": "Choose the right AI model",
-                "body": "Different models suit different tasks. Use a faster model for quick iterations and a powerful one for final quality."
-            },
-            "save_snapshot": {
-                "title": "Save a snapshot with Ctrl+S",
-                "body": "Press Ctrl+S in the editor to save a snapshot you can return to at any time."
-            },
-            "rollback": {
-                "title": "Roll back to any snapshot",
-                "body": "Open the history panel to see all saved snapshots and restore any previous version of your project."
-            }
-        },
-        "types": {
-            "tip": "Tip",
-            "news": "News",
-            "shortcut": "Shortcut"
-        }
-    },
-    "time": {
-        "justNow": "just now",
-        "minutesAgo": "{{count}} min ago",
-        "hoursAgo": "{{count}} h ago",
-        "daysAgo": "{{count}} days ago"
+  "brand": {
+    "name": "ANDY",
+    "tagline": "The cat that codes for you."
+  },
+  "nav": {
+    "login": "Sign in",
+    "register": "Get started"
+  },
+  "home": {
+    "sub": "Build extraordinary websites with AI.",
+    "cta": {
+      "login": "Sign in",
+      "register": "Get started"
+    }
+  },
+  "login": {
+    "title": "Sign in",
+    "description": "Enter your email and password to access your account.",
+    "email": "Email *",
+    "password": "Password *",
+    "submit": "Sign in",
+    "submitting": "Signing in...",
+    "failed": "Login failed",
+    "noAccount": "Don't have an account?",
+    "createAccount": "Get started →"
+  },
+  "register": {
+    "title": "Create account",
+    "description": "A default project is created automatically at the end of registration.",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "email": "Email *",
+    "password": "Password *",
+    "passwordHint": "(min 12 chars, upper/lowercase, number, symbol)",
+    "submit": "Create account",
+    "submitting": "Creating...",
+    "haveAccount": "Already have an account?",
+    "login": "Sign in →"
+  },
+  "dashboard": {
+    "newProject": "New project",
+    "logout": "Logout",
+    "superadmin": "Superadmin",
+    "guidedMode": "Guided Mode",
+    "hero": {
+      "title": "Projects",
+      "empty": "No projects yet. Create the first one from a preset below.",
+      "count_one": "{{count}} project in workspace",
+      "count_other": "{{count}} projects in workspace"
     },
     "presets": {
-        "neutral": {
-            "label": "Empty / Blank",
-            "hint": "Start from a blank canvas"
-        },
-        "landing": {
-            "label": "Landing Page",
-            "hint": "Single-page conversion-oriented site"
-        },
-        "website": {
-            "label": "Website",
-            "hint": "Classic multi-section site"
-        },
-        "form": {
-            "label": "Form",
-            "hint": "Lead and contact collection"
-        },
-        "manifesto": {
-            "label": "Manifesto",
-            "hint": "Identity and values page"
-        },
-        "slideshow": {
-            "label": "Slideshow",
-            "hint": "Navigable slide deck"
-        },
-        "keynote": {
-            "label": "Keynote",
-            "hint": "Visual keynote template"
-        },
-        "a4poster": {
-            "label": "A4 Poster",
-            "hint": "Single-page printable layout"
-        },
-        "infographic": {
-            "label": "Infographic",
-            "hint": "Data and insight visualization"
-        }
+      "title": "New project from preset"
     },
-    "lang": {
-        "it": "Italiano",
-        "en": "English"
+    "projects": {
+      "title": "Your projects",
+      "empty": "No projects yet",
+      "createFirst": "Create first project"
     },
-    "health": {
-        "title": "API Status",
-        "checking": "Checking...",
-        "ok": "API reachable",
-        "error": "API unreachable",
-        "recheck": "Recheck"
+    "footer": {
+      "count_one": "{{count}} project",
+      "count_other": "{{count}} projects"
     },
-    "session": {
-        "expired": "Session expired",
-        "requiresLogin": "Your session has expired. Enter your credentials to continue without losing the current context.",
-        "tokenExpired": "Your session has expired. Please sign in again to continue.",
-        "logout": "Sign out"
+    "modal": {
+      "title": "New project",
+      "descPreset": "Preset: {{preset}}. Give the project a name.",
+      "descBlank": "Enter a name (min 3 characters). You can also start from a preset.",
+      "placeholder": "Project name (min 3 chars)",
+      "cancel": "Cancel",
+      "create": "Create",
+      "creating": "Creating...",
+      "startGuided": "Start Guided Mode"
     },
-    "security": {
-        "passwordChange": {
-            "title": "Password update required",
-            "badge": "Legacy account",
-            "description": "This account was created before the current password policy. Set a stronger password to keep using the workspace.",
-            "currentPassword": "Current password",
-            "newPassword": "New password",
-            "confirmPassword": "Confirm new password",
-            "policyHint": "Use at least 12 characters with uppercase, lowercase, a number, and a symbol.",
-            "logout": "Sign out",
-            "submit": "Update password",
-            "submitting": "Updating...",
-            "errors": {
-                "confirmationMismatch": "Password confirmation does not match.",
-                "generic": "Unable to update the password."
-            }
-        }
+    "confirm": {
+      "delete": "Delete project \"{{name}}\"? This operation is irreversible."
     },
-    "notifications": {
-        "close": "Close",
-        "title": "Processes",
-        "clear": "Clear",
-        "clearTitle": "Remove completed / errors",
-        "hide": "Hide processes",
-        "show": "Show processes",
-        "running_one": "{{count}} running",
-        "running_other": "{{count}} running",
-        "completed_one": "{{count}} completed",
-        "completed_other": "{{count}} completed"
-    },
-    "launch": {
-        "badge": "Guided Mode",
-        "title": "Guided generation",
-        "subtitle": "{{name}} · Complete 3 steps and review the brief before launching.",
-        "project": "Your project",
-        "stepLabel": "Step {{number}} — {{title}}",
-        "siteTypes": {
-            "landing_page": "Landing",
-            "business_site": "Business",
-            "portfolio": "Portfolio",
-            "showcase": "Showcase"
-        },
-        "templates": {
-            "neutral": "Blank",
-            "landing": "Landing page",
-            "website": "Website",
-            "form": "Interactive form",
-            "manifesto": "Manifesto",
-            "a4poster": "A4 poster",
-            "infographic": "Infographic",
-            "slideshow": "Slideshow",
-            "keynote": "Visual keynote",
-            "videogame": "Videogame",
-            "freerunner": "Infinite Runner",
-            "seriousgame": "Serious Game",
-            "game3d": "3D Game",
-            "vr-aframe": "VR A-Frame Experience",
-            "interactive-story": "Interactive Story"
-        },
-        "presetGroups": {
-            "web": "Web & content",
-            "presentation": "Presentation & print",
-            "game": "Game & interactive"
-        },
-        "formatHints": {
-            "one_pager": "One pager",
-            "a3_document": "A3 document",
-            "ratio_1_1": "1:1 format",
-            "ratio_16_9": "16:9 format",
-            "interactive_form": "Interactive form",
-            "portfolio": "Portfolio",
-            "brochure": "Brochure",
-            "analytics_dashboard": "Analytics dashboard"
-        },
-        "styleAttributes": {
-            "minimal": "Minimal",
-            "premium": "Premium",
-            "dark": "Dark / Night",
-            "bright": "Bright / Light",
-            "bold": "Bold / High-impact",
-            "elegant": "Elegant",
-            "corporate": "Corporate",
-            "playful": "Playful / Creative",
-            "tech": "Tech / Modern",
-            "artisan": "Artisan",
-            "luxury": "Luxury",
-            "eco": "Eco / Natural"
-        },
-        "contactSuggestions": {
-            "email": "Email",
-            "phone": "Phone",
-            "address": "Address",
-            "instagram": "Instagram",
-            "facebook": "Facebook",
-            "linkedin": "LinkedIn",
-            "youtube": "YouTube",
-            "whatsapp": "WhatsApp",
-            "website": "Website",
-            "vat": "VAT"
-        },
-        "phase": {
-            "review": "Ready for generation",
-            "launching": "Creating the run and opening the workspace…"
-        },
-        "brief": {
-            "title": "PROJECT BRIEF — {{brand}}",
-            "identity": "[IDENTITY] Brand and site type",
-            "brand": "Brand",
-            "template": "Template",
-            "siteType": "Site type",
-            "goal": "[GOAL] Description and main objective",
-            "audience": "[AUDIENCE] Target audience",
-            "style": "[STYLE] Visual attributes, tone and CTA",
-            "visualAttributes": "Visual attributes",
-            "tone": "Voice tone",
-            "cta": "Primary CTA",
-            "styleNotes": "Additional style notes",
-            "contacts": "[CONTACTS] Contact information and key data",
-            "attachments": "[ATTACHMENTS] Documents analysed for the brief",
-            "footer": "Structured Guided Mode brief · {{siteType}} · Sections: {{sections}}"
-        },
-        "steps": {
-            "1": {
-                "title": "Description",
-                "subtitle": "Brand, site type and main goal"
-            },
-            "2": {
-                "title": "Target & Data",
-                "subtitle": "Audience, contacts and key info"
-            },
-            "3": {
-                "title": "Visual style",
-                "subtitle": "Aesthetics, tone and CTA"
-            }
-        },
-        "step1": {
-            "businessName": "Brand or company name",
-            "businessNamePlaceholder": "e.g. Acme Studio",
-            "presetId": "Template",
-            "presetIdHint": "AI infers the best template from your description. You can change it here.",
-            "goal": "Description and main goal",
-            "goalHint": "Describe the project freely. You can use bullet points (- item), bold (**text**) or paste from a document.",
-            "goalPlaceholder": "e.g. Acme Studio is a premium accessories brand.\n- Goal: grow online sales\n- Audience: 25–45 year old enthusiasts\n- Strength: innovative materials and premium design",
-            "next": "Next"
-        },
-        "step2": {
-            "audience": "Audience and target",
-            "audienceHint": "Who are the recipients? Describe age, interests, needs, language.",
-            "audiencePlaceholder": "e.g. Enthusiasts aged 25–45, Italian and European, who love design and quality",
-            "contacts": "Contact information and key data",
-            "contactsHint": "Email, phone, address, social — data not in the description but needed on the site.",
-            "add": "Add",
-            "noData": "No data added.",
-            "keyPlaceholder": "Email",
-            "back": "Back",
-            "next": "Next"
-        },
-        "step3": {
-            "visualAttributes": "Visual attributes",
-            "visualHint": "Select one or more styles for the project.",
-            "tone": "Voice tone",
-            "tonePlaceholder": "e.g. Clear and modern",
-            "cta": "Primary CTA",
-            "ctaPlaceholder": "e.g. Buy now, Learn more",
-            "styleNotes": "Additional style notes",
-            "styleNotesPlaceholder": "e.g. aluminum frame, brand colors",
-            "outputLanguage": "Output language",
-            "outputLanguageHint": "Language used for all text in the generated page.",
-            "back": "Back",
-            "generate": "Generate brief",
-            "generating": "Generating brief..."
-        },
-        "languages": {
-            "en": "English",
-            "it": "Italian",
-            "fr": "French",
-            "de": "German",
-            "es": "Spanish",
-            "pt": "Portuguese",
-            "nl": "Dutch"
-        },
-        "step4": {
-            "title": "Step 4 — Review brief",
-            "subtitle": "The brief is ready. Edit it if needed, then launch the session.",
-            "generationTitle": "Step 4 — Start generation",
-            "prepared": "Prepared successfully",
-            "briefLabel": "Generated brief — editable (Markdown)",
-            "structuredBriefLabel": "Structured brief — editable before optimization",
-            "optimizeHint": "The brief will be optimized into a prompt, then used to generate the site.",
-            "optimizing": "Optimizing...",
-            "startGeneration": "Start generation",
-            "promptReady": "Prompt ready",
-            "optimizedPromptLabel": "Optimized prompt — editable before generation",
-            "backToBrief": "Back to brief",
-            "readyPrefix": "The prompt is ready. Click",
-            "continueInGuided": "Continue in Guided Mode",
-            "readySuffix": "to generate the site with complete artifact saving, preview, and editing tools.",
-            "dashboard": "Dashboard",
-            "backToDashboard": "Back to dashboard",
-            "continueInWorkspace": "Continue in workspace",
-            "launching": "Launching…"
-        },
-        "workspaceModeBadge": "Workspace",
-        "openWorkspace": "Open Workspace",
-        "review": {
-            "badge": "Review and generate",
-            "prefillTitle": "✦ AI pre-filled",
-            "templateBadge": "Template: {{template}}",
-            "description": "The AI extracted the key data from your request. Generate now or adjust the fields first.",
-            "generating": "Generation in progress…",
-            "summary": {
-                "brand": "Brand",
-                "goal": "Goal",
-                "audience": "Audience",
-                "style": "Style",
-                "contacts": "Contacts"
-            }
-        },
-        "upload": {
-            "uploading": "Uploading...",
-            "attachContext": "Attach context documents",
-            "attachHint": "PDF, DOCX, TXT, MD, images — drag them here or click to browse",
-            "failedBadgeTitle": "Upload failed: {{name}}",
-            "failedCount_one": "{{count}} file not uploaded — check the session",
-            "failedCount_other": "{{count}} files not uploaded — check the session"
-        },
-        "loadError": "Unable to load the project.",
-        "submitError": "Unable to prepare the launch flow.",
-        "errors": {
-            "optimizePrompt": "Prompt optimization failed.",
-            "startGeneration": "Unable to start generation."
-        }
-    },
-    "config": {
-        "title": "Project configuration",
-        "loading": "Loading…",
-        "projectName": "Project name",
-        "projectNamePlaceholder": "Project name…",
-        "brief": "Project brief",
-        "briefPlaceholder": "Describe the project and its main characteristics…",
-        "briefGuide": "Brief guide",
-        "styleNotes": "Style notes",
-        "styleNotesPlaceholder": "Specific style constraints or preferences…",
-        "inheritUser": "Inherit user preferences (fallback)",
-        "presetActive": "Active preset — brief and tags pre-filled.",
-        "forms": {
-            "title": "Operational forms",
-            "subtitle": "Project delivery and privacy settings",
-            "enabled": "Enabled",
-            "disabled": "Disabled",
-            "enable": "Enable",
-            "disable": "Disable",
-            "explanation": "The LLM defines only the form structure. Recipient and privacy settings remain private project configuration and are applied deterministically during preview, publish and export.",
-            "recipient": "Recipient email",
-            "controller": "Data controller",
-            "privacyContact": "Privacy contact email",
-            "privacyVersion": "Privacy notice version",
-            "privacyUrl": "Privacy policy HTTPS URL",
-            "save": "Save form service",
-            "saving": "Saving…",
-            "saved": "Form service settings saved.",
-            "loadError": "Unable to load form service settings.",
-            "saveError": "Unable to save form service settings."
-        },
-        "media": {
-            "title": "Project media",
-            "empty": "No media in library.",
-            "emptyHint": "Upload images, PDFs or links to build the project library.",
-            "upload": "Upload file",
-            "uploading": "Uploading…",
-            "addUrl": "Add URL",
-            "urlPlaceholder": "https://…",
-            "labelPlaceholder": "Label (optional)",
-            "add": "Add",
-            "cancel": "Cancel",
-            "useInProject": "Use in project",
-            "excludeFromProject": "Exclude from project",
-            "inUse": "in use",
-            "use": "use",
-            "deleteAsset": "Delete asset",
-            "advancedOptions": "Advanced options",
-            "styleRole": "Style role…",
-            "descriptionPlaceholder": "Description…",
-            "confirmDelete": "Delete \"{{name}}\"?",
-            "uploadError": "Upload error.",
-            "assetBriefHeading": "Brief",
-            "assetDesignSignalsHeading": "Image analysis"
-        },
-        "tagCategories": {
-            "era": "Era / Movement",
-            "visual": "Visual style",
-            "palette": "Palette",
-            "typography": "Typography",
-            "layout": "Layout",
-            "tone": "Tone",
-            "audience": "Audience / Target",
-            "feature": "Required features",
-            "sector": "Sector / Domain",
-            "reference": "References"
-        },
-        "cancel": "Cancel",
-        "save": "Save",
-        "saving": "Saving…"
-    },
-    "vibecore": {
-        "heading": "What do you want to build today?",
-        "subtitle": "Describe your idea — the AI handles the rest",
-        "placeholder": "E.g. a landing page for a beauty salon, elegant tone, neutral palette…",
-        "cta": "Create with AI",
-        "scrollHint": "scroll to your projects",
-        "attach": "Attach",
-        "attachHint": "Drag files or click to attach — PDF, DOCX, images, max 10 MB",
-        "dropHere": "Drop here",
-        "newProject": "New project",
-        "error": "An error occurred. Please try again.",
-        "attachLimitError": "Some files are unsupported or exceed the allowed limits.",
-        "removeFile": "Remove",
-        "modelOverrideLabel": "Pipeline model",
-        "modelOverrideTitle": "Choose one model for the full pipeline",
-        "modelOverrideActiveTitle": "Pipeline forced to {{provider}} · {{model}}",
-        "modelOverrideDefault": "Use system-configured models",
-        "modelOverrideReset": "Default",
-        "modelOverridePlaceholder": "Select provider and model",
-        "modelOverrideSearch": "Search provider or model",
-        "structuredDatasetCount_one": "{{count}} structured dataset",
-        "structuredDatasetCount_other": "{{count}} structured datasets",
-        "attachCounter": "Attachments: {{count}}/{{max}}",
-        "removeFileAria": "Remove {{name}}",
-        "dataDashboardWarning": "Data dashboard mode is alpha-only and disabled in the main Vibe flow. Continuing with the standard website pipeline.",
-        "uploadAllFailed": "Unable to upload attached files: {{files}}. Check the session and try again.",
-        "uploadPartialFailed": "Some files were not uploaded: {{files}}",
-        "prefillFailedNotification": {
-            "label": "Couldn't auto-fill the brief — you can still continue and fill it in manually."
-        },
-        "phase": {
-            "classifying": "Analysing request…",
-            "prefilling": "Pre-filling fields with AI…",
-            "creating": "Creating workspace…",
-            "uploading": "Uploading files…",
-            "analyzing": "Analysing datasets…",
-            "redirecting": "Opening…",
-            "hints": {
-                "classifying": [
-                    "Reading your idea…",
-                    "Detecting project type…",
-                    "Classifying intent…",
-                    "Identifying output format…"
-                ],
-                "prefilling": [
-                    "Extracting key details…",
-                    "Structuring your brief…",
-                    "Analysing tone and style…",
-                    "Identifying your audience…",
-                    "Building project fields…",
-                    "Processing document context…"
-                ],
-                "creating": [
-                    "Initialising workspace…",
-                    "Setting up your project…"
-                ],
-                "uploading": [
-                    "Uploading your files…",
-                    "Processing documents…",
-                    "Starting enrichment pipeline…"
-                ],
-                "analyzing": [
-                    "Waiting for structured enrichment…",
-                    "Reading uploaded datasets…"
-                ],
-                "redirecting": [
-                    "Almost ready…",
-                    "Opening your workspace…"
-                ]
-            }
-        },
-        "tokenCounter": "~ {{count}} tokens",
-        "prefillBanner": "✦ Pre-filled by AI · Review and generate",
-        "prefillEdit": "Edit manually",
-        "prefillCta": "Process Project"
-    },
-    "workspace": {
-        "selectionNone": "No selection",
-        "notifications": {
-            "export": {
-                "label": "Export ZIP",
-                "running": "Creating screenshot + archive…",
-                "downloading": "Downloading ZIP…",
-                "done": "ZIP downloaded",
-                "sessionExpired": "Session expired",
-                "error": "Export error"
-            },
-            "capture": {
-                "label": "Screenshot {{format}}",
-                "running": "Rendering page…",
-                "done": "File downloaded",
-                "sessionExpired": "Session expired",
-                "error": "Capture error"
-            },
-            "publish": {
-                "label": "Publish",
-                "running": "Publishing…",
-                "done": "Published!",
-                "doneVersioned": "Published! (v{{vn}} active)",
-                "sessionExpired": "Session expired",
-                "error": "Publish error"
-            },
-            "media": {
-                "done": "Media applied",
-                "doneSaved": "Media applied and saved",
-                "doneMessage": "{{name}} linked to the selected element.",
-                "doneSavedMessage": "{{name}} linked to the selected element and saved as a new version.",
-                "error": "Cannot load the selected asset",
-                "errorLabel": "Media error",
-                "notApplicable": "Select a valid image or image URL.",
-                "notApplicableLabel": "Asset not applicable",
-                "noActive": "Select an image first or generate a new asset.",
-                "noActiveLabel": "No active media"
-            },
-            "modelFallback": {
-                "label": "Model switched automatically",
-                "message": "Requested \"{{requested}}\" was not available — using \"{{actual}}\" instead."
-            },
-            "style": {
-                "done": "Style applied",
-                "doneSaved": "Style applied and saved",
-                "doneMessage": "Fit, repeat, opacity and filter updated in the preview.",
-                "doneSavedMessage": "Fit, repeat, opacity and filter updated and saved as a new version."
-            },
-            "imageSuggestion": {
-                "label": "Image suggestion",
-                "running": "Analysing section context…",
-                "done": "Suggestion ready",
-                "failed": "Suggestion failed",
-                "error": "Cannot generate image suggestion"
-            },
-            "prompt": {
-                "updated": "Prompt updated",
-                "updatedMessage": "The suggestion has been copied to the main prompt.",
-                "missing": "Write a prompt or use the image suggestion first.",
-                "missingLabel": "Prompt missing"
-            },
-            "imageGeneration": {
-                "label": "Image generation",
-                "running": "Sending request to provider…",
-                "started": "Generation started",
-                "done": "Image ready",
-                "doneSaved": "Image ready and saved",
-                "doneMessage": "{{name}} updated in the preview.",
-                "doneSavedMessage": "{{name}} replaced the placeholder and saved as a new version.",
-                "failed": "Generation failed",
-                "failedMessage": "{{error}} The placeholder remains in the current working view.",
-                "error": "Image generation error",
-                "stillRunning": "Generation still in progress",
-                "stillRunningMessage": "The provider is still completing the render. The asset remains in the queue but the flow is not blocked.",
-                "autoLabel": "AI image gen",
-                "autoRunning": "Analysing page semantic context…",
-                "autoBrief": "Brief ready. Starting automatic generation…",
-                "autoError": "Cannot start automatic image generation",
-                "placeholderVersionedMsg": "Placeholder applied and saved as a new version. The final image will advance the working view again when ready.",
-                "placeholderAppliedMsg": "Placeholder applied to the working view. If version saving is not yet available, the final image will be registered as soon as ready.",
-                "sentMsg": "Request sent successfully. If the placeholder is not immediately available, the final image will be applied when ready."
-            },
-            "conversation": {
-                "loadError": "Error loading conversation"
-            },
-            "snapshot": {
-                "savedLabel": "Version saved",
-                "saved": "Snapshot activated.",
-                "editSavedLabel": "EDIT version saved",
-                "editSaved": "Manual edits versioned.",
-                "activatedLabel": "Version activated",
-                "activated": "Snapshot selected as active version.",
-                "newVersionLabel": "New version saved",
-                "newVersionMessage": "Snapshot saved and activated by the backend.",
-                "staleBaseLabel": "Version out of date",
-                "staleBase": "This edit started from a version that has since changed. The current version has been reloaded — reapply the change on it.",
-                "noChangeLabel": "Nothing changed",
-                "noChange": "The content is identical to the current version, so no new version was created."
-            },
-            "llm": {
-                "label": "AI Generation",
-                "labelFocus": "AI Generation (focus)",
-                "running": "Processing request…",
-                "runningFocus": "Processing request and updating preview…",
-                "errorLabel": "LLM error",
-                "doneLabel": "Generation complete",
-                "doneMessage": "Response ready with {{provider}} · {{model}}",
-                "abortedLabel": "Generation stopped",
-                "aborted": "Processing cancelled by user.",
-                "abortedContent": "⏹ Processing stopped by user",
-                "parseErrorLabel": "Generation failed",
-                "parseError": "The model returned an unparseable response. Nothing was saved and the project is unchanged. Retry, or select a different model."
-            },
-            "focusPatch": {
-                "parseErrorLabel": "Response parse error",
-                "parseError": "The model produced uninterpretable JSON. Try changing the model and retry.",
-                "parseResponseLabel": "Response parse error",
-                "parseResponseMessage": "LLM response could not be parsed — change model and retry.",
-                "notAppliedLabel": "Focus patch not applied",
-                "notApplied": "Element not found in the current version. Re-select the element in the preview and retry.",
-                "appliedLabel": "Focus patch applied",
-                "appliedMessage": "Element updated — new version active.",
-                "limitedLabel": "Inspect limited",
-                "limited": "The selection was not valid for the focus patch. Continuing with the full project context."
-            },
-            "promptOptimizer": {
-                "label": "Prompt optimization",
-                "running": "Analysing and rewriting the prompt in the chat flow…",
-                "inputLabel": "Original prompt",
-                "outputLabel": "Optimize prompt",
-                "done": "Prompt ready in chat with {{provider}} · {{model}}",
-                "skipped": "Optimizer disabled for this product configuration.",
-                "aborted": "Optimisation stopped",
-                "abortedContent": "⏹ Prompt optimisation stopped by the user"
-            }
-        },
-        "editMediaFilters": {
-            "images": "Images",
-            "backgrounds": "Backgrounds"
-        },
-        "llmErrors": {
-            "contextTooLong": "Context too long",
-            "contextTooLongMessage": "Context too long or response too heavy for this request. Memory reduced: retry the last action.",
-            "configureApiKey": "Configure the provider API key",
-            "providerCallError": "Error during provider call",
-            "providerNotConfigured": "Provider not configured",
-            "generic": "LLM error",
-            "errorWithStatus": "Error [{{status}}]: {{message}}",
-            "providerKeyMissing": "Provider {{provider}} requires an API key that is not configured."
-        },
-        "ui": {
-            "resizeChat": "Resize chat input",
-            "resizePanels": "Resize panels",
-            "mediaPlaceholderBackground": "Use an optional manual prompt or ask for a semantic suggestion for this background…",
-            "mediaPlaceholderImage": "Use an optional manual prompt or ask for a semantic suggestion for this image…",
-            "checkingSession": "Checking session…",
-            "configureProject": "Configure project",
-            "chatTitle": "Project Chat",
-            "providerPlaceholder": "Provider",
-            "providerKeyWarning": "Provider {{provider}} requires an unconfigured API key.",
-            "providerKeyWarningConfigure": "Configure {{var}} and retry.",
-            "providerKeyWarningConfigureGeneric": "Configure the provider key and retry.",
-            "optimizePromptLabel": "Optimize prompt uses {{provider}} · {{model}}",
-            "pipelineOverrideActive": "Active pipeline",
-            "pipelineOverrideSticky": "preconfigured for the next messages",
-            "loadingConversation": "Loading conversation…",
-            "voiceOnlyChrome": "Dictation only available in compatible Chrome or Edge.",
-            "voiceUnavailable": "Dictation unavailable: {{error}}.",
-            "voiceMicError": "Microphone already in use or permission not granted.",
-            "voiceListeningTitle": "Stop dictation",
-            "voiceStartTitle": "Start dictation with microphone",
-            "voiceListeningLabel": "Stop dictation",
-            "voiceStartLabel": "Start dictation",
-            "attachError": "File attachment failed. Supported formats: PDF, DOCX, DOC, TXT, MD, images.",
-            "attachTitle": "Attach document or image",
-            "attachLabel": "Attach file",
-            "dropToAttach": "Drop files to attach",
-            "attachDropHint": "Drag files here or use the paperclip: attachments stay in the project and are sent with the prompt.",
-            "removeAttachment": "Remove attachment",
-            "uploading": "Uploading…",
-            "uploadSuccess": "Attached to project",
-            "imageSuggestionLogo": "Use as logo",
-            "imageSuggestionBackground": "Use as background",
-            "imageSuggestionIcon": "Use as icon",
-            "imageSuggestionDismiss": "Dismiss",
-            "autoOptimizeOn": "Auto-optimize ON",
-            "autoOptimizeOff": "Auto-optimize OFF",
-            "autoOptimizeOnTitle": "Auto-optimize is ON: Send will optimize the prompt automatically before sending",
-            "autoOptimizeOffTitle": "Auto-optimize is OFF: prompt will be sent as-is",
-            "voiceListening": "🎙️ Listening...",
-            "voiceReady": "Chrome: voice dictation ready",
-            "inspectElementLabel": "Element: ",
-            "copyJsonTitle": "Copy JSON metadata of selected element",
-            "copyJson": "Copy JSON",
-            "removeElementSelection": "Remove element selection",
-            "codeSelectionLines": "{{lang}} lines {{start}}–{{end}}",
-            "removeCodeSelection": "Remove code selection",
-            "inspectHint": "Click an element in the preview to select it. For images you can click directly on the photo; with Shift or Alt you select the wider container.",
-            "closeButton": "Close",
-            "generatingMedia": "Processing…",
-            "genImageAI": "Gen image AI",
-            "promptPanelNone": "none",
-            "editOn": "✎ EDIT ON",
-            "editOff": "✎ EDIT",
-            "emptyConversation": "Open a conversation or send a new prompt.",
-            "scrollToBottom": "Back to bottom of chat",
-            "scrollToBottomTitle": "Back to bottom",
-            "placeholderFocusPatchBackground": "Describe the focus patch change for the selected background here...",
-            "placeholderFocusPatch": "Describe the focus patch change for the selected element here...",
-            "placeholderDefault": "Write what you want to create...",
-            "useProviderModel": "Use {{provider}} · {{model}}",
-            "useActiveProviderModel": "Use the active chat provider/model",
-            "optimizingPrompt": "Optimizing...",
-            "optimizeWith": "Optimize · {{model}}",
-            "optimizePrompt": "Optimize prompt",
-            "restoreOriginal": "Restore original",
-            "clearPrompt": "Clear",
-            "stopGeneration": "Stop the current generation",
-            "sending": "Sending...",
-            "send": "Send",
-            "exportTitle": "Export HTML/CSS/JS as ZIP",
-            "exportError": "Export error",
-            "captureTitle": "Capture JPG or PDF screenshot of the preview",
-            "publishUpdateTitle": "Update live publication",
-            "publishTitle": "Publish with shareable link",
-            "publishStateError": "⚠ Error",
-            "publishStateUpdate": "🔄 Update",
-            "publishStatePublish": "🌐 Publish",
-            "promptTabTitle": "View the composed system prompt passed to the LLM (read-only)",
-            "inspectOnTitle": "Deactivate Inspect",
-            "inspectOffTitle": "Activate Inspect: select an element and use only the focus patch flow in chat",
-            "inspectNoArtifacts": "Inspect only available when the preview contains generated code",
-            "inspectOn": "◎ Inspect ON",
-            "inspectOff": "◎ Inspect",
-            "editOnTitle": "Deactivate EDIT Light",
-            "editOffTitle": "Activate EDIT Light: click text to edit it or an image to open AI tools",
-            "saveEditTitle": "Save EDIT changes as a new artifact version",
-            "saveEditSaving": "⏳ Saving…",
-            "saveEdit": "💾 Save EDIT",
-            "copyLink": "📋 Copy link",
-            "copied": "✓ Copied",
-            "editSlug": "✏ Slug",
-            "setSlug": "🔗 Set slug",
-            "unpublish": "Remove",
-            "staleVersion": "⚠ online v{{published}}, active v{{current}}",
-            "updatePublish": "Update",
-            "snapshotPanelLiveLine": "🌐 live: v{{live}} · you're working on v{{current}}",
-            "snapshotPanelLiveBadge": "🌐 live",
-            "branchNotice": "⎘ You're working on v{{active}}, not the latest (v{{latest}}): your next change will branch from here. v{{latest}} stays reachable in the history.",
-            "slugPlaceholder": "e.g. my-bakery",
-            "slugChecking": "⏳ Checking…",
-            "slugAvailable": "✓ Available",
-            "slugTaken": "✗ Already in use",
-            "slugInvalid": "⚠ Invalid format",
-            "slugReserved": "⚠ Reserved name",
-            "slugError": "✗ Check failed",
-            "slugSaving": "⏳",
-            "slugSave": "Save",
-            "slugRemove": "Remove slug",
-            "slugCancel": "Cancel",
-            "noCodeTitle": "No generated code",
-            "noCodeHint": "The center only shows HTML/CSS/JS artifacts generated by the backend. Send a prompt to populate the preview.",
-            "previewRefreshing": "Refreshing preview…",
-            "rescanImages": "Rescan images from preview",
-            "promptPanelDesc": "Composed system prompt passed to the LLM — read-only",
-            "promptPanelReload": "↻ Reload",
-            "promptPanelLoading": "Loading…",
-            "promptPanelHint": "The prompt will load automatically. If it doesn't appear, click ↻ Reload.",
-            "promptPanelTokensPreset": "~{{tokens}} tokens · preset: {{preset}}",
-            "promptPanelUserMessage": "User message",
-            "promptPanelAssistantMessage": "Assistant message (history)",
-            "promptPanelNoGenYet": "No generation yet — preview of what will be sent on the next request.",
-            "stream": {
-                "optimizing": "Optimizing prompt...",
-                "analysingOptimizer": "Analysing optimizer...",
-                "connectingOptimizer": "Connecting optimizer...",
-                "responding": "Responding...",
-                "reasoning": "Reasoning...",
-                "connectingProvider": "Connecting to provider...",
-                "thinkingDefault": "Processing prompt in the conversational flow...",
-                "thinkingOptimizer": "Waiting for stream reasoning...",
-                "spinnerOptimizer": "optimizing prompt...",
-                "spinnerDefault": "thinking..."
-            },
-            "layers": {
-                "layerA": "LAYER A — Base constraints",
-                "layerABadge": "always active",
-                "layerASource": "System constant",
-                "layerB": "LAYER B — Preset module",
-                "layerBBadge": "preset: {{presetId}}",
-                "layerBBadgeNone": "no preset",
-                "layerBSource": "Project configuration (⚙ gear)",
-                "layerBEmpty": "(empty — no preset assigned to the project)",
-                "layerC": "LAYER C — Style context",
-                "layerCBadge": "moodboard + user profile",
-                "layerCBadgeEmpty": "empty",
-                "layerCSource": "User profile (initial profiling) + Project moodboard (⚙ gear)",
-                "layerCEmpty": "(empty — no user profiling data or moodboard configured)",
-                "layerD": "LAYER D — Document context",
-                "layerDBadge": "enriched assets",
-                "layerDSource": "Uploaded assets enriched by DCL pipeline",
-                "layerDEmpty": "(empty — no enriched assets)",
-                "layerE": "LAYER E — Custom template",
-                "layerEBadge": "active",
-                "layerESource": "Advanced project configuration (⚙ gear)",
-                "policy": "POLICY — Output budget",
-                "policyBadge": "system",
-                "policySource": "Automatic token/output configuration"
-            },
-            "codeEditor": {
-                "beautifyTitle": "Format / Beautify (equivalent to Alt+Shift+F)",
-                "saveVersionTitle": "Save changes as a new active preview version",
-                "saveVersion": "💾 Save version",
-                "saving": "Saving…",
-                "fontDecrease": "Decrease font size",
-                "fontIncrease": "Increase font size",
-                "shortcuts": "Ctrl+scroll = zoom · Alt+Shift+F = format",
-                "font": "Font",
-                "selectionLines": "Selection lines {{start}}-{{end}}",
-                "cursorPosition": "Cursor line {{line}}, col {{col}}"
-            },
-            "imageToolsInEditTitle": "Image tools in EDIT",
-            "imageToolsInEditHint": "In EDIT, text keeps priority. Click directly on the image area to target the media underneath.",
-            "imageAiToolsTitle": "Image AI tools",
-            "imageAiToolsDesc": "Manual generation and advanced image settings are separated from the chat and available only inside EDIT mode.",
-            "reqMeta": {
-                "flow": "Flow",
-                "target": "Target",
-                "provider": "Provider",
-                "finishReason": "Finish reason",
-                "model": "Model",
-                "snapshot": "Snapshot",
-                "mediaStatus": "Media status",
-                "mediaResolved": "resolved",
-                "mediaDegraded": "degraded",
-                "mediaResolvedCount": "Media resolved",
-                "mediaFailedCount": "Media failed",
-                "mediaKeys": "Media keys",
-                "badgeMedia": "{{resolved}}/{{total}} media",
-                "badgeInfo": "info",
-                "totalTokens": "Total tokens",
-                "promptTokens": "Prompt tokens",
-                "completionTokens": "Completion tokens",
-                "prepromptSystem": "Preprompt (system)",
-                "msgsSent": "Messages sent to LLM",
-                "promptConfigId": "Prompt config ID",
-                "execTime": "Execution time",
-                "totalCost": "Total cost",
-                "tokenCost": "Token cost",
-                "imageCost": "Image cost",
-                "videoCost": "Video cost",
-                "eurPerKTok": "€/1k tok",
-                "providerUsd": "Provider USD",
-                "structuredParse": "Structured parse",
-                "parseValid": "✓ valid",
-                "parseFailed": "✗ failed",
-                "details": "Request details",
-                "detailsGlobal": "Last request details"
-            },
-            "messageOutcome": {
-                "artifactLinked": "artifact linked",
-                "mediaCount": "{{resolved}}/{{total}} media",
-                "failedCount": "{{count}} failed"
-            },
-            "requestInsight": {
-                "openDetails": "Details",
-                "title": "Generation outcome",
-                "description": "Quick summary first, technical trace only when you need to inspect it.",
-                "mediaResolved": "media resolved",
-                "mediaDegraded": "media degraded",
-                "snapshot": "Snapshot",
-                "duration": "Duration",
-                "tokens": "Tokens",
-                "cost": "Cost",
-                "mediaOutcomeTitle": "Media outcome",
-                "mediaOutcomeSubtitle": "{{count}} keys tracked for this artifact",
-                "resolvedCount": "{{count}} resolved",
-                "failedCount": "{{count}} failed",
-                "artifactSummaryTitle": "Artifact summary",
-                "artifactSummarySubtitle": "Persisted payload sizes and parsing outcome",
-                "structuredParse": "Structured parse",
-                "parseValid": "valid",
-                "parseFailed": "failed",
-                "htmlBytes": "HTML bytes",
-                "cssBytes": "CSS bytes",
-                "jsBytes": "JS bytes",
-                "technicalTraceTitle": "Technical trace",
-                "technicalTraceSubtitle": "IDs, prompt lineage, and saved references",
-                "snapshotId": "Snapshot ID",
-                "promptConfig": "Prompt config",
-                "llmMessagesSent": "LLM messages sent",
-                "systemPromptEstimate": "System prompt est.",
-                "systemPromptEstimateValue": "{{count}} tok",
-                "traceIds": "Trace IDs",
-                "assetIds": "Asset IDs",
-                "directiveStatus": {
-                    "resolved": "resolved",
-                    "fallback_resolved": "fallback resolved",
-                    "unresolved": "unresolved"
-                }
-            },
-            "messageBubble": {
-                "copy": "Copy",
-                "copied": "Copied",
-                "copyError": "Error",
-                "copyTitle": "Copy message",
-                "nextSteps": "Next steps",
-                "errorBadge": "Error",
-                "errorHint": "No version was saved — the project is unchanged."
-            }
-        }
-    },
-    "aiUsagePanel": {
-        "title": "AI usage recap",
-        "loading": "Loading AI analytics…",
-        "emptyState": "No AI activity yet for this scope.",
-        "totalCost": "Total cost",
-        "imageGen": "Image gen",
-        "llmSpend": "LLM spend",
-        "tokens": "Tokens",
-        "tokensLower": "tokens",
-        "runs": "{{count}} runs",
-        "queuedFailed": "{{queued}} queued · {{failed}} failed",
-        "topModels": "Top models",
-        "recentRequests": "Recent requests",
-        "noRequests": "No requests logged yet.",
-        "noPromptPreview": "No prompt preview available.",
-        "mediaOkCount": "{{count}} media ok",
-        "failedCount": "{{count}} failed",
-        "details": "Details",
-        "dialogTitle": "Request details",
-        "dialogDescription": "Compact operational summary for recent AI activity.",
-        "model": "Model",
-        "cost": "Cost",
-        "created": "Created",
-        "resolvedCount": "{{count}} resolved",
-        "degraded": "degraded",
-        "clean": "clean",
-        "promptPreviewTitle": "Prompt preview",
-        "promptPreviewSubtitle": "The compact text stored for recent-request analytics",
-        "technicalSummaryTitle": "Technical summary",
-        "technicalSummarySubtitle": "Useful for admin/support review without opening raw logs",
-        "requestId": "Request ID",
-        "imageSize": "Image size"
+    "toast": {
+      "loadError": "Error loading projects",
+      "created": "Project \"{{name}}\" created",
+      "deleted": "Project \"{{name}}\" deleted",
+      "deleteError": "Error deleting project",
+      "duplicateError": "Error duplicating",
+      "promptCopied": "Prompt copied to clipboard",
+      "noPrompt": "No prompt configured for this project"
     }
+  },
+  "onboarding": {
+    "loading": "Loading...",
+    "skipAll": "Skip all →",
+    "styleProfile": "Style profiling",
+    "step": "Step",
+    "of": "of",
+    "saveError": "Save error. Please try again.",
+    "back": "← Back",
+    "skip": "Skip",
+    "next": "Next →",
+    "complete": "Complete →",
+    "saving": "Saving...",
+    "steps": {
+      "0": {
+        "title": "Who are you?",
+        "subtitle": "Select the tags that best describe your identity and sector."
+      },
+      "1": {
+        "title": "Your visual style",
+        "subtitle": "How do you want your site to look? Choose the tags closest to your aesthetic vision."
+      },
+      "2": {
+        "title": "For whom and how",
+        "subtitle": "Define the target audience, tone, and most important features for your project."
+      }
+    },
+    "catLabels": {
+      "TC-IDENTITY": "Brand identity",
+      "TC-SECTOR": "Sector / Industry",
+      "TC-AUDIENCE": "Target audience",
+      "TC-VISUAL": "Visual style",
+      "TC-PALETTE": "Color palette",
+      "TC-TYPOGRAPHY": "Typography",
+      "TC-LAYOUT": "Layout",
+      "TC-TONE": "Communication tone",
+      "TC-REFERENCE": "Style references",
+      "TC-FEATURE": "Priority features"
+    }
+  },
+  "card": {
+    "openWorkspace": "Open workspace →",
+    "openWorkspaceHover": "Open workspace →",
+    "options": "Project options",
+    "version_one": "{{count}} version",
+    "version_other": "{{count}} versions",
+    "menu": {
+      "open": "Open",
+      "openData": "Data dashboard",
+      "duplicate": "Duplicate",
+      "copyPrompt": "Copy prompt",
+      "copyBrief": "Copy brief",
+      "delete": "Delete"
+    }
+  },
+  "admin": {
+    "experimental": {
+      "title": "Experimental",
+      "dataDashboardLabel": "Data Dashboard Alpha",
+      "dataDashboardDescription": "Detached superadmin-only console for grounded dataset experiments outside the main UX."
+    }
+  },
+  "guide": {
+    "title": "How to get started with ANDY",
+    "subtitle": "Watch the quick guide and create your first site in minutes.",
+    "cta": "Watch tutorial"
+  },
+  "tips": {
+    "chip": "Tips",
+    "title": "Tips & News",
+    "closePanel": "Close panel",
+    "fabLabel": "Open tips and news",
+    "markRead": "Mark as read",
+    "items": {
+      "style_profile": {
+        "title": "Complete your style profile",
+        "body": "Select style tags in onboarding to get AI generations that match your visual identity."
+      },
+      "duplicate": {
+        "title": "Duplicate before you experiment",
+        "body": "Use 'Duplicate' from the project menu to keep a safe copy before making big changes."
+      },
+      "prompt_reuse": {
+        "title": "Reuse your best prompts",
+        "body": "Use 'Copy prompt' to transfer your instruction system to a new project without rewriting it."
+      },
+      "iterative": {
+        "title": "Describe changes naturally",
+        "body": "Just tell the AI what to change: 'Make it more minimal', 'Add a CTA', 'Use warmer colors'. No code needed."
+      },
+      "workspace_isolation": {
+        "title": "Organize projects by workspace",
+        "body": "Create separate workspaces for each client or brand to keep prompts and styles isolated."
+      },
+      "streaming": {
+        "title": "Real-time AI streaming",
+        "body": "Responses now appear progressively as they are generated — no more waiting for the full output."
+      },
+      "publish": {
+        "title": "Publish your site in one click",
+        "body": "Project ready? Hit 'Publish' in the editor to make it live instantly on your subdomain."
+      },
+      "model_choice": {
+        "title": "Choose the right AI model",
+        "body": "Different models suit different tasks. Use a faster model for quick iterations and a powerful one for final quality."
+      },
+      "save_snapshot": {
+        "title": "Save a snapshot with Ctrl+S",
+        "body": "Press Ctrl+S in the editor to save a snapshot you can return to at any time."
+      },
+      "rollback": {
+        "title": "Roll back to any snapshot",
+        "body": "Open the history panel to see all saved snapshots and restore any previous version of your project."
+      }
+    },
+    "types": {
+      "tip": "Tip",
+      "news": "News",
+      "shortcut": "Shortcut"
+    }
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} h ago",
+    "daysAgo": "{{count}} days ago"
+  },
+  "presets": {
+    "neutral": {
+      "label": "Empty / Blank",
+      "hint": "Start from a blank canvas"
+    },
+    "landing": {
+      "label": "Landing Page",
+      "hint": "Single-page conversion-oriented site"
+    },
+    "website": {
+      "label": "Website",
+      "hint": "Classic multi-section site"
+    },
+    "form": {
+      "label": "Form",
+      "hint": "Lead and contact collection"
+    },
+    "manifesto": {
+      "label": "Manifesto",
+      "hint": "Identity and values page"
+    },
+    "slideshow": {
+      "label": "Slideshow",
+      "hint": "Navigable slide deck"
+    },
+    "keynote": {
+      "label": "Keynote",
+      "hint": "Visual keynote template"
+    },
+    "a4poster": {
+      "label": "A4 Poster",
+      "hint": "Single-page printable layout"
+    },
+    "infographic": {
+      "label": "Infographic",
+      "hint": "Data and insight visualization"
+    }
+  },
+  "lang": {
+    "it": "Italiano",
+    "en": "English"
+  },
+  "health": {
+    "title": "API Status",
+    "checking": "Checking...",
+    "ok": "API reachable",
+    "error": "API unreachable",
+    "recheck": "Recheck"
+  },
+  "session": {
+    "expired": "Session expired",
+    "requiresLogin": "Your session has expired. Enter your credentials to continue without losing the current context.",
+    "tokenExpired": "Your session has expired. Please sign in again to continue.",
+    "logout": "Sign out"
+  },
+  "security": {
+    "passwordChange": {
+      "title": "Password update required",
+      "badge": "Legacy account",
+      "description": "This account was created before the current password policy. Set a stronger password to keep using the workspace.",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "policyHint": "Use at least 12 characters with uppercase, lowercase, a number, and a symbol.",
+      "logout": "Sign out",
+      "submit": "Update password",
+      "submitting": "Updating...",
+      "errors": {
+        "confirmationMismatch": "Password confirmation does not match.",
+        "generic": "Unable to update the password."
+      }
+    }
+  },
+  "notifications": {
+    "close": "Close",
+    "title": "Processes",
+    "clear": "Clear",
+    "clearTitle": "Remove completed / errors",
+    "hide": "Hide processes",
+    "show": "Show processes",
+    "running_one": "{{count}} running",
+    "running_other": "{{count}} running",
+    "completed_one": "{{count}} completed",
+    "completed_other": "{{count}} completed"
+  },
+  "launch": {
+    "badge": "Guided Mode",
+    "title": "Guided generation",
+    "subtitle": "{{name}} · Complete 3 steps and review the brief before launching.",
+    "project": "Your project",
+    "stepLabel": "Step {{number}} — {{title}}",
+    "siteTypes": {
+      "landing_page": "Landing",
+      "business_site": "Business",
+      "portfolio": "Portfolio",
+      "showcase": "Showcase"
+    },
+    "templates": {
+      "neutral": "Blank",
+      "landing": "Landing page",
+      "website": "Website",
+      "form": "Interactive form",
+      "manifesto": "Manifesto",
+      "a4poster": "A4 poster",
+      "infographic": "Infographic",
+      "slideshow": "Slideshow",
+      "keynote": "Visual keynote",
+      "videogame": "Videogame",
+      "freerunner": "Infinite Runner",
+      "seriousgame": "Serious Game",
+      "game3d": "3D Game",
+      "vr-aframe": "VR A-Frame Experience",
+      "interactive-story": "Interactive Story"
+    },
+    "presetGroups": {
+      "web": "Web & content",
+      "presentation": "Presentation & print",
+      "game": "Game & interactive"
+    },
+    "formatHints": {
+      "one_pager": "One pager",
+      "a3_document": "A3 document",
+      "ratio_1_1": "1:1 format",
+      "ratio_16_9": "16:9 format",
+      "interactive_form": "Interactive form",
+      "portfolio": "Portfolio",
+      "brochure": "Brochure",
+      "analytics_dashboard": "Analytics dashboard"
+    },
+    "styleAttributes": {
+      "minimal": "Minimal",
+      "premium": "Premium",
+      "dark": "Dark / Night",
+      "bright": "Bright / Light",
+      "bold": "Bold / High-impact",
+      "elegant": "Elegant",
+      "corporate": "Corporate",
+      "playful": "Playful / Creative",
+      "tech": "Tech / Modern",
+      "artisan": "Artisan",
+      "luxury": "Luxury",
+      "eco": "Eco / Natural"
+    },
+    "contactSuggestions": {
+      "email": "Email",
+      "phone": "Phone",
+      "address": "Address",
+      "instagram": "Instagram",
+      "facebook": "Facebook",
+      "linkedin": "LinkedIn",
+      "youtube": "YouTube",
+      "whatsapp": "WhatsApp",
+      "website": "Website",
+      "vat": "VAT"
+    },
+    "phase": {
+      "review": "Ready for generation",
+      "launching": "Creating the run and opening the workspace…"
+    },
+    "brief": {
+      "title": "PROJECT BRIEF — {{brand}}",
+      "identity": "[IDENTITY] Brand and site type",
+      "brand": "Brand",
+      "template": "Template",
+      "siteType": "Site type",
+      "goal": "[GOAL] Description and main objective",
+      "audience": "[AUDIENCE] Target audience",
+      "style": "[STYLE] Visual attributes, tone and CTA",
+      "visualAttributes": "Visual attributes",
+      "tone": "Voice tone",
+      "cta": "Primary CTA",
+      "styleNotes": "Additional style notes",
+      "contacts": "[CONTACTS] Contact information and key data",
+      "attachments": "[ATTACHMENTS] Documents analysed for the brief",
+      "footer": "Structured Guided Mode brief · {{siteType}} · Sections: {{sections}}"
+    },
+    "steps": {
+      "1": {
+        "title": "Description",
+        "subtitle": "Brand, site type and main goal"
+      },
+      "2": {
+        "title": "Target & Data",
+        "subtitle": "Audience, contacts and key info"
+      },
+      "3": {
+        "title": "Visual style",
+        "subtitle": "Aesthetics, tone and CTA"
+      }
+    },
+    "step1": {
+      "businessName": "Brand or company name",
+      "businessNamePlaceholder": "e.g. Acme Studio",
+      "presetId": "Template",
+      "presetIdHint": "AI infers the best template from your description. You can change it here.",
+      "goal": "Description and main goal",
+      "goalHint": "Describe the project freely. You can use bullet points (- item), bold (**text**) or paste from a document.",
+      "goalPlaceholder": "e.g. Acme Studio is a premium accessories brand.\n- Goal: grow online sales\n- Audience: 25–45 year old enthusiasts\n- Strength: innovative materials and premium design",
+      "next": "Next"
+    },
+    "step2": {
+      "audience": "Audience and target",
+      "audienceHint": "Who are the recipients? Describe age, interests, needs, language.",
+      "audiencePlaceholder": "e.g. Enthusiasts aged 25–45, Italian and European, who love design and quality",
+      "contacts": "Contact information and key data",
+      "contactsHint": "Email, phone, address, social — data not in the description but needed on the site.",
+      "add": "Add",
+      "noData": "No data added.",
+      "keyPlaceholder": "Email",
+      "back": "Back",
+      "next": "Next"
+    },
+    "step3": {
+      "visualAttributes": "Visual attributes",
+      "visualHint": "Select one or more styles for the project.",
+      "tone": "Voice tone",
+      "tonePlaceholder": "e.g. Clear and modern",
+      "cta": "Primary CTA",
+      "ctaPlaceholder": "e.g. Buy now, Learn more",
+      "styleNotes": "Additional style notes",
+      "styleNotesPlaceholder": "e.g. aluminum frame, brand colors",
+      "outputLanguage": "Output language",
+      "outputLanguageHint": "Language used for all text in the generated page.",
+      "back": "Back",
+      "generate": "Generate brief",
+      "generating": "Generating brief..."
+    },
+    "languages": {
+      "en": "English",
+      "it": "Italian",
+      "fr": "French",
+      "de": "German",
+      "es": "Spanish",
+      "pt": "Portuguese",
+      "nl": "Dutch"
+    },
+    "step4": {
+      "title": "Step 4 — Review brief",
+      "subtitle": "The brief is ready. Edit it if needed, then launch the session.",
+      "generationTitle": "Step 4 — Start generation",
+      "prepared": "Prepared successfully",
+      "briefLabel": "Generated brief — editable (Markdown)",
+      "structuredBriefLabel": "Structured brief — editable before optimization",
+      "optimizeHint": "The brief will be optimized into a prompt, then used to generate the site.",
+      "optimizing": "Optimizing...",
+      "startGeneration": "Start generation",
+      "promptReady": "Prompt ready",
+      "optimizedPromptLabel": "Optimized prompt — editable before generation",
+      "backToBrief": "Back to brief",
+      "readyPrefix": "The prompt is ready. Click",
+      "continueInGuided": "Continue in Guided Mode",
+      "readySuffix": "to generate the site with complete artifact saving, preview, and editing tools.",
+      "dashboard": "Dashboard",
+      "backToDashboard": "Back to dashboard",
+      "continueInWorkspace": "Continue in workspace",
+      "launching": "Launching…"
+    },
+    "workspaceModeBadge": "Workspace",
+    "openWorkspace": "Open Workspace",
+    "review": {
+      "badge": "Review and generate",
+      "prefillTitle": "✦ AI pre-filled",
+      "templateBadge": "Template: {{template}}",
+      "description": "The AI extracted the key data from your request. Generate now or adjust the fields first.",
+      "generating": "Generation in progress…",
+      "summary": {
+        "brand": "Brand",
+        "goal": "Goal",
+        "audience": "Audience",
+        "style": "Style",
+        "contacts": "Contacts"
+      }
+    },
+    "upload": {
+      "uploading": "Uploading...",
+      "attachContext": "Attach context documents",
+      "attachHint": "PDF, DOCX, TXT, MD, images — drag them here or click to browse",
+      "failedBadgeTitle": "Upload failed: {{name}}",
+      "failedCount_one": "{{count}} file not uploaded — check the session",
+      "failedCount_other": "{{count}} files not uploaded — check the session"
+    },
+    "loadError": "Unable to load the project.",
+    "submitError": "Unable to prepare the launch flow.",
+    "errors": {
+      "optimizePrompt": "Prompt optimization failed.",
+      "startGeneration": "Unable to start generation."
+    }
+  },
+  "config": {
+    "title": "Project configuration",
+    "loading": "Loading…",
+    "projectName": "Project name",
+    "projectNamePlaceholder": "Project name…",
+    "brief": "Project brief",
+    "briefPlaceholder": "Describe the project and its main characteristics…",
+    "briefGuide": "Brief guide",
+    "styleNotes": "Style notes",
+    "styleNotesPlaceholder": "Specific style constraints or preferences…",
+    "inheritUser": "Inherit user preferences (fallback)",
+    "presetActive": "Active preset — brief and tags pre-filled.",
+    "forms": {
+      "title": "Operational forms",
+      "subtitle": "Project delivery and privacy settings",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "enable": "Enable",
+      "disable": "Disable",
+      "explanation": "The LLM defines only the form structure. Recipient and privacy settings remain private project configuration and are applied deterministically during preview, publish and export.",
+      "recipient": "Recipient email",
+      "controller": "Data controller",
+      "privacyContact": "Privacy contact email",
+      "privacyVersion": "Privacy notice version",
+      "privacyUrl": "Privacy policy HTTPS URL",
+      "save": "Save form service",
+      "saving": "Saving…",
+      "saved": "Form service settings saved.",
+      "loadError": "Unable to load form service settings.",
+      "saveError": "Unable to save form service settings."
+    },
+    "media": {
+      "title": "Project media",
+      "empty": "No media in library.",
+      "emptyHint": "Upload images, PDFs or links to build the project library.",
+      "upload": "Upload file",
+      "uploading": "Uploading…",
+      "addUrl": "Add URL",
+      "urlPlaceholder": "https://…",
+      "labelPlaceholder": "Label (optional)",
+      "add": "Add",
+      "cancel": "Cancel",
+      "useInProject": "Use in project",
+      "excludeFromProject": "Exclude from project",
+      "inUse": "in use",
+      "use": "use",
+      "deleteAsset": "Delete asset",
+      "advancedOptions": "Advanced options",
+      "styleRole": "Style role…",
+      "descriptionPlaceholder": "Description…",
+      "confirmDelete": "Delete \"{{name}}\"?",
+      "uploadError": "Upload error.",
+      "assetBriefHeading": "Brief",
+      "assetDesignSignalsHeading": "Image analysis"
+    },
+    "tagCategories": {
+      "era": "Era / Movement",
+      "visual": "Visual style",
+      "palette": "Palette",
+      "typography": "Typography",
+      "layout": "Layout",
+      "tone": "Tone",
+      "audience": "Audience / Target",
+      "feature": "Required features",
+      "sector": "Sector / Domain",
+      "reference": "References"
+    },
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…"
+  },
+  "vibecore": {
+    "heading": "What do you want to build today?",
+    "subtitle": "Describe your idea — the AI handles the rest",
+    "placeholder": "E.g. a landing page for a beauty salon, elegant tone, neutral palette…",
+    "cta": "Create with AI",
+    "scrollHint": "scroll to your projects",
+    "attach": "Attach",
+    "attachHint": "Drag files or click to attach — PDF, DOCX, images, max 10 MB",
+    "dropHere": "Drop here",
+    "newProject": "New project",
+    "error": "An error occurred. Please try again.",
+    "attachLimitError": "Some files are unsupported or exceed the allowed limits.",
+    "removeFile": "Remove",
+    "modelOverrideLabel": "Pipeline model",
+    "modelOverrideTitle": "Choose one model for the full pipeline",
+    "modelOverrideActiveTitle": "Pipeline forced to {{provider}} · {{model}}",
+    "modelOverrideDefault": "Use system-configured models",
+    "modelOverrideReset": "Default",
+    "modelOverridePlaceholder": "Select provider and model",
+    "modelOverrideSearch": "Search provider or model",
+    "structuredDatasetCount_one": "{{count}} structured dataset",
+    "structuredDatasetCount_other": "{{count}} structured datasets",
+    "attachCounter": "Attachments: {{count}}/{{max}}",
+    "removeFileAria": "Remove {{name}}",
+    "dataDashboardWarning": "Data dashboard mode is alpha-only and disabled in the main Vibe flow. Continuing with the standard website pipeline.",
+    "uploadAllFailed": "Unable to upload attached files: {{files}}. Check the session and try again.",
+    "uploadPartialFailed": "Some files were not uploaded: {{files}}",
+    "prefillFailedNotification": {
+      "label": "Couldn't auto-fill the brief — you can still continue and fill it in manually."
+    },
+    "phase": {
+      "classifying": "Analysing request…",
+      "prefilling": "Pre-filling fields with AI…",
+      "creating": "Creating workspace…",
+      "uploading": "Uploading files…",
+      "analyzing": "Analysing datasets…",
+      "redirecting": "Opening…",
+      "hints": {
+        "classifying": [
+          "Reading your idea…",
+          "Detecting project type…",
+          "Classifying intent…",
+          "Identifying output format…"
+        ],
+        "prefilling": [
+          "Extracting key details…",
+          "Structuring your brief…",
+          "Analysing tone and style…",
+          "Identifying your audience…",
+          "Building project fields…",
+          "Processing document context…"
+        ],
+        "creating": [
+          "Initialising workspace…",
+          "Setting up your project…"
+        ],
+        "uploading": [
+          "Uploading your files…",
+          "Processing documents…",
+          "Starting enrichment pipeline…"
+        ],
+        "analyzing": [
+          "Waiting for structured enrichment…",
+          "Reading uploaded datasets…"
+        ],
+        "redirecting": [
+          "Almost ready…",
+          "Opening your workspace…"
+        ]
+      }
+    },
+    "tokenCounter": "~ {{count}} tokens",
+    "prefillBanner": "✦ Pre-filled by AI · Review and generate",
+    "prefillEdit": "Edit manually",
+    "prefillCta": "Process Project"
+  },
+  "workspace": {
+    "selectionNone": "No selection",
+    "notifications": {
+      "export": {
+        "label": "Export ZIP",
+        "running": "Creating screenshot + archive…",
+        "downloading": "Downloading ZIP…",
+        "done": "ZIP downloaded",
+        "sessionExpired": "Session expired",
+        "error": "Export error"
+      },
+      "capture": {
+        "label": "Screenshot {{format}}",
+        "running": "Rendering page…",
+        "done": "File downloaded",
+        "sessionExpired": "Session expired",
+        "error": "Capture error"
+      },
+      "publish": {
+        "label": "Publish",
+        "running": "Publishing…",
+        "done": "Published!",
+        "doneVersioned": "Published! (v{{vn}} active)",
+        "sessionExpired": "Session expired",
+        "error": "Publish error"
+      },
+      "media": {
+        "done": "Media applied",
+        "doneSaved": "Media applied and saved",
+        "doneMessage": "{{name}} linked to the selected element.",
+        "doneSavedMessage": "{{name}} linked to the selected element and saved as a new version.",
+        "error": "Cannot load the selected asset",
+        "errorLabel": "Media error",
+        "notApplicable": "Select a valid image or image URL.",
+        "notApplicableLabel": "Asset not applicable",
+        "noActive": "Select an image first or generate a new asset.",
+        "noActiveLabel": "No active media"
+      },
+      "modelFallback": {
+        "label": "Model switched automatically",
+        "message": "Requested \"{{requested}}\" was not available — using \"{{actual}}\" instead."
+      },
+      "style": {
+        "done": "Style applied",
+        "doneSaved": "Style applied and saved",
+        "doneMessage": "Fit, repeat, opacity and filter updated in the preview.",
+        "doneSavedMessage": "Fit, repeat, opacity and filter updated and saved as a new version."
+      },
+      "imageSuggestion": {
+        "label": "Image suggestion",
+        "running": "Analysing section context…",
+        "done": "Suggestion ready",
+        "failed": "Suggestion failed",
+        "error": "Cannot generate image suggestion"
+      },
+      "prompt": {
+        "updated": "Prompt updated",
+        "updatedMessage": "The suggestion has been copied to the main prompt.",
+        "missing": "Write a prompt or use the image suggestion first.",
+        "missingLabel": "Prompt missing"
+      },
+      "imageGeneration": {
+        "label": "Image generation",
+        "running": "Sending request to provider…",
+        "started": "Generation started",
+        "done": "Image ready",
+        "doneSaved": "Image ready and saved",
+        "doneMessage": "{{name}} updated in the preview.",
+        "doneSavedMessage": "{{name}} replaced the placeholder and saved as a new version.",
+        "failed": "Generation failed",
+        "failedMessage": "{{error}} The placeholder remains in the current working view.",
+        "error": "Image generation error",
+        "stillRunning": "Generation still in progress",
+        "stillRunningMessage": "The provider is still completing the render. The asset remains in the queue but the flow is not blocked.",
+        "autoLabel": "AI image gen",
+        "autoRunning": "Analysing page semantic context…",
+        "autoBrief": "Brief ready. Starting automatic generation…",
+        "autoError": "Cannot start automatic image generation",
+        "placeholderVersionedMsg": "Placeholder applied and saved as a new version. The final image will advance the working view again when ready.",
+        "placeholderAppliedMsg": "Placeholder applied to the working view. If version saving is not yet available, the final image will be registered as soon as ready.",
+        "sentMsg": "Request sent successfully. If the placeholder is not immediately available, the final image will be applied when ready."
+      },
+      "conversation": {
+        "loadError": "Error loading conversation"
+      },
+      "snapshot": {
+        "savedLabel": "Version saved",
+        "saved": "Snapshot activated.",
+        "editSavedLabel": "EDIT version saved",
+        "editSaved": "Manual edits versioned.",
+        "activatedLabel": "Version activated",
+        "activated": "Snapshot selected as active version.",
+        "newVersionLabel": "New version saved",
+        "newVersionMessage": "Snapshot saved and activated by the backend.",
+        "staleBaseLabel": "Version out of date",
+        "staleBase": "This edit started from a version that has since changed. The current version has been reloaded — reapply the change on it.",
+        "noChangeLabel": "Nothing changed",
+        "noChange": "The content is identical to the current version, so no new version was created.",
+        "commitFailedLabel": "The preview was not saved",
+        "commitFailed": "The generation succeeded but the version was not recorded, so the preview still shows the previous one. The reply is in the chat.",
+        "invalidJs": "The model produced invalid JavaScript, so the version was not saved and the preview still shows the previous one. Ask in chat to fix the script.",
+        "invalidJsLabel": "Damaged artifact"
+      },
+      "llm": {
+        "label": "AI Generation",
+        "labelFocus": "AI Generation (focus)",
+        "running": "Processing request…",
+        "runningFocus": "Processing request and updating preview…",
+        "errorLabel": "LLM error",
+        "doneLabel": "Generation complete",
+        "doneMessage": "Response ready with {{provider}} · {{model}}",
+        "abortedLabel": "Generation stopped",
+        "aborted": "Processing cancelled by user.",
+        "abortedContent": "⏹ Processing stopped by user",
+        "parseErrorLabel": "Generation failed",
+        "parseError": "The model returned an unparseable response. Nothing was saved and the project is unchanged. Retry, or select a different model."
+      },
+      "focusPatch": {
+        "parseErrorLabel": "Response parse error",
+        "parseError": "The model produced uninterpretable JSON. Try changing the model and retry.",
+        "parseResponseLabel": "Response parse error",
+        "parseResponseMessage": "LLM response could not be parsed — change model and retry.",
+        "notAppliedLabel": "Focus patch not applied",
+        "notApplied": "Element not found in the current version. Re-select the element in the preview and retry.",
+        "appliedLabel": "Focus patch applied",
+        "appliedMessage": "Element updated — new version active.",
+        "limitedLabel": "Inspect limited",
+        "limited": "The selection was not valid for the focus patch. Continuing with the full project context."
+      },
+      "promptOptimizer": {
+        "label": "Prompt optimization",
+        "running": "Analysing and rewriting the prompt in the chat flow…",
+        "inputLabel": "Original prompt",
+        "outputLabel": "Optimize prompt",
+        "done": "Prompt ready in chat with {{provider}} · {{model}}",
+        "skipped": "Optimizer disabled for this product configuration.",
+        "aborted": "Optimisation stopped",
+        "abortedContent": "⏹ Prompt optimisation stopped by the user"
+      }
+    },
+    "editMediaFilters": {
+      "images": "Images",
+      "backgrounds": "Backgrounds"
+    },
+    "llmErrors": {
+      "contextTooLong": "Context too long",
+      "contextTooLongMessage": "Context too long or response too heavy for this request. Memory reduced: retry the last action.",
+      "configureApiKey": "Configure the provider API key",
+      "providerCallError": "Error during provider call",
+      "providerNotConfigured": "Provider not configured",
+      "generic": "LLM error",
+      "errorWithStatus": "Error [{{status}}]: {{message}}",
+      "providerKeyMissing": "Provider {{provider}} requires an API key that is not configured."
+    },
+    "ui": {
+      "resizeChat": "Resize chat input",
+      "resizePanels": "Resize panels",
+      "mediaPlaceholderBackground": "Use an optional manual prompt or ask for a semantic suggestion for this background…",
+      "mediaPlaceholderImage": "Use an optional manual prompt or ask for a semantic suggestion for this image…",
+      "checkingSession": "Checking session…",
+      "configureProject": "Configure project",
+      "chatTitle": "Project Chat",
+      "providerPlaceholder": "Provider",
+      "providerKeyWarning": "Provider {{provider}} requires an unconfigured API key.",
+      "providerKeyWarningConfigure": "Configure {{var}} and retry.",
+      "providerKeyWarningConfigureGeneric": "Configure the provider key and retry.",
+      "optimizePromptLabel": "Optimize prompt uses {{provider}} · {{model}}",
+      "pipelineOverrideActive": "Active pipeline",
+      "pipelineOverrideSticky": "preconfigured for the next messages",
+      "loadingConversation": "Loading conversation…",
+      "voiceOnlyChrome": "Dictation only available in compatible Chrome or Edge.",
+      "voiceUnavailable": "Dictation unavailable: {{error}}.",
+      "voiceMicError": "Microphone already in use or permission not granted.",
+      "voiceListeningTitle": "Stop dictation",
+      "voiceStartTitle": "Start dictation with microphone",
+      "voiceListeningLabel": "Stop dictation",
+      "voiceStartLabel": "Start dictation",
+      "attachError": "File attachment failed. Supported formats: PDF, DOCX, DOC, TXT, MD, images.",
+      "attachTitle": "Attach document or image",
+      "attachLabel": "Attach file",
+      "dropToAttach": "Drop files to attach",
+      "attachDropHint": "Drag files here or use the paperclip: attachments stay in the project and are sent with the prompt.",
+      "removeAttachment": "Remove attachment",
+      "uploading": "Uploading…",
+      "uploadSuccess": "Attached to project",
+      "imageSuggestionLogo": "Use as logo",
+      "imageSuggestionBackground": "Use as background",
+      "imageSuggestionIcon": "Use as icon",
+      "imageSuggestionDismiss": "Dismiss",
+      "autoOptimizeOn": "Auto-optimize ON",
+      "autoOptimizeOff": "Auto-optimize OFF",
+      "autoOptimizeOnTitle": "Auto-optimize is ON: Send will optimize the prompt automatically before sending",
+      "autoOptimizeOffTitle": "Auto-optimize is OFF: prompt will be sent as-is",
+      "voiceListening": "🎙️ Listening...",
+      "voiceReady": "Chrome: voice dictation ready",
+      "inspectElementLabel": "Element: ",
+      "copyJsonTitle": "Copy JSON metadata of selected element",
+      "copyJson": "Copy JSON",
+      "removeElementSelection": "Remove element selection",
+      "codeSelectionLines": "{{lang}} lines {{start}}–{{end}}",
+      "removeCodeSelection": "Remove code selection",
+      "inspectHint": "Click an element in the preview to select it. For images you can click directly on the photo; with Shift or Alt you select the wider container.",
+      "closeButton": "Close",
+      "generatingMedia": "Processing…",
+      "genImageAI": "Gen image AI",
+      "promptPanelNone": "none",
+      "editOn": "✎ EDIT ON",
+      "editOff": "✎ EDIT",
+      "emptyConversation": "Open a conversation or send a new prompt.",
+      "scrollToBottom": "Back to bottom of chat",
+      "scrollToBottomTitle": "Back to bottom",
+      "placeholderFocusPatchBackground": "Describe the focus patch change for the selected background here...",
+      "placeholderFocusPatch": "Describe the focus patch change for the selected element here...",
+      "placeholderDefault": "Write what you want to create...",
+      "useProviderModel": "Use {{provider}} · {{model}}",
+      "useActiveProviderModel": "Use the active chat provider/model",
+      "optimizingPrompt": "Optimizing...",
+      "optimizeWith": "Optimize · {{model}}",
+      "optimizePrompt": "Optimize prompt",
+      "restoreOriginal": "Restore original",
+      "clearPrompt": "Clear",
+      "stopGeneration": "Stop the current generation",
+      "sending": "Sending...",
+      "send": "Send",
+      "exportTitle": "Export HTML/CSS/JS as ZIP",
+      "exportError": "Export error",
+      "captureTitle": "Capture JPG or PDF screenshot of the preview",
+      "publishUpdateTitle": "Update live publication",
+      "publishTitle": "Publish with shareable link",
+      "publishStateError": "⚠ Error",
+      "publishStateUpdate": "🔄 Update",
+      "publishStatePublish": "🌐 Publish",
+      "promptTabTitle": "View the composed system prompt passed to the LLM (read-only)",
+      "inspectOnTitle": "Deactivate Inspect",
+      "inspectOffTitle": "Activate Inspect: select an element and use only the focus patch flow in chat",
+      "inspectNoArtifacts": "Inspect only available when the preview contains generated code",
+      "inspectOn": "◎ Inspect ON",
+      "inspectOff": "◎ Inspect",
+      "editOnTitle": "Deactivate EDIT Light",
+      "editOffTitle": "Activate EDIT Light: click text to edit it or an image to open AI tools",
+      "saveEditTitle": "Save EDIT changes as a new artifact version",
+      "saveEditSaving": "⏳ Saving…",
+      "saveEdit": "💾 Save EDIT",
+      "copyLink": "📋 Copy link",
+      "copied": "✓ Copied",
+      "editSlug": "✏ Slug",
+      "setSlug": "🔗 Set slug",
+      "unpublish": "Remove",
+      "staleVersion": "⚠ online v{{published}}, active v{{current}}",
+      "updatePublish": "Update",
+      "snapshotPanelLiveLine": "🌐 live: v{{live}} · you're working on v{{current}}",
+      "snapshotPanelLiveBadge": "🌐 live",
+      "branchNotice": "⎘ You're working on v{{active}}, not the latest (v{{latest}}): your next change will branch from here. v{{latest}} stays reachable in the history.",
+      "slugPlaceholder": "e.g. my-bakery",
+      "slugChecking": "⏳ Checking…",
+      "slugAvailable": "✓ Available",
+      "slugTaken": "✗ Already in use",
+      "slugInvalid": "⚠ Invalid format",
+      "slugReserved": "⚠ Reserved name",
+      "slugError": "✗ Check failed",
+      "slugSaving": "⏳",
+      "slugSave": "Save",
+      "slugRemove": "Remove slug",
+      "slugCancel": "Cancel",
+      "noCodeTitle": "No generated code",
+      "noCodeHint": "The center only shows HTML/CSS/JS artifacts generated by the backend. Send a prompt to populate the preview.",
+      "previewRefreshing": "Refreshing preview…",
+      "rescanImages": "Rescan images from preview",
+      "promptPanelDesc": "Composed system prompt passed to the LLM — read-only",
+      "promptPanelReload": "↻ Reload",
+      "promptPanelLoading": "Loading…",
+      "promptPanelHint": "The prompt will load automatically. If it doesn't appear, click ↻ Reload.",
+      "promptPanelTokensPreset": "~{{tokens}} tokens · preset: {{preset}}",
+      "promptPanelUserMessage": "User message",
+      "promptPanelAssistantMessage": "Assistant message (history)",
+      "promptPanelNoGenYet": "No generation yet — preview of what will be sent on the next request.",
+      "promptPanelCurrentTurnTitle": "Current turn — full conversation sent",
+      "stream": {
+        "optimizing": "Optimizing prompt...",
+        "analysingOptimizer": "Analysing optimizer...",
+        "connectingOptimizer": "Connecting optimizer...",
+        "responding": "Responding...",
+        "reasoning": "Reasoning...",
+        "connectingProvider": "Connecting to provider...",
+        "thinkingDefault": "Processing prompt in the conversational flow...",
+        "thinkingOptimizer": "Waiting for stream reasoning...",
+        "spinnerOptimizer": "optimizing prompt...",
+        "spinnerDefault": "thinking..."
+      },
+      "layers": {
+        "layerA": "LAYER A — Base constraints",
+        "layerABadge": "always active",
+        "layerASource": "System constant",
+        "layerB": "LAYER B — Preset module",
+        "layerBBadge": "preset: {{presetId}}",
+        "layerBBadgeNone": "no preset",
+        "layerBSource": "Project configuration (⚙ gear)",
+        "layerBEmpty": "(empty — no preset assigned to the project)",
+        "layerC": "LAYER C — Style context",
+        "layerCBadge": "moodboard + user profile",
+        "layerCBadgeEmpty": "empty",
+        "layerCSource": "User profile (initial profiling) + Project moodboard (⚙ gear)",
+        "layerCEmpty": "(empty — no user profiling data or moodboard configured)",
+        "layerD": "LAYER D — Document context",
+        "layerDBadge": "enriched assets",
+        "layerDSource": "Uploaded assets enriched by DCL pipeline",
+        "layerDEmpty": "(empty — no enriched assets)",
+        "layerE": "LAYER E — Custom template",
+        "layerEBadge": "active",
+        "layerESource": "Advanced project configuration (⚙ gear)",
+        "policy": "POLICY — Output budget",
+        "policyBadge": "system",
+        "policySource": "Automatic token/output configuration"
+      },
+      "codeEditor": {
+        "beautifyTitle": "Format / Beautify (equivalent to Alt+Shift+F)",
+        "saveVersionTitle": "Save changes as a new active preview version",
+        "saveVersion": "💾 Save version",
+        "saving": "Saving…",
+        "fontDecrease": "Decrease font size",
+        "fontIncrease": "Increase font size",
+        "shortcuts": "Ctrl+scroll = zoom · Alt+Shift+F = format",
+        "font": "Font",
+        "selectionLines": "Selection lines {{start}}-{{end}}",
+        "cursorPosition": "Cursor line {{line}}, col {{col}}"
+      },
+      "imageToolsInEditTitle": "Image tools in EDIT",
+      "imageToolsInEditHint": "In EDIT, text keeps priority. Click directly on the image area to target the media underneath.",
+      "imageAiToolsTitle": "Image AI tools",
+      "imageAiToolsDesc": "Manual generation and advanced image settings are separated from the chat and available only inside EDIT mode.",
+      "reqMeta": {
+        "flow": "Flow",
+        "target": "Target",
+        "provider": "Provider",
+        "finishReason": "Finish reason",
+        "model": "Model",
+        "snapshot": "Snapshot",
+        "mediaStatus": "Media status",
+        "mediaResolved": "resolved",
+        "mediaDegraded": "degraded",
+        "mediaResolvedCount": "Media resolved",
+        "mediaFailedCount": "Media failed",
+        "mediaKeys": "Media keys",
+        "badgeMedia": "{{resolved}}/{{total}} media",
+        "badgeInfo": "info",
+        "totalTokens": "Total tokens",
+        "promptTokens": "Prompt tokens",
+        "completionTokens": "Completion tokens",
+        "prepromptSystem": "Preprompt (system)",
+        "msgsSent": "Messages sent to LLM",
+        "promptConfigId": "Prompt config ID",
+        "execTime": "Execution time",
+        "totalCost": "Total cost",
+        "tokenCost": "Token cost",
+        "imageCost": "Image cost",
+        "videoCost": "Video cost",
+        "eurPerKTok": "€/1k tok",
+        "providerUsd": "Provider USD",
+        "structuredParse": "Structured parse",
+        "parseValid": "✓ valid",
+        "parseFailed": "✗ failed",
+        "details": "Request details",
+        "detailsGlobal": "Last request details"
+      },
+      "messageOutcome": {
+        "artifactLinked": "artifact linked",
+        "mediaCount": "{{resolved}}/{{total}} media",
+        "failedCount": "{{count}} failed"
+      },
+      "requestInsight": {
+        "openDetails": "Details",
+        "title": "Generation outcome",
+        "description": "Quick summary first, technical trace only when you need to inspect it.",
+        "mediaResolved": "media resolved",
+        "mediaDegraded": "media degraded",
+        "snapshot": "Snapshot",
+        "duration": "Duration",
+        "tokens": "Tokens",
+        "cost": "Cost",
+        "mediaOutcomeTitle": "Media outcome",
+        "mediaOutcomeSubtitle": "{{count}} keys tracked for this artifact",
+        "resolvedCount": "{{count}} resolved",
+        "failedCount": "{{count}} failed",
+        "artifactSummaryTitle": "Artifact summary",
+        "artifactSummarySubtitle": "Persisted payload sizes and parsing outcome",
+        "structuredParse": "Structured parse",
+        "parseValid": "valid",
+        "parseFailed": "failed",
+        "htmlBytes": "HTML bytes",
+        "cssBytes": "CSS bytes",
+        "jsBytes": "JS bytes",
+        "technicalTraceTitle": "Technical trace",
+        "technicalTraceSubtitle": "IDs, prompt lineage, and saved references",
+        "snapshotId": "Snapshot ID",
+        "promptConfig": "Prompt config",
+        "llmMessagesSent": "LLM messages sent",
+        "systemPromptEstimate": "System prompt est.",
+        "systemPromptEstimateValue": "{{count}} tok",
+        "traceIds": "Trace IDs",
+        "assetIds": "Asset IDs",
+        "directiveStatus": {
+          "resolved": "resolved",
+          "fallback_resolved": "fallback resolved",
+          "unresolved": "unresolved"
+        }
+      },
+      "messageBubble": {
+        "copy": "Copy",
+        "copied": "Copied",
+        "copyError": "Error",
+        "copyTitle": "Copy message",
+        "nextSteps": "Next steps",
+        "errorBadge": "Error",
+        "errorHint": "No version was saved — the project is unchanged."
+      }
+    },
+    "inspector": {
+      "loading": "Loading history…",
+      "empty": "No activity recorded for this project yet.",
+      "vibeTitle": "Vibe",
+      "zeroEffortTitle": "Zero Effort",
+      "generationTitle": "Generation",
+      "truncated": "TRUNCATED",
+      "noGeneration": "This session has no generation yet.",
+      "noActivity": "This session has nothing to show yet."
+    },
+    "recovery": {
+      "resumeLoaded": "Context recovered from the interrupted generation: the brief, the partial answer and the model's reasoning. Send to continue from there."
+    }
+  },
+  "aiUsagePanel": {
+    "title": "AI usage recap",
+    "loading": "Loading AI analytics…",
+    "emptyState": "No AI activity yet for this scope.",
+    "totalCost": "Total cost",
+    "imageGen": "Image gen",
+    "llmSpend": "LLM spend",
+    "tokens": "Tokens",
+    "tokensLower": "tokens",
+    "runs": "{{count}} runs",
+    "queuedFailed": "{{queued}} queued · {{failed}} failed",
+    "topModels": "Top models",
+    "recentRequests": "Recent requests",
+    "noRequests": "No requests logged yet.",
+    "noPromptPreview": "No prompt preview available.",
+    "mediaOkCount": "{{count}} media ok",
+    "failedCount": "{{count}} failed",
+    "details": "Details",
+    "dialogTitle": "Request details",
+    "dialogDescription": "Compact operational summary for recent AI activity.",
+    "model": "Model",
+    "cost": "Cost",
+    "created": "Created",
+    "resolvedCount": "{{count}} resolved",
+    "degraded": "degraded",
+    "clean": "clean",
+    "promptPreviewTitle": "Prompt preview",
+    "promptPreviewSubtitle": "The compact text stored for recent-request analytics",
+    "technicalSummaryTitle": "Technical summary",
+    "technicalSummarySubtitle": "Useful for admin/support review without opening raw logs",
+    "requestId": "Request ID",
+    "imageSize": "Image size"
+  },
+  "recovery": {
+    "title": "The generation stopped",
+    "body": "There are {{tokens}} tokens of work already done — a partial result and the model's reasoning. You can resume from there instead of starting over.",
+    "failedModel": "Model that stopped",
+    "reasoningKept": "Reasoning kept",
+    "partialKept": "Partial answer kept",
+    "pickModel": "Retry with a different model",
+    "pickModelHint": "A faster model can finish what the first one left half-done. The prompt, the brief, the attachments and the interrupted reasoning come with you.",
+    "resume": "Resume in project mode",
+    "resumeOther": "Resume in project mode with this model",
+    "retrying": "Resuming…",
+    "cancelAndDelete": "Cancel and delete the project",
+    "discardConfirmTitle": "Delete the project?",
+    "discardConfirmBody": "Removes the project, its prompt history, its recorded costs and its work session. This cannot be undone, and the already-paid work you were about to resume goes with it.",
+    "discardConfirm": "Yes, delete",
+    "backToChoice": "Go back"
+  }
 }

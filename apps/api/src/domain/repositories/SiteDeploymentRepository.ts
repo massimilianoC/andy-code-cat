@@ -21,6 +21,14 @@ export interface SiteDeploymentRepository {
     findByPublishId(publishId: string): Promise<SiteDeployment | null>;
     findActiveByProjectId(projectId: string): Promise<SiteDeployment | null>;
     findByProjectId(projectId: string): Promise<SiteDeployment[]>;
+    /**
+     * Delete-project cascade — removes every deployment row for a project. Returns the number
+     * removed. This is a DB-only operation: the caller (`DeleteProject`) is responsible for
+     * deleting each deployment's published files (`IFileStorage.deletePublishDir`) first, the same
+     * way `UnpublishProject` does for a single deployment — one file-deletion path, reused rather
+     * than duplicated.
+     */
+    deleteByProject(projectId: string): Promise<number>;
     updateStatus(
         id: string,
         status: SiteDeploymentStatus,

@@ -14,12 +14,10 @@ import {
     getLlmProviders,
     logBackgroundTask,
     getLlmPromptConfig,
-    getLlmPromptPreview,
     setLlmPromptConfig,
     streamOptimizePrompt,
     getPromptUsageSummary,
     getPipelineRun,
-    type PromptPreviewResponse,
     listPreviewSnapshots,
     createPreviewSnapshot,
     activatePreviewSnapshot,
@@ -73,8 +71,7 @@ import { Separator } from "@/components/ui/separator";
 import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { buildPreviewDoc } from "@/lib/preview/buildPreviewDoc";
 import { ProviderModelPicker } from "@/components/llm/ProviderModelPicker";
-import PromptLayersView from "@/components/PromptLayersView";
-import PromptTranscriptView from "@/components/PromptTranscriptView";
+import { SessionInspectorPanel } from "@/components/workspace/inspector/SessionInspectorPanel";
 import { WorkspaceHeader } from "../../../components/workspace/WorkspaceHeader";
 import { DidacticPanel } from "../../../components/didactic/DidacticPanel";
 import { PreviewViewportSelector, viewportDimensions, viewportWidth } from "../../../components/workspace/PreviewViewportSelector";
@@ -176,6 +173,42 @@ function getStringDetail(details: unknown, key: string): string | undefined {
     return typeof value === "string" ? value : undefined;
 }
 
+/**
+ * WP1 step 1 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — the single place that decides
+ * what an assistant message looks like at the moment it is allowed to enter `activeConv` state.
+ * Exported as a pure function (no closures over component state) so the ordering guarantee this
+ * step establishes — a message never reaches state ahead of the PreviewSnapshot it produced —
+ * is testable without rendering the page.
+ *
+ * `snapshot` is `null`/`undefined` in the legitimate cases where this turn produced no
+ * snapshot at all (plain chat reply, parse error, an unapplied focus patch, or a stale-base
+ * refusal). handleSend calls this exactly once per turn, only once the snapshot commit (or the
+ * decision that none applies) has already settled — never before. That is what closes the
+ * window `metadata.generatedArtifacts` used to paper over: there is no intermediate render
+ * where a message exists in state pointing at one artifact while a snapshot committed
+ * moments later disagrees with it.
+ *
+ * Not exported: Next.js's route typing (`.next/types/app/.../page.ts`) requires a page module
+ * to export only what App Router recognizes (the default component, `metadata`, etc.) — any
+ * other named export fails `next build`'s generated type check. Kept top-level (rather than a
+ * closure inside WorkspacePageContent) purely so it stays free of component state, which is
+ * what makes it possible to reason about — and test — in isolation.
+ */
+function buildAssistantMessageForConv(
+    message: MessageDto,
+    snapshot?: Pick<PreviewSnapshot, "id"> & { metadata?: { mediaResolution?: NonNullable<MessageDto["metadata"]>["mediaResolution"] } } | null
+): MessageDto {
+    if (!snapshot) return message;
+    return {
+        ...message,
+        metadata: {
+            ...(message.metadata ?? {}),
+            snapshotId: snapshot.id,
+            mediaResolution: snapshot.metadata?.mediaResolution,
+        },
+    };
+}
+
 function WorkspacePageContent() {
     const { t, i18n } = useTranslation();
     const router = useRouter();
@@ -198,6 +231,34 @@ function WorkspacePageContent() {
     const [presetCatalog, setPresetCatalog] = useState<ProjectPreset[]>([]);
 
     const [prompt, setPrompt] = useState("");
+    /** True once a recovered prompt has been loaded, so the composer can say why it is prefilled. */
+    const [recoveryResumePending, setRecoveryResumePending] = useState(false);
+
+    /**
+     * A generation that broke in Vibe hands its recovered context over through sessionStorage
+     * (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3). Reading it here is what makes "riprendi in
+     * project mode" continue the model's own reasoning instead of restarting it — without this the
+     * navigation lands the user in the workspace and nothing happens, which is worse than not
+     * offering the recovery at all.
+     *
+     * The key is removed BEFORE the prompt is placed, so a page reload cannot replay a resumption
+     * the user already took.
+     */
+    useEffect(() => {
+        if (!projectId) return;
+        try {
+            const key = `recovery_resume_${projectId}`;
+            const resumePrompt = sessionStorage.getItem(key);
+            if (!resumePrompt) return;
+            sessionStorage.removeItem(key);
+            setPrompt(resumePrompt);
+            setRecoveryResumePending(true);
+        } catch {
+            // sessionStorage unavailable — the user still lands here with their project, and can
+            // retry by hand. Degraded, not broken.
+        }
+    }, [projectId]);
+
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
     const [activeOperation, setActiveOperation] = useState<"chat" | "prompt-optimizer" | null>(null);
     const [promptRestoreValue, setPromptRestoreValue] = useState<string | null>(null);
@@ -309,8 +370,6 @@ function WorkspacePageContent() {
     const [promptTemplate, setPromptTemplate] = useState("");
     const [promptEnabled, setPromptEnabled] = useState(true);
     const [isSavingPrompt, setIsSavingPrompt] = useState(false);
-    const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
-    const [loadingPromptPreview, setLoadingPromptPreview] = useState(false);
     const [previewSnapshots, setPreviewSnapshots] = useState<PreviewSnapshot[]>([]);
     const [selectedBackendSnapshotId, setSelectedBackendSnapshotId] = useState<string | null>(null);
     const [loadingSnapshots, setLoadingSnapshots] = useState(false);
@@ -487,29 +546,6 @@ function WorkspacePageContent() {
             setIsSavingPrompt(false);
         }
     }, [token, projectId, promptTemplate, promptEnabled, promptConfigVersion]);
-
-    const loadPromptPreview = useCallback(async () => {
-        if (!token) return;
-        setLoadingPromptPreview(true);
-        try {
-            // Mirror exactly what the next chat-preview generation will send (provider, model,
-            // pipelineRole, capability) so the dry-run resolves the same model + Layer E template.
-            const data = await getLlmPromptPreview(token, projectId, {
-                provider: selectedProvider || undefined,
-                model: selectedModel || undefined,
-                pipelineRole: chatDefaults.pipelineRole,
-                capability: chatDefaults.capability,
-                uiLanguage: i18n.language?.split("-")[0] || undefined,
-            });
-            setPromptPreview(data);
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 401) {
-                window.dispatchEvent(new CustomEvent("session-expired"));
-            }
-        } finally {
-            setLoadingPromptPreview(false);
-        }
-    }, [token, projectId, selectedProvider, selectedModel, chatDefaults.pipelineRole, chatDefaults.capability, i18n.language]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const thinkingFlowRef = useRef<HTMLDivElement>(null);
@@ -804,13 +840,6 @@ function WorkspacePageContent() {
         setPreferredModelResolutionComplete(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [preferredModelResolutionComplete, providersCatalog]);
-
-    // Auto-load prompt preview when user opens the prompt tab
-    useEffect(() => {
-        if (previewTab === "prompt" && token && !promptPreview && !loadingPromptPreview) {
-            void loadPromptPreview();
-        }
-    }, [previewTab, token, promptPreview, loadingPromptPreview, loadPromptPreview]);
 
     // Track user scroll direction: only set isUserScrolled = true when scrolling UP,
     // reset to false when reaching the bottom. This prevents programmatic smooth-scroll
@@ -1821,11 +1850,6 @@ function WorkspacePageContent() {
     // Computed BEFORE hooks that depend on them
     // and before early-return guard so handleSend can access them via closure.
 
-    const assistantSnapshots = (activeConv?.messages ?? [])
-        .filter((m) => m.role === "assistant" && m.metadata?.generatedArtifacts)
-        .slice()
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
     const latestAssistant = (activeConv?.messages ?? [])
         .slice()
         .reverse()
@@ -1897,8 +1921,13 @@ function WorkspacePageContent() {
     const selectedBackendSnapshot =
         previewSnapshots.find((s) => s.id === selectedBackendSnapshotId) ?? activeBaselineSnapshot;
 
-    const artifacts =
-        selectedBackendSnapshot?.artifacts ?? latestAssistant?.metadata?.generatedArtifacts;
+    // WP1 step 2 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — the PreviewSnapshot is the
+    // only source the preview panel reads from. Step 1 guarantees a snapshot already exists (or
+    // that this turn produced none, in which case there is nothing to display anyway) by the
+    // time a message can appear in activeConv, so there is no longer a render window where
+    // falling back to metadata.generatedArtifacts on the conversation's latest message would
+    // pick up a copy that could disagree with the snapshot.
+    const artifacts = selectedBackendSnapshot?.artifacts;
 
     const artifactsKey = selectedBackendSnapshot?.id ?? latestAssistant?.id ?? "no-artifacts";
 
@@ -2140,10 +2169,15 @@ function WorkspacePageContent() {
                 })
                 .filter((m) => m.content.length > 0);
 
+            // WP1 step 2 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — activeBaselineSnapshot
+            // is the sole source of the artifact sent as the base of the next generation. See
+            // the comment on `artifacts` above: step 1 already guarantees a snapshot exists (or
+            // that none does, and there is nothing to send) before a message can enter state, so
+            // metadata.generatedArtifacts is never needed here either.
             const currentArtifactsSource =
                 editorHtml || editorCss || editorJs
                     ? { html: editorHtml, css: editorCss, js: editorJs }
-                    : activeBaselineSnapshot?.artifacts ?? latestAssistant?.metadata?.generatedArtifacts;
+                    : activeBaselineSnapshot?.artifacts;
             // In focused edit mode the server needs the full HTML for section extraction
             // and patch merging (data-pf-id lookup). Use Zod schema max (80K/20K/20K)
             // for focus; server-side buildMessagesWithHistory truncates for the LLM prompt.
@@ -2381,21 +2415,14 @@ function WorkspacePageContent() {
                     promptingTrace: llm.promptingTrace,
                     tokenUsage: llm.usage,
                     costEstimate: llm.costEstimate,
-                    generatedArtifacts: llm.structured?.artifacts,
+                    // WP1 step 3 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — this used to
+                    // write generatedArtifacts here, creating a second, independently-updated
+                    // copy of the artifact alongside the PreviewSnapshot committed a few lines
+                    // below. Steps 1-2 already removed every read of that copy; this stops
+                    // producing it.
                     chatStructured: llm.structuredParseValid ? llm.structured?.chat : undefined,
                 },
             });
-
-            setActiveConv((prev) =>
-                prev
-                    ? {
-                        ...prev,
-                        totalTokens: prev.totalTokens + (llm.usage?.totalTokens ?? 0),
-                        totalCost: (prev.totalCost ?? 0) + (llm.costEstimate?.amount ?? 0),
-                        messages: [...prev.messages, assistantSaved.message],
-                    }
-                    : prev
-            );
 
             // Keep promptOpsSummary in sync so the workspace header total cost
             // reflects chat costs immediately (backend now writes chat to PromptExecutionLog).
@@ -2405,7 +2432,52 @@ function WorkspacePageContent() {
                 runs: prev.runs + 1,
             }));
 
+            // WP1 step 1 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — the assistant message
+            // must not reach `activeConv` state until the PreviewSnapshot it produced (if any)
+            // already exists. Before this reorder, the message was pushed into state right here,
+            // and the snapshot commit + list refresh ran afterwards; any render in that gap —
+            // most visibly a conversation's very first generation, when previewSnapshots is still
+            // empty and selectedBackendSnapshot/activeBaselineSnapshot both resolve to nothing —
+            // showed a "latest assistant message" with no snapshot backing it yet. That gap is
+            // exactly what the metadata.generatedArtifacts live fallback existed to paper over.
+            // Committing the snapshot (or establishing that this turn produces none) before the
+            // message enters state closes the gap instead of masking it.
+            const addAssistantMessageToConv = (message: MessageDto) => {
+                setActiveConv((prev) =>
+                    prev
+                        ? {
+                            ...prev,
+                            totalTokens: prev.totalTokens + (llm.usage?.totalTokens ?? 0),
+                            totalCost: (prev.totalCost ?? 0) + (llm.costEstimate?.amount ?? 0),
+                            messages: [...prev.messages, message],
+                        }
+                        : prev
+                );
+            };
+
             let previewVersionSaved = false;
+
+            // The server now diagnoses invalid JavaScript at the moment the artifact is produced,
+            // not only when a write is attempted. Saying so here is the difference between "the
+            // reply arrived and the preview never changed" and "the model broke the script, ask it
+            // to fix line N" — the second is something the user can act on, and it arrives before
+            // they go looking for a preview that will never come.
+            if (llm.generatedJavaScriptError) {
+                const js = llm.generatedJavaScriptError;
+                // The evidence, not just the verdict. A bare "Unexpected token ')'" leaves the user
+                // scrolling thirty thousand characters of generated code; the line number and the
+                // line itself are something they can paste straight back into the chat.
+                const where = js.line
+                    ? ` — riga ${js.line}${js.column ? `:${js.column}` : ""}${js.sourceLine ? `: ${js.sourceLine}` : ""}`
+                    : "";
+                addNotification({
+                    label: t("workspace.notifications.snapshot.invalidJsLabel", "Artefatto danneggiato"),
+                    status: "error",
+                    message: t("workspace.notifications.snapshot.invalidJs",
+                        "Il modello ha prodotto JavaScript non valido, quindi la versione non è stata salvata e l'anteprima resta quella precedente. Chiedi in chat di correggere lo script.")
+                        + ` (${js.message})${where}`,
+                });
+            }
 
             // Persist preview snapshot to DB — only when html is non-empty AND the
             // structured parse succeeded. A parse failure now returns empty artifacts
@@ -2489,26 +2561,9 @@ function WorkspacePageContent() {
                     setEditorHtml(snapArt?.html ?? llm.structured.artifacts.html ?? "");
                     setEditorCss(snapArt?.css ?? llm.structured.artifacts.css ?? "");
                     setEditorJs(snapArt?.js ?? llm.structured.artifacts.js ?? "");
-                    setActiveConv((prev) => {
-                        if (!prev) return prev;
-                        return {
-                            ...prev,
-                            messages: prev.messages.map((message) => {
-                                if (message.id !== assistantSaved.message.id) {
-                                    return message;
-                                }
-
-                                return {
-                                    ...message,
-                                    metadata: {
-                                        ...(message.metadata ?? {}),
-                                        snapshotId: snap.snapshot.id,
-                                        mediaResolution: snap.snapshot.metadata?.mediaResolution,
-                                    },
-                                };
-                            }),
-                        };
-                    });
+                    // The message enters state already carrying the snapshotId it produced —
+                    // there is no intermediate render where one exists without the other.
+                    addAssistantMessageToConv(buildAssistantMessageForConv(assistantSaved.message, snap.snapshot));
                     // Spinner cleared by iframe onLoad; fallback timeout in case user is on another tab
                     setPreviewRefreshing(true);
                     setPreviewPending(true);
@@ -2520,9 +2575,63 @@ function WorkspacePageContent() {
                     // AL-042 — a refused base is not "snapshot persistence is optional": the
                     // model produced a version that could not be attached to what the user is
                     // looking at, and they need to know before they build on it.
-                    await handleStaleArtifactBase(err);
-                    // Anything else stays non-blocking — the chat works without the snapshot.
+                    const handled = await handleStaleArtifactBase(err);
+
+                    // Everything else used to be swallowed here, and that was survivable only
+                    // while metadata.generatedArtifacts still held a second copy the preview
+                    // could fall back on. WP1 removed that copy — correctly, the two disagreed —
+                    // so a silent failure now means the generation completes, the user is
+                    // charged, and the preview simply never updates with nothing said. That is
+                    // the worst of both: the work is done, paid for, and invisible.
+                    //
+                    // The chat still works without the snapshot, so this stays non-blocking. But
+                    // it is reported, and it is logged with the payload sizes, because the first
+                    // time this happened the error existed nowhere and the cause had to be
+                    // guessed at from what survived in the database.
+                    if (!handled) {
+                        const detail = err instanceof ApiError
+                            ? (err.userMessage ?? err.message)
+                            : err instanceof Error ? err.message : String(err);
+                        // The commonest real cause, measured: the server refuses to store an
+                        // artifact whose JavaScript does not parse (422
+                        // INVALID_GENERATED_JAVASCRIPT). That refusal is correct — storing it
+                        // would activate a version whose scripts are broken — but it used to be
+                        // invisible twice over: swallowed here, and papered over by the preview
+                        // falling back to metadata.generatedArtifacts, which displayed the very
+                        // artifact the server had just rejected. The fallback is gone; the
+                        // silence must go with it.
+                        const invalidJs = err instanceof ApiError && err.code === "INVALID_GENERATED_JAVASCRIPT";
+                        console.error("[snapshot] commit failed — the preview will not update", {
+                            projectId,
+                            conversationId: convId,
+                            messageId: assistantSaved.message.id,
+                            promptExecutionId: llm.promptExecutionId,
+                            htmlChars: (llm.structured?.artifacts?.html ?? "").length,
+                            cssChars: (llm.structured?.artifacts?.css ?? "").length,
+                            jsChars: (llm.structured?.artifacts?.js ?? "").length,
+                            error: detail,
+                        });
+                        addNotification({
+                            label: t("workspace.notifications.snapshot.commitFailedLabel",
+                                "L'anteprima non è stata salvata"),
+                            status: "error",
+                            message: (invalidJs
+                                ? t("workspace.notifications.snapshot.invalidJs",
+                                    "Il modello ha prodotto JavaScript non valido, quindi la versione non è stata salvata e l'anteprima resta quella precedente. Chiedi in chat di correggere lo script.")
+                                : t("workspace.notifications.snapshot.commitFailed",
+                                    "La generazione è riuscita ma la versione non è stata registrata, quindi l'anteprima resta quella precedente. La risposta è nella chat."))
+                                + ` (${detail})`,
+                        });
+                    }
+
+                    // The message was already persisted server-side; it still has to reach
+                    // state even though no snapshot backs it this time.
+                    addAssistantMessageToConv(assistantSaved.message);
                 }
+            } else {
+                // No snapshot applies to this turn (plain chat reply, parse error, or an
+                // unapplied focus patch) — nothing to wait for, add the message directly.
+                addAssistantMessageToConv(assistantSaved.message);
             }
 
             // When focused-mode JSON parsing failed entirely, notify the user
@@ -3175,30 +3284,7 @@ function WorkspacePageContent() {
             >
                 <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
                     {t("workspace.ui.promptPanelDesc")}
-                    {promptPreview && (
-                        <span style={{ color: "var(--accent, #7dd3fc)", marginLeft: "0.75rem" }}>
-                            {`~${promptPreview.tokenEstimate} token · ${promptPreview.provider}/${promptPreview.model}`}
-                        </span>
-                    )}
                 </span>
-                <button
-                    type="button"
-                    disabled={loadingPromptPreview}
-                    onClick={() => void loadPromptPreview()}
-                    style={{
-                        marginLeft: "auto",
-                        fontSize: "0.78rem",
-                        padding: "0.25rem 0.75rem",
-                        background: "transparent",
-                        color: "var(--accent, #7dd3fc)",
-                        border: "1px solid var(--accent, #7dd3fc)",
-                        borderRadius: "var(--radius)",
-                        cursor: loadingPromptPreview ? "wait" : "pointer",
-                        fontWeight: 600,
-                    }}
-                >
-                    {loadingPromptPreview ? t("workspace.ui.promptPanelLoading") : t("workspace.ui.promptPanelReload")}
-                </button>
             </div>
             <div
                 style={{
@@ -3207,49 +3293,27 @@ function WorkspacePageContent() {
                     padding: "1rem",
                 }}
             >
-                {!lastSentTrace?.effectiveSystemPrompt && !promptPreview && !loadingPromptPreview && (
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
-                        {t("workspace.ui.promptPanelHint")}
-                    </p>
-                )}
-                {!lastSentTrace?.effectiveSystemPrompt && loadingPromptPreview && (
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.ui.promptPanelLoading")}</p>
-                )}
-                {lastSentTrace?.effectiveSystemPrompt ? (
-                    <>
-                        <PromptLayersView
-                            mode="sent"
-                            fullText={lastSentTrace.effectiveSystemPrompt}
-                            layers={lastSentTrace.layers ?? []}
-                            defaultRaw={!lastSentTrace.layers?.length}
-                        />
-                        {/* I16: every non-system message in the trace (user AND assistant history
-                            turns), not just role:user — prior assistant replies are part of what
-                            was actually sent and were being dropped from this view before.
-                            Folded: once an artifact exists each turn carries the full generated
-                            markup, which used to bury the conversation under thousands of lines. */}
-                        <PromptTranscriptView
-                            messages={lastSentMessages}
-                            labels={{
-                                user: t("workspace.ui.promptPanelUserMessage", "Messaggio utente"),
-                                assistant: t("workspace.ui.promptPanelAssistantMessage", "Messaggio assistant (cronologia)"),
-                                system: "System",
-                            }}
-                        />
-                    </>
-                ) : promptPreview ? (
-                    <>
-                        <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: "0.75rem" }}>
-                            {t("workspace.ui.promptPanelNoGenYet", "Nessuna generazione ancora — anteprima di cosa verrà inviato alla prossima request.")}
-                        </p>
-                        <PromptLayersView
-                            mode="dry-run"
-                            fullText={promptPreview.effectiveSystemPrompt}
-                            layers={promptPreview.layers}
-                            subtitle={`${promptPreview.provider}/${promptPreview.model}`}
-                        />
-                    </>
-                ) : null}
+                {/* Session Inspector (docs/specs/SESSION_INSPECTOR_SPEC.md): the project's Vibe /
+                    Zero Effort / Generation history, read from the work-sessions endpoints. */}
+                {/* Session Inspector (docs/specs/SESSION_INSPECTOR_SPEC.md): the project's Vibe /
+                    Zero Effort / Generation history, read from the work-sessions endpoints, plus
+                    the sent conversation as a fourth block.
+
+                    The conversation used to render below this panel as a flat section, which meant
+                    the Prompt view showed two stacks of prompt layers — the generation's inside the
+                    Generation block, and the current turn's loose at the bottom. They read as a
+                    duplicate and are not one: after a few chat turns the current turn's system
+                    prompt is no longer the generation's. Both now live in the block they belong to
+                    (§1: this view "becomes" that history, rather than sitting beside it). */}
+                <SessionInspectorPanel
+                    projectId={projectId}
+                    conversation={lastSentTrace?.effectiveSystemPrompt || lastSentMessages.length
+                        ? {
+                            messages: lastSentMessages,
+                            currentTurnSystemPrompt: lastSentTrace?.effectiveSystemPrompt,
+                        }
+                        : undefined}
+                />
             </div>
         </div>
     );
@@ -3274,21 +3338,12 @@ function WorkspacePageContent() {
             style={{ gridTemplateColumns: `${leftWidth}% 8px minmax(0, 1fr)` }}
         >
             <aside className="workspace-chat-panel">
-                {workMode === "build" ? (<>
-                <div className="workspace-chat-header">
-                    {/* Project name + cog */}
-                    <div className="row" style={{ gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem" }}>
-                        <span style={{ flex: 1, fontSize: "0.92rem", fontWeight: 700, color: "var(--text-foreground, #fff)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {projectName || "…"}
-                        </span>
-                        <button
-                            onClick={() => setConfigOpen(true)}
-                            title={t("workspace.ui.configureProject")}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "0.15rem", display: "flex", alignItems: "center", opacity: 0.7 }}
-                        >
-                            <Settings size={15} />
-                        </button>
-                    </div>
+                {/* The model selector belongs to the SESSION, not to Build mode. It used to live
+                    inside the build branch below, so switching to Didactic mode hid it and the
+                    didactic calls silently re-derived a model from stored preferences — spending
+                    the user's money on compute they had not chosen. Rendered here it stays visible
+                    and stays the one answer both modes use. */}
+                <div className="workspace-chat-header" style={{ paddingBottom: "0.5rem" }}>
                     <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                         <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                             {t("workspace.ui.chatTitle")}
@@ -3307,6 +3362,22 @@ function WorkspacePageContent() {
                             placeholder={t("workspace.ui.providerPlaceholder")}
                             className="min-w-[18rem] flex-1"
                         />
+                    </div>
+                </div>
+                {workMode === "build" ? (<>
+                <div className="workspace-chat-header">
+                    {/* Project name + cog */}
+                    <div className="row" style={{ gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem" }}>
+                        <span style={{ flex: 1, fontSize: "0.92rem", fontWeight: 700, color: "var(--text-foreground, #fff)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {projectName || "…"}
+                        </span>
+                        <button
+                            onClick={() => setConfigOpen(true)}
+                            title={t("workspace.ui.configureProject")}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "0.15rem", display: "flex", alignItems: "center", opacity: 0.7 }}
+                        >
+                            <Settings size={15} />
+                        </button>
                     </div>
                     {currentProviderMissingKey && currentProvider && (
                         <div
@@ -3487,6 +3558,28 @@ function WorkspacePageContent() {
                             if (files && files.length > 0) void handleChatFileAttach(files);
                         }}
                     />
+
+                    {/* A prefilled composer with no explanation is the same silence this programme
+                        removed elsewhere: the user would see text they did not type. Prefilled and
+                        not auto-sent on purpose — the resumption is theirs to fire, and a paid
+                        generation should not start itself on a navigation. */}
+                    {recoveryResumePending && (
+                        <div
+                            role="status"
+                            style={{
+                                margin: "0 0 0.5rem",
+                                padding: "0.45rem 0.7rem",
+                                fontSize: "0.75rem",
+                                borderRadius: "0.5rem",
+                                color: "#a78bfa",
+                                background: "rgba(167,139,250,0.08)",
+                                border: "1px solid rgba(167,139,250,0.25)",
+                            }}
+                        >
+                            {t("workspace.recovery.resumeLoaded",
+                                "Contesto recuperato dalla generazione interrotta: il brief, la risposta parziale e il ragionamento del modello. Invia per continuare da lì.")}
+                        </div>
+                    )}
 
                     {/* Main input row: textarea + vertical action buttons */}
                     <div className="workspace-input-row">
@@ -3876,6 +3969,9 @@ function WorkspacePageContent() {
                     token={token ?? ""}
                     onAnchorFocus={(kind) => setPreviewTab(kind)}
                     onCostUpdated={refreshProjectDbCost}
+                    provider={selectedProvider || undefined}
+                    model={selectedModel || undefined}
+                    pipelineRunId={pipelineRunIdRef.current || undefined}
                 />
             )}</aside>
 

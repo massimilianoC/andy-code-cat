@@ -119,6 +119,15 @@ export const llmChatPreviewSchema = z.object({
      * modelLock instead of the legacy cascade (see ResolvePromptExecution.execute).
      */
     pipelineRunId: z.string().min(1).max(120).optional(),
+    /**
+     * Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — the id of the
+     * failed `PromptExecutionLog` this turn resumes from, when `message` was built by injecting
+     * that row's partial answer and reasoning into the original brief. Purely a provenance flag:
+     * it changes nothing about how the call is dispatched, journalled or costed — it only answers
+     * "why is there a second generation here" when the journal is read back later. Omitted for
+     * every ordinary turn.
+     */
+    resumedFromPromptExecutionId: z.string().min(1).max(120).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({
@@ -319,6 +328,22 @@ export interface LlmChatPreviewResult {
     reply: string;
     rawResponse?: string;
     structuredParseValid?: boolean;
+    /**
+     * Set when the artifact's JavaScript does not compile.
+     *
+     * The generation is still returned — discarding a complete artifact over a missing bracket
+     * would throw away work the user paid for and could ask the model to fix. But the storage
+     * boundaries refuse it (snapshot, export, publish all call
+     * assertGeneratedJavaScriptSyntax), so a caller that ignores this will watch the snapshot
+     * write fail later with nothing said, which is exactly how this went unnoticed.
+     */
+    generatedJavaScriptError?: {
+        message: string;
+        line?: number;
+        column?: number;
+        /** The offending source line, so the user can paste it back and have it fixed. */
+        sourceLine?: string;
+    };
     promptingTrace?: LlmPromptingTrace;
     structured?: LlmStructuredResponse;
     mediaResolution?: MediaResolutionMetadata;

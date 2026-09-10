@@ -247,10 +247,12 @@ describe("resolveModelSelection — vibe-cascade (VibeClassify.ts / VibePrefill.
 });
 
 describe("resolveModelSelection — optimizer-cascade (OptimizeUserPrompt.ts)", () => {
-    it("honors a direct provider-name override, and honors the model override without checking catalog membership because apiType is openai-compatible (KNOWN-DIVERGENCE)", () => {
-        // KNOWN-DIVERGENCE (future work): "not-a-real-model" is never validated against
-        // siliconflow's model list — this mirrors a real, currently-latent defect in
-        // OptimizeUserPrompt.ts's cascade, preserved here exactly as-is.
+    // DELIBERATE BEHAVIOR CHANGE, 2026-09-07. This row previously pinned the KNOWN-DIVERGENCE:
+    // "not-a-real-model" was forwarded to the provider unverified, because the gate checked only
+    // the provider's apiType and never catalog membership. The optimizer receives the user's live
+    // model selection from the workspace, so forwarding an id no provider offers meant the user's
+    // prompt was optimized by whatever the provider did with a name it did not recognise.
+    it("under legacy, an override that is not in the catalog falls through instead of being forwarded unverified", () => {
         const decision = resolveModelSelection({
             ...BASE_OPTIMIZER,
             activeProviders: [siliconflow([model("MiniMaxAI/MiniMax-M3", { isDefault: true })])],
@@ -260,7 +262,42 @@ describe("resolveModelSelection — optimizer-cascade (OptimizeUserPrompt.ts)", 
             taskSettingModel: "MiniMaxAI/MiniMax-M3",
         });
 
-        expect(decision.effective).toEqual({ provider: "siliconflow", model: "not-a-real-model" });
+        // The provider override is still honored — it names a real, active provider.
+        expect(decision.effective).toEqual({ provider: "siliconflow", model: "MiniMaxAI/MiniMax-M3" });
+        expect(decision.modelSource).toBe("task-setting");
+    });
+
+    it("under strict, an override that is not in the catalog blocks rather than substituting", () => {
+        // The caller passes "strict" exactly when the user actually chose a model, so this is the
+        // path a real workspace request takes. Same answer the vibe cascade already gives.
+        const decision = resolveModelSelection({
+            ...BASE_OPTIMIZER,
+            activeProviders: [siliconflow([model("MiniMaxAI/MiniMax-M3", { isDefault: true })])],
+            requestedProvider: "siliconflow",
+            requestedModel: "not-a-real-model",
+            taskSettingProvider: "siliconflow",
+            taskSettingModel: "MiniMaxAI/MiniMax-M3",
+            policy: "strict",
+        });
+
+        expect(decision.blocked?.code).toBe("MODEL_OVERRIDE_NOT_IN_CATALOG");
+    });
+
+    it("honors an override that IS an active model of the resolved provider", () => {
+        const decision = resolveModelSelection({
+            ...BASE_OPTIMIZER,
+            activeProviders: [siliconflow([
+                model("MiniMaxAI/MiniMax-M3", { isDefault: true }),
+                model("zai-org/GLM-5.3"),
+            ])],
+            requestedProvider: "siliconflow",
+            requestedModel: "zai-org/GLM-5.3",
+            taskSettingProvider: "siliconflow",
+            taskSettingModel: "MiniMaxAI/MiniMax-M3",
+            policy: "strict",
+        });
+
+        expect(decision.effective).toEqual({ provider: "siliconflow", model: "zai-org/GLM-5.3" });
         expect(decision.modelSource).toBe("request-override");
     });
 

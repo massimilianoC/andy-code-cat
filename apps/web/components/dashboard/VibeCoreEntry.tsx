@@ -18,6 +18,10 @@ import { createProject, deleteProject, getProjectAsset, uploadProjectAsset, upda
 import { ApiError } from "@/lib/api/call";
 import { getLlmProviders, type LlmProviderCatalogDto } from "@/lib/api/llm";
 import { useNotifications } from "@/lib/notifications";
+import { getRecoveryStatus, discardPendingProject } from "@/lib/api/recovery";
+import { ZeroEffortRecoveryModal } from "@/components/recovery/ZeroEffortRecoveryModal";
+import { shouldOfferRecovery, buildResumeHandoff, RESUME_STORAGE_KEY } from "@/lib/recovery/resumeHandoff";
+import type { ZeroEffortRecoveryStatus } from "@andy-code-cat/contracts";
 
 const DEFAULT_ATTACHMENT_POLICY = {
     maxAttachmentsPerPrompt: 10,
@@ -262,6 +266,12 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const [serverWarnings, setServerWarnings] = useState<string[]>([]);
     const [isDragOver, setIsDragOver] = useState(false);
     const [providersCatalog, setProvidersCatalog] = useState<LlmProviderCatalogDto[]>([]);
+    // Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3). Held here rather than
+    // handed to the launch page because the offer must be answered before leaving Vibe: continuing
+    // to the empty form is the outcome the modal exists to prevent.
+    const [recoveryStatus, setRecoveryStatus] = useState<ZeroEffortRecoveryStatus | null>(null);
+    const [recoveryProjectId, setRecoveryProjectId] = useState<string | null>(null);
+    const [recoveryBusy, setRecoveryBusy] = useState(false);
     const [pipelineOverride, setPipelineOverride] = useState<PipelineModelOverride | null>(null);
     const [modelOverrideOpen, setModelOverrideOpen] = useState(false);
     const [attachmentPolicy, setAttachmentPolicy] = useState(DEFAULT_ATTACHMENT_POLICY);
@@ -627,6 +637,10 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 }
                 return null;
             });
+            const serverWarningsForHandoff = [
+                ...(classification?.warnings ?? []),
+                ...(prefillResult?.warnings ?? []),
+            ].filter((w, i, a) => a.indexOf(w) === i);
             if (prefillResult?.warnings?.length) {
                 setServerWarnings((prev) => [...new Set([...prev, ...prefillResult.warnings!])]);
             }
@@ -655,6 +669,38 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     );
                 } catch {
                     // sessionStorage unavailable — launch page falls back to manual wizard
+                }
+            }
+
+            // Hand the warnings to the launch page the same way the draft is handed over.
+            // Without this they die here: they are set into state and this component navigates away
+            // in the same tick, so the banner that renders them never gets shown. A prefill that
+            // failed then looks identical to one that was never attempted — the user lands on the
+            // manual form with no idea the model refused.
+            if (serverWarningsForHandoff.length > 0) {
+                try {
+                    sessionStorage.setItem(
+                        `guided_warnings_${projectId}`,
+                        JSON.stringify(serverWarningsForHandoff),
+                    );
+                } catch {
+                    // sessionStorage unavailable — the warning is lost, which is the status quo ante
+                }
+            }
+
+            // When the prefill failed, ask the server whether anything is worth resuming BEFORE
+            // sending the user on to an empty form. The server owns that judgement (spec §4): a 402
+            // or a bad key produced no partial work, and offering to resume from nothing costs the
+            // user a second paid call for nothing. Only a row that actually carries material opens
+            // the modal; everything else continues to the launch page exactly as before.
+            if (!hasPrefill && token) {
+                const recovery = await getRecoveryStatus(token, projectId).catch(() => null);
+                if (shouldOfferRecovery(Boolean(hasPrefill), recovery)) {
+                    handoffCompleted = true;   // the project is now the modal's to resume or delete
+                    setRecoveryStatus(recovery!);
+                    setRecoveryProjectId(projectId);
+                    setEntryPhase("idle");
+                    return;
                 }
             }
 
@@ -1178,6 +1224,46 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                 <span>{t("vibecore.scrollHint", "scorri per i tuoi progetti")}</span>
                 <ChevronDown className="h-4 w-4 animate-bounce" style={{ animationDuration: "2s" }} />
             </div>
+
+            {/* The prefill broke and left work behind. Resuming carries the whole recovered context
+                into project mode; cancelling deletes the project, so a failure never survives as a
+                dashboard entry that is not a thing the user has. */}
+            {recoveryStatus && recoveryProjectId && (
+                <ZeroEffortRecoveryModal
+                    status={recoveryStatus}
+                    providers={providersCatalog}
+                    busy={recoveryBusy}
+                    onRetry={({ provider, model }) => {
+                        setRecoveryBusy(true);
+                        // The server already assembled the brief, the attachments and the
+                        // interrupted reasoning into `resumePrompt`; the workspace sends it as an
+                        // ordinary turn, which is what makes this a navigation and not a pipeline.
+                        const handoff = buildResumeHandoff(recoveryStatus, { provider, model });
+                        try {
+                            if (handoff.resumePrompt) {
+                                sessionStorage.setItem(RESUME_STORAGE_KEY(recoveryProjectId), handoff.resumePrompt);
+                            }
+                        } catch {
+                            // sessionStorage unavailable — the workspace falls back to a plain retry,
+                            // which restarts the thinking instead of continuing it. Degraded, not broken.
+                        }
+                        router.push(`/workspace/${recoveryProjectId}?${handoff.query}`);
+                    }}
+                    onDiscard={async () => {
+                        setRecoveryBusy(true);
+                        const projectToDelete = recoveryProjectId;
+                        try {
+                            if (token) await discardPendingProject(token, projectToDelete);
+                        } catch {
+                            // Reported below either way: leaving the modal open on a failed delete
+                            // would trap the user in a dialog with no working exit.
+                        }
+                        setRecoveryBusy(false);
+                        setRecoveryStatus(null);
+                        setRecoveryProjectId(null);
+                    }}
+                />
+            )}
         </section>
     );
 }

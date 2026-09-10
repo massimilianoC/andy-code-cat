@@ -9,7 +9,7 @@ import type { IFileStorage } from "../../infra/storage/IFileStorage";
 import { env } from "../../config";
 import { estimateCost } from "../llm/costPolicy";
 import { resolveStoredAssetNames } from "../media/assetMime";
-import { generateImageWithSiliconFlow } from "../media/generateImageWithSiliconFlow";
+import { generateImageWithSiliconFlow, resolveSiliconFlowImageEndpoint } from "../media/generateImageWithSiliconFlow";
 import {
     buildAssetSemanticMetadata,
     buildDeferredSvgPlaceholder,
@@ -22,6 +22,10 @@ import { ResourceType } from "../../domain/entities/CostTransaction";
 import { buildContextAwareImagePrompt, buildImagePromptContextPacket } from "../prompting/buildImagePromptContext";
 import type { OptimizeImagePrompt } from "../prompting/OptimizeImagePrompt";
 import { SavePlatformAsset } from "./SavePlatformAsset";
+import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
+
+/** docs/specs/SESSION_TRACING_EXECUTION_PLAN.md WP4b — journal task key for this use case. */
+const TASK_KEY = "generate_project_image";
 
 function inferImageSizeFromElement(
     requestedSize: string | undefined,
@@ -74,6 +78,12 @@ export class GenerateProjectImage {
         private readonly moodboardRepository?: ProjectMoodboardRepository,
         private readonly userStyleProfileRepository?: UserStyleProfileRepository,
         private readonly optimizeImagePrompt?: OptimizeImagePrompt,
+        /**
+         * Optional so existing callers and tests keep working, but production wiring should pass
+         * it: without it an image call that cost money and took 30 seconds leaves no record of
+         * what prompt produced it (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md WP4b).
+         */
+        private readonly promptExecutionLogRepository?: PromptExecutionLogRepository,
     ) { }
 
     async execute(input: {
@@ -95,6 +105,9 @@ export class GenerateProjectImage {
             filter?: string;
         };
         prePromptTemplate?: string;
+        /** Correlation keys — see docs/specs/WORK_SESSION_TRACING_SPEC.md §3. */
+        workSessionId?: string;
+        pipelineRunId?: string;
     }): Promise<{
         taskId: string;
         status: "queued";
@@ -248,6 +261,10 @@ export class GenerateProjectImage {
 
         setTimeout(() => {
             void (async () => {
+                // Tracing must never fail a generation: the pending id stays optional from here
+                // on, and every journal call below is `.catch()`-guarded so a missing or throwing
+                // repository degrades to "untraced", never to a failed image.
+                let pendingLogId: string | null = null;
                 try {
                     let finalBuffer = buildDeferredSvgPlaceholder({
                         title: label,
@@ -259,6 +276,28 @@ export class GenerateProjectImage {
                     let finalMetadata: AssetGenerationMetadata;
 
                     if (provider === "siliconflow" && env.hasSiliconFlowApiKey) {
+                        const imageEndpoint = resolveSiliconFlowImageEndpoint();
+
+                        // Journalled before dispatch, never after — a record written only on
+                        // success cannot explain a call that never came back. Same reasoning as
+                        // VibeClassify.execute(); see docs/specs/WORK_SESSION_TRACING_SPEC.md §2.
+                        pendingLogId = this.promptExecutionLogRepository
+                            ? await this.promptExecutionLogRepository.createPending({
+                                taskKey: TASK_KEY,
+                                projectId: input.projectId,
+                                userId: input.userId,
+                                workSessionId: input.workSessionId,
+                                pipelineRunId: input.pipelineRunId,
+                                pipelineStage: "image_generation",
+                                endpoint: imageEndpoint,
+                                provider,
+                                model,
+                                inputPrompt: effectivePrompt,
+                                renderedUserPrompt: effectivePrompt,
+                                contextMeta: { usedMoodboard: false, usedUserProfile: false },
+                            }).then((log) => log.id).catch(() => null)
+                            : null;
+
                         const liveResult = await generateImageWithSiliconFlow({
                             prompt: effectivePrompt,
                             model,
@@ -322,6 +361,19 @@ export class GenerateProjectImage {
                                 },
                             },
                         };
+
+                        if (pendingLogId) {
+                            // `rawResponse` is the provider's own JSON with base64 image bytes
+                            // already stripped by sanitizeProviderResponse — this is a prompt
+                            // journal, not asset storage, and the asset already carries those
+                            // bytes on disk.
+                            await this.promptExecutionLogRepository!.complete(pendingLogId, {
+                                status: "succeeded",
+                                durationMs: liveResult.latencyMs,
+                                costEstimate: cost,
+                                rawResponse: JSON.stringify(liveResult.providerResponse ?? {}),
+                            }).catch(() => undefined);
+                        }
                     } else {
                         const completedAt = new Date();
                         const cost = estimateCost(
@@ -439,6 +491,15 @@ export class GenerateProjectImage {
                 } catch (error) {
                     const completedAt = new Date();
                     const message = error instanceof Error ? error.message : "Image generation failed";
+
+                    if (pendingLogId) {
+                        await this.promptExecutionLogRepository!.complete(pendingLogId, {
+                            status: "failed",
+                            durationMs: completedAt.getTime() - requestedAt.getTime(),
+                            errorMessage: message,
+                        }).catch(() => undefined);
+                    }
+
                     const failedPlaceholder = buildDeferredSvgPlaceholder({
                         title: label,
                         prompt: input.prompt,

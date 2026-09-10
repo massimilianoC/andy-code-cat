@@ -1,3 +1,9 @@
+import type { CostUnits, CostRatesSnapshot, CostSourceRef } from "@andy-code-cat/contracts";
+
+// Declarations moved to packages/contracts so the inspector can render a cost row without
+// re-declaring its shape.
+export type { CostUnits, CostRatesSnapshot, CostSourceRef };
+
 /**
  * CostTransaction — immutable ledger record for every billable event.
  *
@@ -41,42 +47,8 @@ export const ResourceType = {
 
 export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
 
-export interface CostUnits {
-    promptTokens?: number;
-    completionTokens?: number;
-    totalTokens?: number;
-    imageCount?: number;
-    videoSeconds?: number;
-    computeMs?: number;
-    storageBytes?: number;
-}
 
-/**
- * One of these fields is populated — identifies the originating object.
- * Kept as plain strings (not ObjectId) so the entity has no infra dependency.
- */
-export interface CostSourceRef {
-    conversationId?: string;
-    messageId?: string;
-    backgroundTaskId?: string;
-    promptExecutionLogId?: string;
-    assetId?: string;
-    enrichmentTraceId?: string;
-    backgroundJobId?: string;
-    exportId?: string;
-    sessionId?: string;
-}
 
-export interface CostRatesSnapshot {
-    usdToEurRate: number;
-    platformMarkupPct: number;
-    infraCostPct: number;
-    /** Fixed fee in EUR applied for this specific transaction (0 when none). */
-    fixedFeeEur?: number;
-    textEurPer1kTokens: number;
-    imageEurPerAsset: number;
-    videoEurPerAsset: number;
-}
 
 export interface CostTransaction {
     id: string;

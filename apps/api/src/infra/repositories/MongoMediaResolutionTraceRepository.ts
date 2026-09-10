@@ -71,4 +71,10 @@ export class MongoMediaResolutionTraceRepository implements MediaResolutionTrace
         const doc = await col.findOne(filter, { sort: { createdAt: -1 } });
         return doc ? toEntity(doc) : null;
     }
+
+    async deleteByProject(projectId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId } as Filter<MediaResolutionTraceDocument>);
+        return result.deletedCount;
+    }
 }

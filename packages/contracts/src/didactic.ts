@@ -79,9 +79,36 @@ export const didacticQnaEntrySchema = z.object({
     createdAt: z.string().datetime().or(z.date()),
 });
 
+/**
+ * The model the user currently has selected, carried on every didactic request.
+ *
+ * Didactic Mode is not a separate tool with its own model: it is the same session, looking at the
+ * same artifact, and the user chose a model for that session. Resolving a different one from stored
+ * preferences — which is what happened before these fields existed — means the compute power and
+ * the price the user picked are not the ones they get.
+ *
+ * Optional because a request may legitimately arrive before the picker has resolved; the server
+ * then falls back to the user's preference. Never a free-form value: the server resolves it against
+ * the catalog and refuses an unavailable one rather than silently substituting.
+ */
+const selectedModelFields = {
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+};
+
+/**
+ * Correlation key — see docs/specs/WORK_SESSION_TRACING_SPEC.md §3. Optional: omitting it means
+ * the journal row for this call carries no pipelineRunId, matching pre-tracing behavior exactly.
+ */
+const pipelineRunIdField = {
+    pipelineRunId: z.string().min(1).max(120).optional(),
+};
+
 export const generateDidacticKnowledgeSchema = z.object({
     snapshotId: z.string().min(1),
     uiLanguage: z.enum(["it", "en"]).default("it"),
+    ...selectedModelFields,
+    ...pipelineRunIdField,
 });
 
 export const askDidacticQuestionSchema = z.object({
@@ -89,6 +116,8 @@ export const askDidacticQuestionSchema = z.object({
     question: z.string().min(1).max(2000),
     focus: didacticQnaFocusSchema.optional(),
     uiLanguage: z.enum(["it", "en"]).default("it"),
+    ...selectedModelFields,
+    ...pipelineRunIdField,
 });
 
 export type DidacticAnchor = z.infer<typeof didacticAnchorSchema>;
@@ -110,5 +139,19 @@ export interface DidacticKnowledgeResponseDto {
     costEstimate?: {
         providerCostEur: number;
         totalEur: number;
+    };
+    /**
+     * Present only when the model returned less than the prompt required.
+     *
+     * The prompt asks for 6-10 topics and exactly 5 quizzes, but nothing can force it: `strict`
+     * JSON-schema mode does not support array cardinality. So a lazy model produces a reply that is
+     * valid against the schema and poor as a product — one topic, one quiz — and without this the
+     * user is simply shown less and told nothing. Reporting costs no extra call.
+     */
+    shortfall?: {
+        topics: number;
+        quizzes: number;
+        expectedTopics: { min: number; max: number };
+        expectedQuizzes: number;
     };
 }

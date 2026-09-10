@@ -330,14 +330,45 @@ function assembleResult(parsed: Partial<LlmStructuredResponse>): LlmStructuredRe
  * 4. repairTruncatedJson — closes open strings/arrays/objects (max_tokens cut-off)
  * 5. jsonrepair library — broad heuristic, last resort
  */
-function tryParseWithRepairs(candidate: string): LlmStructuredResponse | null {
-    const strategies: Array<() => string> = [
+export function jsonRepairStrategies(candidate: string): Array<() => string> {
+    return [
         () => candidate,
         () => repairInvalidJsonEscapes(candidate),
         () => repairInvalidJsonEscapes(repairPrematureStringTermination(repairInvalidJsonEscapes(candidate))),
         () => repairTruncatedJson(repairInvalidJsonEscapes(candidate)),
         () => jsonrepair(candidate),
     ];
+}
+
+/**
+ * Runs the repair chain above against an arbitrary JSON shape, returning the first candidate that
+ * both parses and satisfies `accept`.
+ *
+ * Exported so the section-plan parser can reuse these five strategies rather than growing a sixth
+ * copy of them. Every model quirk they encode — gemma's `\\"`, Hunyuan's stray `>`, a max_tokens
+ * cut-off mid-string — is a quirk the plan call meets too, and a repair rule that lives in two
+ * places is a repair rule that gets fixed in one of them (AGENTS.md, Rule Zero).
+ *
+ * `repaired` reports whether anything beyond a plain `JSON.parse` was needed: for the plan stage
+ * that is a signal worth acting on, since a plan that only parsed after truncation repair describes
+ * fewer sections than the model intended to write.
+ */
+export function parseJsonWithRepairs<T>(
+    candidate: string,
+    accept: (value: unknown) => value is T,
+): { value: T; repaired: boolean } | null {
+    const strategies = jsonRepairStrategies(candidate);
+    for (const [index, getRepaired] of strategies.entries()) {
+        try {
+            const parsed: unknown = JSON.parse(getRepaired());
+            if (accept(parsed)) return { value: parsed, repaired: index > 0 };
+        } catch { /* try next strategy */ }
+    }
+    return null;
+}
+
+function tryParseWithRepairs(candidate: string): LlmStructuredResponse | null {
+    const strategies = jsonRepairStrategies(candidate);
     for (const getRepaired of strategies) {
         try {
             const text = getRepaired();

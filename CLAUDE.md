@@ -27,7 +27,8 @@ This repository uses full Gitflow.
 - release branches are named `release/YYYY.MM.DD.N`
 - hotfix branches are named `hotfix/<name>` and branch from `main`
 
-Never propose or perform direct pushes to `main` or `develop`.
+Claude operates git autonomously, on the condition that Gitflow is respected in full. See
+"Autonomous Git Authority" below for what that permits and what it still forbids.
 
 ## Release Versioning
 
@@ -48,12 +49,45 @@ Do not treat the release version as the npm package version. `package.json` rema
 4. `hotfix/*` branches start from `main` and must be merged back into both `main` and `develop`.
 5. Use Conventional Commits: `type(scope): description`.
 
+## Autonomous Git Authority
+
+Claude may carry a change through the whole Gitflow path without asking at each step: commit,
+branch, push a branch, merge along a legal edge, tag a release, and back-merge. Autonomy is granted
+*because* Gitflow is a discipline, not despite it — the sequence is what makes each step reviewable
+after the fact.
+
+**Permitted, unattended:**
+
+- Commit to any `feat/*`, `fix/*`, `docs/*`, `chore/*`, `refactor/*`, `release/*` or `hotfix/*`
+  branch, and push it.
+- Merge `feat|fix|docs|chore|refactor/*` → `develop`, using `--no-ff` so the branch remains legible
+  in the history.
+- Cut `release/<RELEASE_VERSION>` from `develop`, bump `RELEASE_VERSION` there, merge it into `main`,
+  tag `main` with that exact version, and back-merge the release into `develop`.
+- Delete a branch that is fully contained in both `develop` and `main`.
+
+**Still forbidden, with or without instruction:**
+
+- Committing directly onto `main` or `develop`. They are merge targets; work arrives by merge.
+- Rewriting history that has been pushed: no `--force`, no `--force-with-lease`, no rebase or amend
+  of a shared branch, no moving a tag that exists on the remote.
+- Deleting a branch holding commits that are not in `develop` or `main`.
+- Skipping hooks or signing (`--no-verify`, `--no-gpg-sign`).
+- Tagging or merging into `main` while a release gate is red, unless the operator has been told the
+  gate is red and has said to proceed anyway. A red gate is reported, never quietly stepped over.
+
+**Non-negotiable before a merge into `main`:** the unit suites pass, `tsc` is clean,
+`npm run gitflow:guard` and `npm run release:version:validate` pass, and `npm run guard:public-repo`
+passes. State the results; do not assert them.
+
 ## What Claude Must Avoid
 
 - Do not invent alternative branch names outside the approved prefixes.
 - Do not suggest publishing from `develop`.
 - Do not place feature work on `release/*` or `hotfix/*`.
 - Do not rewrite history on shared branches.
+- Do not report a capability as unavailable without having tested it in the current session. A
+  blocker carried over from earlier context is a claim, not a measurement.
 
 ## Validation Commands
 

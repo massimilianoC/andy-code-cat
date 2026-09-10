@@ -22,12 +22,14 @@ import { errorHandler } from "./presentation/http/middlewares/errorHandler";
 import { createAdminRoutes } from "./presentation/http/routes/adminRoutes";
 import { createPipelineRoutes } from "./presentation/http/routes/pipelineRoutes";
 import { createPipelineRunRoutes } from "./presentation/http/routes/pipelineRunRoutes";
+import { createWorkSessionRoutes } from "./presentation/http/routes/workSessionRoutes";
 import { createCostRoutes } from "./presentation/http/routes/costRoutes";
 import { createVibecoreRoutes } from "./presentation/http/routes/vibecoreRoutes";
 import { createNotificationRoutes } from "./presentation/http/routes/notificationRoutes";
 import { createDatasetRoutes } from "./presentation/http/routes/datasetRoutes";
 import { createDidacticRoutes } from "./presentation/http/routes/didacticRoutes";
 import { createFormServiceRoutes } from "./presentation/http/routes/formServiceRoutes";
+import { createRecoveryRoutes } from "./presentation/http/routes/recoveryRoutes";
 
 export function createApp() {
     const app = express();
@@ -84,7 +86,9 @@ export function createApp() {
     app.use("/v1", createExportRoutes());
     app.use("/v1", createGenerationWorkspaceRoutes());
     app.use("/v1", createPipelineRoutes());
+    app.use("/v1", createRecoveryRoutes());
     app.use("/v1", createPipelineRunRoutes());
+    app.use("/v1", createWorkSessionRoutes());
     app.use("/v1", createWysiwygRoutes());
     app.use("/v1", createExecutionLogRoutes());
     app.use("/v1", createCostRoutes());

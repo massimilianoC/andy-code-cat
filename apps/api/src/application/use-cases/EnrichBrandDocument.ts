@@ -68,6 +68,8 @@ class CaptureAssetRepository implements ProjectAssetRepository {
     listRecentGeneratedByProject(): never { return this.unsupported(); }
     summarizeGenerationAll(): never { return this.unsupported(); }
     listRecentGeneratedAll(): never { return this.unsupported(); }
+    listOwnedByProject(): never { return this.unsupported(); }
+    deleteByProject(): never { return this.unsupported(); }
 }
 
 /**

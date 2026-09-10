@@ -1,1092 +1,1128 @@
 {
-    "brand": {
-        "name": "ANDY",
-        "tagline": "Il gatto che programma per te."
-    },
-    "nav": {
-        "login": "Accedi",
-        "register": "Crea account"
-    },
-    "home": {
-        "sub": "Crea siti straordinari con l'intelligenza artificiale.",
-        "cta": {
-            "login": "Accedi",
-            "register": "Inizia ora"
-        }
-    },
-    "login": {
-        "title": "Accedi",
-        "description": "Inserisci email e password per accedere al tuo account.",
-        "email": "Email *",
-        "password": "Password *",
-        "submit": "Accedi",
-        "submitting": "Accesso in corso...",
-        "failed": "Login fallito",
-        "noAccount": "Non hai un account?",
-        "createAccount": "Crea account →"
-    },
-    "register": {
-        "title": "Crea account",
-        "description": "Il sistema crea automaticamente un progetto default al termine della registrazione.",
-        "firstName": "Nome",
-        "lastName": "Cognome",
-        "email": "Email *",
-        "password": "Password *",
-        "passwordHint": "(min 12 caratteri, maiuscole/minuscole, numero, simbolo)",
-        "submit": "Crea account",
-        "submitting": "Creazione...",
-        "haveAccount": "Hai già un account?",
-        "login": "Accedi →"
-    },
-    "dashboard": {
-        "newProject": "Nuovo progetto",
-        "logout": "Logout",
-        "superadmin": "Superadmin",
-        "guidedMode": "Modalità Guidata",
-        "hero": {
-            "title": "Dashboard Progetti",
-            "empty": "Nessun progetto ancora. Crea il primo da un preset qui sotto.",
-            "count_one": "{{count}} progetto nel workspace",
-            "count_other": "{{count}} progetti nel workspace"
-        },
-        "presets": {
-            "title": "Nuovo progetto da preset"
-        },
-        "projects": {
-            "title": "I tuoi progetti",
-            "empty": "Nessun progetto ancora",
-            "createFirst": "Crea il primo progetto"
-        },
-        "footer": {
-            "count_one": "{{count}} progetto",
-            "count_other": "{{count}} progetti"
-        },
-        "modal": {
-            "title": "Nuovo progetto",
-            "descPreset": "Preset: {{preset}}. Dai un nome al progetto.",
-            "descBlank": "Inserisci un nome (minimo 3 caratteri). Puoi partire anche da un preset.",
-            "placeholder": "Nome progetto (min 3 caratteri)",
-            "cancel": "Annulla",
-            "create": "Crea",
-            "creating": "Creazione...",
-            "startGuided": "Avvia Modalità Guidata"
-        },
-        "confirm": {
-            "delete": "Eliminare il progetto \"{{name}}\"? Questa operazione è irreversibile."
-        },
-        "toast": {
-            "loadError": "Errore nel caricamento dei progetti",
-            "created": "Progetto \"{{name}}\" creato",
-            "deleted": "Progetto \"{{name}}\" eliminato",
-            "deleteError": "Errore nell'eliminazione",
-            "duplicateError": "Errore nella duplicazione",
-            "promptCopied": "Prompt copiato negli appunti",
-            "noPrompt": "Nessun prompt configurato per questo progetto"
-        }
-    },
-    "onboarding": {
-        "loading": "Caricamento...",
-        "skipAll": "Salta tutto →",
-        "styleProfile": "Profilazione stile",
-        "step": "Passo",
-        "of": "di",
-        "saveError": "Errore nel salvataggio. Riprova.",
-        "back": "← Indietro",
-        "skip": "Salta",
-        "next": "Avanti →",
-        "complete": "Completa →",
-        "saving": "Salvataggio...",
-        "steps": {
-            "0": {
-                "title": "Chi sei?",
-                "subtitle": "Seleziona i tag che descrivono meglio la tua identità e il tuo settore."
-            },
-            "1": {
-                "title": "Il tuo stile visivo",
-                "subtitle": "Come vuoi che appaia il tuo sito? Scegli i tag più vicini alla tua visione estetica."
-            },
-            "2": {
-                "title": "Per chi e come",
-                "subtitle": "Definisci il pubblico, il tono e le funzionalità più importanti per il tuo progetto."
-            }
-        },
-        "catLabels": {
-            "TC-IDENTITY": "Identità del brand",
-            "TC-SECTOR": "Settore / Industria",
-            "TC-AUDIENCE": "Pubblico di riferimento",
-            "TC-VISUAL": "Stile visivo",
-            "TC-PALETTE": "Palette colori",
-            "TC-TYPOGRAPHY": "Tipografia",
-            "TC-LAYOUT": "Layout",
-            "TC-TONE": "Tono di comunicazione",
-            "TC-REFERENCE": "Riferimenti stilistici",
-            "TC-FEATURE": "Funzionalità prioritarie"
-        }
-    },
-    "card": {
-        "openWorkspace": "Apri workspace →",
-        "openWorkspaceHover": "Apri workspace →",
-        "options": "Opzioni progetto",
-        "version_one": "{{count}} versione",
-        "version_other": "{{count}} versioni",
-        "menu": {
-            "open": "Apri",
-            "openData": "Data dashboard",
-            "duplicate": "Duplica",
-            "copyPrompt": "Copia prompt",
-            "delete": "Elimina"
-        }
-    },
-    "admin": {
-        "experimental": {
-            "title": "Sperimentale",
-            "dataDashboardLabel": "Data Dashboard Alpha",
-            "dataDashboardDescription": "Console separata, solo superadmin, per esperimenti con dataset grounded fuori dalla UX principale."
-        }
-    },
-    "guide": {
-        "title": "Come iniziare con ANDY",
-        "subtitle": "Guarda la guida rapida e crea il tuo primo sito in pochi minuti.",
-        "cta": "Guarda il tutorial"
-    },
-    "tips": {
-        "chip": "Consigli & Novità",
-        "title": "Consigli & Novità",
-        "closePanel": "Chiudi pannello",
-        "fabLabel": "Apri consigli e novità",
-        "markRead": "Segna come letto",
-        "items": {
-            "style_profile": {
-                "title": "Completa il profilo stile",
-                "body": "Seleziona i tag di stile nell'onboarding per ottenere generazioni AI coerenti con la tua identità visiva."
-            },
-            "duplicate": {
-                "title": "Duplica prima di sperimentare",
-                "body": "Usa 'Duplica' dal menu progetto per conservare una copia sicura prima di grandi modifiche."
-            },
-            "prompt_reuse": {
-                "title": "Riutilizza i tuoi prompt migliori",
-                "body": "Usa 'Copia prompt' per trasferire il tuo sistema di istruzioni in un nuovo progetto senza riscriverlo."
-            },
-            "iterative": {
-                "title": "Descrivi le modifiche in modo naturale",
-                "body": "Dì all'AI cosa cambiare: 'Rendilo più minimal', 'Aggiungi una CTA', 'Usa colori più caldi'. Nessun codice necessario."
-            },
-            "workspace_isolation": {
-                "title": "Organizza i progetti per workspace",
-                "body": "Crea workspace separati per ogni cliente o brand per mantenere prompt e stili isolati."
-            },
-            "streaming": {
-                "title": "Streaming AI in tempo reale",
-                "body": "Le risposte appaiono progressivamente mentre vengono generate — niente più attesa per l'output completo."
-            },
-            "publish": {
-                "title": "Pubblica il tuo sito con un click",
-                "body": "Progetto pronto? Premi 'Pubblica' nell'editor per renderlo live istantaneamente sul tuo sottodominio."
-            },
-            "model_choice": {
-                "title": "Scegli il modello AI giusto",
-                "body": "Modelli diversi si adattano a compiti diversi. Usa un modello veloce per iterare e uno più potente per la qualità finale."
-            },
-            "save_snapshot": {
-                "title": "Salva uno snapshot con Ctrl+S",
-                "body": "Premi Ctrl+S nell'editor per salvare uno snapshot a cui puoi tornare in qualsiasi momento."
-            },
-            "rollback": {
-                "title": "Torna a qualsiasi snapshot",
-                "body": "Apri il pannello cronologia per vedere tutti gli snapshot salvati e ripristinare qualsiasi versione precedente del progetto."
-            }
-        },
-        "types": {
-            "tip": "Consiglio",
-            "news": "Novità",
-            "shortcut": "Scorciatoia"
-        }
-    },
-    "time": {
-        "justNow": "adesso",
-        "minutesAgo": "{{count}} min fa",
-        "hoursAgo": "{{count}} ore fa",
-        "daysAgo": "{{count}} giorni fa"
+  "brand": {
+    "name": "ANDY",
+    "tagline": "Il gatto che programma per te."
+  },
+  "nav": {
+    "login": "Accedi",
+    "register": "Crea account"
+  },
+  "home": {
+    "sub": "Crea siti straordinari con l'intelligenza artificiale.",
+    "cta": {
+      "login": "Accedi",
+      "register": "Inizia ora"
+    }
+  },
+  "login": {
+    "title": "Accedi",
+    "description": "Inserisci email e password per accedere al tuo account.",
+    "email": "Email *",
+    "password": "Password *",
+    "submit": "Accedi",
+    "submitting": "Accesso in corso...",
+    "failed": "Login fallito",
+    "noAccount": "Non hai un account?",
+    "createAccount": "Crea account →"
+  },
+  "register": {
+    "title": "Crea account",
+    "description": "Il sistema crea automaticamente un progetto default al termine della registrazione.",
+    "firstName": "Nome",
+    "lastName": "Cognome",
+    "email": "Email *",
+    "password": "Password *",
+    "passwordHint": "(min 12 caratteri, maiuscole/minuscole, numero, simbolo)",
+    "submit": "Crea account",
+    "submitting": "Creazione...",
+    "haveAccount": "Hai già un account?",
+    "login": "Accedi →"
+  },
+  "dashboard": {
+    "newProject": "Nuovo progetto",
+    "logout": "Logout",
+    "superadmin": "Superadmin",
+    "guidedMode": "Modalità Guidata",
+    "hero": {
+      "title": "Dashboard Progetti",
+      "empty": "Nessun progetto ancora. Crea il primo da un preset qui sotto.",
+      "count_one": "{{count}} progetto nel workspace",
+      "count_other": "{{count}} progetti nel workspace"
     },
     "presets": {
-        "neutral": {
-            "label": "Vuoto / Neutro",
-            "hint": "Parti da una tela bianca"
-        },
-        "landing": {
-            "label": "Landing Page",
-            "hint": "Singola pagina orientata conversione"
-        },
-        "website": {
-            "label": "Website",
-            "hint": "Sito multi-sezione classico"
-        },
-        "form": {
-            "label": "Form",
-            "hint": "Raccolta lead e contatti"
-        },
-        "manifesto": {
-            "label": "Manifesto",
-            "hint": "Pagina identità e valori"
-        },
-        "slideshow": {
-            "label": "Presentazione",
-            "hint": "Deck navigabile a slide"
-        },
-        "keynote": {
-            "label": "Keynote",
-            "hint": "Template keynote visuale"
-        },
-        "a4poster": {
-            "label": "A4 Poster",
-            "hint": "Layout singola pagina stampabile"
-        },
-        "infographic": {
-            "label": "Infographic",
-            "hint": "Visualizzazione dati e insight"
-        }
+      "title": "Nuovo progetto da preset"
     },
-    "lang": {
-        "it": "Italiano",
-        "en": "English"
+    "projects": {
+      "title": "I tuoi progetti",
+      "empty": "Nessun progetto ancora",
+      "createFirst": "Crea il primo progetto"
     },
-    "health": {
-        "title": "Stato API",
-        "checking": "Verifica in corso...",
-        "ok": "API raggiungibile",
-        "error": "API non raggiungibile",
-        "recheck": "Ricontrolla"
+    "footer": {
+      "count_one": "{{count}} progetto",
+      "count_other": "{{count}} progetti"
     },
-    "session": {
-        "expired": "Sessione scaduta",
-        "requiresLogin": "La tua sessione è scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
-        "tokenExpired": "La tua sessione è scaduta. Effettua di nuovo il login per continuare.",
-        "logout": "Esci"
+    "modal": {
+      "title": "Nuovo progetto",
+      "descPreset": "Preset: {{preset}}. Dai un nome al progetto.",
+      "descBlank": "Inserisci un nome (minimo 3 caratteri). Puoi partire anche da un preset.",
+      "placeholder": "Nome progetto (min 3 caratteri)",
+      "cancel": "Annulla",
+      "create": "Crea",
+      "creating": "Creazione...",
+      "startGuided": "Avvia Modalità Guidata"
     },
-    "security": {
-        "passwordChange": {
-            "title": "Aggiornamento password richiesto",
-            "badge": "Account legacy",
-            "description": "Questo account è stato creato prima della policy password corrente. Imposta una password più robusta per continuare a usare il workspace.",
-            "currentPassword": "Password attuale",
-            "newPassword": "Nuova password",
-            "confirmPassword": "Conferma nuova password",
-            "policyHint": "Usa almeno 12 caratteri con maiuscole, minuscole, numero e simbolo.",
-            "logout": "Esci",
-            "submit": "Aggiorna password",
-            "submitting": "Aggiornamento...",
-            "errors": {
-                "confirmationMismatch": "La conferma password non corrisponde.",
-                "generic": "Impossibile aggiornare la password."
-            }
-        }
+    "confirm": {
+      "delete": "Eliminare il progetto \"{{name}}\"? Questa operazione è irreversibile."
     },
-    "notifications": {
-        "close": "Chiudi",
-        "title": "Processi",
-        "clear": "Pulisci",
-        "clearTitle": "Rimuovi completati/errori",
-        "hide": "Nascondi processi",
-        "show": "Mostra processi in corso",
-        "running_one": "{{count}} in corso",
-        "running_other": "{{count}} in corso",
-        "completed_one": "{{count}} completato",
-        "completed_other": "{{count}} completati"
-    },
-    "launch": {
-        "badge": "Modalità Guidata",
-        "title": "Generazione guidata",
-        "subtitle": "{{name}} · Compila i 3 step e rivedi il brief prima di avviare.",
-        "project": "Il tuo progetto",
-        "stepLabel": "Step {{number}} — {{title}}",
-        "siteTypes": {
-            "landing_page": "Landing",
-            "business_site": "Business",
-            "portfolio": "Portfolio",
-            "showcase": "Showcase"
-        },
-        "templates": {
-            "neutral": "Blank",
-            "landing": "Landing page",
-            "website": "Sito web",
-            "form": "Form interattivo",
-            "manifesto": "Manifesto",
-            "a4poster": "Poster A4",
-            "infographic": "Infografica",
-            "slideshow": "Slideshow",
-            "keynote": "Keynote visiva",
-            "videogame": "Videogioco",
-            "freerunner": "Runner infinito",
-            "seriousgame": "Serious Game",
-            "game3d": "Gioco 3D",
-            "vr-aframe": "Esperienza VR A-Frame",
-            "interactive-story": "Storia interattiva"
-        },
-        "presetGroups": {
-            "web": "Web e contenuto",
-            "presentation": "Presentazione e stampa",
-            "game": "Gioco e interattivo"
-        },
-        "formatHints": {
-            "one_pager": "One pager",
-            "a3_document": "Documento A3",
-            "ratio_1_1": "Formato 1:1",
-            "ratio_16_9": "Formato 16:9",
-            "interactive_form": "Form interattivo",
-            "portfolio": "Portfolio",
-            "brochure": "Brochure",
-            "analytics_dashboard": "Dashboard analytics"
-        },
-        "styleAttributes": {
-            "minimal": "Minimal",
-            "premium": "Premium",
-            "dark": "Dark / Notte",
-            "bright": "Chiaro / Luminoso",
-            "bold": "Bold / Impattante",
-            "elegant": "Elegante",
-            "corporate": "Corporate",
-            "playful": "Giocoso / Creativo",
-            "tech": "Tech / Moderno",
-            "artisan": "Artigianale",
-            "luxury": "Luxury",
-            "eco": "Eco / Naturale"
-        },
-        "contactSuggestions": {
-            "email": "Email",
-            "phone": "Telefono",
-            "address": "Indirizzo",
-            "instagram": "Instagram",
-            "facebook": "Facebook",
-            "linkedin": "LinkedIn",
-            "youtube": "YouTube",
-            "whatsapp": "WhatsApp",
-            "website": "Sito web",
-            "vat": "P.IVA"
-        },
-        "phase": {
-            "review": "Pronto per la generazione",
-            "launching": "Creo la run e apro il workspace…"
-        },
-        "brief": {
-            "title": "BRIEF DI PROGETTO — {{brand}}",
-            "identity": "[IDENTITÀ] Brand e tipo sito",
-            "brand": "Brand",
-            "template": "Template",
-            "siteType": "Tipo sito",
-            "goal": "[OBIETTIVO] Descrizione e obiettivo principale",
-            "audience": "[AUDIENCE] Target e pubblico di riferimento",
-            "style": "[STILE] Attributi visivi, tono e CTA",
-            "visualAttributes": "Attributi visivi",
-            "tone": "Tono di voce",
-            "cta": "CTA principale",
-            "styleNotes": "Note stilistiche aggiuntive",
-            "contacts": "[CONTATTI] Informazioni di contatto e dati salienti",
-            "attachments": "[ALLEGATI] Documenti analizzati per il brief",
-            "footer": "Brief strutturato Guided Mode · {{siteType}} · Sezioni: {{sections}}"
-        },
-        "steps": {
-            "1": {
-                "title": "Descrizione",
-                "subtitle": "Brand, tipo sito e obiettivo principale"
-            },
-            "2": {
-                "title": "Target & Dati",
-                "subtitle": "Audience, contatti e info salienti"
-            },
-            "3": {
-                "title": "Stile visivo",
-                "subtitle": "Attributi estetici, tono e CTA"
-            }
-        },
-        "step1": {
-            "businessName": "Nome brand o azienda",
-            "businessNamePlaceholder": "es. Acme Studio",
-            "presetId": "Template",
-            "presetIdHint": "L'AI sceglie il template più adatto alla tua descrizione. Puoi cambiarlo qui.",
-            "goal": "Descrizione e obiettivo principale",
-            "goalHint": "Descrivi liberamente il progetto. Puoi usare elenchi puntati (- elemento), grassetto (**testo**) o incollare da Word.",
-            "goalPlaceholder": "es. Acme Studio è un brand di accessori premium.\n- Obiettivo: aumentare le vendite online\n- Pubblico: appassionati tra 25-45 anni\n- Punto di forza: design e qualità",
-            "next": "Avanti"
-        },
-        "step2": {
-            "audience": "Audience e target",
-            "audienceHint": "Chi sono i destinatari? Descrivi età, interessi, bisogni, lingua.",
-            "audiencePlaceholder": "es. Appassionati tra 25-45 anni, italiani ed europei, amanti del design e della qualità",
-            "contacts": "Informazioni di contatto e dati salienti",
-            "contactsHint": "Email, telefono, indirizzo, social — dati che devono apparire nel sito.",
-            "add": "Aggiungi",
-            "noData": "Nessun dato aggiunto.",
-            "keyPlaceholder": "Email",
-            "back": "Indietro",
-            "next": "Avanti"
-        },
-        "step3": {
-            "visualAttributes": "Attributi visivi",
-            "visualHint": "Seleziona uno o più stili che caratterizzano il progetto.",
-            "tone": "Tono di voce",
-            "tonePlaceholder": "es. chiaro e moderno",
-            "cta": "CTA principale",
-            "ctaPlaceholder": "es. Acquista ora, Scopri di più",
-            "styleNotes": "Note stilistiche aggiuntive",
-            "styleNotesPlaceholder": "es. frame in alluminio, colori brand",
-            "outputLanguage": "Lingua di output",
-            "outputLanguageHint": "Lingua usata per tutto il testo nella pagina generata.",
-            "back": "Indietro",
-            "generate": "Genera brief",
-            "generating": "Generazione brief..."
-        },
-        "languages": {
-            "en": "Inglese",
-            "it": "Italiano",
-            "fr": "Francese",
-            "de": "Tedesco",
-            "es": "Spagnolo",
-            "pt": "Portoghese",
-            "nl": "Olandese"
-        },
-        "step4": {
-            "title": "Step 4 — Revisione brief",
-            "subtitle": "Il brief è pronto. Modificalo se vuoi, poi avvia la sessione.",
-            "generationTitle": "Step 4 — Avvia generazione",
-            "prepared": "Preparato con successo",
-            "briefLabel": "Brief generato — modificabile (Markdown)",
-            "structuredBriefLabel": "Brief strutturato — modificabile prima dell'ottimizzazione",
-            "optimizeHint": "Il brief verrà ottimizzato in prompt, poi usato per generare il sito.",
-            "optimizing": "Ottimizzazione...",
-            "startGeneration": "Avvia generazione",
-            "promptReady": "Prompt pronto",
-            "optimizedPromptLabel": "Prompt ottimizzato — modificabile prima della generazione",
-            "backToBrief": "Torna al brief",
-            "readyPrefix": "Il prompt è pronto. Clicca",
-            "continueInGuided": "Continua in Guided Mode",
-            "readySuffix": "per generare il sito con salvataggio completo dell'artefatto, preview e strumenti di modifica.",
-            "dashboard": "Dashboard",
-            "backToDashboard": "Torna alla dashboard",
-            "continueInWorkspace": "Continua nel workspace",
-            "launching": "Avvio…"
-        },
-        "workspaceModeBadge": "Workspace",
-        "openWorkspace": "Apri Workspace",
-        "review": {
-            "badge": "Rivedi e genera",
-            "prefillTitle": "✦ Pre-compilato dall'AI",
-            "templateBadge": "Template: {{template}}",
-            "description": "L'AI ha estratto i dati dalla tua richiesta. Genera subito oppure modifica prima i campi.",
-            "generating": "Generazione in corso…",
-            "summary": {
-                "brand": "Brand",
-                "goal": "Obiettivo",
-                "audience": "Audience",
-                "style": "Stile",
-                "contacts": "Contatti"
-            }
-        },
-        "upload": {
-            "uploading": "Caricamento in corso...",
-            "attachContext": "Allega documenti di contesto",
-            "attachHint": "PDF, DOCX, TXT, MD, immagini — trascinali qui o clicca per sfogliare",
-            "failedBadgeTitle": "Caricamento fallito: {{name}}",
-            "failedCount_one": "{{count}} file non caricato — verifica la sessione",
-            "failedCount_other": "{{count}} file non caricati — verifica la sessione"
-        },
-        "loadError": "Impossibile caricare il progetto.",
-        "submitError": "Impossibile preparare il flusso di lancio.",
-        "errors": {
-            "optimizePrompt": "Errore durante l'ottimizzazione del prompt.",
-            "startGeneration": "Impossibile avviare la generazione."
-        }
-    },
-    "config": {
-        "title": "Configurazione Progetto",
-        "loading": "Caricamento…",
-        "projectName": "Nome progetto",
-        "projectNamePlaceholder": "Nome progetto…",
-        "brief": "Brief di progetto",
-        "briefPlaceholder": "Descrivi il progetto e le sue caratteristiche principali…",
-        "briefGuide": "Guida al brief",
-        "styleNotes": "Note di stile",
-        "styleNotesPlaceholder": "Vincoli o preferenze di stile specifiche…",
-        "inheritUser": "Eredita preferenze utente (fallback)",
-        "presetActive": "Preset attivo — brief e tag pre-compilati.",
-        "forms": {
-            "title": "Form operativi",
-            "subtitle": "Consegna e privacy configurate per progetto",
-            "enabled": "Attivo",
-            "disabled": "Disattivo",
-            "enable": "Attiva",
-            "disable": "Disattiva",
-            "explanation": "La LLM definisce solo la struttura del form. Destinatario e privacy restano configurazione privata del progetto e vengono applicati deterministicamente in anteprima, pubblicazione ed export.",
-            "recipient": "Email destinatario",
-            "controller": "Titolare del trattamento",
-            "privacyContact": "Email contatto privacy",
-            "privacyVersion": "Versione informativa",
-            "privacyUrl": "URL HTTPS privacy policy",
-            "save": "Salva servizio form",
-            "saving": "Salvataggio…",
-            "saved": "Configurazione del servizio form salvata.",
-            "loadError": "Impossibile caricare la configurazione del servizio form.",
-            "saveError": "Impossibile salvare la configurazione del servizio form."
-        },
-        "media": {
-            "title": "Media di progetto",
-            "empty": "Nessun media in libreria.",
-            "emptyHint": "Carica immagini, PDF o link per costruire la libreria del progetto.",
-            "upload": "Carica file",
-            "uploading": "Caricamento…",
-            "addUrl": "Aggiungi URL",
-            "urlPlaceholder": "https://…",
-            "labelPlaceholder": "Etichetta (opzionale)",
-            "add": "Aggiungi",
-            "cancel": "Annulla",
-            "useInProject": "Usa nel progetto",
-            "excludeFromProject": "Escludi dal progetto",
-            "inUse": "in uso",
-            "use": "usa",
-            "deleteAsset": "Elimina asset",
-            "advancedOptions": "Opzioni avanzate",
-            "styleRole": "Ruolo stile…",
-            "descriptionPlaceholder": "Descrizione…",
-            "confirmDelete": "Eliminare \"{{name}}\"?",
-            "uploadError": "Errore durante il caricamento.",
-            "assetBriefHeading": "Brief",
-            "assetDesignSignalsHeading": "Analisi immagine"
-        },
-        "tagCategories": {
-            "era": "Era / Movimento",
-            "visual": "Stile visivo",
-            "palette": "Palette",
-            "typography": "Tipografia",
-            "layout": "Layout",
-            "tone": "Tono",
-            "audience": "Audience / Target",
-            "feature": "Funzionalità richieste",
-            "sector": "Settore / Ambito",
-            "reference": "Riferimenti"
-        },
-        "cancel": "Annulla",
-        "save": "Salva",
-        "saving": "Salvataggio…"
-    },
-    "vibecore": {
-        "heading": "Cosa vuoi realizzare oggi?",
-        "subtitle": "Descrivi la tua idea — l'AI fa il resto",
-        "placeholder": "Es. una landing page per un salone di bellezza, tono elegante, palette neutra…",
-        "cta": "Crea con AI",
-        "scrollHint": "scorri per i tuoi progetti",
-        "attach": "Allega",
-        "attachHint": "Trascina file o clicca per allegare — PDF, DOCX, immagini, max 10 MB",
-        "dropHere": "Rilascia qui",
-        "newProject": "Nuovo progetto",
-        "error": "Si è verificato un errore. Riprova.",
-        "attachLimitError": "Alcuni file non sono supportati o superano i limiti consentiti.",
-        "removeFile": "Rimuovi",
-        "modelOverrideLabel": "Modello pipeline",
-        "modelOverrideTitle": "Scegli un modello per tutta la pipeline",
-        "modelOverrideActiveTitle": "Pipeline forzata su {{provider}} · {{model}}",
-        "modelOverrideDefault": "Usa i modelli configurati dal sistema",
-        "modelOverrideReset": "Default",
-        "modelOverridePlaceholder": "Seleziona provider e modello",
-        "modelOverrideSearch": "Cerca provider o modello",
-        "structuredDatasetCount_one": "{{count}} dataset strutturato",
-        "structuredDatasetCount_other": "{{count}} dataset strutturati",
-        "attachCounter": "Allegati: {{count}}/{{max}}",
-        "removeFileAria": "Rimuovi {{name}}",
-        "dataDashboardWarning": "La modalità data dashboard è solo alpha ed è disattivata nel flusso Vibe principale. Continuo con la pipeline website standard.",
-        "uploadAllFailed": "Impossibile caricare i file allegati: {{files}}. Verifica la sessione e riprova.",
-        "uploadPartialFailed": "Alcuni file non sono stati caricati: {{files}}",
-        "prefillFailedNotification": {
-            "label": "Non siamo riusciti a precompilare automaticamente i campi — puoi comunque continuare e compilarli manualmente."
-        },
-        "phase": {
-            "classifying": "Analisi della richiesta…",
-            "prefilling": "Pre-compilazione campi AI…",
-            "creating": "Creazione del workspace…",
-            "uploading": "Carico i file…",
-            "analyzing": "Analizzo i dataset…",
-            "redirecting": "Apertura…",
-            "hints": {
-                "classifying": [
-                    "Leggo la tua idea…",
-                    "Rilevo il tipo di progetto…",
-                    "Classifico l'intento…",
-                    "Identifico il formato…"
-                ],
-                "prefilling": [
-                    "Estraggo le informazioni chiave…",
-                    "Struttura il brief…",
-                    "Analizzo tono e stile…",
-                    "Identifico il pubblico target…",
-                    "Genero i campi del progetto…",
-                    "Processo il contesto documentale…"
-                ],
-                "creating": [
-                    "Inizializzo il workspace…",
-                    "Configuro il progetto…"
-                ],
-                "uploading": [
-                    "Carico i tuoi file…",
-                    "Processo i documenti…",
-                    "Avvio la pipeline di arricchimento…"
-                ],
-                "analyzing": [
-                    "Aspetto l'arricchimento strutturato…",
-                    "Leggo i dataset caricati…"
-                ],
-                "redirecting": [
-                    "Quasi pronto…",
-                    "Apertura workspace…"
-                ]
-            }
-        },
-        "tokenCounter": "~ {{count}} token",
-        "prefillBanner": "✦ Pre-compilato dall'AI · Rivedi e genera",
-        "prefillEdit": "Modifica manualmente",
-        "prefillCta": "Elabora Progetto"
-    },
-    "workspace": {
-        "selectionNone": "Nessuna selezione",
-        "notifications": {
-            "export": {
-                "label": "Export ZIP (con screenshot)",
-                "running": "Cattura screenshot + archivio in corso…",
-                "downloading": "Download ZIP…",
-                "done": "ZIP scaricato",
-                "sessionExpired": "Sessione scaduta",
-                "error": "Errore export"
-            },
-            "capture": {
-                "label": "Cattura screenshot {{format}}",
-                "running": "Rendering pagina in corso…",
-                "done": "File scaricato",
-                "sessionExpired": "Sessione scaduta",
-                "error": "Errore cattura"
-            },
-            "publish": {
-                "label": "Pubblicazione",
-                "running": "Pubblicazione in corso…",
-                "done": "Pubblicato!",
-                "doneVersioned": "Pubblicato! (v{{vn}} attiva)",
-                "sessionExpired": "Sessione scaduta",
-                "error": "Errore pubblicazione"
-            },
-            "media": {
-                "done": "Media applicato",
-                "doneSaved": "Media applicato e salvato",
-                "doneMessage": "{{name}} collegato all'elemento selezionato.",
-                "doneSavedMessage": "{{name}} collegato all'elemento selezionato e salvato come nuova versione.",
-                "error": "Impossibile caricare l'asset selezionato",
-                "errorLabel": "Errore media",
-                "notApplicable": "Seleziona un'immagine o un URL immagine valido.",
-                "notApplicableLabel": "Asset non applicabile",
-                "noActive": "Seleziona prima un'immagine o genera un nuovo asset.",
-                "noActiveLabel": "Nessuna media attiva"
-            },
-            "modelFallback": {
-                "label": "Modello cambiato automaticamente",
-                "message": "\"{{requested}}\" richiesto non era disponibile — in uso \"{{actual}}\"."
-            },
-            "style": {
-                "done": "Stile applicato",
-                "doneSaved": "Stile applicato e salvato",
-                "doneMessage": "Fit, repeat, opacity e filter sono stati aggiornati nella preview.",
-                "doneSavedMessage": "Fit, repeat, opacity e filter sono stati aggiornati e salvati come nuova versione."
-            },
-            "imageSuggestion": {
-                "label": "Suggerimento immagine",
-                "running": "Sto analizzando il contesto della sezione…",
-                "done": "Suggerimento pronto",
-                "failed": "Suggerimento fallito",
-                "error": "Impossibile generare un suggerimento immagine"
-            },
-            "prompt": {
-                "updated": "Prompt aggiornato",
-                "updatedMessage": "Il suggerimento è stato copiato nel prompt principale.",
-                "missing": "Scrivi un prompt oppure usa prima il suggerimento immagine.",
-                "missingLabel": "Prompt mancante"
-            },
-            "imageGeneration": {
-                "label": "Generazione immagine",
-                "running": "Invio richiesta al provider…",
-                "started": "Generazione avviata",
-                "done": "Immagine pronta",
-                "doneSaved": "Immagine pronta e salvata",
-                "doneMessage": "{{name}} è stata aggiornata nella preview.",
-                "doneSavedMessage": "{{name}} ha sostituito il placeholder ed è stata salvata come nuova versione.",
-                "failed": "Generazione fallita",
-                "failedMessage": "{{error}} Il placeholder resta nella working view corrente.",
-                "error": "Errore durante la generazione dell'immagine",
-                "stillRunning": "Generazione ancora in corso",
-                "stillRunningMessage": "Il provider sta ancora completando il render. L'asset rimane in coda ma il flusso non è bloccato.",
-                "autoLabel": "Gen image AI",
-                "autoRunning": "Analizzo il contesto semantico della pagina…",
-                "autoBrief": "Brief pronto. Avvio la generazione automatica…",
-                "autoError": "Impossibile avviare la generazione automatica dell'immagine",
-                "placeholderVersionedMsg": "Placeholder applicato e salvato come nuova versione. L'immagine finale avanzerà di nuovo la working view quando sarà pronta.",
-                "placeholderAppliedMsg": "Placeholder applicato nella working view. Se il salvataggio versione non è ancora disponibile, l'immagine finale verrà comunque registrata appena pronta.",
-                "sentMsg": "Richiesta inviata correttamente. Se il placeholder non è subito disponibile, l'immagine finale verrà comunque applicata appena pronta."
-            },
-            "conversation": {
-                "loadError": "Errore caricamento conversazione"
-            },
-            "snapshot": {
-                "savedLabel": "Versione salvata dall'editor",
-                "saved": "Snapshot attivato.",
-                "editSavedLabel": "Versione EDIT salvata",
-                "editSaved": "Modifiche manuali versionate.",
-                "activatedLabel": "Versione attivata",
-                "activated": "Snapshot selezionato come versione attiva.",
-                "newVersionLabel": "Nuova versione salvata",
-                "newVersionMessage": "Snapshot salvato e attivato dal backend.",
-                "staleBaseLabel": "Versione non aggiornata",
-                "staleBase": "Questa modifica parte da una versione che nel frattempo è cambiata. La versione corrente è stata ricaricata — riapplica la modifica su quella.",
-                "noChangeLabel": "Nessuna modifica",
-                "noChange": "Il contenuto è identico alla versione corrente: nessuna nuova versione creata."
-            },
-            "llm": {
-                "label": "Generazione AI",
-                "labelFocus": "Generazione AI con focus",
-                "running": "Sto elaborando la richiesta…",
-                "runningFocus": "Sto elaborando la richiesta e aggiornando la preview…",
-                "errorLabel": "Errore LLM",
-                "doneLabel": "Generazione completata",
-                "doneMessage": "Risposta pronta con {{provider}} · {{model}}",
-                "abortedLabel": "Generazione interrotta",
-                "aborted": "Elaborazione annullata dall'utente.",
-                "abortedContent": "⏹ Elaborazione interrotta dall'utente",
-                "parseErrorLabel": "Generazione fallita",
-                "parseError": "Il modello ha restituito una risposta non interpretabile. Nulla è stato salvato e il progetto è invariato. Riprova oppure seleziona un modello diverso."
-            },
-            "focusPatch": {
-                "parseErrorLabel": "Errore di parsing focus patch",
-                "parseError": "Il modello ha prodotto JSON non interpretabile. Prova a cambiare modello e ripetere la richiesta.",
-                "parseResponseLabel": "Errore parsing risposta",
-                "parseResponseMessage": "Risposta LLM non interpretabile — cambia modello e riprova.",
-                "notAppliedLabel": "Focus patch non applicata",
-                "notApplied": "Elemento non trovato nella versione corrente. Riseleziona l'elemento nel preview e riprova.",
-                "appliedLabel": "Focus patch applicata",
-                "appliedMessage": "Elemento aggiornato — nuova versione attiva.",
-                "limitedLabel": "Inspect limitato",
-                "limited": "La selezione non era valida per la focus patch. Continuo con il contesto completo del progetto."
-            },
-            "promptOptimizer": {
-                "label": "Prompt optimization",
-                "running": "Analizzo e riscrivo il prompt nel flusso chat…",
-                "inputLabel": "Prompt originale",
-                "outputLabel": "Optimize prompt",
-                "done": "Prompt pronto in chat con {{provider}} · {{model}}",
-                "skipped": "Optimizer disattivato per questa configurazione prodotto.",
-                "aborted": "Ottimizzazione interrotta",
-                "abortedContent": "⏹ Ottimizzazione prompt interrotta dall'utente"
-            }
-        },
-        "editMediaFilters": {
-            "images": "Immagini",
-            "backgrounds": "Sfondi"
-        },
-        "llmErrors": {
-            "contextTooLong": "Contesto troppo lungo",
-            "contextTooLongMessage": "Contesto troppo lungo o risposta troppo pesante per questa richiesta. Ho ridotto la memoria inviata: riprova con l'ultima azione.",
-            "configureApiKey": "Configura la API key del provider",
-            "providerCallError": "Errore durante la chiamata al provider",
-            "providerNotConfigured": "Provider non configurato",
-            "generic": "Errore LLM",
-            "errorWithStatus": "Errore [{{status}}]: {{message}}",
-            "providerKeyMissing": "Il provider {{provider}} richiede una API key che non è configurata."
-        },
-        "ui": {
-            "resizeChat": "Ridimensiona input chat",
-            "resizePanels": "Ridimensiona pannelli",
-            "mediaPlaceholderBackground": "Prompt manuale opzionale o chiedi un suggerimento semantico per questo sfondo…",
-            "mediaPlaceholderImage": "Prompt manuale opzionale o chiedi un suggerimento semantico per questa immagine…",
-            "checkingSession": "Verifica sessione…",
-            "configureProject": "Configura progetto",
-            "chatTitle": "Chat di Progetto",
-            "providerPlaceholder": "Provider",
-            "providerKeyWarning": "Il provider {{provider}} richiede una API key non configurata.",
-            "providerKeyWarningConfigure": "Configura {{var}} e riprova.",
-            "providerKeyWarningConfigureGeneric": "Configura la chiave del provider e riprova.",
-            "optimizePromptLabel": "Optimize prompt usa {{provider}} · {{model}}",
-            "pipelineOverrideActive": "Pipeline attiva",
-            "pipelineOverrideSticky": "preconfigurata per i prossimi messaggi",
-            "loadingConversation": "Caricamento conversazione…",
-            "voiceOnlyChrome": "Dettatura disponibile solo in Chrome o Edge compatibili.",
-            "voiceUnavailable": "Dettatura non disponibile: {{error}}.",
-            "voiceMicError": "Microfono già in uso o permesso non concesso.",
-            "voiceListeningTitle": "Ferma la dettatura",
-            "voiceStartTitle": "Detta il prompt con il microfono",
-            "voiceListeningLabel": "Ferma dettatura",
-            "voiceStartLabel": "Avvia dettatura",
-            "attachError": "Allegato non riuscito. Formati supportati: PDF, DOCX, DOC, TXT, MD, immagini.",
-            "attachTitle": "Allega documento o immagine",
-            "attachLabel": "Allega file",
-            "dropToAttach": "Trascina qui per allegare",
-            "attachDropHint": "Trascina file qui o usa la graffetta: gli allegati restano nel progetto e vengono passati al prompt.",
-            "removeAttachment": "Rimuovi allegato",
-            "uploading": "Caricamento in corso…",
-            "uploadSuccess": "Allegato al progetto",
-            "imageSuggestionLogo": "Usa come logo",
-            "imageSuggestionBackground": "Usa come sfondo",
-            "imageSuggestionIcon": "Usa come icona",
-            "imageSuggestionDismiss": "Ignora",
-            "autoOptimizeOn": "Auto-ottimizza ON",
-            "autoOptimizeOff": "Auto-ottimizza OFF",
-            "autoOptimizeOnTitle": "Auto-ottimizzazione attiva: il prompt verrà ottimizzato automaticamente prima dell'invio",
-            "autoOptimizeOffTitle": "Auto-ottimizzazione disattiva: il prompt verrà inviato così com'è",
-            "voiceListening": "🎙️ Ascolto in corso…",
-            "voiceReady": "Chrome: dettatura vocale pronta",
-            "inspectElementLabel": "Elemento: ",
-            "copyJsonTitle": "Copia JSON metadati elemento selezionato",
-            "copyJson": "Copia JSON",
-            "removeElementSelection": "Rimuovi selezione elemento",
-            "codeSelectionLines": "{{lang}} righe {{start}}–{{end}}",
-            "removeCodeSelection": "Rimuovi selezione codice",
-            "inspectHint": "Clicca un elemento nella preview per selezionarlo. Per le immagini puoi cliccare direttamente la foto; con Shift o Alt selezioni il contenitore più ampio.",
-            "closeButton": "Chiudi",
-            "generatingMedia": "Elaborazione…",
-            "genImageAI": "Gen image AI",
-            "promptPanelNone": "nessuno",
-            "editOn": "✎ EDIT ON",
-            "editOff": "✎ EDIT",
-            "emptyConversation": "Apri una conversazione o invia un nuovo prompt.",
-            "scrollToBottom": "Torna in fondo alla chat",
-            "scrollToBottomTitle": "Torna in fondo",
-            "placeholderFocusPatchBackground": "Descrivi qui la modifica focus patch per il background selezionato...",
-            "placeholderFocusPatch": "Descrivi qui la modifica focus patch per l'elemento selezionato...",
-            "placeholderDefault": "Scrivi cosa vuoi realizzare...",
-            "useProviderModel": "Usa {{provider}} · {{model}}",
-            "useActiveProviderModel": "Usa il provider/modello attivo della chat",
-            "optimizingPrompt": "Ottimizzazione...",
-            "optimizeWith": "Optimize · {{model}}",
-            "optimizePrompt": "Optimize prompt",
-            "restoreOriginal": "Ripristina originale",
-            "clearPrompt": "Cancella",
-            "stopGeneration": "Interrompi la generazione in corso",
-            "sending": "Invio...",
-            "send": "Invia",
-            "exportTitle": "Esporta HTML/CSS/JS come ZIP",
-            "exportError": "Errore export",
-            "captureTitle": "Cattura screenshot JPG o PDF della preview",
-            "publishUpdateTitle": "Aggiorna pubblicazione live",
-            "publishTitle": "Pubblica con link condivisibile",
-            "publishStateError": "⚠ Errore",
-            "publishStateUpdate": "🔄 Aggiorna",
-            "publishStatePublish": "🌐 Pubblica",
-            "promptTabTitle": "Visualizza il system prompt composto passato all'LLM (sola lettura)",
-            "inspectOnTitle": "Disattiva Inspect",
-            "inspectOffTitle": "Attiva Inspect: seleziona un elemento e usa solo il flow focus patch in chat",
-            "inspectNoArtifacts": "Inspect disponibile solo quando la preview contiene codice generato",
-            "inspectOn": "◎ Inspect ON",
-            "inspectOff": "◎ Inspect",
-            "editOnTitle": "Disattiva EDIT Light",
-            "editOffTitle": "Attiva EDIT Light: clicca il testo per modificarlo o un'immagine per aprire gli strumenti AI",
-            "saveEditTitle": "Salva le modifiche EDIT come nuova versione dell'artefatto",
-            "saveEditSaving": "⏳ Salvataggio…",
-            "saveEdit": "💾 Salva EDIT",
-            "copyLink": "📋 Copia link",
-            "copied": "✓ Copiato",
-            "editSlug": "✏ Slug",
-            "setSlug": "🔗 Imposta slug",
-            "unpublish": "Rimuovi",
-            "staleVersion": "⚠ online v{{published}}, attiva v{{current}}",
-            "updatePublish": "Aggiorna",
-            "snapshotPanelLiveLine": "🌐 live: v{{live}} · stai lavorando su v{{current}}",
-            "snapshotPanelLiveBadge": "🌐 live",
-            "branchNotice": "⎘ Stai lavorando su v{{active}}, non l'ultima versione (v{{latest}}): la prossima modifica creerà un nuovo ramo da qui. v{{latest}} resta raggiungibile nello storico.",
-            "slugPlaceholder": "es. mia-pizzeria",
-            "slugChecking": "⏳ Verifica…",
-            "slugAvailable": "✓ Disponibile",
-            "slugTaken": "✗ Già in uso",
-            "slugInvalid": "⚠ Formato non valido",
-            "slugReserved": "⚠ Nome riservato",
-            "slugError": "✗ Verifica non riuscita",
-            "slugSaving": "⏳",
-            "slugSave": "Salva",
-            "slugRemove": "Rimuovi slug",
-            "slugCancel": "Annulla",
-            "noCodeTitle": "Nessun codice generato",
-            "noCodeHint": "Il centro mostra solo artifacts HTML/CSS/JS generati dal backend. Invia un prompt per popolare la preview.",
-            "previewRefreshing": "Aggiornamento preview…",
-            "rescanImages": "Rescan immagini dalla preview",
-            "promptPanelDesc": "System prompt composto passato all'LLM — sola lettura",
-            "promptPanelReload": "↻ Ricarica",
-            "promptPanelLoading": "Caricamento…",
-            "promptPanelHint": "Il prompt verrà caricato automaticamente. Se non appare, clicca ↻ Ricarica.",
-            "promptPanelTokensPreset": "~{{tokens}} token · preset: {{preset}}",
-            "promptPanelUserMessage": "Messaggio utente",
-            "promptPanelAssistantMessage": "Messaggio assistant (cronologia)",
-            "promptPanelNoGenYet": "Nessuna generazione ancora — anteprima di cosa verrà inviato alla prossima request.",
-            "stream": {
-                "optimizing": "Ottimizzazione prompt in corso...",
-                "analysingOptimizer": "Analisi optimizer...",
-                "connectingOptimizer": "Connessione optimizer...",
-                "responding": "Risposta in corso...",
-                "reasoning": "Ragionamento...",
-                "connectingProvider": "Connessione al provider...",
-                "thinkingDefault": "Sto elaborando il prompt nel flusso conversazionale...",
-                "thinkingOptimizer": "In attesa del ragionamento stream...",
-                "spinnerOptimizer": "ottimizzo il prompt...",
-                "spinnerDefault": "sto pensando..."
-            },
-            "layers": {
-                "layerA": "LAYER A — Vincoli base",
-                "layerABadge": "sempre attivo",
-                "layerASource": "Costante del sistema",
-                "layerB": "LAYER B — Modulo preset",
-                "layerBBadge": "preset: {{presetId}}",
-                "layerBBadgeNone": "nessun preset",
-                "layerBSource": "Configurazione progetto (⚙ rotella)",
-                "layerBEmpty": "(vuoto — nessun preset assegnato al progetto)",
-                "layerC": "LAYER C — Contesto stile",
-                "layerCBadge": "moodboard + profilo utente",
-                "layerCBadgeEmpty": "vuoto",
-                "layerCSource": "Profilo utente (profilazione iniziale) + Moodboard progetto (⚙ rotella)",
-                "layerCEmpty": "(vuoto — nessun dato di profilazione utente o moodboard configurato)",
-                "layerD": "LAYER D — Contesto documenti",
-                "layerDBadge": "asset arricchiti",
-                "layerDSource": "Asset caricati arricchiti dalla pipeline DCL",
-                "layerDEmpty": "(vuoto — nessun asset arricchito)",
-                "layerE": "LAYER E — Template personalizzato",
-                "layerEBadge": "attivo",
-                "layerESource": "Configurazione avanzata progetto (⚙ rotella)",
-                "policy": "POLICY — Budget output",
-                "policyBadge": "sistema",
-                "policySource": "Configurazione automatica token/output"
-            },
-            "codeEditor": {
-                "beautifyTitle": "Formatta / Beautify (equivale a Alt+Shift+F)",
-                "saveVersionTitle": "Salva le modifiche come nuova versione preview (attiva)",
-                "saveVersion": "💾 Salva versione",
-                "saving": "Salvataggio…",
-                "fontDecrease": "Riduci dimensione carattere",
-                "fontIncrease": "Aumenta dimensione carattere",
-                "shortcuts": "Ctrl+scroll = zoom · Alt+Shift+F = formatta",
-                "font": "Font",
-                "selectionLines": "Selezione righe {{start}}-{{end}}",
-                "cursorPosition": "Cursore riga {{line}}, col {{col}}"
-            },
-            "imageToolsInEditTitle": "Strumenti immagine in EDIT",
-            "imageToolsInEditHint": "In EDIT il testo ha priorità. Clicca direttamente sull'area immagine per selezionare il media sottostante.",
-            "imageAiToolsTitle": "Strumenti AI per immagini",
-            "imageAiToolsDesc": "La generazione manuale e le impostazioni avanzate delle immagini sono separate dalla chat e disponibili solo in modalità EDIT.",
-            "reqMeta": {
-                "flow": "Flusso",
-                "target": "Target",
-                "provider": "Provider",
-                "finishReason": "Motivo fine",
-                "model": "Modello",
-                "snapshot": "Snapshot",
-                "mediaStatus": "Stato media",
-                "mediaResolved": "risolto",
-                "mediaDegraded": "degradato",
-                "mediaResolvedCount": "Media risolti",
-                "mediaFailedCount": "Media falliti",
-                "mediaKeys": "Chiavi media",
-                "badgeMedia": "{{resolved}}/{{total}} media",
-                "badgeInfo": "info",
-                "totalTokens": "Token totali",
-                "promptTokens": "Token prompt",
-                "completionTokens": "Token risposta",
-                "prepromptSystem": "Preprompt (system)",
-                "msgsSent": "Messaggi inviati a LLM",
-                "promptConfigId": "ID config prompt",
-                "execTime": "Tempo esecuzione",
-                "totalCost": "Costo totale",
-                "tokenCost": "Costo token",
-                "imageCost": "Costo immagine",
-                "videoCost": "Costo video",
-                "eurPerKTok": "€/1k tok",
-                "providerUsd": "Provider USD",
-                "structuredParse": "Parse strutturato",
-                "parseValid": "✓ valido",
-                "parseFailed": "✗ fallito",
-                "details": "Dettagli richiesta",
-                "detailsGlobal": "Dettagli ultima richiesta"
-            },
-            "messageOutcome": {
-                "artifactLinked": "artifact collegato",
-                "mediaCount": "{{resolved}}/{{total}} media",
-                "failedCount": "{{count}} falliti"
-            },
-            "requestInsight": {
-                "openDetails": "Dettagli",
-                "title": "Esito generazione",
-                "description": "Prima il riepilogo rapido, poi la traccia tecnica solo quando serve ispezionarla.",
-                "mediaResolved": "media risolti",
-                "mediaDegraded": "media degradati",
-                "snapshot": "Snapshot",
-                "duration": "Durata",
-                "tokens": "Token",
-                "cost": "Costo",
-                "mediaOutcomeTitle": "Esito media",
-                "mediaOutcomeSubtitle": "{{count}} chiavi tracciate per questo artifact",
-                "resolvedCount": "{{count}} risolti",
-                "failedCount": "{{count}} falliti",
-                "artifactSummaryTitle": "Riepilogo artifact",
-                "artifactSummarySubtitle": "Dimensioni persistite dei payload ed esito del parsing",
-                "structuredParse": "Parse strutturato",
-                "parseValid": "valido",
-                "parseFailed": "fallito",
-                "htmlBytes": "Byte HTML",
-                "cssBytes": "Byte CSS",
-                "jsBytes": "Byte JS",
-                "technicalTraceTitle": "Traccia tecnica",
-                "technicalTraceSubtitle": "ID, lineage del prompt e riferimenti salvati",
-                "snapshotId": "ID snapshot",
-                "promptConfig": "Config prompt",
-                "llmMessagesSent": "Messaggi LLM inviati",
-                "systemPromptEstimate": "Stima prompt system",
-                "systemPromptEstimateValue": "{{count}} tok",
-                "traceIds": "ID trace",
-                "assetIds": "ID asset",
-                "directiveStatus": {
-                    "resolved": "risolto",
-                    "fallback_resolved": "risolto via fallback",
-                    "unresolved": "non risolto"
-                }
-            },
-            "messageBubble": {
-                "copy": "Copia",
-                "copied": "Copiato",
-                "copyError": "Errore",
-                "copyTitle": "Copia messaggio",
-                "nextSteps": "Prossimi passi",
-                "errorBadge": "Errore",
-                "errorHint": "Nessuna versione salvata — il progetto non è stato modificato."
-            }
-        }
-    },
-    "aiUsagePanel": {
-        "title": "Riepilogo uso AI",
-        "loading": "Caricamento analytics AI…",
-        "emptyState": "Nessuna attività AI registrata per questo ambito.",
-        "totalCost": "Costo totale",
-        "imageGen": "Generazione immagini",
-        "llmSpend": "Spesa LLM",
-        "tokens": "Token",
-        "tokensLower": "token",
-        "runs": "{{count}} run",
-        "queuedFailed": "{{queued}} in coda · {{failed}} falliti",
-        "topModels": "Modelli principali",
-        "recentRequests": "Richieste recenti",
-        "noRequests": "Nessuna richiesta registrata.",
-        "noPromptPreview": "Nessuna anteprima prompt disponibile.",
-        "mediaOkCount": "{{count}} media ok",
-        "failedCount": "{{count}} falliti",
-        "details": "Dettagli",
-        "dialogTitle": "Dettagli richiesta",
-        "dialogDescription": "Riepilogo operativo compatto per l'attività AI recente.",
-        "model": "Modello",
-        "cost": "Costo",
-        "created": "Creato",
-        "resolvedCount": "{{count}} risolti",
-        "degraded": "degradato",
-        "clean": "pulito",
-        "promptPreviewTitle": "Anteprima prompt",
-        "promptPreviewSubtitle": "Testo compatto salvato per le analytics delle richieste recenti",
-        "technicalSummaryTitle": "Riepilogo tecnico",
-        "technicalSummarySubtitle": "Utile per admin/support senza aprire i log grezzi",
-        "requestId": "ID richiesta",
-        "imageSize": "Dimensione immagine"
+    "toast": {
+      "loadError": "Errore nel caricamento dei progetti",
+      "created": "Progetto \"{{name}}\" creato",
+      "deleted": "Progetto \"{{name}}\" eliminato",
+      "deleteError": "Errore nell'eliminazione",
+      "duplicateError": "Errore nella duplicazione",
+      "promptCopied": "Prompt copiato negli appunti",
+      "noPrompt": "Nessun prompt configurato per questo progetto"
     }
+  },
+  "onboarding": {
+    "loading": "Caricamento...",
+    "skipAll": "Salta tutto →",
+    "styleProfile": "Profilazione stile",
+    "step": "Passo",
+    "of": "di",
+    "saveError": "Errore nel salvataggio. Riprova.",
+    "back": "← Indietro",
+    "skip": "Salta",
+    "next": "Avanti →",
+    "complete": "Completa →",
+    "saving": "Salvataggio...",
+    "steps": {
+      "0": {
+        "title": "Chi sei?",
+        "subtitle": "Seleziona i tag che descrivono meglio la tua identità e il tuo settore."
+      },
+      "1": {
+        "title": "Il tuo stile visivo",
+        "subtitle": "Come vuoi che appaia il tuo sito? Scegli i tag più vicini alla tua visione estetica."
+      },
+      "2": {
+        "title": "Per chi e come",
+        "subtitle": "Definisci il pubblico, il tono e le funzionalità più importanti per il tuo progetto."
+      }
+    },
+    "catLabels": {
+      "TC-IDENTITY": "Identità del brand",
+      "TC-SECTOR": "Settore / Industria",
+      "TC-AUDIENCE": "Pubblico di riferimento",
+      "TC-VISUAL": "Stile visivo",
+      "TC-PALETTE": "Palette colori",
+      "TC-TYPOGRAPHY": "Tipografia",
+      "TC-LAYOUT": "Layout",
+      "TC-TONE": "Tono di comunicazione",
+      "TC-REFERENCE": "Riferimenti stilistici",
+      "TC-FEATURE": "Funzionalità prioritarie"
+    }
+  },
+  "card": {
+    "openWorkspace": "Apri workspace →",
+    "openWorkspaceHover": "Apri workspace →",
+    "options": "Opzioni progetto",
+    "version_one": "{{count}} versione",
+    "version_other": "{{count}} versioni",
+    "menu": {
+      "open": "Apri",
+      "openData": "Data dashboard",
+      "duplicate": "Duplica",
+      "copyPrompt": "Copia prompt",
+      "copyBrief": "Copia brief",
+      "delete": "Elimina"
+    }
+  },
+  "admin": {
+    "experimental": {
+      "title": "Sperimentale",
+      "dataDashboardLabel": "Data Dashboard Alpha",
+      "dataDashboardDescription": "Console separata, solo superadmin, per esperimenti con dataset grounded fuori dalla UX principale."
+    }
+  },
+  "guide": {
+    "title": "Come iniziare con ANDY",
+    "subtitle": "Guarda la guida rapida e crea il tuo primo sito in pochi minuti.",
+    "cta": "Guarda il tutorial"
+  },
+  "tips": {
+    "chip": "Consigli & Novità",
+    "title": "Consigli & Novità",
+    "closePanel": "Chiudi pannello",
+    "fabLabel": "Apri consigli e novità",
+    "markRead": "Segna come letto",
+    "items": {
+      "style_profile": {
+        "title": "Completa il profilo stile",
+        "body": "Seleziona i tag di stile nell'onboarding per ottenere generazioni AI coerenti con la tua identità visiva."
+      },
+      "duplicate": {
+        "title": "Duplica prima di sperimentare",
+        "body": "Usa 'Duplica' dal menu progetto per conservare una copia sicura prima di grandi modifiche."
+      },
+      "prompt_reuse": {
+        "title": "Riutilizza i tuoi prompt migliori",
+        "body": "Usa 'Copia prompt' per trasferire il tuo sistema di istruzioni in un nuovo progetto senza riscriverlo."
+      },
+      "iterative": {
+        "title": "Descrivi le modifiche in modo naturale",
+        "body": "Dì all'AI cosa cambiare: 'Rendilo più minimal', 'Aggiungi una CTA', 'Usa colori più caldi'. Nessun codice necessario."
+      },
+      "workspace_isolation": {
+        "title": "Organizza i progetti per workspace",
+        "body": "Crea workspace separati per ogni cliente o brand per mantenere prompt e stili isolati."
+      },
+      "streaming": {
+        "title": "Streaming AI in tempo reale",
+        "body": "Le risposte appaiono progressivamente mentre vengono generate — niente più attesa per l'output completo."
+      },
+      "publish": {
+        "title": "Pubblica il tuo sito con un click",
+        "body": "Progetto pronto? Premi 'Pubblica' nell'editor per renderlo live istantaneamente sul tuo sottodominio."
+      },
+      "model_choice": {
+        "title": "Scegli il modello AI giusto",
+        "body": "Modelli diversi si adattano a compiti diversi. Usa un modello veloce per iterare e uno più potente per la qualità finale."
+      },
+      "save_snapshot": {
+        "title": "Salva uno snapshot con Ctrl+S",
+        "body": "Premi Ctrl+S nell'editor per salvare uno snapshot a cui puoi tornare in qualsiasi momento."
+      },
+      "rollback": {
+        "title": "Torna a qualsiasi snapshot",
+        "body": "Apri il pannello cronologia per vedere tutti gli snapshot salvati e ripristinare qualsiasi versione precedente del progetto."
+      }
+    },
+    "types": {
+      "tip": "Consiglio",
+      "news": "Novità",
+      "shortcut": "Scorciatoia"
+    }
+  },
+  "time": {
+    "justNow": "adesso",
+    "minutesAgo": "{{count}} min fa",
+    "hoursAgo": "{{count}} ore fa",
+    "daysAgo": "{{count}} giorni fa"
+  },
+  "presets": {
+    "neutral": {
+      "label": "Vuoto / Neutro",
+      "hint": "Parti da una tela bianca"
+    },
+    "landing": {
+      "label": "Landing Page",
+      "hint": "Singola pagina orientata conversione"
+    },
+    "website": {
+      "label": "Website",
+      "hint": "Sito multi-sezione classico"
+    },
+    "form": {
+      "label": "Form",
+      "hint": "Raccolta lead e contatti"
+    },
+    "manifesto": {
+      "label": "Manifesto",
+      "hint": "Pagina identità e valori"
+    },
+    "slideshow": {
+      "label": "Presentazione",
+      "hint": "Deck navigabile a slide"
+    },
+    "keynote": {
+      "label": "Keynote",
+      "hint": "Template keynote visuale"
+    },
+    "a4poster": {
+      "label": "A4 Poster",
+      "hint": "Layout singola pagina stampabile"
+    },
+    "infographic": {
+      "label": "Infographic",
+      "hint": "Visualizzazione dati e insight"
+    }
+  },
+  "lang": {
+    "it": "Italiano",
+    "en": "English"
+  },
+  "health": {
+    "title": "Stato API",
+    "checking": "Verifica in corso...",
+    "ok": "API raggiungibile",
+    "error": "API non raggiungibile",
+    "recheck": "Ricontrolla"
+  },
+  "session": {
+    "expired": "Sessione scaduta",
+    "requiresLogin": "La tua sessione è scaduta. Inserisci le credenziali per continuare senza perdere il contesto attuale.",
+    "tokenExpired": "La tua sessione è scaduta. Effettua di nuovo il login per continuare.",
+    "logout": "Esci"
+  },
+  "security": {
+    "passwordChange": {
+      "title": "Aggiornamento password richiesto",
+      "badge": "Account legacy",
+      "description": "Questo account è stato creato prima della policy password corrente. Imposta una password più robusta per continuare a usare il workspace.",
+      "currentPassword": "Password attuale",
+      "newPassword": "Nuova password",
+      "confirmPassword": "Conferma nuova password",
+      "policyHint": "Usa almeno 12 caratteri con maiuscole, minuscole, numero e simbolo.",
+      "logout": "Esci",
+      "submit": "Aggiorna password",
+      "submitting": "Aggiornamento...",
+      "errors": {
+        "confirmationMismatch": "La conferma password non corrisponde.",
+        "generic": "Impossibile aggiornare la password."
+      }
+    }
+  },
+  "notifications": {
+    "close": "Chiudi",
+    "title": "Processi",
+    "clear": "Pulisci",
+    "clearTitle": "Rimuovi completati/errori",
+    "hide": "Nascondi processi",
+    "show": "Mostra processi in corso",
+    "running_one": "{{count}} in corso",
+    "running_other": "{{count}} in corso",
+    "completed_one": "{{count}} completato",
+    "completed_other": "{{count}} completati"
+  },
+  "launch": {
+    "badge": "Modalità Guidata",
+    "title": "Generazione guidata",
+    "subtitle": "{{name}} · Compila i 3 step e rivedi il brief prima di avviare.",
+    "project": "Il tuo progetto",
+    "stepLabel": "Step {{number}} — {{title}}",
+    "siteTypes": {
+      "landing_page": "Landing",
+      "business_site": "Business",
+      "portfolio": "Portfolio",
+      "showcase": "Showcase"
+    },
+    "templates": {
+      "neutral": "Blank",
+      "landing": "Landing page",
+      "website": "Sito web",
+      "form": "Form interattivo",
+      "manifesto": "Manifesto",
+      "a4poster": "Poster A4",
+      "infographic": "Infografica",
+      "slideshow": "Slideshow",
+      "keynote": "Keynote visiva",
+      "videogame": "Videogioco",
+      "freerunner": "Runner infinito",
+      "seriousgame": "Serious Game",
+      "game3d": "Gioco 3D",
+      "vr-aframe": "Esperienza VR A-Frame",
+      "interactive-story": "Storia interattiva"
+    },
+    "presetGroups": {
+      "web": "Web e contenuto",
+      "presentation": "Presentazione e stampa",
+      "game": "Gioco e interattivo"
+    },
+    "formatHints": {
+      "one_pager": "One pager",
+      "a3_document": "Documento A3",
+      "ratio_1_1": "Formato 1:1",
+      "ratio_16_9": "Formato 16:9",
+      "interactive_form": "Form interattivo",
+      "portfolio": "Portfolio",
+      "brochure": "Brochure",
+      "analytics_dashboard": "Dashboard analytics"
+    },
+    "styleAttributes": {
+      "minimal": "Minimal",
+      "premium": "Premium",
+      "dark": "Dark / Notte",
+      "bright": "Chiaro / Luminoso",
+      "bold": "Bold / Impattante",
+      "elegant": "Elegante",
+      "corporate": "Corporate",
+      "playful": "Giocoso / Creativo",
+      "tech": "Tech / Moderno",
+      "artisan": "Artigianale",
+      "luxury": "Luxury",
+      "eco": "Eco / Naturale"
+    },
+    "contactSuggestions": {
+      "email": "Email",
+      "phone": "Telefono",
+      "address": "Indirizzo",
+      "instagram": "Instagram",
+      "facebook": "Facebook",
+      "linkedin": "LinkedIn",
+      "youtube": "YouTube",
+      "whatsapp": "WhatsApp",
+      "website": "Sito web",
+      "vat": "P.IVA"
+    },
+    "phase": {
+      "review": "Pronto per la generazione",
+      "launching": "Creo la run e apro il workspace…"
+    },
+    "brief": {
+      "title": "BRIEF DI PROGETTO — {{brand}}",
+      "identity": "[IDENTITÀ] Brand e tipo sito",
+      "brand": "Brand",
+      "template": "Template",
+      "siteType": "Tipo sito",
+      "goal": "[OBIETTIVO] Descrizione e obiettivo principale",
+      "audience": "[AUDIENCE] Target e pubblico di riferimento",
+      "style": "[STILE] Attributi visivi, tono e CTA",
+      "visualAttributes": "Attributi visivi",
+      "tone": "Tono di voce",
+      "cta": "CTA principale",
+      "styleNotes": "Note stilistiche aggiuntive",
+      "contacts": "[CONTATTI] Informazioni di contatto e dati salienti",
+      "attachments": "[ALLEGATI] Documenti analizzati per il brief",
+      "footer": "Brief strutturato Guided Mode · {{siteType}} · Sezioni: {{sections}}"
+    },
+    "steps": {
+      "1": {
+        "title": "Descrizione",
+        "subtitle": "Brand, tipo sito e obiettivo principale"
+      },
+      "2": {
+        "title": "Target & Dati",
+        "subtitle": "Audience, contatti e info salienti"
+      },
+      "3": {
+        "title": "Stile visivo",
+        "subtitle": "Attributi estetici, tono e CTA"
+      }
+    },
+    "step1": {
+      "businessName": "Nome brand o azienda",
+      "businessNamePlaceholder": "es. Acme Studio",
+      "presetId": "Template",
+      "presetIdHint": "L'AI sceglie il template più adatto alla tua descrizione. Puoi cambiarlo qui.",
+      "goal": "Descrizione e obiettivo principale",
+      "goalHint": "Descrivi liberamente il progetto. Puoi usare elenchi puntati (- elemento), grassetto (**testo**) o incollare da Word.",
+      "goalPlaceholder": "es. Acme Studio è un brand di accessori premium.\n- Obiettivo: aumentare le vendite online\n- Pubblico: appassionati tra 25-45 anni\n- Punto di forza: design e qualità",
+      "next": "Avanti"
+    },
+    "step2": {
+      "audience": "Audience e target",
+      "audienceHint": "Chi sono i destinatari? Descrivi età, interessi, bisogni, lingua.",
+      "audiencePlaceholder": "es. Appassionati tra 25-45 anni, italiani ed europei, amanti del design e della qualità",
+      "contacts": "Informazioni di contatto e dati salienti",
+      "contactsHint": "Email, telefono, indirizzo, social — dati che devono apparire nel sito.",
+      "add": "Aggiungi",
+      "noData": "Nessun dato aggiunto.",
+      "keyPlaceholder": "Email",
+      "back": "Indietro",
+      "next": "Avanti"
+    },
+    "step3": {
+      "visualAttributes": "Attributi visivi",
+      "visualHint": "Seleziona uno o più stili che caratterizzano il progetto.",
+      "tone": "Tono di voce",
+      "tonePlaceholder": "es. chiaro e moderno",
+      "cta": "CTA principale",
+      "ctaPlaceholder": "es. Acquista ora, Scopri di più",
+      "styleNotes": "Note stilistiche aggiuntive",
+      "styleNotesPlaceholder": "es. frame in alluminio, colori brand",
+      "outputLanguage": "Lingua di output",
+      "outputLanguageHint": "Lingua usata per tutto il testo nella pagina generata.",
+      "back": "Indietro",
+      "generate": "Genera brief",
+      "generating": "Generazione brief..."
+    },
+    "languages": {
+      "en": "Inglese",
+      "it": "Italiano",
+      "fr": "Francese",
+      "de": "Tedesco",
+      "es": "Spagnolo",
+      "pt": "Portoghese",
+      "nl": "Olandese"
+    },
+    "step4": {
+      "title": "Step 4 — Revisione brief",
+      "subtitle": "Il brief è pronto. Modificalo se vuoi, poi avvia la sessione.",
+      "generationTitle": "Step 4 — Avvia generazione",
+      "prepared": "Preparato con successo",
+      "briefLabel": "Brief generato — modificabile (Markdown)",
+      "structuredBriefLabel": "Brief strutturato — modificabile prima dell'ottimizzazione",
+      "optimizeHint": "Il brief verrà ottimizzato in prompt, poi usato per generare il sito.",
+      "optimizing": "Ottimizzazione...",
+      "startGeneration": "Avvia generazione",
+      "promptReady": "Prompt pronto",
+      "optimizedPromptLabel": "Prompt ottimizzato — modificabile prima della generazione",
+      "backToBrief": "Torna al brief",
+      "readyPrefix": "Il prompt è pronto. Clicca",
+      "continueInGuided": "Continua in Guided Mode",
+      "readySuffix": "per generare il sito con salvataggio completo dell'artefatto, preview e strumenti di modifica.",
+      "dashboard": "Dashboard",
+      "backToDashboard": "Torna alla dashboard",
+      "continueInWorkspace": "Continua nel workspace",
+      "launching": "Avvio…"
+    },
+    "workspaceModeBadge": "Workspace",
+    "openWorkspace": "Apri Workspace",
+    "review": {
+      "badge": "Rivedi e genera",
+      "prefillTitle": "✦ Pre-compilato dall'AI",
+      "templateBadge": "Template: {{template}}",
+      "description": "L'AI ha estratto i dati dalla tua richiesta. Genera subito oppure modifica prima i campi.",
+      "generating": "Generazione in corso…",
+      "summary": {
+        "brand": "Brand",
+        "goal": "Obiettivo",
+        "audience": "Audience",
+        "style": "Stile",
+        "contacts": "Contatti"
+      }
+    },
+    "upload": {
+      "uploading": "Caricamento in corso...",
+      "attachContext": "Allega documenti di contesto",
+      "attachHint": "PDF, DOCX, TXT, MD, immagini — trascinali qui o clicca per sfogliare",
+      "failedBadgeTitle": "Caricamento fallito: {{name}}",
+      "failedCount_one": "{{count}} file non caricato — verifica la sessione",
+      "failedCount_other": "{{count}} file non caricati — verifica la sessione"
+    },
+    "loadError": "Impossibile caricare il progetto.",
+    "submitError": "Impossibile preparare il flusso di lancio.",
+    "errors": {
+      "optimizePrompt": "Errore durante l'ottimizzazione del prompt.",
+      "startGeneration": "Impossibile avviare la generazione."
+    }
+  },
+  "config": {
+    "title": "Configurazione Progetto",
+    "loading": "Caricamento…",
+    "projectName": "Nome progetto",
+    "projectNamePlaceholder": "Nome progetto…",
+    "brief": "Brief di progetto",
+    "briefPlaceholder": "Descrivi il progetto e le sue caratteristiche principali…",
+    "briefGuide": "Guida al brief",
+    "styleNotes": "Note di stile",
+    "styleNotesPlaceholder": "Vincoli o preferenze di stile specifiche…",
+    "inheritUser": "Eredita preferenze utente (fallback)",
+    "presetActive": "Preset attivo — brief e tag pre-compilati.",
+    "forms": {
+      "title": "Form operativi",
+      "subtitle": "Consegna e privacy configurate per progetto",
+      "enabled": "Attivo",
+      "disabled": "Disattivo",
+      "enable": "Attiva",
+      "disable": "Disattiva",
+      "explanation": "La LLM definisce solo la struttura del form. Destinatario e privacy restano configurazione privata del progetto e vengono applicati deterministicamente in anteprima, pubblicazione ed export.",
+      "recipient": "Email destinatario",
+      "controller": "Titolare del trattamento",
+      "privacyContact": "Email contatto privacy",
+      "privacyVersion": "Versione informativa",
+      "privacyUrl": "URL HTTPS privacy policy",
+      "save": "Salva servizio form",
+      "saving": "Salvataggio…",
+      "saved": "Configurazione del servizio form salvata.",
+      "loadError": "Impossibile caricare la configurazione del servizio form.",
+      "saveError": "Impossibile salvare la configurazione del servizio form."
+    },
+    "media": {
+      "title": "Media di progetto",
+      "empty": "Nessun media in libreria.",
+      "emptyHint": "Carica immagini, PDF o link per costruire la libreria del progetto.",
+      "upload": "Carica file",
+      "uploading": "Caricamento…",
+      "addUrl": "Aggiungi URL",
+      "urlPlaceholder": "https://…",
+      "labelPlaceholder": "Etichetta (opzionale)",
+      "add": "Aggiungi",
+      "cancel": "Annulla",
+      "useInProject": "Usa nel progetto",
+      "excludeFromProject": "Escludi dal progetto",
+      "inUse": "in uso",
+      "use": "usa",
+      "deleteAsset": "Elimina asset",
+      "advancedOptions": "Opzioni avanzate",
+      "styleRole": "Ruolo stile…",
+      "descriptionPlaceholder": "Descrizione…",
+      "confirmDelete": "Eliminare \"{{name}}\"?",
+      "uploadError": "Errore durante il caricamento.",
+      "assetBriefHeading": "Brief",
+      "assetDesignSignalsHeading": "Analisi immagine"
+    },
+    "tagCategories": {
+      "era": "Era / Movimento",
+      "visual": "Stile visivo",
+      "palette": "Palette",
+      "typography": "Tipografia",
+      "layout": "Layout",
+      "tone": "Tono",
+      "audience": "Audience / Target",
+      "feature": "Funzionalità richieste",
+      "sector": "Settore / Ambito",
+      "reference": "Riferimenti"
+    },
+    "cancel": "Annulla",
+    "save": "Salva",
+    "saving": "Salvataggio…"
+  },
+  "vibecore": {
+    "heading": "Cosa vuoi realizzare oggi?",
+    "subtitle": "Descrivi la tua idea — l'AI fa il resto",
+    "placeholder": "Es. una landing page per un salone di bellezza, tono elegante, palette neutra…",
+    "cta": "Crea con AI",
+    "scrollHint": "scorri per i tuoi progetti",
+    "attach": "Allega",
+    "attachHint": "Trascina file o clicca per allegare — PDF, DOCX, immagini, max 10 MB",
+    "dropHere": "Rilascia qui",
+    "newProject": "Nuovo progetto",
+    "error": "Si è verificato un errore. Riprova.",
+    "attachLimitError": "Alcuni file non sono supportati o superano i limiti consentiti.",
+    "removeFile": "Rimuovi",
+    "modelOverrideLabel": "Modello pipeline",
+    "modelOverrideTitle": "Scegli un modello per tutta la pipeline",
+    "modelOverrideActiveTitle": "Pipeline forzata su {{provider}} · {{model}}",
+    "modelOverrideDefault": "Usa i modelli configurati dal sistema",
+    "modelOverrideReset": "Default",
+    "modelOverridePlaceholder": "Seleziona provider e modello",
+    "modelOverrideSearch": "Cerca provider o modello",
+    "structuredDatasetCount_one": "{{count}} dataset strutturato",
+    "structuredDatasetCount_other": "{{count}} dataset strutturati",
+    "attachCounter": "Allegati: {{count}}/{{max}}",
+    "removeFileAria": "Rimuovi {{name}}",
+    "dataDashboardWarning": "La modalità data dashboard è solo alpha ed è disattivata nel flusso Vibe principale. Continuo con la pipeline website standard.",
+    "uploadAllFailed": "Impossibile caricare i file allegati: {{files}}. Verifica la sessione e riprova.",
+    "uploadPartialFailed": "Alcuni file non sono stati caricati: {{files}}",
+    "prefillFailedNotification": {
+      "label": "Non siamo riusciti a precompilare automaticamente i campi — puoi comunque continuare e compilarli manualmente."
+    },
+    "phase": {
+      "classifying": "Analisi della richiesta…",
+      "prefilling": "Pre-compilazione campi AI…",
+      "creating": "Creazione del workspace…",
+      "uploading": "Carico i file…",
+      "analyzing": "Analizzo i dataset…",
+      "redirecting": "Apertura…",
+      "hints": {
+        "classifying": [
+          "Leggo la tua idea…",
+          "Rilevo il tipo di progetto…",
+          "Classifico l'intento…",
+          "Identifico il formato…"
+        ],
+        "prefilling": [
+          "Estraggo le informazioni chiave…",
+          "Struttura il brief…",
+          "Analizzo tono e stile…",
+          "Identifico il pubblico target…",
+          "Genero i campi del progetto…",
+          "Processo il contesto documentale…"
+        ],
+        "creating": [
+          "Inizializzo il workspace…",
+          "Configuro il progetto…"
+        ],
+        "uploading": [
+          "Carico i tuoi file…",
+          "Processo i documenti…",
+          "Avvio la pipeline di arricchimento…"
+        ],
+        "analyzing": [
+          "Aspetto l'arricchimento strutturato…",
+          "Leggo i dataset caricati…"
+        ],
+        "redirecting": [
+          "Quasi pronto…",
+          "Apertura workspace…"
+        ]
+      }
+    },
+    "tokenCounter": "~ {{count}} token",
+    "prefillBanner": "✦ Pre-compilato dall'AI · Rivedi e genera",
+    "prefillEdit": "Modifica manualmente",
+    "prefillCta": "Elabora Progetto"
+  },
+  "workspace": {
+    "selectionNone": "Nessuna selezione",
+    "notifications": {
+      "export": {
+        "label": "Export ZIP (con screenshot)",
+        "running": "Cattura screenshot + archivio in corso…",
+        "downloading": "Download ZIP…",
+        "done": "ZIP scaricato",
+        "sessionExpired": "Sessione scaduta",
+        "error": "Errore export"
+      },
+      "capture": {
+        "label": "Cattura screenshot {{format}}",
+        "running": "Rendering pagina in corso…",
+        "done": "File scaricato",
+        "sessionExpired": "Sessione scaduta",
+        "error": "Errore cattura"
+      },
+      "publish": {
+        "label": "Pubblicazione",
+        "running": "Pubblicazione in corso…",
+        "done": "Pubblicato!",
+        "doneVersioned": "Pubblicato! (v{{vn}} attiva)",
+        "sessionExpired": "Sessione scaduta",
+        "error": "Errore pubblicazione"
+      },
+      "media": {
+        "done": "Media applicato",
+        "doneSaved": "Media applicato e salvato",
+        "doneMessage": "{{name}} collegato all'elemento selezionato.",
+        "doneSavedMessage": "{{name}} collegato all'elemento selezionato e salvato come nuova versione.",
+        "error": "Impossibile caricare l'asset selezionato",
+        "errorLabel": "Errore media",
+        "notApplicable": "Seleziona un'immagine o un URL immagine valido.",
+        "notApplicableLabel": "Asset non applicabile",
+        "noActive": "Seleziona prima un'immagine o genera un nuovo asset.",
+        "noActiveLabel": "Nessuna media attiva"
+      },
+      "modelFallback": {
+        "label": "Modello cambiato automaticamente",
+        "message": "\"{{requested}}\" richiesto non era disponibile — in uso \"{{actual}}\"."
+      },
+      "style": {
+        "done": "Stile applicato",
+        "doneSaved": "Stile applicato e salvato",
+        "doneMessage": "Fit, repeat, opacity e filter sono stati aggiornati nella preview.",
+        "doneSavedMessage": "Fit, repeat, opacity e filter sono stati aggiornati e salvati come nuova versione."
+      },
+      "imageSuggestion": {
+        "label": "Suggerimento immagine",
+        "running": "Sto analizzando il contesto della sezione…",
+        "done": "Suggerimento pronto",
+        "failed": "Suggerimento fallito",
+        "error": "Impossibile generare un suggerimento immagine"
+      },
+      "prompt": {
+        "updated": "Prompt aggiornato",
+        "updatedMessage": "Il suggerimento è stato copiato nel prompt principale.",
+        "missing": "Scrivi un prompt oppure usa prima il suggerimento immagine.",
+        "missingLabel": "Prompt mancante"
+      },
+      "imageGeneration": {
+        "label": "Generazione immagine",
+        "running": "Invio richiesta al provider…",
+        "started": "Generazione avviata",
+        "done": "Immagine pronta",
+        "doneSaved": "Immagine pronta e salvata",
+        "doneMessage": "{{name}} è stata aggiornata nella preview.",
+        "doneSavedMessage": "{{name}} ha sostituito il placeholder ed è stata salvata come nuova versione.",
+        "failed": "Generazione fallita",
+        "failedMessage": "{{error}} Il placeholder resta nella working view corrente.",
+        "error": "Errore durante la generazione dell'immagine",
+        "stillRunning": "Generazione ancora in corso",
+        "stillRunningMessage": "Il provider sta ancora completando il render. L'asset rimane in coda ma il flusso non è bloccato.",
+        "autoLabel": "Gen image AI",
+        "autoRunning": "Analizzo il contesto semantico della pagina…",
+        "autoBrief": "Brief pronto. Avvio la generazione automatica…",
+        "autoError": "Impossibile avviare la generazione automatica dell'immagine",
+        "placeholderVersionedMsg": "Placeholder applicato e salvato come nuova versione. L'immagine finale avanzerà di nuovo la working view quando sarà pronta.",
+        "placeholderAppliedMsg": "Placeholder applicato nella working view. Se il salvataggio versione non è ancora disponibile, l'immagine finale verrà comunque registrata appena pronta.",
+        "sentMsg": "Richiesta inviata correttamente. Se il placeholder non è subito disponibile, l'immagine finale verrà comunque applicata appena pronta."
+      },
+      "conversation": {
+        "loadError": "Errore caricamento conversazione"
+      },
+      "snapshot": {
+        "savedLabel": "Versione salvata dall'editor",
+        "saved": "Snapshot attivato.",
+        "editSavedLabel": "Versione EDIT salvata",
+        "editSaved": "Modifiche manuali versionate.",
+        "activatedLabel": "Versione attivata",
+        "activated": "Snapshot selezionato come versione attiva.",
+        "newVersionLabel": "Nuova versione salvata",
+        "newVersionMessage": "Snapshot salvato e attivato dal backend.",
+        "staleBaseLabel": "Versione non aggiornata",
+        "staleBase": "Questa modifica parte da una versione che nel frattempo è cambiata. La versione corrente è stata ricaricata — riapplica la modifica su quella.",
+        "noChangeLabel": "Nessuna modifica",
+        "noChange": "Il contenuto è identico alla versione corrente: nessuna nuova versione creata.",
+        "commitFailedLabel": "L'anteprima non è stata salvata",
+        "commitFailed": "La generazione è riuscita ma la versione non è stata registrata, quindi l'anteprima resta quella precedente. La risposta è nella chat.",
+        "invalidJs": "Il modello ha prodotto JavaScript non valido, quindi la versione non è stata salvata e l'anteprima resta quella precedente. Chiedi in chat di correggere lo script.",
+        "invalidJsLabel": "Artefatto danneggiato"
+      },
+      "llm": {
+        "label": "Generazione AI",
+        "labelFocus": "Generazione AI con focus",
+        "running": "Sto elaborando la richiesta…",
+        "runningFocus": "Sto elaborando la richiesta e aggiornando la preview…",
+        "errorLabel": "Errore LLM",
+        "doneLabel": "Generazione completata",
+        "doneMessage": "Risposta pronta con {{provider}} · {{model}}",
+        "abortedLabel": "Generazione interrotta",
+        "aborted": "Elaborazione annullata dall'utente.",
+        "abortedContent": "⏹ Elaborazione interrotta dall'utente",
+        "parseErrorLabel": "Generazione fallita",
+        "parseError": "Il modello ha restituito una risposta non interpretabile. Nulla è stato salvato e il progetto è invariato. Riprova oppure seleziona un modello diverso."
+      },
+      "focusPatch": {
+        "parseErrorLabel": "Errore di parsing focus patch",
+        "parseError": "Il modello ha prodotto JSON non interpretabile. Prova a cambiare modello e ripetere la richiesta.",
+        "parseResponseLabel": "Errore parsing risposta",
+        "parseResponseMessage": "Risposta LLM non interpretabile — cambia modello e riprova.",
+        "notAppliedLabel": "Focus patch non applicata",
+        "notApplied": "Elemento non trovato nella versione corrente. Riseleziona l'elemento nel preview e riprova.",
+        "appliedLabel": "Focus patch applicata",
+        "appliedMessage": "Elemento aggiornato — nuova versione attiva.",
+        "limitedLabel": "Inspect limitato",
+        "limited": "La selezione non era valida per la focus patch. Continuo con il contesto completo del progetto."
+      },
+      "promptOptimizer": {
+        "label": "Prompt optimization",
+        "running": "Analizzo e riscrivo il prompt nel flusso chat…",
+        "inputLabel": "Prompt originale",
+        "outputLabel": "Optimize prompt",
+        "done": "Prompt pronto in chat con {{provider}} · {{model}}",
+        "skipped": "Optimizer disattivato per questa configurazione prodotto.",
+        "aborted": "Ottimizzazione interrotta",
+        "abortedContent": "⏹ Ottimizzazione prompt interrotta dall'utente"
+      }
+    },
+    "editMediaFilters": {
+      "images": "Immagini",
+      "backgrounds": "Sfondi"
+    },
+    "llmErrors": {
+      "contextTooLong": "Contesto troppo lungo",
+      "contextTooLongMessage": "Contesto troppo lungo o risposta troppo pesante per questa richiesta. Ho ridotto la memoria inviata: riprova con l'ultima azione.",
+      "configureApiKey": "Configura la API key del provider",
+      "providerCallError": "Errore durante la chiamata al provider",
+      "providerNotConfigured": "Provider non configurato",
+      "generic": "Errore LLM",
+      "errorWithStatus": "Errore [{{status}}]: {{message}}",
+      "providerKeyMissing": "Il provider {{provider}} richiede una API key che non è configurata."
+    },
+    "ui": {
+      "resizeChat": "Ridimensiona input chat",
+      "resizePanels": "Ridimensiona pannelli",
+      "mediaPlaceholderBackground": "Prompt manuale opzionale o chiedi un suggerimento semantico per questo sfondo…",
+      "mediaPlaceholderImage": "Prompt manuale opzionale o chiedi un suggerimento semantico per questa immagine…",
+      "checkingSession": "Verifica sessione…",
+      "configureProject": "Configura progetto",
+      "chatTitle": "Chat di Progetto",
+      "providerPlaceholder": "Provider",
+      "providerKeyWarning": "Il provider {{provider}} richiede una API key non configurata.",
+      "providerKeyWarningConfigure": "Configura {{var}} e riprova.",
+      "providerKeyWarningConfigureGeneric": "Configura la chiave del provider e riprova.",
+      "optimizePromptLabel": "Optimize prompt usa {{provider}} · {{model}}",
+      "pipelineOverrideActive": "Pipeline attiva",
+      "pipelineOverrideSticky": "preconfigurata per i prossimi messaggi",
+      "loadingConversation": "Caricamento conversazione…",
+      "voiceOnlyChrome": "Dettatura disponibile solo in Chrome o Edge compatibili.",
+      "voiceUnavailable": "Dettatura non disponibile: {{error}}.",
+      "voiceMicError": "Microfono già in uso o permesso non concesso.",
+      "voiceListeningTitle": "Ferma la dettatura",
+      "voiceStartTitle": "Detta il prompt con il microfono",
+      "voiceListeningLabel": "Ferma dettatura",
+      "voiceStartLabel": "Avvia dettatura",
+      "attachError": "Allegato non riuscito. Formati supportati: PDF, DOCX, DOC, TXT, MD, immagini.",
+      "attachTitle": "Allega documento o immagine",
+      "attachLabel": "Allega file",
+      "dropToAttach": "Trascina qui per allegare",
+      "attachDropHint": "Trascina file qui o usa la graffetta: gli allegati restano nel progetto e vengono passati al prompt.",
+      "removeAttachment": "Rimuovi allegato",
+      "uploading": "Caricamento in corso…",
+      "uploadSuccess": "Allegato al progetto",
+      "imageSuggestionLogo": "Usa come logo",
+      "imageSuggestionBackground": "Usa come sfondo",
+      "imageSuggestionIcon": "Usa come icona",
+      "imageSuggestionDismiss": "Ignora",
+      "autoOptimizeOn": "Auto-ottimizza ON",
+      "autoOptimizeOff": "Auto-ottimizza OFF",
+      "autoOptimizeOnTitle": "Auto-ottimizzazione attiva: il prompt verrà ottimizzato automaticamente prima dell'invio",
+      "autoOptimizeOffTitle": "Auto-ottimizzazione disattiva: il prompt verrà inviato così com'è",
+      "voiceListening": "🎙️ Ascolto in corso…",
+      "voiceReady": "Chrome: dettatura vocale pronta",
+      "inspectElementLabel": "Elemento: ",
+      "copyJsonTitle": "Copia JSON metadati elemento selezionato",
+      "copyJson": "Copia JSON",
+      "removeElementSelection": "Rimuovi selezione elemento",
+      "codeSelectionLines": "{{lang}} righe {{start}}–{{end}}",
+      "removeCodeSelection": "Rimuovi selezione codice",
+      "inspectHint": "Clicca un elemento nella preview per selezionarlo. Per le immagini puoi cliccare direttamente la foto; con Shift o Alt selezioni il contenitore più ampio.",
+      "closeButton": "Chiudi",
+      "generatingMedia": "Elaborazione…",
+      "genImageAI": "Gen image AI",
+      "promptPanelNone": "nessuno",
+      "editOn": "✎ EDIT ON",
+      "editOff": "✎ EDIT",
+      "emptyConversation": "Apri una conversazione o invia un nuovo prompt.",
+      "scrollToBottom": "Torna in fondo alla chat",
+      "scrollToBottomTitle": "Torna in fondo",
+      "placeholderFocusPatchBackground": "Descrivi qui la modifica focus patch per il background selezionato...",
+      "placeholderFocusPatch": "Descrivi qui la modifica focus patch per l'elemento selezionato...",
+      "placeholderDefault": "Scrivi cosa vuoi realizzare...",
+      "useProviderModel": "Usa {{provider}} · {{model}}",
+      "useActiveProviderModel": "Usa il provider/modello attivo della chat",
+      "optimizingPrompt": "Ottimizzazione...",
+      "optimizeWith": "Optimize · {{model}}",
+      "optimizePrompt": "Optimize prompt",
+      "restoreOriginal": "Ripristina originale",
+      "clearPrompt": "Cancella",
+      "stopGeneration": "Interrompi la generazione in corso",
+      "sending": "Invio...",
+      "send": "Invia",
+      "exportTitle": "Esporta HTML/CSS/JS come ZIP",
+      "exportError": "Errore export",
+      "captureTitle": "Cattura screenshot JPG o PDF della preview",
+      "publishUpdateTitle": "Aggiorna pubblicazione live",
+      "publishTitle": "Pubblica con link condivisibile",
+      "publishStateError": "⚠ Errore",
+      "publishStateUpdate": "🔄 Aggiorna",
+      "publishStatePublish": "🌐 Pubblica",
+      "promptTabTitle": "Visualizza il system prompt composto passato all'LLM (sola lettura)",
+      "inspectOnTitle": "Disattiva Inspect",
+      "inspectOffTitle": "Attiva Inspect: seleziona un elemento e usa solo il flow focus patch in chat",
+      "inspectNoArtifacts": "Inspect disponibile solo quando la preview contiene codice generato",
+      "inspectOn": "◎ Inspect ON",
+      "inspectOff": "◎ Inspect",
+      "editOnTitle": "Disattiva EDIT Light",
+      "editOffTitle": "Attiva EDIT Light: clicca il testo per modificarlo o un'immagine per aprire gli strumenti AI",
+      "saveEditTitle": "Salva le modifiche EDIT come nuova versione dell'artefatto",
+      "saveEditSaving": "⏳ Salvataggio…",
+      "saveEdit": "💾 Salva EDIT",
+      "copyLink": "📋 Copia link",
+      "copied": "✓ Copiato",
+      "editSlug": "✏ Slug",
+      "setSlug": "🔗 Imposta slug",
+      "unpublish": "Rimuovi",
+      "staleVersion": "⚠ online v{{published}}, attiva v{{current}}",
+      "updatePublish": "Aggiorna",
+      "snapshotPanelLiveLine": "🌐 live: v{{live}} · stai lavorando su v{{current}}",
+      "snapshotPanelLiveBadge": "🌐 live",
+      "branchNotice": "⎘ Stai lavorando su v{{active}}, non l'ultima versione (v{{latest}}): la prossima modifica creerà un nuovo ramo da qui. v{{latest}} resta raggiungibile nello storico.",
+      "slugPlaceholder": "es. mia-pizzeria",
+      "slugChecking": "⏳ Verifica…",
+      "slugAvailable": "✓ Disponibile",
+      "slugTaken": "✗ Già in uso",
+      "slugInvalid": "⚠ Formato non valido",
+      "slugReserved": "⚠ Nome riservato",
+      "slugError": "✗ Verifica non riuscita",
+      "slugSaving": "⏳",
+      "slugSave": "Salva",
+      "slugRemove": "Rimuovi slug",
+      "slugCancel": "Annulla",
+      "noCodeTitle": "Nessun codice generato",
+      "noCodeHint": "Il centro mostra solo artifacts HTML/CSS/JS generati dal backend. Invia un prompt per popolare la preview.",
+      "previewRefreshing": "Aggiornamento preview…",
+      "rescanImages": "Rescan immagini dalla preview",
+      "promptPanelDesc": "System prompt composto passato all'LLM — sola lettura",
+      "promptPanelReload": "↻ Ricarica",
+      "promptPanelLoading": "Caricamento…",
+      "promptPanelHint": "Il prompt verrà caricato automaticamente. Se non appare, clicca ↻ Ricarica.",
+      "promptPanelTokensPreset": "~{{tokens}} token · preset: {{preset}}",
+      "promptPanelUserMessage": "Messaggio utente",
+      "promptPanelAssistantMessage": "Messaggio assistant (cronologia)",
+      "promptPanelNoGenYet": "Nessuna generazione ancora — anteprima di cosa verrà inviato alla prossima request.",
+      "promptPanelCurrentTurnTitle": "Turno corrente — conversazione completa inviata",
+      "stream": {
+        "optimizing": "Ottimizzazione prompt in corso...",
+        "analysingOptimizer": "Analisi optimizer...",
+        "connectingOptimizer": "Connessione optimizer...",
+        "responding": "Risposta in corso...",
+        "reasoning": "Ragionamento...",
+        "connectingProvider": "Connessione al provider...",
+        "thinkingDefault": "Sto elaborando il prompt nel flusso conversazionale...",
+        "thinkingOptimizer": "In attesa del ragionamento stream...",
+        "spinnerOptimizer": "ottimizzo il prompt...",
+        "spinnerDefault": "sto pensando..."
+      },
+      "layers": {
+        "layerA": "LAYER A — Vincoli base",
+        "layerABadge": "sempre attivo",
+        "layerASource": "Costante del sistema",
+        "layerB": "LAYER B — Modulo preset",
+        "layerBBadge": "preset: {{presetId}}",
+        "layerBBadgeNone": "nessun preset",
+        "layerBSource": "Configurazione progetto (⚙ rotella)",
+        "layerBEmpty": "(vuoto — nessun preset assegnato al progetto)",
+        "layerC": "LAYER C — Contesto stile",
+        "layerCBadge": "moodboard + profilo utente",
+        "layerCBadgeEmpty": "vuoto",
+        "layerCSource": "Profilo utente (profilazione iniziale) + Moodboard progetto (⚙ rotella)",
+        "layerCEmpty": "(vuoto — nessun dato di profilazione utente o moodboard configurato)",
+        "layerD": "LAYER D — Contesto documenti",
+        "layerDBadge": "asset arricchiti",
+        "layerDSource": "Asset caricati arricchiti dalla pipeline DCL",
+        "layerDEmpty": "(vuoto — nessun asset arricchito)",
+        "layerE": "LAYER E — Template personalizzato",
+        "layerEBadge": "attivo",
+        "layerESource": "Configurazione avanzata progetto (⚙ rotella)",
+        "policy": "POLICY — Budget output",
+        "policyBadge": "sistema",
+        "policySource": "Configurazione automatica token/output"
+      },
+      "codeEditor": {
+        "beautifyTitle": "Formatta / Beautify (equivale a Alt+Shift+F)",
+        "saveVersionTitle": "Salva le modifiche come nuova versione preview (attiva)",
+        "saveVersion": "💾 Salva versione",
+        "saving": "Salvataggio…",
+        "fontDecrease": "Riduci dimensione carattere",
+        "fontIncrease": "Aumenta dimensione carattere",
+        "shortcuts": "Ctrl+scroll = zoom · Alt+Shift+F = formatta",
+        "font": "Font",
+        "selectionLines": "Selezione righe {{start}}-{{end}}",
+        "cursorPosition": "Cursore riga {{line}}, col {{col}}"
+      },
+      "imageToolsInEditTitle": "Strumenti immagine in EDIT",
+      "imageToolsInEditHint": "In EDIT il testo ha priorità. Clicca direttamente sull'area immagine per selezionare il media sottostante.",
+      "imageAiToolsTitle": "Strumenti AI per immagini",
+      "imageAiToolsDesc": "La generazione manuale e le impostazioni avanzate delle immagini sono separate dalla chat e disponibili solo in modalità EDIT.",
+      "reqMeta": {
+        "flow": "Flusso",
+        "target": "Target",
+        "provider": "Provider",
+        "finishReason": "Motivo fine",
+        "model": "Modello",
+        "snapshot": "Snapshot",
+        "mediaStatus": "Stato media",
+        "mediaResolved": "risolto",
+        "mediaDegraded": "degradato",
+        "mediaResolvedCount": "Media risolti",
+        "mediaFailedCount": "Media falliti",
+        "mediaKeys": "Chiavi media",
+        "badgeMedia": "{{resolved}}/{{total}} media",
+        "badgeInfo": "info",
+        "totalTokens": "Token totali",
+        "promptTokens": "Token prompt",
+        "completionTokens": "Token risposta",
+        "prepromptSystem": "Preprompt (system)",
+        "msgsSent": "Messaggi inviati a LLM",
+        "promptConfigId": "ID config prompt",
+        "execTime": "Tempo esecuzione",
+        "totalCost": "Costo totale",
+        "tokenCost": "Costo token",
+        "imageCost": "Costo immagine",
+        "videoCost": "Costo video",
+        "eurPerKTok": "€/1k tok",
+        "providerUsd": "Provider USD",
+        "structuredParse": "Parse strutturato",
+        "parseValid": "✓ valido",
+        "parseFailed": "✗ fallito",
+        "details": "Dettagli richiesta",
+        "detailsGlobal": "Dettagli ultima richiesta"
+      },
+      "messageOutcome": {
+        "artifactLinked": "artifact collegato",
+        "mediaCount": "{{resolved}}/{{total}} media",
+        "failedCount": "{{count}} falliti"
+      },
+      "requestInsight": {
+        "openDetails": "Dettagli",
+        "title": "Esito generazione",
+        "description": "Prima il riepilogo rapido, poi la traccia tecnica solo quando serve ispezionarla.",
+        "mediaResolved": "media risolti",
+        "mediaDegraded": "media degradati",
+        "snapshot": "Snapshot",
+        "duration": "Durata",
+        "tokens": "Token",
+        "cost": "Costo",
+        "mediaOutcomeTitle": "Esito media",
+        "mediaOutcomeSubtitle": "{{count}} chiavi tracciate per questo artifact",
+        "resolvedCount": "{{count}} risolti",
+        "failedCount": "{{count}} falliti",
+        "artifactSummaryTitle": "Riepilogo artifact",
+        "artifactSummarySubtitle": "Dimensioni persistite dei payload ed esito del parsing",
+        "structuredParse": "Parse strutturato",
+        "parseValid": "valido",
+        "parseFailed": "fallito",
+        "htmlBytes": "Byte HTML",
+        "cssBytes": "Byte CSS",
+        "jsBytes": "Byte JS",
+        "technicalTraceTitle": "Traccia tecnica",
+        "technicalTraceSubtitle": "ID, lineage del prompt e riferimenti salvati",
+        "snapshotId": "ID snapshot",
+        "promptConfig": "Config prompt",
+        "llmMessagesSent": "Messaggi LLM inviati",
+        "systemPromptEstimate": "Stima prompt system",
+        "systemPromptEstimateValue": "{{count}} tok",
+        "traceIds": "ID trace",
+        "assetIds": "ID asset",
+        "directiveStatus": {
+          "resolved": "risolto",
+          "fallback_resolved": "risolto via fallback",
+          "unresolved": "non risolto"
+        }
+      },
+      "messageBubble": {
+        "copy": "Copia",
+        "copied": "Copiato",
+        "copyError": "Errore",
+        "copyTitle": "Copia messaggio",
+        "nextSteps": "Prossimi passi",
+        "errorBadge": "Errore",
+        "errorHint": "Nessuna versione salvata — il progetto non è stato modificato."
+      }
+    },
+    "inspector": {
+      "loading": "Caricamento cronologia…",
+      "empty": "Nessuna attività registrata per questo progetto.",
+      "vibeTitle": "Vibe",
+      "zeroEffortTitle": "Zero Effort",
+      "generationTitle": "Generation",
+      "truncated": "TRONCATO",
+      "noGeneration": "Questa sessione non ha ancora una generazione.",
+      "noActivity": "Questa sessione non ha ancora nulla da mostrare."
+    },
+    "recovery": {
+      "resumeLoaded": "Contesto recuperato dalla generazione interrotta: il brief, la risposta parziale e il ragionamento del modello. Invia per continuare da lì."
+    }
+  },
+  "aiUsagePanel": {
+    "title": "Riepilogo uso AI",
+    "loading": "Caricamento analytics AI…",
+    "emptyState": "Nessuna attività AI registrata per questo ambito.",
+    "totalCost": "Costo totale",
+    "imageGen": "Generazione immagini",
+    "llmSpend": "Spesa LLM",
+    "tokens": "Token",
+    "tokensLower": "token",
+    "runs": "{{count}} run",
+    "queuedFailed": "{{queued}} in coda · {{failed}} falliti",
+    "topModels": "Modelli principali",
+    "recentRequests": "Richieste recenti",
+    "noRequests": "Nessuna richiesta registrata.",
+    "noPromptPreview": "Nessuna anteprima prompt disponibile.",
+    "mediaOkCount": "{{count}} media ok",
+    "failedCount": "{{count}} falliti",
+    "details": "Dettagli",
+    "dialogTitle": "Dettagli richiesta",
+    "dialogDescription": "Riepilogo operativo compatto per l'attività AI recente.",
+    "model": "Modello",
+    "cost": "Costo",
+    "created": "Creato",
+    "resolvedCount": "{{count}} risolti",
+    "degraded": "degradato",
+    "clean": "pulito",
+    "promptPreviewTitle": "Anteprima prompt",
+    "promptPreviewSubtitle": "Testo compatto salvato per le analytics delle richieste recenti",
+    "technicalSummaryTitle": "Riepilogo tecnico",
+    "technicalSummarySubtitle": "Utile per admin/support senza aprire i log grezzi",
+    "requestId": "ID richiesta",
+    "imageSize": "Dimensione immagine"
+  },
+  "recovery": {
+    "title": "La generazione si è interrotta",
+    "body": "Ci sono {{tokens}} token di lavoro già fatto — una risposta parziale e il ragionamento del modello. Puoi riprendere da lì invece di ricominciare.",
+    "failedModel": "Modello che si è fermato",
+    "reasoningKept": "Ragionamento conservato",
+    "partialKept": "Risposta parziale conservata",
+    "pickModel": "Riprova con un altro modello",
+    "pickModelHint": "Un modello più veloce può finire il lavoro che il primo ha lasciato a metà. Il prompt, il brief, gli allegati e il ragionamento interrotto vengono portati con te.",
+    "resume": "Riprendi in project mode",
+    "resumeOther": "Riprendi in project mode con questo modello",
+    "retrying": "Riprendo…",
+    "cancelAndDelete": "Annulla ed elimina il progetto",
+    "discardConfirmTitle": "Eliminare il progetto?",
+    "discardConfirmBody": "Rimuove il progetto, la sua cronologia dei prompt, i costi registrati e la sessione di lavoro. Non è reversibile. Il lavoro già pagato che stavi per riprendere va perso con lui.",
+    "discardConfirm": "Sì, elimina",
+    "backToChoice": "Torna indietro"
+  }
 }
