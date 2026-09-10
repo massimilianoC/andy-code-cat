@@ -9,4 +9,7 @@ export interface DidacticArtifactKnowledgeRepository {
 
     /** Delete knowledge for a snapshot (cleanup). */
     deleteBySnapshot(projectId: string, snapshotId: string): Promise<void>;
+
+    /** Delete-project cascade — removes every entry for a project. Returns the number removed. */
+    deleteByProject(projectId: string): Promise<number>;
 }

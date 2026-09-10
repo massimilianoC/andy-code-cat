@@ -8,6 +8,27 @@ import type {
 } from "../../../domain/entities/AssetEnrichmentTrace";
 import type { EnrichmentAssetKind } from "../../../domain/entities/AssetEnrichmentTrace";
 import type { ParsedDocumentSheet, ParsedDocumentSlide } from "../parsers/PdfParser";
+import type { PromptExecutionLogRepository } from "../../../domain/repositories/PromptExecutionLogRepository";
+
+const DOCUMENT_BRIEF_TASK_KEY = "enrich_document";
+const DATASET_APPENDIX_TASK_KEY = "enrich_dataset_appendix";
+const PIPELINE_STAGE = "document_brief";
+
+/**
+ * Optional prompt-execution journal wiring shared by both LLM calls in this file
+ * (docs/specs/WORK_SESSION_TRACING_SPEC.md §2). Without a repository (or without
+ * projectId/userId) the call still runs — it just leaves no journal row, same as before
+ * this wiring existed.
+ */
+export interface DocumentJournalContext {
+    promptExecutionLogRepository?: PromptExecutionLogRepository;
+    provider: string;
+    projectId?: string;
+    userId?: string;
+    workSessionId?: string;
+    pipelineRunId?: string;
+    assetId?: string;
+}
 
 const TEXT_SNIPPET_MAX = 20_000;
 // The structured inventory already conveys the data shape; keep the raw CSV
@@ -31,6 +52,51 @@ function strings(v: unknown, max: number): string[] {
     return v.filter(x => typeof x === "string").slice(0, max) as string[];
 }
 
+// ── Prompt-execution journal wiring (shared by both LLM calls in this file) ────────────────
+//
+// Journalled before dispatch, never after: a record written only on success cannot explain a
+// call that never came back. Journalling failure must not fail extraction — the pending id stays
+// optional from here on, and every use of it is `.catch()`-guarded.
+
+async function createPendingJournalRow(params: {
+    journal: DocumentJournalContext | undefined;
+    taskKey: string;
+    endpoint: string;
+    model: string;
+    inputPrompt: string;
+    renderedUserPrompt: string;
+}): Promise<string | null> {
+    const journal = params.journal;
+    if (!journal?.promptExecutionLogRepository || !journal.projectId || !journal.userId) return null;
+    return journal.promptExecutionLogRepository.createPending({
+        taskKey: params.taskKey,
+        projectId: journal.projectId,
+        userId: journal.userId,
+        workSessionId: journal.workSessionId,
+        pipelineRunId: journal.pipelineRunId,
+        pipelineStage: PIPELINE_STAGE,
+        endpoint: params.endpoint,
+        provider: journal.provider,
+        model: params.model,
+        inputPrompt: params.inputPrompt.slice(0, 2000),
+        renderedUserPrompt: params.renderedUserPrompt,
+        contextMeta: {
+            assetIds: journal.assetId ? [journal.assetId] : undefined,
+            usedMoodboard: false,
+            usedUserProfile: false,
+        },
+    }).then((log) => log.id).catch(() => null);
+}
+
+async function completeJournalRow(
+    journal: DocumentJournalContext | undefined,
+    pendingLogId: string | null,
+    completion: Parameters<PromptExecutionLogRepository["complete"]>[1],
+): Promise<void> {
+    if (!pendingLogId || !journal?.promptExecutionLogRepository) return;
+    await journal.promptExecutionLogRepository.complete(pendingLogId, completion).catch(() => undefined);
+}
+
 export interface DocumentBriefInput {
     textSnippet: string;
     assetKind: EnrichmentAssetKind;
@@ -40,6 +106,7 @@ export interface DocumentBriefInput {
     baseUrl: string;
     model: string;
     authHeader: string | undefined;
+    journal?: DocumentJournalContext;
 }
 
 export interface DocumentBriefResult {
@@ -281,6 +348,7 @@ export async function extractDatasetAppendix(input: {
     baseUrl: string;
     model: string;
     authHeader: string | undefined;
+    journal?: DocumentJournalContext;
 }): Promise<{
     appendix: DatasetLlmAppendix;
     tokensUsed: number | null;
@@ -290,9 +358,10 @@ export async function extractDatasetAppendix(input: {
         totalTokens: number;
     };
 }> {
+    const appendixPrompt = buildDatasetAppendixPrompt(input.datasetStructuredData);
     const body = {
         model: input.model,
-        messages: [{ role: "user", content: buildDatasetAppendixPrompt(input.datasetStructuredData) }],
+        messages: [{ role: "user", content: appendixPrompt }],
         max_tokens: 1200,
         temperature: 0,
     };
@@ -300,43 +369,73 @@ export async function extractDatasetAppendix(input: {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (input.authHeader) headers["Authorization"] = input.authHeader;
 
-    const res = await fetch(`${input.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
+    const endpoint = `${input.baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const startedAt = Date.now();
+
+    const pendingLogId = await createPendingJournalRow({
+        journal: input.journal,
+        taskKey: DATASET_APPENDIX_TASK_KEY,
+        endpoint,
+        model: input.model,
+        inputPrompt: appendixPrompt,
+        renderedUserPrompt: appendixPrompt,
     });
 
-    if (!res.ok) {
-        const responseSnippet = await res.text().catch(() => "(unable to read body)");
-        throw new Error(`LLM returned HTTP ${res.status} for dataset appendix extraction: ${responseSnippet.slice(0, 400)}`);
-    }
-
-    const json = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-    };
-    const raw = json.choices?.[0]?.message?.content ?? "";
-    const promptTokens = Number(json.usage?.prompt_tokens ?? 0);
-    const completionTokens = Number(json.usage?.completion_tokens ?? 0);
-    const totalTokens = Number(json.usage?.total_tokens ?? (promptTokens + completionTokens));
-
-    let parsed: Record<string, unknown>;
     try {
-        parsed = JSON.parse(jsonrepair(raw));
-    } catch {
-        throw new Error(`Dataset appendix LLM response could not be parsed. Raw: ${raw.slice(0, 200)}`);
-    }
+        const res = await fetch(endpoint, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+        });
 
-    return {
-        appendix: {
-            analyticalSummary: typeof parsed.analyticalSummary === "string" ? parsed.analyticalSummary.trim().slice(0, 1200) : "",
-            keySignals: strings(parsed.keySignals, 8).map((value) => value.slice(0, 240)),
-            suggestedQuestions: strings(parsed.suggestedQuestions, 6).map((value) => value.slice(0, 240)),
-            cautions: strings(parsed.cautions, 5).map((value) => value.slice(0, 240)),
-        },
-        tokensUsed: json.usage?.total_tokens ?? null,
-        usage: { promptTokens, completionTokens, totalTokens },
-    };
+        if (!res.ok) {
+            const responseSnippet = await res.text().catch(() => "(unable to read body)");
+            throw new Error(`LLM returned HTTP ${res.status} for dataset appendix extraction: ${responseSnippet.slice(0, 400)}`);
+        }
+
+        const json = (await res.json()) as {
+            choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+            usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+        };
+        const raw = json.choices?.[0]?.message?.content ?? "";
+        const finishReason = json.choices?.[0]?.finish_reason;
+        const promptTokens = Number(json.usage?.prompt_tokens ?? 0);
+        const completionTokens = Number(json.usage?.completion_tokens ?? 0);
+        const totalTokens = Number(json.usage?.total_tokens ?? (promptTokens + completionTokens));
+
+        let parsed: Record<string, unknown>;
+        try {
+            parsed = JSON.parse(jsonrepair(raw));
+        } catch {
+            throw new Error(`Dataset appendix LLM response could not be parsed. Raw: ${raw.slice(0, 200)}`);
+        }
+
+        await completeJournalRow(input.journal, pendingLogId, {
+            status: "succeeded",
+            durationMs: Date.now() - startedAt,
+            usage: { promptTokens, completionTokens, totalTokens },
+            finishReason,
+            rawResponse: raw,
+        });
+
+        return {
+            appendix: {
+                analyticalSummary: typeof parsed.analyticalSummary === "string" ? parsed.analyticalSummary.trim().slice(0, 1200) : "",
+                keySignals: strings(parsed.keySignals, 8).map((value) => value.slice(0, 240)),
+                suggestedQuestions: strings(parsed.suggestedQuestions, 6).map((value) => value.slice(0, 240)),
+                cautions: strings(parsed.cautions, 5).map((value) => value.slice(0, 240)),
+            },
+            tokensUsed: json.usage?.total_tokens ?? null,
+            usage: { promptTokens, completionTokens, totalTokens },
+        };
+    } catch (err) {
+        await completeJournalRow(input.journal, pendingLogId, {
+            status: "failed",
+            durationMs: Date.now() - startedAt,
+            errorMessage: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+    }
 }
 
 // ── Main extractor ────────────────────────────────────────────────────────
@@ -363,67 +462,97 @@ export async function extractDocumentBrief(input: DocumentBriefInput): Promise<D
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (input.authHeader) headers["Authorization"] = input.authHeader;
 
-    const res = await fetch(`${input.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
+    const endpoint = `${input.baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const startedAt = Date.now();
+
+    const pendingLogId = await createPendingJournalRow({
+        journal: input.journal,
+        taskKey: DOCUMENT_BRIEF_TASK_KEY,
+        endpoint,
+        model: input.model,
+        inputPrompt: safePrompt,
+        renderedUserPrompt: safePrompt,
     });
 
-    if (!res.ok) {
-        // Surface the provider's error body so the trace explains what went wrong.
-        const responseSnippet = await res.text().catch(() => "(unable to read body)");
-        throw new Error(
-            `LLM returned HTTP ${res.status} for document brief extraction (assetKind=${input.assetKind}, model=${input.model}, promptLen=${safePrompt.length}): ${responseSnippet.slice(0, 400)}`,
-        );
-    }
-
-    const json = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-    };
-
-    const raw = json.choices?.[0]?.message?.content ?? "";
-    const promptTokens = Number(json.usage?.prompt_tokens ?? 0);
-    const completionTokens = Number(json.usage?.completion_tokens ?? 0);
-    const totalTokens = Number(json.usage?.total_tokens ?? (promptTokens + completionTokens));
-    const tokensUsed = json.usage?.total_tokens ?? null;
-
-    let parsed: Record<string, unknown>;
     try {
-        parsed = JSON.parse(jsonrepair(raw));
-    } catch {
-        throw new Error(`Document brief LLM response could not be parsed. Raw: ${raw.slice(0, 200)}`);
+        const res = await fetch(endpoint, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+            // Surface the provider's error body so the trace explains what went wrong.
+            const responseSnippet = await res.text().catch(() => "(unable to read body)");
+            throw new Error(
+                `LLM returned HTTP ${res.status} for document brief extraction (assetKind=${input.assetKind}, model=${input.model}, promptLen=${safePrompt.length}): ${responseSnippet.slice(0, 400)}`,
+            );
+        }
+
+        const json = (await res.json()) as {
+            choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+            usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+        };
+
+        const raw = json.choices?.[0]?.message?.content ?? "";
+        const finishReason = json.choices?.[0]?.finish_reason;
+        const promptTokens = Number(json.usage?.prompt_tokens ?? 0);
+        const completionTokens = Number(json.usage?.completion_tokens ?? 0);
+        const totalTokens = Number(json.usage?.total_tokens ?? (promptTokens + completionTokens));
+        const tokensUsed = json.usage?.total_tokens ?? null;
+
+        let parsed: Record<string, unknown>;
+        try {
+            parsed = JSON.parse(jsonrepair(raw));
+        } catch {
+            throw new Error(`Document brief LLM response could not be parsed. Raw: ${raw.slice(0, 200)}`);
+        }
+
+        const brief: DocumentBrief = {
+            documentType: safeDocType(parsed["documentType"]),
+            detectedTitle: typeof parsed["detectedTitle"] === "string" ? parsed["detectedTitle"] : null,
+            detectedBrandName: typeof parsed["detectedBrandName"] === "string" ? parsed["detectedBrandName"] : null,
+            purposeSentence: typeof parsed["purposeSentence"] === "string" ? parsed["purposeSentence"] : "",
+            contentSummary: typeof parsed["contentSummary"] === "string" ? parsed["contentSummary"] : "",
+            mainArgumentOrValue: typeof parsed["mainArgumentOrValue"] === "string" ? parsed["mainArgumentOrValue"] : null,
+            structureSummary: typeof parsed["structureSummary"] === "string" ? parsed["structureSummary"] : null,
+            keyMessages: strings(parsed["keyMessages"], 12),
+            toneLabel: typeof parsed["toneLabel"] === "string" ? parsed["toneLabel"] : "neutral",
+            targetAudience: typeof parsed["targetAudience"] === "string" ? parsed["targetAudience"] : null,
+            ctaText: typeof parsed["ctaText"] === "string" ? parsed["ctaText"] : null,
+            primaryTopics: strings(parsed["primaryTopics"], 14),
+            contentLanguage: typeof parsed["contentLanguage"] === "string" ? parsed["contentLanguage"] : "unknown",
+            suggestedStyleRole: typeof parsed["suggestedStyleRole"] === "string" ? parsed["suggestedStyleRole"] : "reference",
+        };
+
+        // Build structured payload for LayerD injection
+        let structuredData: StructuredDataPayload | undefined;
+        if (isSpreadsheet && hasSheets) {
+            structuredData = { kind: "spreadsheet", sheets: input.sheets! };
+        } else if (isPresentation && hasSlides) {
+            structuredData = { kind: "presentation", slides: input.slides! };
+        }
+
+        await completeJournalRow(input.journal, pendingLogId, {
+            status: "succeeded",
+            durationMs: Date.now() - startedAt,
+            usage: { promptTokens, completionTokens, totalTokens },
+            finishReason,
+            rawResponse: raw,
+        });
+
+        return {
+            brief,
+            tokensUsed,
+            structuredData,
+            usage: { promptTokens, completionTokens, totalTokens },
+        };
+    } catch (err) {
+        await completeJournalRow(input.journal, pendingLogId, {
+            status: "failed",
+            durationMs: Date.now() - startedAt,
+            errorMessage: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
     }
-
-    const brief: DocumentBrief = {
-        documentType: safeDocType(parsed["documentType"]),
-        detectedTitle: typeof parsed["detectedTitle"] === "string" ? parsed["detectedTitle"] : null,
-        detectedBrandName: typeof parsed["detectedBrandName"] === "string" ? parsed["detectedBrandName"] : null,
-        purposeSentence: typeof parsed["purposeSentence"] === "string" ? parsed["purposeSentence"] : "",
-        contentSummary: typeof parsed["contentSummary"] === "string" ? parsed["contentSummary"] : "",
-        mainArgumentOrValue: typeof parsed["mainArgumentOrValue"] === "string" ? parsed["mainArgumentOrValue"] : null,
-        structureSummary: typeof parsed["structureSummary"] === "string" ? parsed["structureSummary"] : null,
-        keyMessages: strings(parsed["keyMessages"], 12),
-        toneLabel: typeof parsed["toneLabel"] === "string" ? parsed["toneLabel"] : "neutral",
-        targetAudience: typeof parsed["targetAudience"] === "string" ? parsed["targetAudience"] : null,
-        ctaText: typeof parsed["ctaText"] === "string" ? parsed["ctaText"] : null,
-        primaryTopics: strings(parsed["primaryTopics"], 14),
-        contentLanguage: typeof parsed["contentLanguage"] === "string" ? parsed["contentLanguage"] : "unknown",
-        suggestedStyleRole: typeof parsed["suggestedStyleRole"] === "string" ? parsed["suggestedStyleRole"] : "reference",
-    };
-
-    // Build structured payload for LayerD injection
-    let structuredData: StructuredDataPayload | undefined;
-    if (isSpreadsheet && hasSheets) {
-        structuredData = { kind: "spreadsheet", sheets: input.sheets! };
-    } else if (isPresentation && hasSlides) {
-        structuredData = { kind: "presentation", slides: input.slides! };
-    }
-
-    return {
-        brief,
-        tokensUsed,
-        structuredData,
-        usage: { promptTokens, completionTokens, totalTokens },
-    };
 }

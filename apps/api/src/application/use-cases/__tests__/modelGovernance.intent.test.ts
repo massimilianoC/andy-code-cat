@@ -102,6 +102,7 @@ class InMemoryPipelineRunRepository implements PipelineRunRepository {
     async appendStage(): Promise<PipelineRun> { throw new Error("not used by these tests"); }
     async setStatus(): Promise<PipelineRun> { throw new Error("not used by these tests"); }
     async attachCanonicalBrief(): Promise<PipelineRun> { throw new Error("not used by these tests"); }
+    async deleteByProject(): Promise<number> { throw new Error("not used by these tests"); }
 }
 
 function subject(providers: LlmProviderCatalog[]) {

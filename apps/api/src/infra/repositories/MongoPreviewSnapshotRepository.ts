@@ -193,4 +193,10 @@ export class MongoPreviewSnapshotRepository implements PreviewSnapshotRepository
         }
         return map;
     }
+
+    async deleteByProject(projectId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId } as Filter<PreviewSnapshotDocument>);
+        return result.deletedCount;
+    }
 }

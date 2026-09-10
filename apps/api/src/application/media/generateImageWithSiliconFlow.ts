@@ -44,12 +44,23 @@ function parseTokenUsage(value: unknown): ImageProviderTokenUsage | undefined {
     return { promptTokens, completionTokens, totalTokens };
 }
 
+/**
+ * Strips the provider's response down to fields safe to keep around — most importantly, never the
+ * `b64_json` image payload. This shape is reused verbatim as the prompt-execution journal's
+ * `rawResponse` (see GenerateProjectImage), so it doubles as the guarantee that image bytes never
+ * land in the journal: the journal is a record of what prompt produced an asset, not a second copy
+ * of the asset, which already has its own storage. Where a base64 payload existed, a short marker
+ * says so instead of silently dropping the field.
+ */
 function sanitizeProviderResponse(body: unknown): Record<string, unknown> | undefined {
     if (!body || typeof body !== "object") return undefined;
     const source = body as Record<string, unknown>;
     const data = Array.isArray(source["data"])
         ? (source["data"] as Array<Record<string, unknown>>).map((item) => ({
             url: typeof item?.["url"] === "string" ? item["url"] : undefined,
+            image: typeof item?.["b64_json"] === "string" && item["b64_json"]
+                ? "[base64 image payload omitted — asset bytes live in project asset storage]"
+                : undefined,
             revised_prompt: typeof item?.["revised_prompt"] === "string" ? item["revised_prompt"] : undefined,
             width: typeof item?.["width"] === "number" ? item["width"] : undefined,
             height: typeof item?.["height"] === "number" ? item["height"] : undefined,
@@ -61,6 +72,16 @@ function sanitizeProviderResponse(body: unknown): Record<string, unknown> | unde
         data,
         usage: source["usage"],
     };
+}
+
+/**
+ * The exact URL the image-generation call is dispatched to. Exported so callers that need to
+ * journal a pending prompt-execution row BEFORE this function is invoked (the row must exist
+ * before the fetch is dispatched, not after) can record the same endpoint this function actually
+ * calls, instead of duplicating the URL-construction logic.
+ */
+export function resolveSiliconFlowImageEndpoint(): string {
+    return `${env.SILICONFLOW_BASE_URL.replace(/\/$/, "")}/images/generations`;
 }
 
 function inferMimeType(url: string, header: string | null): string {
@@ -94,7 +115,7 @@ export async function generateImageWithSiliconFlow(input: {
     const requestedAt = new Date();
     const t0 = Date.now();
 
-    const response = await fetch(`${env.SILICONFLOW_BASE_URL.replace(/\/$/, "")}/images/generations`, {
+    const response = await fetch(resolveSiliconFlowImageEndpoint(), {
         method: "POST",
         headers: {
             "Content-Type": "application/json",

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Optional pre-commit hook: runs the public-repo guard before every commit.
+#
+# Not installed by default — no husky, no postinstall magic, no dependency added on your behalf.
+# Opt in once per clone:
+#
+#   git config core.hooksPath scripts/hooks
+#
+# The non-bypassable check is .github/workflows/public-repo-guard.yml, which runs on every pull
+# request into develop/main regardless of whether this hook is installed locally. This hook only
+# saves you the round trip to CI.
+
+npm run --silent guard:public-repo

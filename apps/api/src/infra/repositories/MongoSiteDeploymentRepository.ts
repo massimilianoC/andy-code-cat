@@ -208,4 +208,10 @@ export class MongoSiteDeploymentRepository implements SiteDeploymentRepository {
         const col = await this.col();
         return col.countDocuments({ status: "live" });
     }
+
+    async deleteByProject(projectId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId });
+        return result.deletedCount;
+    }
 }

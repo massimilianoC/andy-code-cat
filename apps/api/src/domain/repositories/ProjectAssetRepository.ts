@@ -34,6 +34,25 @@ export interface ProjectAssetRepository {
 
     delete(id: string, projectId: string, userId: string): Promise<boolean>;
 
+    /**
+     * Assets owned exclusively by this project — scope `"project"` (or a legacy row predating the
+     * `scope` field, which defaults the same way `create()` does). Excludes `"user"` and `"global"`
+     * scoped assets even when their `projectId` matches: those are the user's reusable media
+     * library (see `listByUser`) and must survive the project that first created them.
+     *
+     * Used by the delete-project cascade to know which files to remove before `deleteByProject`
+     * removes the rows — the same set, by construction.
+     */
+    listOwnedByProject(projectId: string, userId: string): Promise<ProjectAsset[]>;
+
+    /**
+     * Delete-project cascade — removes every row `listOwnedByProject` would return. Returns the
+     * number removed. DB-only: the caller (`DeleteProject`) deletes each asset's file first via
+     * `IFileStorage.deleteUpload`, the same call `DeleteProjectAsset` makes for a single asset —
+     * one file-deletion path, reused rather than duplicated.
+     */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
+
     /** Total size in bytes for all assets in the project (user uploads only, for quota). */
     totalProjectSize(projectId: string, userId: string): Promise<number>;
 

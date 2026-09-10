@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { getProjectSessionSummary } from "@/lib/api/projects";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, LayoutTemplate, Files, FileImage, Presentation, FormInput, GalleryVertical, RectangleEllipsis, Plus, BarChart3, Rocket, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -206,11 +207,23 @@ export default function DashboardPage() {
         }
     }
 
-    async function handleCopyPrompt(project: Project) {
+    /**
+     * Copies what the user actually wrote, or the brief it became — not the prompt template.
+     *
+     * The previous implementation copied `prePromptTemplate`, which is the same text for every
+     * project and therefore never what anyone meant by "copy this project's prompt". The user's own
+     * words simply were not stored anywhere until the session tracing work; now they are, and this
+     * reads them.
+     */
+    async function handleCopyPrompt(project: Project, what: "userPrompt" | "brief") {
         if (!token) return;
         try {
-            const res = await getLlmPromptConfig(token, project.id);
-            const text = res.config?.prePromptTemplate ?? "";
+            const summary = await getProjectSessionSummary(token, project.id);
+            const text = what === "brief" ? summary.brief : summary.userPrompt;
+            if (!text) {
+                showToast(t("dashboard.toast.noPrompt"), false);
+                return;
+            }
             await navigator.clipboard.writeText(text);
             showToast(t("dashboard.toast.promptCopied"), true);
         } catch {

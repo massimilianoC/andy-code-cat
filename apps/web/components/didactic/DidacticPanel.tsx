@@ -34,6 +34,20 @@ interface DidacticPanelProps {
     onAnchorFocus?: (kind: "html" | "css" | "js", lineRange?: [number, number]) => void;
     /** Called after a successful generate or ask operation so callers can refresh cost totals. */
     onCostUpdated?: () => void;
+    /**
+     * The model the user currently has selected in the workspace, inherited rather than re-derived.
+     * Didactic Mode is the same session looking at the same artifact: resolving a different model
+     * server-side would spend the user's money on compute they did not choose.
+     */
+    provider?: string;
+    model?: string;
+    /**
+     * Correlation key for the run this artifact came from, so the didactic call joins the same
+     * chain as the generation that produced what it is explaining
+     * (docs/specs/WORK_SESSION_TRACING_SPEC.md §3). Absent when the workspace was not entered
+     * through a pipeline handoff.
+     */
+    pipelineRunId?: string;
 }
 
 export function DidacticPanel({
@@ -44,6 +58,9 @@ export function DidacticPanel({
     onClearFocus,
     onAnchorFocus,
     onCostUpdated,
+    provider,
+    model,
+    pipelineRunId,
 }: DidacticPanelProps) {
     const [activeTab, setActiveTab] = useState<"analyze" | "quiz" | "ask">("analyze");
     const [statusDto, setStatusDto] = useState<DidacticKnowledgeStatusDto | null>(null);
@@ -51,6 +68,9 @@ export function DidacticPanel({
     const [generating, setGenerating] = useState(false);
     const [generatingPhase, setGeneratingPhase] = useState("");
     const [error, setError] = useState<string | null>(null);
+    // Not an error: the knowledge is usable, it is just thinner than the prompt required. Kept
+    // separate so it renders as a notice rather than replacing the result with a failure.
+    const [shortfall, setShortfall] = useState<string | null>(null);
     const phaseTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
     const load = async () => {
@@ -91,11 +111,17 @@ export function DidacticPanel({
         );
 
         try {
-            const res = await generateDidacticKnowledge(token, projectId, { snapshotId, uiLanguage: "it" });
+            const res = await generateDidacticKnowledge(token, projectId, { snapshotId, uiLanguage: "it", provider, model, pipelineRunId });
             setStatusDto({ status: "ready", knowledge: res.knowledge });
+            setShortfall(res.shortfall
+                ? `Il modello ha prodotto ${res.shortfall.topics} argomenti e ${res.shortfall.quizzes} quiz, `
+                  + `a fronte di ${res.shortfall.expectedTopics.min}–${res.shortfall.expectedTopics.max} argomenti `
+                  + `e ${res.shortfall.expectedQuizzes} quiz richiesti. Prova a rigenerare con un altro modello.`
+                : null);
             setActiveTab("analyze");
             onCostUpdated?.();
         } catch (e) {
+            setShortfall(null);
             setError(e instanceof Error ? e.message : "Errore generazione");
         } finally {
             phaseTimersRef.current.forEach(clearTimeout);
@@ -157,8 +183,16 @@ export function DidacticPanel({
                 )}
             </div>
 
-            {/* Content */}
-            <div className="flex-1 min-h-0 relative">
+            {/* Content — a flex column, not a plain block: the shortfall/error banners above
+                are siblings of the scrollable area, and only a flex column lets them claim
+                their own height while the scrollable area gets exactly what's left via
+                `flex-1 min-h-0` (the same pattern MediaGrid uses). Before this, the banners
+                were laid out in-flow while the ScrollArea below them was sized with `h-full`
+                (100% of this container, ignoring the banner already sitting above it), so the
+                ScrollArea's box ran past the bottom of this panel by exactly the banner's
+                height — silently clipped by `.workspace-chat-panel`'s `overflow: hidden`
+                (apps/web/app/globals.css). That clipped strip was never reachable by scrolling. */}
+            <div className="flex-1 min-h-0 relative flex flex-col">
                 {/* No snapshot yet — guard against null snapshotId so we never fire
                     requests with ?snapshotId=null. The user must first generate or
                     select an artifact version in Build mode. */}
@@ -196,7 +230,7 @@ export function DidacticPanel({
                 )}
 
                 {snapshotId && error && (
-                    <div className="p-4 space-y-2">
+                    <div className="p-4 space-y-2 shrink-0">
                         <p className="text-sm text-destructive">{error}</p>
                         <Button type="button" size="sm" variant="outline" onClick={load}>
                             Riprova
@@ -204,8 +238,18 @@ export function DidacticPanel({
                     </div>
                 )}
 
+                {/* A notice, not an error: the analysis below is real and usable, it is simply
+                    thinner than the prompt required. Before this, a model that returned one topic
+                    instead of six produced a panel that looked complete and said nothing. */}
+                {snapshotId && !error && shortfall && (
+                    <div className="mx-3 mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 shrink-0">
+                        <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-600" />
+                        <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">{shortfall}</p>
+                    </div>
+                )}
+
                 {snapshotId && activeTab !== "ask" && (
-                    <ScrollArea className="h-full">
+                    <ScrollArea className="flex-1 min-h-0">
                         <DidacticExploreTab
                             status={statusDto?.status ?? "absent"}
                             knowledge={statusDto?.knowledge}
@@ -219,14 +263,19 @@ export function DidacticPanel({
                 )}
 
                 {snapshotId && activeTab === "ask" && (
-                    <DidacticAskTab
-                        projectId={projectId}
-                        snapshotId={snapshotId}
-                        token={token}
-                        focus={focus}
-                        onClearFocus={onClearFocus}
-                        onCostUpdated={onCostUpdated}
-                    />
+                    <div className="flex-1 min-h-0">
+                        <DidacticAskTab
+                            projectId={projectId}
+                            snapshotId={snapshotId}
+                            token={token}
+                            focus={focus}
+                            onClearFocus={onClearFocus}
+                            onCostUpdated={onCostUpdated}
+                            provider={provider}
+                            model={model}
+                            pipelineRunId={pipelineRunId}
+                        />
+                    </div>
                 )}
             </div>
         </div>

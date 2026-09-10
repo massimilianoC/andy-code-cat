@@ -9,7 +9,7 @@ import { env } from "../../../config";
 import { detectEnrichmentKind, isDocumentKind, isImageKind } from "./EnrichmentKindDetector";
 import { buildEnrichmentTrace } from "./EnrichmentTraceBuilder";
 import { getParser } from "../parsers/DocumentParserFactory";
-import { buildDatasetAppendixPrompt, buildDocumentBriefPrompt, extractDatasetAppendix, extractDocumentBrief } from "./DocumentBriefExtractor";
+import { extractDatasetAppendix, extractDocumentBrief, type DocumentJournalContext } from "./DocumentBriefExtractor";
 import { analyzeImage } from "../image/ImageAnalyzer";
 import { prepareImageBuffer } from "../image/ImageResizeGuard";
 import type { DocumentTextLayer } from "../../../domain/entities/AssetEnrichmentTrace";
@@ -36,6 +36,9 @@ export interface EnrichmentInput {
     };
     /** Optional — when provided, admin-configured task settings override env var defaults. */
     platformConfig?: Pick<PlatformConfig, "governanceByProduct"> | null;
+    /** Correlation keys — see docs/specs/WORK_SESSION_TRACING_SPEC.md §3. */
+    workSessionId?: string;
+    pipelineRunId?: string;
 }
 
 function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none"): string | undefined {
@@ -136,53 +139,24 @@ function recordEnrichmentCost(params: {
 export class AssetEnrichmentPipeline {
     private readonly datasetCache = new DatasetCacheStore(getFileStorage());
 
-    private async persistPromptExecutionLog(params: {
-        input: EnrichmentInput;
-        taskKey: "enrich_document" | "enrich_dataset_appendix";
-        provider: string;
-        model: string;
-        inputPrompt: string;
-        usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
-        costEur?: number | null;
-        status: "succeeded" | "failed";
-        durationMs: number;
-        errorMessage?: string;
-    }): Promise<void> {
-        const repo = params.input.promptExecutionLogRepository;
-        if (!repo) return;
-
-        await repo.create({
-            taskKey: params.taskKey,
-            projectId: params.input.asset.projectId,
-            userId: params.input.asset.userId,
-            conversationId: params.input.sourceContext?.conversationId,
-            provider: params.provider,
-            model: params.model,
-            inputPrompt: params.inputPrompt,
-            contextMeta: {
-                assetIds: [params.input.asset.id],
-                usedMoodboard: false,
-                usedUserProfile: false,
-            },
-            usage: params.usage,
-            costEstimate: params.costEur != null ? {
-                currency: "EUR",
-                amount: params.costEur,
-                breakdown: {
-                    tokenCost: params.costEur,
-                    imageCost: 0,
-                    videoCost: 0,
-                },
-                unitRates: {
-                    textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                    imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                    videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                },
-            } : undefined,
-            status: params.status,
-            errorMessage: params.errorMessage,
-            durationMs: params.durationMs,
-        });
+    /**
+     * Builds the per-call journal wiring passed down into DocumentBriefExtractor / ImageAnalyzer,
+     * which now write their own pending-before-dispatch row and complete it themselves — see
+     * docs/specs/WORK_SESSION_TRACING_SPEC.md §2. This replaces the old post-hoc `create()` call
+     * that used to run here after the provider round-trip: a record written only on success cannot
+     * explain a call that never came back, and the per-call detail (endpoint, rawResponse,
+     * finishReason) only exists at the call site itself.
+     */
+    private journalContextFor(input: EnrichmentInput, providerKey: string): DocumentJournalContext {
+        return {
+            promptExecutionLogRepository: input.promptExecutionLogRepository,
+            provider: providerKey,
+            projectId: input.asset.projectId,
+            userId: input.asset.userId,
+            workSessionId: input.workSessionId,
+            pipelineRunId: input.pipelineRunId,
+            assetId: input.asset.id,
+        };
     }
 
     private emitLlmExecutionLog(params: {
@@ -496,12 +470,6 @@ export class AssetEnrichmentPipeline {
                 llmModel = textModel;
 
                 if (parsed.rawText.length >= 50) {
-                    const briefPrompt = buildDocumentBriefPrompt({
-                        textSnippet: parsed.rawText,
-                        assetKind,
-                        sheets: parsed.sheets,
-                        slides: parsed.slides,
-                    });
                     const briefStartMs = Date.now();
                     try {
                         const result = await extractDocumentBrief({
@@ -512,6 +480,7 @@ export class AssetEnrichmentPipeline {
                             baseUrl: provider.baseUrl,
                             model: textModel,
                             authHeader,
+                            journal: this.journalContextFor(input, provider.provider),
                         });
                         documentBrief = result.brief;
                         structuredData = result.structuredData ?? earlyStructuredData;
@@ -529,17 +498,6 @@ export class AssetEnrichmentPipeline {
                             });
                             llmCostEur = (llmCostEur ?? 0) + (briefCost ?? 0);
                         }
-                        await this.persistPromptExecutionLog({
-                            input,
-                            taskKey: "enrich_document",
-                            provider: provider.provider,
-                            model: textModel,
-                            inputPrompt: briefPrompt.prompt,
-                            usage: result.usage,
-                            costEur: briefCost,
-                            status: "succeeded",
-                            durationMs: Date.now() - briefStartMs,
-                        });
                         this.emitLlmExecutionLog({
                             input,
                             eventType: "asset_enrichment_llm_complete",
@@ -553,16 +511,6 @@ export class AssetEnrichmentPipeline {
                         });
                     } catch (briefErr) {
                         briefErrorMessage = briefErr instanceof Error ? briefErr.message : String(briefErr);
-                        await this.persistPromptExecutionLog({
-                            input,
-                            taskKey: "enrich_document",
-                            provider: provider.provider,
-                            model: textModel,
-                            inputPrompt: briefPrompt.prompt,
-                            status: "failed",
-                            durationMs: Date.now() - briefStartMs,
-                            errorMessage: briefErrorMessage,
-                        });
                         this.emitLlmExecutionLog({
                             input,
                             eventType: "asset_enrichment_llm_failed",
@@ -581,7 +529,6 @@ export class AssetEnrichmentPipeline {
                 }
 
                 if (datasetStructuredData) {
-                    const datasetAppendixPrompt = buildDatasetAppendixPrompt(datasetStructuredData);
                     const datasetAppendixStartMs = Date.now();
                     try {
                         const appendixResult = await extractDatasetAppendix({
@@ -589,6 +536,7 @@ export class AssetEnrichmentPipeline {
                             baseUrl: provider.baseUrl,
                             model: textModel,
                             authHeader,
+                            journal: this.journalContextFor(input, provider.provider),
                         });
                         if (structuredData?.dataset) {
                             structuredData.dataset.llmAppendix = appendixResult.appendix;
@@ -610,17 +558,6 @@ export class AssetEnrichmentPipeline {
                             });
                             llmCostEur = (llmCostEur ?? 0) + (appendixCost ?? 0);
                         }
-                        await this.persistPromptExecutionLog({
-                            input,
-                            taskKey: "enrich_dataset_appendix",
-                            provider: provider.provider,
-                            model: textModel,
-                            inputPrompt: datasetAppendixPrompt,
-                            usage: appendixResult.usage,
-                            costEur: appendixCost,
-                            status: "succeeded",
-                            durationMs: Date.now() - datasetAppendixStartMs,
-                        });
                         this.emitLlmExecutionLog({
                             input,
                             eventType: "asset_enrichment_llm_complete",
@@ -634,16 +571,6 @@ export class AssetEnrichmentPipeline {
                         });
                     } catch (appendixErr) {
                         const appendixErrorMessage = appendixErr instanceof Error ? appendixErr.message : String(appendixErr);
-                        await this.persistPromptExecutionLog({
-                            input,
-                            taskKey: "enrich_dataset_appendix",
-                            provider: provider.provider,
-                            model: textModel,
-                            inputPrompt: datasetAppendixPrompt,
-                            status: "failed",
-                            durationMs: Date.now() - datasetAppendixStartMs,
-                            errorMessage: appendixErrorMessage,
-                        });
                         this.emitLlmExecutionLog({
                             input,
                             eventType: "asset_enrichment_llm_failed",
@@ -723,12 +650,20 @@ export class AssetEnrichmentPipeline {
         );
         const authHeader = resolveAuthHeader(provider.provider, provider.authType);
 
+        const journal = this.journalContextFor(input, provider.provider);
         const { colorPalette, visualAnalysis, designSignals, tokensUsed, usage } = await analyzeImage({
             buffer: safeBuffer,
             mimeType: safeMime,
             baseUrl: provider.baseUrl,
             model: visionModel,
             authHeader,
+            provider: provider.provider,
+            promptExecutionLogRepository: journal.promptExecutionLogRepository,
+            projectId: journal.projectId,
+            userId: journal.userId,
+            workSessionId: journal.workSessionId,
+            pipelineRunId: journal.pipelineRunId,
+            assetId: journal.assetId,
         });
 
         // ── Cost ledger: attribute vision call to (user, project) ──

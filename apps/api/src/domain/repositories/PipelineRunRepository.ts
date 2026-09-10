@@ -16,6 +16,7 @@ export interface NewPipelineRun {
     ownerUserId: string;
     conversationId?: string;
     entryMode: PipelineEntryMode;
+    workSessionId?: string;
     modelLock: PipelineModelLock;
     optimizationPolicy: OptimizationPolicy;
     canonicalBrief?: CanonicalBriefEnvelope;
@@ -52,4 +53,9 @@ export interface PipelineRunRepository {
     ): Promise<PipelineRunRecord>;
 
     attachCanonicalBrief(runId: string, brief: CanonicalBriefEnvelope): Promise<PipelineRunRecord>;
+    /**
+     * Discard (INTERRUPTED_RUN_RECOVERY.md §3bis) — deletes every run belonging to a project the
+     * owner is discarding. Returns the number removed.
+     */
+    deleteByProject(projectId: string, ownerUserId: string): Promise<number>;
 }

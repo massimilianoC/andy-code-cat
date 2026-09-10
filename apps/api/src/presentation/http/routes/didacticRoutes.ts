@@ -10,6 +10,7 @@ import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoDidacticArtifactKnowledgeRepository } from "../../../infra/repositories/MongoDidacticArtifactKnowledgeRepository";
 import { MongoDidacticQnaRepository } from "../../../infra/repositories/MongoDidacticQnaRepository";
+import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
@@ -22,6 +23,7 @@ import { CostTransactionService } from "../../../application/cost/CostTransactio
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { ResourceType } from "../../../domain/entities/CostTransaction";
 import { env } from "../../../config";
+import { HttpError } from "../errors/httpError";
 import { resolveComposerCascade } from "../../../application/llm/catalogModels";
 import type { RequestWithContext } from "../types";
 
@@ -30,7 +32,34 @@ function sendSse(res: RequestWithContext["res"], payload: unknown) {
     (res as any).write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-async function resolveLlmContext(userId: string) {
+/**
+ * The completion budget for a didactic generation, clamped the way the chat preview clamps its own
+ * (`resolveChatPreviewMaxTokens` in llmRoutes.ts).
+ *
+ * `LLM_DEFAULT_MAX_COMPLETION_TOKENS` is a global "as much as the biggest model allows" figure —
+ * 167000 on this deployment. This route passed it through raw, so every request asked for a
+ * 167k-token completion regardless of what the chosen model can hold. It only ever worked because
+ * the model being resolved happened to have a large enough window; the moment a 128k model was
+ * selected the provider answered `400 maximum context length is 128000 tokens ... you requested
+ * about 167515 (515 of text input, 167000 in the output)` before generating a single token.
+ *
+ * A didactic knowledge payload is a bounded object — topics and quizzes for one artifact. Measured
+ * runs used 4348 and 6076 completion tokens, so this ceiling is generous by more than a factor of
+ * two while fitting inside any model with a 32k window.
+ */
+const DIDACTIC_COMPLETION_CEILING = 16_000;
+
+function resolveDidacticMaxTokens(): number {
+    return Math.min(env.LLM_DEFAULT_MAX_COMPLETION_TOKENS || DIDACTIC_COMPLETION_CEILING, DIDACTIC_COMPLETION_CEILING);
+}
+
+/**
+ * @param selected the provider/model the user currently has selected in the workspace. It is a
+ * request, not an authority (AGENTS.md, Rule Zero's corollary): the cascade resolves it against the
+ * catalog, and an unavailable choice is refused rather than quietly replaced — silently running a
+ * different model is precisely the defect this parameter exists to close.
+ */
+async function resolveLlmContext(userId: string, selected?: { provider?: string; model?: string }) {
     const catalog = await new GetLlmCatalog(
         env.LLM_CATALOG_SOURCE,
         env.SILICONFLOW_BASE_URL,
@@ -48,13 +77,35 @@ async function resolveLlmContext(userId: string) {
     // Same cascade the generation composer uses, with the dialogue role pinned — see
     // resolveComposerCascade in application/llm/catalogModels.ts. This route used to carry its
     // own copy of both the cascade and dedupeModelsById.
+    // The user's live selection wins over the stored preference; the preference is the fallback for
+    // a request that arrives before the picker has resolved.
+    const requestedProvider = selected?.provider ?? prefs?.defaultProvider;
+    const requestedModel = selected?.model ?? prefs?.roleModelOverrides?.["dialogue"];
+
     const cascade = resolveComposerCascade({
         providers: catalog.providers,
-        requestedProvider: prefs?.defaultProvider,
-        requestedModel: prefs?.roleModelOverrides?.["dialogue"],
+        requestedProvider,
+        requestedModel,
         pipelineRole: "dialogue",
         envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
     });
+
+    // Only when the user asked explicitly. A stale stored preference should still degrade to the
+    // cascade's default — it is not a choice the user made for this request.
+    if (selected?.provider && cascade.requestedProviderUnavailable) {
+        throw new HttpError(`The selected provider "${selected.provider}" is not available.`, {
+            statusCode: 409,
+            code: "SELECTED_PROVIDER_UNAVAILABLE",
+            userMessage: `Il provider selezionato (${selected.provider}) non è disponibile. Scegline un altro dal selettore in alto.`,
+        });
+    }
+    if (selected?.model && cascade.requestedModelUnavailable) {
+        throw new HttpError(`The selected model "${selected.model}" is not available.`, {
+            statusCode: 409,
+            code: "SELECTED_MODEL_UNAVAILABLE",
+            userMessage: `Il modello selezionato (${selected.model}) non è disponibile. Scegline un altro dal selettore in alto.`,
+        });
+    }
 
     const providerCatalog = cascade.providerCatalog;
     if (!providerCatalog) throw new Error("No LLM provider available");
@@ -70,7 +121,7 @@ async function resolveLlmContext(userId: string) {
         baseUrl: providerCatalog.baseUrl,
         apiKey,
         temperature: 0.4,
-        maxTokens: env.LLM_DEFAULT_MAX_COMPLETION_TOKENS ? Number(env.LLM_DEFAULT_MAX_COMPLETION_TOKENS) : 4096,
+        maxTokens: resolveDidacticMaxTokens(),
     };
 }
 
@@ -90,6 +141,7 @@ export function createDidacticRoutes(): Router {
     const knowledgeRepo = new MongoDidacticArtifactKnowledgeRepository();
     const qnaRepo = new MongoDidacticQnaRepository();
     const snapshotRepo = new MongoPreviewSnapshotRepository();
+    const promptExecutionLogRepo = new MongoPromptExecutionLogRepository();
 
     // GET /v1/projects/:projectId/didactic/knowledge?snapshotId=...
     router.get("/projects/:projectId/didactic/knowledge", async (req: RequestWithContext, res, next) => {
@@ -120,8 +172,8 @@ export function createDidacticRoutes(): Router {
                 return;
             }
 
-            const llmContext = await resolveLlmContext(req.auth!.userId);
-            const useCase = new GenerateDidacticKnowledge(knowledgeRepo);
+            const llmContext = await resolveLlmContext(req.auth!.userId, { provider: body.provider, model: body.model });
+            const useCase = new GenerateDidacticKnowledge(knowledgeRepo, promptExecutionLogRepo);
             const result = await useCase.execute({
                 projectId,
                 snapshotId: body.snapshotId,
@@ -129,6 +181,8 @@ export function createDidacticRoutes(): Router {
                 snapshot,
                 uiLanguage: body.uiLanguage,
                 llmContext,
+                workSessionId: req.workSession?.id,
+                pipelineRunId: body.pipelineRunId,
             });
 
             res.json({
@@ -137,6 +191,7 @@ export function createDidacticRoutes(): Router {
                     generatedAt: result.knowledge.generatedAt.toISOString(),
                 },
                 costEstimate: result.costEstimate,
+                shortfall: result.shortfall,
             });
         } catch (err) {
             next(err);
@@ -154,8 +209,8 @@ export function createDidacticRoutes(): Router {
                 return;
             }
 
-            const llmContext = await resolveLlmContext(req.auth!.userId);
-            const askUseCase = new AskDidacticQuestion(qnaRepo);
+            const llmContext = await resolveLlmContext(req.auth!.userId, { provider: body.provider, model: body.model });
+            const askUseCase = new AskDidacticQuestion(qnaRepo, promptExecutionLogRepo);
 
             // SSE setup
             res.setHeader("Content-Type", "text/event-stream");
@@ -178,6 +233,8 @@ export function createDidacticRoutes(): Router {
                     focus: body.focus,
                     uiLanguage: body.uiLanguage,
                     llmContext,
+                    workSessionId: req.workSession?.id,
+                    pipelineRunId: body.pipelineRunId,
                 };
 
                 const result = await askUseCase.streamTokens(askInput, (delta) => {

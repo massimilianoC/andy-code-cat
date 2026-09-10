@@ -56,11 +56,16 @@ export interface MessageMetadata {
      */
     snapshotId?: string;
     promptingTrace?: LlmPromptingTrace;
-    generatedArtifacts?: {
-        html: string;
-        css: string;
-        js: string;
-    };
+    /**
+     * WP1 step 4 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — `generatedArtifacts` used to
+     * live here: a second, independently-written copy of the artifact alongside the
+     * authoritative one in `preview_snapshots.artifacts`. Measured on a real session, the two
+     * copies disagreed by 2,181 characters, and the web client read this one as a live fallback
+     * for both what the preview displayed and what was sent as the base of the next generation
+     * (apps/web/app/workspace/[projectId]/page.tsx, removed there across three prior commits).
+     * Removed last, after every read and the write were already gone, per the rule that a field
+     * is deleted only once nothing depends on it — never first.
+     */
     mediaResolution?: {
         version: "media-resolution-v1";
         traceIds: string[];

@@ -370,7 +370,14 @@ export function createAdminRoutes(): Router {
                 modelIds: body.modelIds,
                 isActive: body.isActive,
             });
-            const catalog = await getEffectiveLlmCatalog.execute();
+            // The write landed in Mongo, but hydrateProviderCatalog caches the discovered list for
+            // five minutes keyed only by provider|baseUrl|hasAuth — curated state is not part of
+            // the key, and isActive is already baked into the cached entries. Re-reading without
+            // clearing it returned the PRE-toggle catalog: the operator flipped a model on, the
+            // response said it was still off, and the page rendered exactly that. Every other read
+            // in the app shares this cache, so normal users saw the stale state too.
+            clearLiveModelCatalogCache();
+            const catalog = await getEffectiveLlmCatalog.execute({ forceRefresh: true });
             res.json({ ok: true, ...result, ...catalog, byokEnabled: true });
         } catch (err) {
             next(err);
@@ -405,6 +412,8 @@ export function createAdminRoutes(): Router {
                     priceOutputUsdPerM: body.priceOutputUsdPerM,
                 },
             });
+            // Same stale-cache reason as the activation route above.
+            clearLiveModelCatalogCache();
             res.json(updated);
         } catch (err) {
             next(err);
@@ -416,6 +425,8 @@ export function createAdminRoutes(): Router {
             const provider = getRequiredRouteParam(req.params.provider, "provider");
             const modelId = getRequiredRouteParam(req.params.modelId, "modelId");
             const updated = await llmCatalogRepo.deleteModel(provider, modelId);
+            // Same stale-cache reason as the activation route above.
+            clearLiveModelCatalogCache();
             res.json(updated);
         } catch (err) {
             next(err);

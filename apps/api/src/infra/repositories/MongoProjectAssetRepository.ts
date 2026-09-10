@@ -190,6 +190,27 @@ export class MongoProjectAssetRepository implements ProjectAssetRepository {
         return result.deletedCount === 1;
     }
 
+    /**
+     * `scope: { $nin: ["user", "global"] }` also matches documents with no `scope` field at all —
+     * rows written before the field existed — which is what we want: `create()` has always
+     * defaulted a missing scope to `"project"`, so a legacy row is a project-owned asset too.
+     */
+    private ownedByProjectFilter(projectId: string, userId: string): Filter<ProjectAssetDocument> {
+        return { projectId, userId, scope: { $nin: ["user", "global"] } } as Filter<ProjectAssetDocument>;
+    }
+
+    async listOwnedByProject(projectId: string, userId: string): Promise<ProjectAsset[]> {
+        const col = await this.col();
+        const docs = await col.find(this.ownedByProjectFilter(projectId, userId)).toArray();
+        return docs.map(toEntity);
+    }
+
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany(this.ownedByProjectFilter(projectId, userId));
+        return result.deletedCount;
+    }
+
     /** Total bytes for user_upload assets only (for quota enforcement). */
     async totalProjectSize(projectId: string, userId: string): Promise<number> {
         const col = await this.col();

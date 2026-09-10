@@ -69,4 +69,11 @@ export interface ICostTransactionRepository {
     topProjectsPlatform(fromDate?: Date, toDate?: Date, limit?: number): Promise<Array<{ projectId: string; totalEur: number }>>;
 
     voidTransaction(txId: string, voidedByTxId: string): Promise<void>;
+    /**
+     * Discard (INTERRUPTED_RUN_RECOVERY.md §3bis) — hard-deletes every transaction for a project
+     * the owner is discarding. Deliberately NOT `voidTransaction`: voiding preserves an append-only
+     * audit trail for a correction on a project that still exists; discarding removes the project
+     * itself, so nothing is left for the void record to annotate. Returns the number removed.
+     */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
 }

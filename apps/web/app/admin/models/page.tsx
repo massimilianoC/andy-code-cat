@@ -99,6 +99,22 @@ export default function AdminModelsPage() {
     );
 
     /**
+     * The backend enforces one default per (provider, role) and will silently re-promote this
+     * very model the moment "Set default" is unchecked here with nothing else active to take
+     * over — see normalizeModels' promotion branch in MongoLlmCatalogRepository.ts. Unchecking
+     * would therefore look like it worked, then revert on the next load with no error shown.
+     * The button is disabled in exactly that case so the constraint is visible instead of a
+     * silent no-op; picking a different model as default first is the only way to move it.
+     */
+    const hasActiveSiblingOfRole = useMemo(
+        () => (activeProvider?.models ?? []).some(
+            (model) => model.id !== draft.id && model.role === draft.role && model.isActive,
+        ),
+        [activeProvider, draft.id, draft.role],
+    );
+    const canUnsetDefault = !draft.isDefault || hasActiveSiblingOfRole;
+
+    /**
      * Models of the selected provider, grouped by author. Granularity stays per model — this is
      * only how they are laid out, because a provider that lists two hundred models is unusable as
      * a flat list, and "everything from this author" is the decision an operator actually makes.
@@ -483,6 +499,14 @@ export default function AdminModelsPage() {
                                                             {model.id}
                                                             {model.availability === "deprecated" ? " · no longer offered" : ""}
                                                         </div>
+                                                        {model.isDefault ? (
+                                                            // One default per (provider, role) is enforced server-side and is
+                                                            // otherwise invisible here — this is the only place an operator can
+                                                            // see, at a glance, which model currently holds it for its role.
+                                                            <div className="mt-0.5 text-[10px] font-medium text-primary">
+                                                                ★ Default for {model.role}
+                                                            </div>
+                                                        ) : null}
                                                     </div>
                                                 </Button>
                                                 <Button
@@ -587,7 +611,15 @@ export default function AdminModelsPage() {
                             <Button type="button" variant={draft.isActive ? "default" : "outline"} onClick={() => setDraft((prev) => ({ ...prev, isActive: !prev.isActive }))}>
                                 {draft.isActive ? "Published" : "Unpublished"}
                             </Button>
-                            <Button type="button" variant={draft.isDefault ? "default" : "outline"} onClick={() => setDraft((prev) => ({ ...prev, isDefault: !prev.isDefault }))}>
+                            <Button
+                                type="button"
+                                variant={draft.isDefault ? "default" : "outline"}
+                                disabled={draft.isDefault && !canUnsetDefault}
+                                title={draft.isDefault && !canUnsetDefault
+                                    ? `The only active ${draft.role} model for ${draft.provider} — activate or set another as default first`
+                                    : undefined}
+                                onClick={() => setDraft((prev) => ({ ...prev, isDefault: !prev.isDefault }))}
+                            >
                                 {draft.isDefault ? "Default" : "Set default"}
                             </Button>
                             <Button type="button" variant={draft.isFallback ? "secondary" : "outline"} onClick={() => setDraft((prev) => ({ ...prev, isFallback: !prev.isFallback }))}>

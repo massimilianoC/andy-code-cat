@@ -10,6 +10,7 @@ import { Router, type RequestHandler } from "express";
 import type { Response, NextFunction } from "express";
 import { z } from "zod";
 import { authMiddleware } from "../middlewares/authMiddleware";
+import { createWorkSessionMiddleware } from "../middlewares/workSessionMiddleware";
 import { HttpError } from "../errors/httpError";
 import type { RequestWithContext } from "../types";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
@@ -24,6 +25,12 @@ import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../.
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
 import { VibePrefill } from "../../../application/use-cases/VibePrefill";
+import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
+import { OpenWorkSession } from "../../../application/use-cases/OpenWorkSession";
+import { MongoVibeIntakeRepository } from "../../../infra/repositories/MongoVibeIntakeRepository";
+import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositories/MongoZeroEffortFormProposalRepository";
+import { WORK_SESSION_HEADER } from "../middlewares/workSessionMiddleware";
 import {
     resolveAttachmentPolicyFromConfig,
     resolveDocumentContextPolicyFromConfig,
@@ -91,8 +98,12 @@ export function createVibecoreRoutes(): Router {
         env.providerApiKeys,
         env.LLM_DEFAULT_PROVIDER,
     );
-    const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog);
-    const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog);
+    const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
+    const openWorkSession = new OpenWorkSession(new MongoWorkSessionRepository());
+    const vibeIntakeRepository = new MongoVibeIntakeRepository();
+    const zeroEffortFormProposalRepository = new MongoZeroEffortFormProposalRepository();
+    const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
+    const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
     const projectRepository = new MongoProjectRepository();
     const assetRepository = new MongoProjectAssetRepository();
     const resolveBrandDocumentContext = new ResolveBrandDocumentContext(new MongoBrandAssetRepository());
@@ -230,6 +241,10 @@ export function createVibecoreRoutes(): Router {
     }
 
     router.use(authMiddleware as RequestHandler);
+    // Mounted after auth because the session lookup is ownership-scoped. Never rejects: a
+    // missing or foreign session id leaves the request untraced rather than refused
+    // (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md rule 4).
+    router.use(createWorkSessionMiddleware(new MongoWorkSessionRepository()) as RequestHandler);
 
     router.get(
         "/vibecore/config",
@@ -274,6 +289,41 @@ export function createVibecoreRoutes(): Router {
                 }
                 const warnings = buildAttachmentWarnings(attachmentMeta, attachmentPolicy);
 
+                // The session opens here, at the first tool the user engages, and its id travels
+                // back so every later request can name it via the x-work-session-id header. A
+                // resubmission carries the previous id and continues the same session rather than
+                // splitting one intent into two histories. Never throws: reuseOrOpen returns null
+                // if the store is unreachable, and the generation proceeds untraced.
+                const headerSessionId = String(req.headers[WORK_SESSION_HEADER] ?? "").trim() || undefined;
+                const continuing = req.workSession?.id ?? headerSessionId;
+                // A fresh Vibe prompt IS a new intent, so this stage starts one and closes whatever
+                // was still open on the project — unless the client explicitly named a session to
+                // continue, which only a deliberate resubmission does.
+                const workSession = continuing
+                    ? await openWorkSession.reuseOrOpen(continuing, { userId, entryMode: "vibe", projectId })
+                    : await openWorkSession.startIntent({ userId, entryMode: "vibe", projectId });
+
+                // Recorded BEFORE classify dispatches: a request that dies in the provider must still
+                // prove it was made. Certificate §3 question 1 — nothing else in the database holds
+                // the prompt as the user actually typed it. Guarded, because a failure to record the
+                // intake must not cost the user their generation.
+                if (workSession) {
+                    await vibeIntakeRepository.record({
+                        workSessionId: workSession.id,
+                        userId,
+                        projectId,
+                        prompt: parsed.data.prompt,
+                        attachments: attachmentMeta.map((a) => ({
+                            filename: a.filename,
+                            mimeType: a.mimeType,
+                            sizeBytes: a.sizeBytes,
+                        })),
+                        requestedProvider: parsed.data.provider,
+                        requestedModel: parsed.data.model,
+                        generationMode: parsed.data.generationMode,
+                    }).catch(() => undefined);
+                }
+
                 const result = await vibeClassify.execute({
                     prompt: parsed.data.prompt,
                     attachmentMeta,
@@ -282,6 +332,7 @@ export function createVibecoreRoutes(): Router {
                     model: parsed.data.model,
                     userId,
                     projectId,
+                    workSessionId: workSession?.id,
                 });
 
                 // Persist the Layer T signal on the project so subsequent generation
@@ -300,8 +351,16 @@ export function createVibecoreRoutes(): Router {
                 }
 
                 // Always echo projectId so the client pins follow-up calls
-                // (prefill, generation, conversation) to the same sandbox.
-                res.json({ ...result, projectId, warnings, attachmentPolicy });
+                // (prefill, generation, conversation) to the same sandbox. workSessionId is echoed
+                // for the same reason at a wider scope: the client sends it back as
+                // x-work-session-id so every later call in this intent joins one history.
+                res.json({
+                    ...result,
+                    projectId,
+                    warnings,
+                    attachmentPolicy,
+                    ...(workSession ? { workSessionId: workSession.id } : {}),
+                });
             } catch (error) {
                 next(error);
             }
@@ -412,8 +471,18 @@ export function createVibecoreRoutes(): Router {
                     brandDocuments.forEach((d) => layerDocNames.push(d.title));
                 }
 
+                // Prefill is the second stage of an intent classify already opened, so it reuses
+                // that session rather than starting one; reuseOrOpen only creates when the id is
+                // absent, stale or foreign.
+                const prefillHeaderSessionId = String(req.headers[WORK_SESSION_HEADER] ?? "").trim() || undefined;
+                const prefillWorkSession = await openWorkSession.reuseOrOpen(
+                    req.workSession?.id ?? prefillHeaderSessionId,
+                    { userId, entryMode: "zero-effort", projectId },
+                );
+
                 const result = await vibePrefill.execute({
                     prompt: parsed.data.prompt,
+                    workSessionId: prefillWorkSession?.id,
                     layerDContext,
                     layerXDataContext,
                     generationMode: parsed.data.generationMode,
@@ -430,6 +499,20 @@ export function createVibecoreRoutes(): Router {
                 // Attach document names that contributed to the brief (informational, shown to user)
                 if (layerDocNames.length > 0) {
                     result.draft.attachedDocuments = layerDocNames;
+                }
+
+                // Certificate §3 question 4 — the one fact nothing else in the database holds: what
+                // the model PROPOSED, so that what the user submits can later be diffed against it.
+                // The confirmed side is deliberately not stored here; canonicalBrief.sourceFields
+                // already owns it, and editedFields is filled at launch when both sides exist.
+                if (prefillWorkSession && !result.skipped) {
+                    await zeroEffortFormProposalRepository.record({
+                        workSessionId: prefillWorkSession.id,
+                        userId,
+                        projectId,
+                        prefilled: result.draft as unknown as import("@andy-code-cat/contracts").GuidedLaunchInput,
+                        editedFields: [],
+                    }).catch(() => undefined);
                 }
 
                 // Merge, don't overwrite: `warnings` here are attachment-policy notices, while

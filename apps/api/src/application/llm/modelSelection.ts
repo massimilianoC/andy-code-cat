@@ -283,17 +283,31 @@ function resolveOptimizerCascade(input: ResolveModelSelectionInput, policy: "leg
     //     || activeModels[0]?.id
     //     || FALLBACK_MODEL
     //
-    // KNOWN-DIVERGENCE (future work): the direct override branch below does NOT verify that
-    // `requestedModel` is actually present/active on `providerCatalog.models` — it only checks
-    // the provider's apiType. If a caller passes a provider+model pair where the provider
-    // matches directly (step 1 above) but the model does not belong to that provider, today's
-    // code (and this pure-function mirror of it) will still send that unverified model id
-    // straight to the provider. This is preserved exactly, not fixed, in this PR.
+    // The KNOWN-DIVERGENCE recorded here is now closed. It read: the direct override branch does
+    // not verify that `requestedModel` is present/active on `providerCatalog.models`, it only
+    // checks the provider's apiType — so a model id belonging to no provider was forwarded
+    // unverified. Neither branch of the old gate checked catalog membership: with the flag off it
+    // degraded to `Boolean(requestedModel)`, which honours anything at all.
+    //
+    // The catalog is the source of truth for what may be dispatched, so it is verified, not
+    // consulted (AGENTS.md, Rule Zero's corollary). The optimizer receives the user's live
+    // selection from the workspace, and under "strict" — which is what the caller passes whenever
+    // the user actually chose — an unresolvable choice blocks instead of being silently replaced.
+    // That is the same answer VibeClassify, VibePrefill and ResolvePipelineModelLock already give;
+    // the optimizer was the last cascade still substituting in silence.
     const activeModels = providerCatalog.models.filter((m) => m.isActive);
+    const requestedModelInCatalog = Boolean(requestedModel && activeModels.some((m) => m.id === requestedModel));
     const gateSatisfied = input.gateOverrideOnOpenAiCompatible
-        ? providerCatalog.apiType === "openai-compatible"
-        : Boolean(requestedModel);
+        ? providerCatalog.apiType === "openai-compatible" && requestedModelInCatalog
+        : requestedModelInCatalog;
     const gatedOverride = requestedModel && gateSatisfied ? requestedModel : undefined;
+
+    if (policy === "strict" && requestedModel && !requestedModelInCatalog) {
+        return blockedDecision(input, "strict", {
+            code: "MODEL_OVERRIDE_NOT_IN_CATALOG",
+            reason: `Requested model "${requestedModel}" is not an active model of provider "${providerCatalog.provider}".`,
+        });
+    }
 
     let modelId: string;
     let modelSource: ModelSelectionSource;

@@ -22,6 +22,11 @@ interface DidacticAskTabProps {
     onClearFocus?: () => void;
     /** Called after a successful ask so callers can refresh cost totals. */
     onCostUpdated?: () => void;
+    /** The model the user currently has selected in the workspace — inherited, never re-derived. */
+    provider?: string;
+    model?: string;
+    /** Correlation key — see the same prop on DidacticPanel. */
+    pipelineRunId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +198,9 @@ export function DidacticAskTab({
     focus,
     onClearFocus,
     onCostUpdated,
+    provider,
+    model,
+    pipelineRunId,
 }: DidacticAskTabProps) {
     const [question, setQuestion] = useState("");
     const [displayedAnswer, setDisplayedAnswer] = useState("");
@@ -246,6 +254,9 @@ export function DidacticAskTab({
                           }
                         : undefined,
                     uiLanguage: "it",
+                    provider,
+                    model,
+                    pipelineRunId,
                 },
                 (event) => {
                     if (event.type === "token") {

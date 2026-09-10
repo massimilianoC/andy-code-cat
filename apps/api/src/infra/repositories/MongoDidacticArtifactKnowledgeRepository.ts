@@ -80,4 +80,10 @@ export class MongoDidacticArtifactKnowledgeRepository implements DidacticArtifac
         const col = await this.collection();
         await col.deleteOne({ projectId, snapshotId });
     }
+
+    async deleteByProject(projectId: string): Promise<number> {
+        const col = await this.collection();
+        const result = await col.deleteMany({ projectId });
+        return result.deletedCount;
+    }
 }

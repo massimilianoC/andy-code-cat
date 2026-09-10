@@ -189,4 +189,16 @@ export class MongoPromptExecutionLogRepository implements PromptExecutionLogRepo
         const docs = await col.find({}).sort({ createdAt: -1 }).limit(limit).toArray();
         return docs.map(toEntity);
     }
+
+    async listByWorkSession(workSessionId: string, userId: string): Promise<PromptExecutionLog[]> {
+        const col = await this.col();
+        const docs = await col.find({ workSessionId, userId }).sort({ createdAt: 1 }).toArray();
+        return docs.map(toEntity);
+    }
+
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId, userId });
+        return result.deletedCount ?? 0;
+    }
 }

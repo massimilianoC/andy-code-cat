@@ -23,6 +23,7 @@ interface PipelineRunDocument {
     ownerUserId: string;
     conversationId?: string;
     entryMode: PipelineRun["entryMode"];
+    workSessionId?: string;
     modelLock: PipelineRun["modelLock"];
     optimizationPolicy: PipelineRun["optimizationPolicy"];
     canonicalBrief?: CanonicalBriefEnvelope;
@@ -53,6 +54,7 @@ export class MongoPipelineRunRepository implements PipelineRunRepository {
             ownerUserId: run.ownerUserId,
             conversationId: run.conversationId,
             entryMode: run.entryMode,
+            workSessionId: run.workSessionId,
             modelLock: run.modelLock,
             optimizationPolicy: run.optimizationPolicy,
             canonicalBrief: run.canonicalBrief,
@@ -135,5 +137,11 @@ export class MongoPipelineRunRepository implements PipelineRunRepository {
             throw new Error(`PipelineRun not found: ${runId}`);
         }
         return toEntity(updated);
+    }
+
+    async deleteByProject(projectId: string, ownerUserId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId, ownerUserId } as Filter<PipelineRunDocument>);
+        return result.deletedCount ?? 0;
     }
 }
