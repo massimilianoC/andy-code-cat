@@ -9,6 +9,13 @@ Use this checklist before pushing to the public GitHub remote.
 - Ensure no live secrets are committed (`.env.docker`, `.env.droplet`, `.env.deploy`).
 - Ensure only template files are tracked (`.env.example`, `.env.deploy.example`).
 - Search for accidental key leaks in changed files before pushing.
+- Private key material is now enforced, not just requested: `scripts/public-repo-guard.mjs` fails on
+  key filenames (`id_rsa`, `id_ed25519`, `vps_admin`, `*.pem`, `*.p12`, `*.pfx`, anything under
+  `.ssh/`) **and** on any tracked text file under 16 KB containing a `BEGIN … PRIVATE KEY` block —
+  because the dangerous case is the one that does not look like a key. `.gitignore` covers the same
+  names as a second line of defence.
+- The droplet deploy key lives at `~/.ssh/vps_admin` and is referenced by `~/.ssh/config`. It never
+  belongs in the repository, in a backup folder inside the repository, or in a scratch file.
 
 ---
 
