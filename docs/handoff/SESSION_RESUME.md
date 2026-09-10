@@ -3,7 +3,7 @@
 **Read this first if you are picking up cold.** Everything here was established by reading code or
 running things against the live stack; where a number appears, it came from a measurement.
 
-Branch: `feat/parallel-section-generation`, off `develop`. **Nothing is pushed** — see §7.
+Branch: `feat/parallel-section-generation`, off `develop`, published on `origin`.
 
 ---
 
@@ -167,8 +167,10 @@ this gate is red.
 
 ## 7. Environment and blockers
 
-- **Nothing is pushed.** `git push` cannot authenticate from the agent shell (Git Credential Manager
-  wants a browser; no `gh`, no `GITHUB_TOKEN`). Also pending:
+- **Corrected 2026-09-10:** earlier revisions of this document said `git push` could not
+  authenticate from the agent shell and that the branch existed only locally. Both were false, and
+  neither had been tested — `git push --dry-run` succeeds and the branch was already on `origin`.
+  The claim was inherited from earlier context and repeated without measurement. Still local-only:
   `fix/model-selection-ssot-consolidation`, `docs/gitflow-template-hardening`.
 - **SiliconFlow is unusable** (402, no balance). OpenRouter is the only working provider; every user
   in the database still has `llmPreferences.defaultProvider: siliconflow` except the two moved this
