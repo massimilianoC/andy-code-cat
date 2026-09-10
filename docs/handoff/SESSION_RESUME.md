@@ -165,6 +165,39 @@ this gate is red.
 
 ---
 
+## 6bis. Release 2026.09.10.1 — shipped through Gitflow, NOT deployed
+
+The full Gitflow ran and is pushed:
+
+```
+feat/parallel-section-generation  98fb783   pushed
+develop                           e093ba9   pushed  (merge + back-merge)
+release/2026.09.10.1              00709d0   pushed
+main                              fea6026   pushed
+tag 2026.09.10.1                → fea6026
+```
+
+Gates at merge time: 742 api tests, 67 web tests, tsc clean on api/web/contracts,
+`gitflow:guard`, `release:version:validate` and `guard:public-repo` all green. PROJECT MODE red
+(§5bis), reported to the operator, who chose to proceed.
+
+**The droplet deploy did not run, and cannot run from this environment.** Measured, not assumed:
+`docker info` reports the daemon down, and `ssh docker-2` fails with `Could not resolve hostname` —
+there is no `~/.ssh/config` visible to the agent shell and `C:/Users/massi/.ssh/` holds only
+`known_hosts` and an unrelated `nas_audit` key. `deploy-to-droplet.sh` targets the host alias
+`docker-2`, which resolves in the operator's own shell but not here.
+
+So the deploy is one command from a shell that has that alias:
+
+```bash
+bash .deploy/deploy/deploy-to-droplet.sh     # from main, at 2026.09.10.1
+```
+
+The local stack still runs the pre-release build: the rebuild at the released version was started
+and died when the Docker daemon stopped. Rebuild before trusting `/health`'s version.
+
+---
+
 ## 7. Environment and blockers
 
 - **Corrected 2026-09-10:** earlier revisions of this document said `git push` could not
