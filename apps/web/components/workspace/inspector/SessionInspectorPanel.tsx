@@ -11,7 +11,7 @@ import { ZeroEffortBlock } from "./ZeroEffortBlock";
 import { GenerationBlock } from "./GenerationBlock";
 import { ConversationBlock } from "./ConversationBlock";
 import type { PromptTranscriptMessage } from "@/components/PromptTranscriptView";
-import { pickLatestSession, latestLogForStage, costForLog, canonicalBriefOf, blocksPresent, shouldFetchSessionDetail } from "./sessionSelectors";
+import { pickLatestSession, latestLogForStage, costForLog, canonicalBriefOf, blocksPresent, shouldFetchSessionDetail, detailRequestKey } from "./sessionSelectors";
 
 interface SessionInspectorPanelProps {
     projectId: string;
@@ -24,6 +24,14 @@ interface SessionInspectorPanelProps {
         messages: PromptTranscriptMessage[];
         currentTurnSystemPrompt?: string;
     };
+    /**
+     * Changes whenever a turn completes. The panel re-reads the journal when it does.
+     *
+     * Without it the list was read once, at mount. That held in the Vibe flow, where the session
+     * exists before the workspace opens, and failed in Project Mode, where the session is opened
+     * BY the first generation — after the panel had already mounted and found nothing.
+     */
+    refreshToken?: number;
 }
 
 type BlockKey = "vibe" | "zeroEffort" | "generation" | "conversation";
@@ -42,101 +50,130 @@ type BlockKey = "vibe" | "zeroEffort" | "generation" | "conversation";
  * as part of mounting, and Vibe/Zero Effort reuse the same already-fetched detail without any
  * further request when the user opens them.
  */
-export function SessionInspectorPanel({ projectId, conversation }: SessionInspectorPanelProps) {
+export function SessionInspectorPanel({ projectId, conversation, refreshToken = 0 }: SessionInspectorPanelProps) {
     const { t } = useTranslation();
     const [sessions, setSessions] = useState<WorkSessionSummaryDto[] | null>(null);
     const [sessionsError, setSessionsError] = useState<string | null>(null);
 
     const [detail, setDetail] = useState<WorkSessionDetailDto | null>(null);
-    const [detailFetchedFor, setDetailFetchedFor] = useState<string | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [detailError, setDetailError] = useState<string | null>(null);
 
     const [open, setOpen] = useState<Record<BlockKey, boolean>>({ vibe: false, zeroEffort: false, generation: true, conversation: false });
 
-    // Step 1: the list only — no prompt bodies anywhere in this response.
+    // The user's own "reload" — the same re-read a completed turn triggers.
+    const [manualReload, setManualReload] = useState(0);
+    const [reloading, setReloading] = useState(false);
+    // How many times the list has been read. Part of the detail's request key, so every re-read of
+    // the list is followed by a fresh read of the detail (see detailRequestKey).
+    const [listRead, setListRead] = useState(0);
+
+    // A different project is a different history: start from nothing so the previous one's
+    // blocks never render under the new project's name.
+    useEffect(() => {
+        setSessions(null);
+        setDetail(null);
+    }, [projectId]);
+
+    // Step 1: the list only — no prompt bodies anywhere in this response. Re-run on a completed
+    // turn and on the reload button; a re-read keeps what is on screen until the answer arrives.
     useEffect(() => {
         let cancelled = false;
-        setSessions(null);
         setSessionsError(null);
+        setReloading(true);
         listWorkSessions(projectId)
             .then((res) => {
-                if (!cancelled) setSessions(res);
+                if (cancelled) return;
+                setSessions(res);
+                setListRead((n) => n + 1);
             })
             .catch((err) => {
                 if (!cancelled) setSessionsError(err instanceof Error ? err.message : String(err));
+            })
+            .finally(() => {
+                if (!cancelled) setReloading(false);
             });
         return () => {
             cancelled = true;
         };
-    }, [projectId]);
+    }, [projectId, refreshToken, manualReload]);
 
     const latestSession = sessions ? pickLatestSession(sessions) : undefined;
+    const latestSessionId = latestSession?.id;
     // Conversation is deliberately excluded: it renders from props the page already holds, so
     // opening it must not be what triggers the session detail fetch.
     const anyBlockOpen = open.vibe || open.zeroEffort || open.generation;
+    const requestKey = detailRequestKey(latestSessionId, listRead);
 
-    // Step 2: the one detail fetch, gated on a block actually being open (spec §5.5). Generation
-    // starts open, so this fires right after the session id is known — that IS "expanding a
-    // block", just the one that starts pre-expanded.
-    // The in-flight guard is a ref, not state, and `detailLoading` is deliberately NOT a dependency.
+    // Step 2: the detail read, gated on a block actually being open (spec §5.5). Generation starts
+    // open, so this fires right after the list — that IS "expanding a block", just the one that
+    // starts pre-expanded.
     //
-    // It used to be both: the effect called setDetailLoading(true), which changed a value it
-    // depended on, so React re-ran it — and the cleanup of the first pass set `cancelled = true`.
-    // The request itself completed (the server answered 200 with the whole detail), but `.then`
-    // and `.finally` are both guarded by `cancelled`, so the result was discarded and
-    // `detailLoading` was never set back to false. The panel showed "Caricamento cronologia…"
-    // forever, on every project, while the network tab showed one successful response.
-    const inFlightFor = useRef<string | null>(null);
+    // Nothing here is cancelled on re-run: a superseded response is discarded by sequence number
+    // instead. Both earlier versions cancelled in the effect cleanup and then relied on the request
+    // they had cancelled, and both hung on "Caricamento cronologia…" (see shouldFetchSessionDetail).
+    const startedFor = useRef<string | null>(null);
+    const requestSeq = useRef(0);
 
     useEffect(() => {
-        const sessionId = latestSession?.id;
-        if (!shouldFetchSessionDetail({
-            sessionId,
-            anyBlockOpen,
-            fetchedFor: detailFetchedFor,
-            inFlightFor: inFlightFor.current,
-        })) return;
-
-        let cancelled = false;
-        inFlightFor.current = sessionId!;
+        if (!shouldFetchSessionDetail({ requestKey, anyBlockOpen, startedFor: startedFor.current })) return;
+        startedFor.current = requestKey;
+        const seq = ++requestSeq.current;
         setDetailLoading(true);
         setDetailError(null);
-        getWorkSessionDetail(projectId, sessionId!)
+        getWorkSessionDetail(projectId, latestSessionId!)
             .then((res) => {
-                if (cancelled) return;
-                setDetail(res);
-                setDetailFetchedFor(sessionId!);
+                if (seq === requestSeq.current) setDetail(res);
             })
             .catch((err) => {
-                if (!cancelled) setDetailError(err instanceof Error ? err.message : String(err));
+                if (seq === requestSeq.current) setDetailError(err instanceof Error ? err.message : String(err));
             })
             .finally(() => {
-                // Cleared whether or not this pass was cancelled: leaving the flag set would block
-                // every later attempt, which is the failure this replaced.
-                if (inFlightFor.current === sessionId) inFlightFor.current = null;
-                if (!cancelled) setDetailLoading(false);
+                if (seq === requestSeq.current) setDetailLoading(false);
             });
-        return () => {
-            cancelled = true;
-        };
-    }, [projectId, latestSession, anyBlockOpen, detailFetchedFor]);
+    }, [projectId, latestSessionId, anyBlockOpen, requestKey]);
 
     function toggle(block: BlockKey) {
         setOpen((prev) => ({ ...prev, [block]: !prev[block] }));
     }
 
+    // Always on screen, including when there is nothing yet: "nothing recorded" was a dead end the
+    // user could not get out of without reloading the whole workspace.
+    const reloadBar = (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.5rem" }}>
+            <button
+                type="button"
+                className="secondary"
+                onClick={() => setManualReload((n) => n + 1)}
+                disabled={reloading || detailLoading}
+                title={t("workspace.inspector.reloadTitle", "Rileggi dal journal le sessioni e i prompt inviati")}
+                style={{ fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}
+            >
+                {reloading || detailLoading
+                    ? t("workspace.inspector.reloading", "Aggiornamento…")
+                    : t("workspace.inspector.reload", "↻ Aggiorna")}
+            </button>
+        </div>
+    );
+
     if (sessionsError) {
-        return <p style={{ color: "#f87171", fontSize: "0.8rem" }}>{sessionsError}</p>;
+        return <div>{reloadBar}<p style={{ color: "#f87171", fontSize: "0.8rem" }}>{sessionsError}</p></div>;
     }
     if (sessions === null) {
         return <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.inspector.loading", "Caricamento cronologia…")}</p>;
     }
     if (!latestSession) {
-        return <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.inspector.empty", "Nessuna attività registrata per questo progetto.")}</p>;
+        return (
+            <div>
+                {reloadBar}
+                <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("workspace.inspector.empty", "Nessuna attività registrata per questo progetto.")}</p>
+            </div>
+        );
     }
 
-    const isDetailForLatest = detail && detailFetchedFor === latestSession.id;
+    // Matched on the id the detail itself carries: while a re-read is in flight the previous
+    // detail of the same session stays on screen instead of blinking out.
+    const isDetailForLatest = detail !== null && detail.id === latestSession.id;
     const presence = isDetailForLatest ? blocksPresent(detail) : null;
 
     const classifyLog = isDetailForLatest ? latestLogForStage(detail.promptExecutionLogs, "vibe_classify") : undefined;
@@ -148,6 +185,7 @@ export function SessionInspectorPanel({ projectId, conversation }: SessionInspec
 
     return (
         <div>
+            {reloadBar}
             {presence?.vibe && vibeIntake && (
                 <InspectorBlock
                     title={t("workspace.inspector.vibeTitle", "Vibe")}
