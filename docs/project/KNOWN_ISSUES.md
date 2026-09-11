@@ -65,3 +65,46 @@ deploy-critical files" for why the fix isn't a normal PR).
   again before it bakes a bad URL into new artifacts. Worth a fail-fast check in
   `apps/api/src/config.ts` (reject boot in `production` if the var is unset, rather than silently
   defaulting to `http://localhost:${API_PORT}`) as a real fix, separate from the nginx mitigation.
+- **Re-measured 2026-09-11**: 12 of 92 published sites still carry
+  `http://localhost:4000/p/media/:id` absolute URLs in their stored HTML — the same default the
+  bullet above describes. The newest was published 2026-07-02; nothing published since is
+  affected, so the env is right today and the damage is historical. The browser blocks these as
+  mixed content under the published CSP, and they would not resolve for a visitor anyway. They
+  need a republish or a one-off rewrite of the stored HTML.
+
+## Publishing — two CSPs for the same published site
+
+Found 2026-09-11 from a user report: an A-Frame site worked in preview and failed published with
+`EvalError … 'unsafe-eval' is not an allowed source of script`, then `AFRAME is not defined`.
+
+- A published site is reachable two ways with **different** headers. The public subdomain is
+  served statically by nginx from the droplet's hand-written wildcard vhost (gitignored
+  `nginx/sites-enabled/andy-code-cat.conf`); `/p/:publishId/` is served by the API with
+  `PUBLISHED_PAGE_CSP` (`publishRoutes.ts`). The API's policy allowed `'unsafe-eval'`; nginx's did
+  not. Preview runs under no CSP, so nothing surfaced before publishing.
+- It was not only A-Frame. A survey of the live sites found **every Alpine.js site** broken on the
+  public URL (`Alpine Expression Error … unsafe-eval`) — 18 of 92 use Alpine. Tailwind (play CDN),
+  GSAP, AOS, Lucide, Phaser and Matter.js were unaffected.
+- **Hotfixed live the same day**: `'unsafe-eval'` added to that one directive, nothing else.
+  Before/after header snapshots of every host (app, api, `/p/`, subdomains, HTTP redirect) differ
+  only in that directive; a re-run of the survey shows Alpine and A-Frame working and every other
+  site with exactly the errors it had before. `'unsafe-eval'` adds little exposure here: the policy
+  already allows `'unsafe-inline'` and any `https:` script, and the isolation that matters is the
+  separate origin.
+- The private remote the rule in `GITFLOW_RELEASE_POLICY.md` requires is **not configured on the
+  current workstation**, so the edit is not yet committed anywhere. The workstation's gitignored
+  copy was synced to the live file (hash-verified) so a deploy from it does not revert the fix.
+
+**For the cumulative fix** (not done yet):
+
+1. Version the wildcard publish vhost as a domain-parameterised template in the repo, with the CSP
+   defined once and shared with `PUBLISHED_PAGE_CSP` — `install.sh` does not generate a publish
+   vhost at all today, so a fresh domain install serves published sites only under `/p/`.
+2. Stop shipping `nginx/sites-enabled/local.conf` to the droplet. Deploys copy it and `nginx.conf`
+   includes `sites-enabled/*.conf`, so production answers `Host: localhost` over plain HTTP,
+   outside the `/v1/auth/` rate limit the production vhost applies.
+3. In the publish vhost, the `location ~* \.(css|js|…)$` block sets its own `add_header`, which in
+   nginx discards every server-level `add_header` — static assets are served without the security
+   headers. Harmless for the CSP (it governs documents), not for the rest.
+4. Generated-code errors seen in the survey, independent of routing: `missing ) after argument
+   list` in two sites, a duplicate `const Engine` declaration in one.
