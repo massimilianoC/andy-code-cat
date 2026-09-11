@@ -130,7 +130,7 @@ journalling the hardcoded fallback constants instead of the model asked for — 
 
 ---
 
-## 5bis. The release gate is RED — read this before deploying
+## 5bis. The release gate was RED — what it turned out to mean
 
 `tests/e2e/release-smoke-three-modes.spec.ts` is the repo's own pre-release gate. Run on
 2026-09-09 for the first time: **VIBE and ZERO EFFORT pass and both reach a real artifact.
@@ -140,14 +140,23 @@ One cause was found and fixed (`16fe15f`): the test clicked a project *card* ins
 pill, because `hasText` is a case-insensitive substring match and the bot account now owns twelve
 projects, one named "Default Project". Proven from the page snapshot Playwright saves on failure.
 
-**A second cause remains and is not identified.** After the selector fix the run gets materially
-further — 1 minute to the full 5-minute generation timeout — but still no `POST /v1/projects`
-reaches the API. Nothing on this branch touches `handleProjectMode` (`VibeCoreEntry.tsx:361`), and
-the other two modes exercise the same launch endpoint successfully, so the evidence does not
-implicate the product path. It is not proof that the product is fine.
+**Corrected 2026-09-11 — the second cause was found, and the product WAS implicated.** The
+earlier text here said the evidence did not implicate the product path. That was wrong on both
+counts:
 
-Do not read a green suite as a green release: the unit suites and the didactic e2e all pass while
-this gate is red.
+- The gate drove UI that no longer exists. `ModeSelector` stopped being rendered by `2c6bc09`
+  (2026-05-14, "selection in template picker"); `handleProjectMode` / `handleEntryModeChange` in
+  `VibeCoreEntry.tsx` are unreachable. The PROJECT MODE case is now `test.fixme` with that reason,
+  and needs rewriting against the template picker's blank-project path.
+- Separately, Project Mode generations were **never traced**: `workSessionMiddleware` only resolves
+  a session, and a project entered without Vibe had none, so every generate row carried
+  `workSessionId: null` and the Prompt tab had nothing to show. Fixed in `6ab65e2` (release
+  2026.09.11.1) — a generation with no session opens one. Verified in the production DB.
+- And the Prompt tab rendered behind `artifacts &&`, so a chat-only turn never mounted the
+  inspector at all — see `tests/e2e/prompt-tab-without-artifact.spec.ts`.
+
+Do not read a green suite as a green release: the unit suites and the didactic e2e all passed
+while all three of these were live.
 
 ---
 
@@ -195,6 +204,15 @@ bash .deploy/deploy/deploy-to-droplet.sh     # from main, at 2026.09.10.1
 
 The local stack still runs the pre-release build: the rebuild at the released version was started
 and died when the Docker daemon stopped. Rebuild before trusting `/health`'s version.
+
+**Superseded 2026-09-11:** both 2026.09.10.1 and 2026.09.11.1 are deployed on `docker-2`. The
+blocker above was real but mis-attributed — short SSH commands work, bulk transfer from the
+workstation stalls (an MTU black hole), so `rsync` of the tree never completes. What works: the
+droplet `git clone --depth 1 --branch <tag>` from GitHub and builds in place, api and web built
+separately with `docker builder prune -af` between (the 25 GB disk hit 100% otherwise), a
+`rollback-<previous>-pre` image tag kept, then `docker restart` of nginx so it re-resolves the
+new container IPs (a stale upstream is the public 502). `deploy-to-droplet.sh` does not do this
+yet and still exits 0 on failure.
 
 ---
 
