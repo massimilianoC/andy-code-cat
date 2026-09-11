@@ -1875,6 +1875,10 @@ function WorkspacePageContent() {
         .reverse()
         .map((m) => m.metadata?.promptingTrace)
         .find((tr) => Boolean(tr && ((tr.messagesSentToLlm?.length ?? 0) > 0 || tr.effectiveSystemPrompt)));
+    // Every finished turn appends one assistant message, with or without code. The Prompt view
+    // re-reads the journal when this changes — including the first Project Mode generation, which
+    // is the turn that opens the work session the view is waiting for.
+    const completedTurnCount = (activeConv?.messages ?? []).filter((m) => m.role === "assistant").length;
     const lastSentMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = lastSentTrace
         ? ((lastSentTrace.messagesSentToLlm?.length ?? 0) > 0
             ? lastSentTrace.messagesSentToLlm!
@@ -3307,6 +3311,7 @@ function WorkspacePageContent() {
                     (§1: this view "becomes" that history, rather than sitting beside it). */}
                 <SessionInspectorPanel
                     projectId={projectId}
+                    refreshToken={completedTurnCount}
                     conversation={lastSentTrace?.effectiveSystemPrompt || lastSentMessages.length
                         ? {
                             messages: lastSentMessages,
@@ -4453,7 +4458,14 @@ function WorkspacePageContent() {
                 )}
 
                 <div className="workspace-preview-canvas">
-                    {!artifacts && (
+                    {/* The Prompt tab is the one view that must work WITHOUT an artifact: a turn
+                        that produced no code is exactly the turn whose prompt needs reading. It
+                        used to sit behind `artifacts &&` like the code tabs, so a chat-only reply
+                        hid the only record of what had been sent — the inspector never mounted
+                        and never asked the journal for anything. */}
+                    {!artifacts && previewTab === "prompt" && PromptCanvas()}
+
+                    {!artifacts && previewTab !== "prompt" && (
                         <div style={emptyStateStyle}>
                             <div style={{ fontSize: "2.2rem", marginBottom: "0.75rem" }}>⬡</div>
                             <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.4rem" }}>{t("workspace.ui.noCodeTitle")}</h2>

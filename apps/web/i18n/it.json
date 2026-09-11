@@ -1069,7 +1069,10 @@
       "generationTitle": "Generation",
       "truncated": "TRONCATO",
       "noGeneration": "Questa sessione non ha ancora una generazione.",
-      "noActivity": "Questa sessione non ha ancora nulla da mostrare."
+      "noActivity": "Questa sessione non ha ancora nulla da mostrare.",
+      "reload": "↻ Aggiorna",
+      "reloading": "Aggiornamento…",
+      "reloadTitle": "Rileggi dal journal le sessioni e i prompt inviati"
     },
     "recovery": {
       "resumeLoaded": "Contesto recuperato dalla generazione interrotta: il brief, la risposta parziale e il ragionamento del modello. Invia per continuare da lì."
