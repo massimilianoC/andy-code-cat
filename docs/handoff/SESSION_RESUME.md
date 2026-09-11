@@ -3,7 +3,8 @@
 **Read this first if you are picking up cold.** Everything here was established by reading code or
 running things against the live stack; where a number appears, it came from a measurement.
 
-Branch: `feat/parallel-section-generation`, off `develop`, published on `origin`.
+State as of release 2026.09.11.2: `main`, `develop` and the tag are pushed and aligned; production
+runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
@@ -213,6 +214,25 @@ separately with `docker builder prune -af` between (the 25 GB disk hit 100% othe
 `rollback-<previous>-pre` image tag kept, then `docker restart` of nginx so it re-resolves the
 new container IPs (a stale upstream is the public 502). `deploy-to-droplet.sh` does not do this
 yet and still exits 0 on failure.
+
+---
+
+## 6ter. Release 2026.09.11.2 — the Prompt tab without an artifact
+
+Deployed on `docker-2` and confirmed working by the operator on the production project that
+reported it. The Prompt tab rendered behind `artifacts &&`, so a chat-only turn never mounted the
+inspector: the production access log showed four loads of that workspace and not one
+`/work-sessions` request. Now the tab renders without an artifact, re-reads the journal after
+every completed turn, and has a Refresh button.
+
+Two findings from the reproduction, not yet acted on:
+
+- **Auto-optimize decides whether a question becomes a build.** The same question, optimizer on,
+  was rewritten into a build brief with the preset's context and the model built a site. With it
+  off (the reported turn: 167 raw characters, no optimize row) the model answered in words.
+- **A plain-text reply is shown as an error.** `gpt-4o-mini` answered a question in prose instead
+  of the JSON contract; the workspace reported "JSON malformato" and saved nothing. For a question
+  that reply is legitimate — accepting it as chat is an open product decision.
 
 ---
 

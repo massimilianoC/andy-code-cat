@@ -12,26 +12,37 @@
 
 ---
 
+> **Status: beta.** Used in production, still moving: APIs and the data model can change between
+> releases. The current release is in [`RELEASE_VERSION`](RELEASE_VERSION).
+
 ## What Andy Code Cat Helps You Do
 
 | Capability | Outcome |
 | --- | --- |
-| Prompt-to-site generation | Build landing pages and mini-sites from a natural-language brief |
-| Live iteration | Refine copy, structure, and layout through chat with preview feedback |
-| Visual editing | Combine AI generation with a WYSIWYG editing workflow |
-| Portable delivery | Export static assets or publish directly under managed infrastructure |
-| Open architecture | Run on a self-hosted stack with multi-provider LLM support |
+| Three ways to start | **Vibe**: describe the site and attach documents. **Zero Effort**: answer a short guided form. **Project**: start from a template or a blank workspace |
+| Live iteration | Refine copy, structure and layout in chat, with a live preview and version history |
+| Visual editing | Pick an element in the preview and edit it, or ask the model to change only that part |
+| Learn from the result | **Didactic Mode** explains the generated code in topics and quizzes, and answers questions about it |
+| Portable delivery | Export static assets or publish under a managed slug |
+| Open architecture | Self-hosted stack, multi-provider LLM support |
 
 ---
 
 ## Core Strengths
 
-- **AI-powered generation** using OpenRouter, SiliconFlow, or LM Studio
-- **Focused editing** for targeted HTML, CSS, and JS updates
-- **Runtime model routing** configurable through environment settings
-- **Export and publish flows** for ZIP delivery and hosted output
+- **Multi-provider generation**: OpenRouter, SiliconFlow, or LM Studio for local inference
+- **The model you pick is the model that runs**: a model the catalog cannot serve is refused
+  with an error, never silently swapped for another
+- **Full prompt transparency**: every model call is journalled. The **Prompt** tab shows, per work
+  session, the system prompt split by layer, the prompt actually sent, the raw reply, duration and
+  cost
+- **Real cost accounting**: the cost the provider reports for each call where it exposes one, a
+  price table or flat-rate estimate otherwise, in one ledger per project
+- **Documents as context**: PDF, DOCX, XLSX, PPTX, CSV, TXT and Markdown attachments feed the brief
+- **Working forms in generated sites**: a declarative form runtime, delivered by email (mailto)
+- **Focused editing** for targeted HTML, CSS and JS changes, with recovery of interrupted runs
 - **JWT auth and tenant isolation** with double-sandbox enforcement
-- **Docker-first self-hosting** for both local and deploy-like stacks
+- **Docker-first self-hosting** for local and domain deployments
 
 ---
 
@@ -45,7 +56,8 @@ packages/
   contracts/  Shared Zod schemas and API contracts
 ```
 
-Supporting services: **MongoDB**, **Redis**, **nginx**, and a dedicated workspace container for generation workflows.
+Supporting services: **MongoDB**, **MinIO** (object storage), **Redis**, and **nginx** as the
+reverse proxy.
 
 Start from [AGENTS.md](AGENTS.md) and [docs/INDEX.md](docs/INDEX.md) for the full repository contract and documentation map.
 
@@ -57,7 +69,10 @@ Start from [AGENTS.md](AGENTS.md) and [docs/INDEX.md](docs/INDEX.md) for the ful
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine + Compose v2
 - `openssl` (pre-installed on Linux/macOS; available via Git Bash on Windows)
-- At least one LLM API key — [SiliconFlow](https://siliconflow.cn/account/api-keys) (recommended, affordable) or [OpenRouter](https://openrouter.ai/keys)
+- At least one LLM API key — [OpenRouter](https://openrouter.ai/keys) or
+  [SiliconFlow](https://cloud.siliconflow.com/account/ak). SiliconFlow keys are bound to their
+  region: the platform calls `api.siliconflow.com`, so the key must come from the international
+  console linked here, not from `siliconflow.cn`
 
 ### Step 1 — Clone and configure
 
@@ -162,8 +177,26 @@ and [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](docs/specs/FIRST_INSTALL_SETUP_SPEC
 | `npm run local:logs:api` | Tail API logs only |
 | `npm run local:restart:api` | Restart the API without a full rebuild |
 
+> Do not run the dev `docker compose up` on a machine already running the deploy stack. Update
+> deploy services with `docker compose -f docker-compose.deploy.yml up -d --no-deps api web`.
+
 See [docs/guides/LOCAL_DOCKER_START.md](docs/guides/LOCAL_DOCKER_START.md) for the full dev workflow,
 safe rebuild commands, and emergency mongosh promotion steps.
+
+### Release gates
+
+A change reaches `main` only through Gitflow, and only with all of these green:
+
+| Command | Checks |
+| --- | --- |
+| `npx vitest run` in `apps/api` and `apps/web` | Unit suites |
+| `npx tsc --noEmit -p .` in `apps/api`, `apps/web`, `packages/contracts` | Types |
+| `npm run gitflow:guard` | Branch naming and merge direction |
+| `npm run release:version:validate` | `RELEASE_VERSION` format (`YYYY.MM.DD.N`) |
+| `npm run guard:public-repo` | No secrets, private keys, private infrastructure details or stray files in the public tree |
+
+End-to-end specs in [`tests/e2e/`](tests/e2e/) run against a live stack and call real providers,
+so they spend real money.
 
 ---
 
@@ -191,6 +224,7 @@ Full variable reference: [`.env.deploy.example`](.env.deploy.example).
 | [docs/agents/CODE_AGENT_INDEX.md](docs/agents/CODE_AGENT_INDEX.md) | Agent-oriented codebase map |
 | [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](docs/architecture/BOOTSTRAP_ARCHITECTURE.md) | Platform structure and runtime overview |
 | [docs/specs/](docs/specs/) | Technical and feature specifications |
+| [docs/handoff/SESSION_RESUME.md](docs/handoff/SESSION_RESUME.md) | Latest working state, measured findings, open issues |
 | [docs/guides/](docs/guides/) | Operational guides and policies |
 | [docs/runbooks/](docs/runbooks/) | Validation and hardening runbooks |
 

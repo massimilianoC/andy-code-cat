@@ -36,7 +36,7 @@ DOMAIN=""           # Required for domain mode.  Example: "yourdomain.com"
 CERTBOT_EMAIL=""    # Required for domain mode.  Example: "admin@yourdomain.com"
 
 # LLM provider API keys — set at least one.
-# SiliconFlow (recommended — affordable, fast):  https://siliconflow.cn/account/api-keys
+# SiliconFlow (international key, not .cn):      https://cloud.siliconflow.com/account/ak
 SILICONFLOW_API_KEY=""
 # OpenRouter (multi-model fallback):             https://openrouter.ai/keys
 OPENROUTER_API_KEY=""
