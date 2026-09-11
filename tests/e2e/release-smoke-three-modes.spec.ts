@@ -259,7 +259,22 @@ test.describe("Release smoke — Zero Effort (guided) mode", () => {
 test.describe("Release smoke — Project mode", () => {
     test.setTimeout(GENERATION_TIMEOUT_MS);
 
-    test("PROJECT creates a blank project and the Workspace's own auto-launch reaches a real artifact", async ({ page }) => {
+    // FIXME — this drives a UI that has not existed since 2026-05-14.
+    //
+    // It clicks the PROJECT pill of `ModeSelector` inside VibeCoreEntry. Commit 2c6bc09
+    // ("hide mode selector overlay — selection in template picker") removed that render on purpose:
+    // mode selection moved to the template picker. `ModeSelector` is still defined and
+    // `handleProjectMode` still exists, but nothing renders the one and nothing calls the other —
+    // so no click can reach them, and this test timed out on every run for four months.
+    //
+    // What it was really guarding is NOT unguarded: that a Project Mode generation is recorded in a
+    // work session is pinned at route level by
+    // apps/api/src/presentation/http/routes/__tests__/llmRoutesJournalCorrelation.e2e.test.ts
+    // ("opens a work session when a generation starts without one — Project Mode"), against a real
+    // Mongo, and was verified end to end on the local deploy stack on 2026-09-11.
+    //
+    // To re-enable: drive the template picker's blank-project path instead of ModeSelector.
+    test.fixme("PROJECT creates a blank project, generates, and records it in a work session", async ({ page }) => {
         await loginTestUser(page);
         await page.goto(`${BASE_URL}/dashboard`);
         await page.waitForLoadState("networkidle");
@@ -268,8 +283,11 @@ test.describe("Release smoke — Project mode", () => {
         await expect(textarea).toBeVisible();
         await textarea.fill("A single-page landing site for a local coffee roastery, rustic and inviting.");
 
-        const launchResponse = page.waitForResponse(
-            (res) => res.url().includes("/pipeline/launch-workspace") && res.request().method() === "POST",
+        // Project Mode does NOT call /pipeline/launch-workspace — only the Vibe/Guided review page
+        // does. This used to wait for that call and so could never pass: the Workspace sends the
+        // first prompt through the chat route, and that is the contract asserted below.
+        const generateResponse = page.waitForResponse(
+            (res) => /\/llm\/chat/.test(res.url()) && res.request().method() === "POST",
             { timeout: GENERATION_TIMEOUT_MS },
         );
 
@@ -294,13 +312,32 @@ test.describe("Release smoke — Project mode", () => {
         // Mode before waiting on the slower generation call.
         await page.waitForURL(/\/workspace\//, { timeout: 60_000 });
 
-        const response = await launchResponse;
-        expect(response.status(), "Workspace's own launch-workspace call must succeed").toBe(201);
-        const body = await response.json() as { status?: string; pipelineRunId?: string };
-        expect(body.status).toBe("prepared");
-        expect(body.pipelineRunId, "no PipelineRun was frozen for the Workspace auto-launch").toBeTruthy();
+        const response = await generateResponse;
+        expect(response.status(), "the Workspace's first generation must succeed").toBeLessThan(300);
 
         const projectId = page.url().match(/\/workspace\/([^/?]+)/)?.[1];
+        expect(projectId, "redirected to a workspace").toBeTruthy();
+
+        // The regression this gate now pins. Project Mode opened no work session, so the generation
+        // that built the artifact was journalled belonging to nothing and the Prompt tab said "no
+        // activity recorded yet". Measured in production on 2026-09-10: of 84 chat rows, zero carried
+        // a workSessionId, and no session existed with an entryMode other than vibe.
+        const token = await getAccessToken(page);
+        const traced = await page.evaluate(
+            async ({ apiUrl, token, projectId }) => {
+                const headers = { Authorization: `Bearer ${token}`, "x-project-id": projectId };
+                const list = await (await fetch(`${apiUrl}/v1/projects/${projectId}/work-sessions`, { headers })).json();
+                const sessions = list.sessions ?? [];
+                if (!sessions.length) return { sessions: 0, generateRows: 0 };
+                const detail = await (await fetch(`${apiUrl}/v1/projects/${projectId}/work-sessions/${sessions[0].id}`, { headers })).json();
+                const logs = detail.session?.promptExecutionLogs ?? [];
+                return { sessions: sessions.length, generateRows: logs.filter((l: { pipelineStage?: string }) => l.pipelineStage === "generate").length };
+            },
+            { apiUrl: API_URL, token, projectId: projectId! },
+        );
+        expect(traced.sessions, "Project Mode must open a work session").toBeGreaterThan(0);
+        expect(traced.generateRows, "the generation must be recorded inside it, or the Prompt tab is empty").toBeGreaterThan(0);
+
         if (projectId) {
             await deleteTestProject(page, projectId);
         }

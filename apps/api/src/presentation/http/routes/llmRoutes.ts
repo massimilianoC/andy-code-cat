@@ -40,6 +40,7 @@ import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createWorkSessionMiddleware } from "../middlewares/workSessionMiddleware";
 import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
+import { OpenWorkSession } from "../../../application/use-cases/OpenWorkSession";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
 import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptConfig";
 import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptConfig";
@@ -75,6 +76,38 @@ const PROVIDER_KEY_ENV_HINTS: Record<string, string> = {
  * idempotencyKey. Matches the generous end of this route's own generation timeouts.
  */
 const PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS = 5 * 60_000;
+
+/**
+ * The work session a generation belongs to, opening one when nothing has yet.
+ *
+ * `workSessionMiddleware` only RESOLVES a session — it reads the header, and failing that looks for
+ * one already open on the project. That covers every entry that opens a session upstream: Vibe does
+ * it at classify/prefill, and the launch route does it for the guided handoff.
+ *
+ * Project Mode opens none. It creates a blank project and sends the browser straight to the
+ * workspace, which dispatches the first prompt through this route — so the generation that produced
+ * the artifact was journalled with no session, and the Prompt tab answered "no activity recorded
+ * yet" on a project that had just been built. Measured in production on 2026-09-10: two `generate`
+ * rows minutes apart, the Vibe one carrying a session and the Project Mode one carrying none, and
+ * not a single work session with an entry mode other than `vibe`.
+ *
+ * A generation IS an intent. If none is open when one starts, this opens it rather than recording
+ * the work as belonging to nothing. `reuseOrOpen` is the existing machinery and already has exactly
+ * these semantics; it never throws, because tracing must not fail a generation.
+ */
+async function resolveGenerationWorkSessionId(
+    req: RequestWithContext,
+    openWorkSession: OpenWorkSession,
+): Promise<string | undefined> {
+    if (req.workSession?.id) return req.workSession.id;
+    const opened = await openWorkSession.reuseOrOpen(undefined, {
+        userId: req.auth!.userId,
+        entryMode: "workspace",
+        projectId: req.sandbox!.projectId,
+    });
+    if (opened) req.workSession = { id: opened.id };
+    return opened?.id;
+}
 
 function resolveChatPreviewMaxTokens(requestedMaxTokens?: number): number {
     const previewCeiling = 64_000;
@@ -248,6 +281,7 @@ export function createLlmRoutes(): Router {
     // missing or foreign session id leaves the request untraced rather than refused
     // (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md rule 4).
     router.use(createWorkSessionMiddleware(new MongoWorkSessionRepository()));
+    const openWorkSession = new OpenWorkSession(new MongoWorkSessionRepository());
 
     const llmCatalogRepository = new MongoLlmCatalogRepository();
     const getLlmCatalog = new GetLlmCatalog(
@@ -645,7 +679,7 @@ export function createLlmRoutes(): Router {
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 conversationId: body.conversationId,
-                workSessionId: req.workSession?.id,
+                workSessionId: await resolveGenerationWorkSessionId(req, openWorkSession),
                 pipelineRunId: body.pipelineRunId,
                 pipelineStage: "generate",
                 endpoint,
@@ -1131,7 +1165,7 @@ export function createLlmRoutes(): Router {
                 projectId: req.sandbox!.projectId,
                 userId: req.auth!.userId,
                 conversationId: body.conversationId,
-                workSessionId: req.workSession?.id,
+                workSessionId: await resolveGenerationWorkSessionId(req, openWorkSession),
                 pipelineRunId: body.pipelineRunId,
                 pipelineStage: "generate",
                 endpoint,

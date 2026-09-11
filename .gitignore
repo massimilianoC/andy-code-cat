@@ -85,3 +85,16 @@ health_test.json
 Thumbs.db
 .vscode/settings.json
 docs/brand/Gatto_Codifica_Video_Generato.mp4
+
+# ─── Private key material ─────────────────────────────────────────────────────
+# Belt to the guard's braces (scripts/public-repo-guard.mjs). This is a public
+# repository: a leaked deploy key is a root shell on the droplet.
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+vps_admin
+*.pem
+*.p12
+*.pfx
+.ssh/

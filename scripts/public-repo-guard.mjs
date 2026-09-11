@@ -19,7 +19,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 
 function run(cmd) {
     return execSync(cmd, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
@@ -175,6 +175,52 @@ function checkPrivateInfra(files) {
     return failures;
 }
 
+/**
+ * Private key material, by filename and by content.
+ *
+ * The checklist has always said "search for accidental key leaks in changed files before pushing"
+ * (§1), and nothing verified it. A repository this size gets a stray `.pem` copied into it sooner
+ * or later, and this one is public: a leaked deploy key is a root shell on the droplet.
+ *
+ * Content is checked as well as the name, because the damaging case is the one that does not look
+ * like a key — `notes.txt`, `backup`, `config.bak` — and a PEM header is unambiguous.
+ */
+const privateKeyNameRules = [
+    { pattern: /(^|\/)id_(rsa|dsa|ecdsa|ed25519)$/, reason: "SSH private key" },
+    { pattern: /(^|\/)vps_admin$/, reason: "droplet deploy private key — belongs in ~/.ssh, never in the repo" },
+    { pattern: /\.(pem|p12|pfx)$/i, reason: "private key or certificate bundle" },
+    { pattern: /(^|\/)\.ssh\//, reason: "ssh directory — private to the machine" },
+];
+
+const PRIVATE_KEY_HEADER = /-----BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/;
+
+function checkPrivateKeys(files) {
+    const failures = [];
+    for (const file of files) {
+        const named = privateKeyNameRules.find((rule) => rule.pattern.test(file));
+        if (named) {
+            failures.push(`${file} — ${named.reason}`);
+            continue;
+        }
+        // Only look inside files small enough to be a key; a key is a few KB at most.
+        let stat;
+        try {
+            stat = statSync(file);
+        } catch {
+            continue;
+        }
+        if (!stat.isFile() || stat.size > 16_384) continue;
+        try {
+            if (PRIVATE_KEY_HEADER.test(readFileSync(file, "utf8"))) {
+                failures.push(`${file} — contains a PRIVATE KEY block`);
+            }
+        } catch {
+            // Unreadable or binary: not a text key.
+        }
+    }
+    return failures;
+}
+
 function checkLanguage() {
     const failures = [];
     for (const file of findNewlyAddedMarkdownFiles()) {
@@ -200,12 +246,14 @@ const files = trackedOrStagedFiles();
 const junk = checkJunkPaths(files);
 const envFiles = checkEnvFiles(files);
 const privateInfra = checkPrivateInfra(files);
+const privateKeys = checkPrivateKeys(files);
 const language = checkLanguage();
 
 const sections = [
     ['Tracked junk paths', junk],
     ['Tracked real environment files', envFiles],
     ['Tracked private-infrastructure paths', privateInfra],
+    ['Tracked private key material', privateKeys],
     ['Newly added documents that are not in English', language],
 ];
 
