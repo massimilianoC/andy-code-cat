@@ -1069,7 +1069,10 @@
       "generationTitle": "Generation",
       "truncated": "TRUNCATED",
       "noGeneration": "This session has no generation yet.",
-      "noActivity": "This session has nothing to show yet."
+      "noActivity": "This session has nothing to show yet.",
+      "reload": "↻ Refresh",
+      "reloading": "Refreshing…",
+      "reloadTitle": "Re-read the sessions and the prompts sent from the journal"
     },
     "recovery": {
       "resumeLoaded": "Context recovered from the interrupted generation: the brief, the partial answer and the model's reasoning. Send to continue from there."

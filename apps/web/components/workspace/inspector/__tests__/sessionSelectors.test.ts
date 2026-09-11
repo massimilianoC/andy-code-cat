@@ -4,7 +4,7 @@ import type {
     PromptExecutionLogDetailDto,
     CostTransactionDetailDto,
 } from "@andy-code-cat/contracts";
-import { pickLatestSession, latestLogForStage, costForLog, canonicalBriefOf, blocksPresent, shouldFetchSessionDetail } from "../sessionSelectors";
+import { pickLatestSession, latestLogForStage, costForLog, canonicalBriefOf, blocksPresent, shouldFetchSessionDetail, detailRequestKey } from "../sessionSelectors";
 
 function log(overrides: Partial<PromptExecutionLogDetailDto>): PromptExecutionLogDetailDto {
     return {
@@ -180,33 +180,41 @@ describe("canonicalBriefOf / blocksPresent", () => {
     });
 });
 
-describe("shouldFetchSessionDetail", () => {
-    const base = { sessionId: "s1", anyBlockOpen: true, fetchedFor: null, inFlightFor: null };
+describe("detailRequestKey", () => {
+    it("is a new key on every read of the list, even for the same session", () => {
+        // The Project Mode case: the second generation lands in the session the first one opened.
+        // Keyed on the session id alone, that detail was read once and the new turn never shown.
+        expect(detailRequestKey("s1", 1)).not.toBe(detailRequestKey("s1", 2));
+    });
 
-    it("fetches when a block is open and nothing has been fetched yet", () => {
+    it("has no key without a session", () => {
+        expect(detailRequestKey(undefined, 3)).toBeNull();
+    });
+});
+
+describe("shouldFetchSessionDetail", () => {
+    const base = { requestKey: "s1#1", anyBlockOpen: true, startedFor: null };
+
+    it("fetches when a block is open and nothing has been started yet", () => {
         expect(shouldFetchSessionDetail(base)).toBe(true);
     });
 
-    it("does not fetch while a request for the same session is already out", () => {
-        // The regression: the panel used component state for this and put it in the effect's own
-        // dependency array, so setting it re-ran the effect, whose cleanup cancelled the request
-        // in flight — and the cancelled `finally` never cleared the flag. "Caricamento cronologia…"
-        // stayed on screen forever while the server had already answered 200.
-        expect(shouldFetchSessionDetail({ ...base, inFlightFor: "s1" })).toBe(false);
+    it("does not start the same read twice", () => {
+        // An effect re-run for an unrelated reason (a block toggled, a re-render) must not fire a
+        // duplicate request for a key already started.
+        expect(shouldFetchSessionDetail({ ...base, startedFor: "s1#1" })).toBe(false);
     });
 
-    it("does fetch a DIFFERENT session even while one is in flight", () => {
-        // Switching project mid-flight must not be blocked by the previous request.
-        expect(shouldFetchSessionDetail({ ...base, sessionId: "s2", inFlightFor: "s1" })).toBe(true);
-    });
-
-    it("does not re-fetch what it already has", () => {
-        expect(shouldFetchSessionDetail({ ...base, fetchedFor: "s1" })).toBe(false);
-        expect(shouldFetchSessionDetail({ ...base, sessionId: "s2", fetchedFor: "s1" })).toBe(true);
+    it("starts a new read for a new key while an older one is still out", () => {
+        // The hang this replaces: a re-run mid-request was skipped as "already in flight" while
+        // the request it deferred to had just been cancelled by the effect cleanup. A newer key
+        // always starts; the caller discards the older response by sequence number.
+        expect(shouldFetchSessionDetail({ ...base, requestKey: "s1#2", startedFor: "s1#1" })).toBe(true);
+        expect(shouldFetchSessionDetail({ ...base, requestKey: "s2#1", startedFor: "s1#1" })).toBe(true);
     });
 
     it("waits until a block is actually open, and needs a session", () => {
         expect(shouldFetchSessionDetail({ ...base, anyBlockOpen: false })).toBe(false);
-        expect(shouldFetchSessionDetail({ ...base, sessionId: undefined })).toBe(false);
+        expect(shouldFetchSessionDetail({ ...base, requestKey: null })).toBe(false);
     });
 });

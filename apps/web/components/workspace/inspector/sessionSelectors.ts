@@ -71,26 +71,37 @@ export function blocksPresent(detail: WorkSessionDetailDto): InspectorBlocksPres
 }
 
 /**
- * Whether the detail fetch should start for `sessionId`.
+ * What one detail read is FOR: a session, as of one read of the session list.
+ *
+ * Keyed on the session id alone, the detail was fetched once per session and never again — so a
+ * second generation inside the same session (every Project Mode turn after the first) was
+ * recorded in the journal and never shown. Each re-read of the list is a new key, and therefore a
+ * new detail read, even when the session id has not changed.
+ */
+export function detailRequestKey(sessionId: string | undefined, listRead: number): string | null {
+    return sessionId ? `${sessionId}#${listRead}` : null;
+}
+
+/**
+ * Whether the detail read for `requestKey` should start.
  *
  * Extracted from the effect that used to decide this inline, because deciding it inline is what
- * broke it: the effect guarded on its own `detailLoading` state, which it also set, so React
- * re-ran it, the cleanup cancelled the request in flight, and the guarded `finally` never cleared
- * the flag. The panel then showed "Caricamento cronologia…" indefinitely while the network had
- * already answered 200.
+ * broke it, twice. First the effect guarded on its own `detailLoading` state, which it also set:
+ * React re-ran it, the cleanup cancelled the request in flight, and "Caricamento cronologia…"
+ * stayed on screen while the network had answered 200. The fix that followed guarded on an
+ * in-flight session id — which reproduces the same hang the moment anything re-runs the effect
+ * mid-request (a list re-read does): the re-run is skipped as "already in flight", and the
+ * request it was deferring to has just been cancelled.
  *
- * `fetchedFor` is durable (we have the data), `inFlightFor` is transient (a request is out). Both
- * are compared against the session id rather than treated as booleans, so switching projects mid
- * flight starts the new fetch instead of being blocked by the old one.
+ * So there is no cancellation any more. `startedFor` records the last key a read was started for;
+ * the caller discards a superseded response by sequence number instead. A request is therefore
+ * never both abandoned and relied on.
  */
 export function shouldFetchSessionDetail(input: {
-    sessionId: string | undefined;
+    requestKey: string | null;
     anyBlockOpen: boolean;
-    fetchedFor: string | null;
-    inFlightFor: string | null;
+    startedFor: string | null;
 }): boolean {
-    if (!input.sessionId || !input.anyBlockOpen) return false;
-    if (input.fetchedFor === input.sessionId) return false;
-    if (input.inFlightFor === input.sessionId) return false;
-    return true;
+    if (!input.requestKey || !input.anyBlockOpen) return false;
+    return input.startedFor !== input.requestKey;
 }
