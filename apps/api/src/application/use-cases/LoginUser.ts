@@ -36,14 +36,11 @@ export class LoginUser {
             throw Object.assign(new Error("Email not verified"), { statusCode: 403 });
         }
 
+        // A login is not bound to a project. Every project-scoped request names its project in
+        // x-project-id and the sandbox middleware verifies ownership there; the project once
+        // stored on the session was never read by anything. Binding to one is what forced a
+        // "Default Project" into existence for every account with none.
         const projects = await this.projectRepository.listForUser(user.id);
-        let selectedProject = projects[0];
-
-        // Auto-recover: if the user has no projects (e.g. all were deleted) recreate the default
-        // so that login always succeeds and the session can bind to a project.
-        if (!selectedProject) {
-            selectedProject = await this.projectRepository.create(user.id, "Default Project");
-        }
 
         const tokenId = randomUUID();
         const accessToken = signAccessToken({ sub: user.id, roles: user.roles, sid: tokenId });
@@ -53,7 +50,6 @@ export class LoginUser {
         const refreshTokenHash = await hashPassword(refreshToken);
         await this.sessionRepository.create({
             userId: user.id,
-            projectId: selectedProject.id,
             tokenId,
             refreshTokenHash,
             expiresAt: new Date((refreshPayload.exp ?? 0) * 1000),
@@ -73,7 +69,6 @@ export class LoginUser {
                 llmPreferences: user.llmPreferences
             },
             projects,
-            activeProjectId: selectedProject.id,
             emailVerificationRequired: !user.emailVerified,
             requiresPasswordChange,
             accessToken,

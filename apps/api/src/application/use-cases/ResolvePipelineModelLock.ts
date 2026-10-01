@@ -5,6 +5,7 @@ import type { LlmProviderCatalog } from "../../domain/entities/LlmCatalog";
 import type { PipelineRun, PipelineRunBlockedDetail } from "../../domain/entities/PipelineRun";
 import type { NewPipelineRun, PipelineRunRepository } from "../../domain/repositories/PipelineRunRepository";
 import { resolveModelSelection } from "../llm/modelSelection";
+import { resolvePlatformDefault } from "../llm/catalogModels";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
 import { HttpError } from "../../presentation/http/errors/httpError";
 import { notifyPipelineRunBlocked } from "../llm/pipelineRunNotifications";
@@ -108,6 +109,9 @@ export class ResolvePipelineModelLock {
             requireOverrideInCatalog: true,
             gateOverrideOnOpenAiCompatible: false,
             policy: userChoseModel ? "strict" : "legacy",
+            // No choice made: lock the run to the model the interface pre-selects, not to a
+            // provider picked by a hardcoded constant.
+            platformDefault: resolvePlatformDefault(activeProviders, catalog.activeProvider),
         });
 
         // Refuse, do not substitute (AGENTS.md, Rule Zero's second corollary). The client can

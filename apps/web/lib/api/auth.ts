@@ -8,7 +8,6 @@ export interface RegisterInput {
 }
 export interface RegisterResult {
     user: { id: string; email: string; firstName?: string; lastName?: string; emailVerified: boolean };
-    defaultProject: { id: string; name: string };
 }
 export function register(input: RegisterInput) {
     return call<RegisterResult>("POST", "/v1/auth/register", input);
@@ -21,7 +20,6 @@ export interface LoginInput {
 export interface LoginResult {
     user: { id: string; email: string; roles: string[] };
     projects: { id: string; name: string }[];
-    activeProjectId: string;
     emailVerificationRequired: boolean;
     requiresPasswordChange: boolean;
     accessToken: string;
@@ -34,7 +32,6 @@ export function login(input: LoginInput) {
 export interface RefreshResult {
     accessToken: string;
     refreshToken: string;
-    activeProjectId: string;
     emailVerificationRequired: boolean;
     requiresPasswordChange: boolean;
 }

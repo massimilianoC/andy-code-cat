@@ -1,15 +1,11 @@
 import { adminCreateUserSchema } from "@andy-code-cat/contracts";
 import type { UserRepository } from "../../../domain/repositories/UserRepository";
-import type { ProjectRepository } from "../../../domain/repositories/ProjectRepository";
 import { hashPassword } from "../../../infra/security/password";
 import { CURRENT_PASSWORD_POLICY_VERSION } from "@andy-code-cat/contracts";
 import { env } from "../../../config";
 
 export class AdminCreateUser {
-    constructor(
-        private readonly userRepository: UserRepository,
-        private readonly projectRepository: ProjectRepository,
-    ) {}
+    constructor(private readonly userRepository: UserRepository) {}
 
     async execute(rawInput: unknown) {
         const input = adminCreateUserSchema.parse(rawInput);
@@ -40,8 +36,6 @@ export class AdminCreateUser {
             await this.userRepository.setLimits(user.id, input.limits);
         }
 
-        const defaultProject = await this.projectRepository.create(user.id, "Default Project");
-
         return {
             id: user.id,
             email: user.email,
@@ -49,7 +43,6 @@ export class AdminCreateUser {
             lastName: user.lastName,
             emailVerified: user.emailVerified,
             roles: input.roles,
-            defaultProjectId: defaultProject.id,
         };
     }
 }

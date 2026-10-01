@@ -298,8 +298,8 @@ test.describe("Release smoke — Project mode", () => {
         //
         // This used to be `page.locator("button", { hasText: "PROJECT" }).first()`. Playwright's
         // hasText is a case-insensitive SUBSTRING match, and the dashboard lists the account's
-        // projects as buttons — including the "Default Project" that loginTestUser creates at
-        // registration. So `.first()` clicked that card in DOM order instead of the mode pill, no
+        // projects as buttons — including, at the time, the "Default Project" every registration
+        // created. So `.first()` clicked that card in DOM order instead of the mode pill, no
         // project was ever created, and the test failed on a redirect that was never going to
         // happen. It passed on a clean account and failed on a used one: a release gate that fails
         // for a reason unrelated to the release is a gate that gets ignored.

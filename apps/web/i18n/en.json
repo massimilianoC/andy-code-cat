@@ -82,6 +82,13 @@
       "duplicateError": "Error duplicating",
       "promptCopied": "Prompt copied to clipboard",
       "noPrompt": "No prompt configured for this project"
+    },
+    "stylePrefs": "Preferences",
+    "welcomePrefs": {
+      "title": "Would you like to set your preferences and favourite styles?",
+      "description": "It takes a couple of minutes: your tastes become the starting point of every project. You can also do it later from the “Preferences” button at the top.",
+      "yes": "Yes",
+      "notNow": "Not now"
     }
   },
   "onboarding": {

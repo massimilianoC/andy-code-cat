@@ -74,6 +74,23 @@ COST_POLICY_TEXT_EUR_PER_1K_TOKENS=0.2
 
 > **Security**: the `OPEN_ROUTER_API_KEY` must never be exposed to the frontend. The backend injects it into the `Authorization: Bearer <key>` header at call time.
 
+### The default model a user gets without choosing one
+
+When a user has not picked a model, the pickers pre-select — and a run started without a choice is
+locked to — the **platform default**: the active `dialogue` default (`isDefault`, set in
+`/admin/models`) of `LLM_DEFAULT_PROVIDER`; failing that, of any remote provider; a local provider
+(LM Studio) only when nothing else offers one (`resolvePlatformDefault` in
+`apps/api/src/application/llm/catalogModels.ts`). Provider list order plays no part: it used to,
+and since Mongo lists providers alphabetically, LM Studio's placeholder won on the hosted deploy.
+
+To set it without the admin panel (refuses if the provider is inactive or does not list the model):
+
+```bash
+docker exec andy-code-cat-api node apps/api/dist/scripts/set-dialogue-default.js openrouter google/gemini-3.8-flash
+# or, from apps/api in a dev checkout:
+npm run llm:set-default -- openrouter google/gemini-3.8-flash
+```
+
 The backend config validates the environment with **Zod** at startup and derives `env.hasOpenRouterApiKey` as a boolean:
 
 ```typescript

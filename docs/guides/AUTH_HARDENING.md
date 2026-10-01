@@ -66,9 +66,12 @@ Response includes:
 
 - `accessToken`
 - `refreshToken`
-- `activeProjectId`
+- `projects` (may be empty: a new account owns no project until it starts one from Vibe or a template)
 - `requiresPasswordChange`
 - `emailVerificationRequired`
+
+A login is not bound to a project. Project-scoped requests carry `x-project-id`, verified by the
+sandbox middleware on every call.
 
 ### Refresh
 
@@ -78,7 +81,6 @@ Response includes:
 
 - rotated `accessToken`
 - rotated `refreshToken`
-- `activeProjectId`
 - `requiresPasswordChange`
 
 ### Change Password

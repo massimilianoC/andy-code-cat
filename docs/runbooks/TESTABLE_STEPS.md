@@ -21,17 +21,17 @@
 ### Step 2 - Register
 
 - `POST /v1/auth/register` — body: email, password, firstName, lastName
-- Expected: `201 { user, defaultProject }`
+- Expected: `201 { user }` (no project is created; the first one comes from Vibe or a template)
 
 ### Step 3 - Login
 
 - `POST /v1/auth/login` — body: email, password
-- Expected: `200 { accessToken, refreshToken, projects, activeProjectId, requiresPasswordChange, emailVerificationRequired }`
+- Expected: `200 { accessToken, refreshToken, projects, requiresPasswordChange, emailVerificationRequired }`
 
 ### Step 3a - Refresh Rotation
 
 - `POST /v1/auth/refresh` — body: `{ "refreshToken": "..." }`
-- Expected: `200 { accessToken, refreshToken, activeProjectId }`
+- Expected: `200 { accessToken, refreshToken, requiresPasswordChange, emailVerificationRequired }`
 - Verify: the returned `refreshToken` differs from the submitted one.
 - Verify: replaying the old refresh token now returns `401`.
 
