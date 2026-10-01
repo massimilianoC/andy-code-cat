@@ -141,3 +141,46 @@ export function resolveComposerCascade(input: ResolveComposerCascadeInput): Comp
         requestedProviderUnavailable,
     };
 }
+
+/** Providers that run on the operator's own machine and are unreachable from a hosted deploy. */
+const LOCAL_PROVIDERS = new Set(["lmstudio"]);
+
+export interface PlatformDefaultModel {
+    provider: string;
+    model: string;
+}
+
+/**
+ * The model a user gets when they have not chosen one: what the pickers pre-select and what a
+ * run started without a choice is locked to.
+ *
+ * It is the catalog's own `dialogue` default — the operator sets it in /admin/models — taken from
+ * the configured default provider (`LLM_DEFAULT_PROVIDER`) first, then from any remote provider,
+ * and from a local one only when nothing else offers a default.
+ *
+ * The provider order used to be whatever the catalog happened to list. Mongo lists providers
+ * alphabetically, so `lmstudio` always came first, and its seeded placeholder
+ * `local/default-chat` became every user's default on the hosted deploy, where no LM Studio is
+ * reachable: a user who did not pick a model got no result at all.
+ */
+export function resolvePlatformDefault(
+    providers: readonly LlmProviderCatalog[],
+    preferredProvider?: string,
+): PlatformDefaultModel | undefined {
+    const active = providers.filter((provider) => provider.isActive);
+    const ranked = [
+        ...active.filter((provider) => provider.provider === preferredProvider),
+        ...active.filter((provider) => provider.provider !== preferredProvider && !LOCAL_PROVIDERS.has(provider.provider)),
+        ...active.filter((provider) => provider.provider !== preferredProvider && LOCAL_PROVIDERS.has(provider.provider)),
+    ];
+    const isDialogueDefault = (model: CatalogModel) => model.isActive && model.isDefault && model.role === "dialogue";
+    const isAnyDefault = (model: CatalogModel) => model.isActive && model.isDefault;
+
+    for (const matches of [isDialogueDefault, isAnyDefault]) {
+        for (const provider of ranked) {
+            const model = provider.models.find(matches);
+            if (model) return { provider: provider.provider, model: model.id };
+        }
+    }
+    return undefined;
+}

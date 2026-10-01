@@ -11,6 +11,7 @@
         "seed": "tsx src/scripts/seed.ts",
         "seed:presets": "tsx src/scripts/seed-presets.ts",
         "seed:llm": "tsx src/scripts/seed-llm.ts",
+        "llm:set-default": "tsx src/scripts/set-dialogue-default.ts",
         "migrate:db": "tsx src/scripts/migrate-db-rename.ts",
         "sf:probe": "tsx src/scripts/sf-probe.ts",
     "fanout:probe": "tsx src/scripts/fanout-probe.ts",
