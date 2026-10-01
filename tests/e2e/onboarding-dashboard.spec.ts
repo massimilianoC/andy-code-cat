@@ -3,7 +3,7 @@
  *
  * Covers:
  *  - Register → redirect to /login?registered=1
- *  - Login with registered=1 flag → redirect to /onboarding
+ *  - Login with registered=1 flag → dashboard offers onboarding ("Sì" / "Non adesso")
  *  - Onboarding: step rendering, "Salta" and "Salta tutto" flows
  *  - Onboarding: step-by-step progression (Next), final redirect to /dashboard
  *  - Dashboard: create project, project card visible
@@ -55,7 +55,7 @@ test.describe("Registration → onboarding redirect", () => {
         expect(decodeURIComponent(url.searchParams.get("email") ?? "")).toBe(email);
     });
 
-    test("login with registered=1 flag redirects to /onboarding", async ({ page }) => {
+    test("login with registered=1 flag offers onboarding, and \"Non adesso\" stays on the dashboard", async ({ page }) => {
         // Register a fresh user first
         const email = uniqueEmail();
         const registerRes = await page.evaluate(
@@ -88,9 +88,33 @@ test.describe("Registration → onboarding redirect", () => {
         await page.fill('input[type="password"]', "testpassword123");
         await page.click('button[type="submit"]');
 
-        // Should redirect to /onboarding (new user, onboardingCompleted=false)
+        // Onboarding is optional: the dashboard asks, it does not redirect.
+        await page.waitForURL((url) => url.pathname === "/dashboard", { timeout: 15_000 });
+        const dialog = page.getByRole("dialog", { name: /preferenze e stili preferiti/i });
+        await expect(dialog).toBeVisible();
+        await dialog.getByRole("button", { name: "Non adesso" }).click();
+        await expect(dialog).toBeHidden();
+        expect(new URL(page.url()).pathname).toBe("/dashboard");
+    });
+
+    test("\"Sì\" in the welcome dialog opens the onboarding wizard", async ({ page }) => {
+        const email = uniqueEmail();
+        await page.evaluate(
+            async ({ apiUrl, email }) => {
+                await fetch(`${apiUrl}/v1/auth/register`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password: "testpassword123" }),
+                });
+            },
+            { apiUrl: API_URL, email },
+        );
+        await page.goto(`${BASE_URL}/login?registered=1&email=${encodeURIComponent(email)}`);
+        await page.fill('input[type="password"]', "testpassword123");
+        await page.click('button[type="submit"]');
+        await page.waitForURL((url) => url.pathname === "/dashboard", { timeout: 15_000 });
+        await page.getByRole("dialog").getByRole("button", { name: "Sì" }).click();
         await page.waitForURL((url) => url.pathname === "/onboarding", { timeout: 15_000 });
-        expect(page.url()).toContain("/onboarding");
     });
 });
 

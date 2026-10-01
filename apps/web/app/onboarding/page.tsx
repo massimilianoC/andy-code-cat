@@ -85,13 +85,15 @@ export default function OnboardingPage() {
             .then(([catalogRes, profileRes]) => {
                 setCatalog(catalogRes.catalog ?? {});
                 const p = profileRes.profile;
-                if (p.onboardingCompleted) {
+                // ?edit=1 is the dashboard's "Preferences" button: revisiting saved choices is allowed.
+                const editing = new URLSearchParams(window.location.search).get("edit") === "1";
+                if (p.onboardingCompleted && !editing) {
                     // Already onboarded — skip to dashboard
                     router.replace("/dashboard");
                     return;
                 }
-                // Resume from saved step
-                setStep(Math.min(p.onboardingStep ?? 0, STEP_COUNT - 1));
+                // Resume from saved step; an edit starts from the first one.
+                setStep(editing ? 0 : Math.min(p.onboardingStep ?? 0, STEP_COUNT - 1));
                 setSelected({
                     identityTags: p.identityTags ?? [],
                     sectorTags: p.sectorTags ?? [],

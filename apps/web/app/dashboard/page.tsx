@@ -110,6 +110,8 @@ export default function DashboardPage() {
     const [passwordChangeRequired, setPasswordChangeRequiredState] = useState(false);
     const [canAccessSuperadmin, setCanAccessSuperadmin] = useState(false);
     const [brandOpen, setBrandOpen] = useState(false);
+    // Style onboarding is optional: offered once, right after registration, never imposed.
+    const [welcomePrefsOpen, setWelcomePrefsOpen] = useState(false);
     // VibeCore mode: lifted here so Guided opens dialog overlay, Project resets on return
     const [entryMode, setEntryMode] = useState<EntryMode>("vibe");
     const createInputRef = useRef<HTMLInputElement>(null);
@@ -128,6 +130,11 @@ export default function DashboardPage() {
         const roles = getRoles();
         setCanAccessSuperadmin(roles.includes("admin") || roles.includes("superadmin"));
         setPasswordChangeRequiredState(isPasswordChangeRequired());
+        if (new URLSearchParams(window.location.search).get("welcome") === "1") {
+            setWelcomePrefsOpen(true);
+            // One-shot: a reload or a shared link must not ask again.
+            router.replace("/dashboard");
+        }
         setCheckingAuth(false);
         void load(tok);
         void getPresets().then((res) => setPresetCatalog(res.presets ?? [])).catch(() => undefined);
@@ -320,6 +327,23 @@ export default function DashboardPage() {
                     </DialogContent>
                 </Dialog>
             ) : null}
+            <Dialog open={welcomePrefsOpen && !passwordChangeRequired} onOpenChange={setWelcomePrefsOpen}>
+                <DialogContent className="max-w-md w-full">
+                    <DialogHeader>
+                        <DialogTitle>{t("dashboard.welcomePrefs.title")}</DialogTitle>
+                        <DialogDescription>{t("dashboard.welcomePrefs.description")}</DialogDescription>
+                    </DialogHeader>
+                    {/* "Not now" is the primary action on purpose: starting to build is the default path. */}
+                    <DialogFooter className="flex-row justify-between gap-2 sm:justify-between sm:space-x-0">
+                        <Button variant="outline" onClick={() => router.push("/onboarding")}>
+                            {t("dashboard.welcomePrefs.yes")}
+                        </Button>
+                        <Button autoFocus onClick={() => setWelcomePrefsOpen(false)}>
+                            {t("dashboard.welcomePrefs.notNow")}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Fixed header — always above everything (z-50) */}
             <header className="fixed top-0 left-0 right-0 z-50 h-[56px] bg-card border-b border-border px-6 flex items-center justify-between">
@@ -333,6 +357,9 @@ export default function DashboardPage() {
                     {token ? (
                         <Button variant="ghost" size="sm" onClick={() => setBrandOpen(true)}>Brand</Button>
                     ) : null}
+                    <Button variant="ghost" size="sm" onClick={() => router.push("/onboarding?edit=1")}>
+                        {t("dashboard.stylePrefs")}
+                    </Button>
                     {canAccessSuperadmin ? (
                         <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>{t("dashboard.superadmin")}</Button>
                     ) : null}
