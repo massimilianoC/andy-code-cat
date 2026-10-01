@@ -19,7 +19,7 @@ interface SessionContextType {
     requiresFullLogin: boolean;
     setIsSessionExpired: (expired: boolean) => void;
     /** Kept for embedded login callers that still need to restore tokens. */
-    onLoginSuccess: (accessToken: string, refreshToken: string, projectId: string) => void;
+    onLoginSuccess: (accessToken: string, refreshToken: string) => void;
     clearSession: () => void;
 }
 
@@ -100,12 +100,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setRequiresFullLogin(false);
     };
 
-    const handleLoginSuccess = (
-        accessToken: string,
-        refreshToken: string,
-        projectId: string
-    ) => {
-        saveSession(accessToken, refreshToken, projectId);
+    const handleLoginSuccess = (accessToken: string, refreshToken: string) => {
+        saveSession(accessToken, refreshToken);
         setIsSessionExpired(false);
         setRequiresFullLogin(false);
         // Notify all subscribers (e.g. workspace page) that fresh tokens are available

@@ -6,7 +6,8 @@ import { getDb } from "../db/mongo";
 interface SessionDocument {
     _id: ObjectId;
     userId: ObjectId;
-    projectId: ObjectId;
+    /** Legacy: written by logins before 2026.10, never read. Left in place on old records. */
+    projectId?: ObjectId;
     tokenId?: string;
     refreshTokenHash: string;
     createdAt: Date;
@@ -19,7 +20,6 @@ function mapDocument(doc: SessionDocument): Session {
     return {
         id: doc._id.toHexString(),
         userId: doc.userId.toHexString(),
-        projectId: doc.projectId.toHexString(),
         tokenId: doc.tokenId,
         refreshTokenHash: doc.refreshTokenHash,
         createdAt: doc.createdAt,
@@ -42,7 +42,6 @@ export class MongoSessionRepository implements SessionRepository {
         const result = await collection.insertOne({
             _id: new ObjectId(),
             userId: new ObjectId(input.userId),
-            projectId: new ObjectId(input.projectId),
             tokenId: input.tokenId,
             refreshTokenHash: input.refreshTokenHash,
             createdAt: now,

@@ -5,7 +5,6 @@
 
 const ACCESS_TOKEN_KEY = "pf_access_token";
 const REFRESH_TOKEN_KEY = "pf_refresh_token";
-const PROJECT_KEY = "pf_active_project";
 const PASSWORD_CHANGE_REQUIRED_KEY = "pf_password_change_required";
 
 function safeGetItem(key: string): string | null {
@@ -72,11 +71,10 @@ export function isRefreshTokenExpired(): boolean {
     return Date.now() / 1000 >= payload.exp;
 }
 
-export function saveSession(accessToken: string, refreshToken: string, projectId: string) {
+export function saveSession(accessToken: string, refreshToken: string) {
     if (typeof window === "undefined") return;
     safeSetItem(ACCESS_TOKEN_KEY, accessToken);
     safeSetItem(REFRESH_TOKEN_KEY, refreshToken);
-    safeSetItem(PROJECT_KEY, projectId);
 }
 
 export function getAccessToken(): string | null {
@@ -99,11 +97,6 @@ export function setRefreshToken(token: string) {
     safeSetItem(REFRESH_TOKEN_KEY, token);
 }
 
-export function getActiveProject(): string | null {
-    if (typeof window === "undefined") return null;
-    return safeGetItem(PROJECT_KEY);
-}
-
 export function setPasswordChangeRequired(required: boolean) {
     if (typeof window === "undefined") return;
     safeSetItem(PASSWORD_CHANGE_REQUIRED_KEY, required ? "true" : "false");
@@ -118,7 +111,6 @@ export function clearSession() {
     if (typeof window === "undefined") return;
     safeRemoveItem(ACCESS_TOKEN_KEY);
     safeRemoveItem(REFRESH_TOKEN_KEY);
-    safeRemoveItem(PROJECT_KEY);
     safeRemoveItem(PASSWORD_CHANGE_REQUIRED_KEY);
 }
 

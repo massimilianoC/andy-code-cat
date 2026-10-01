@@ -134,7 +134,6 @@ test.describe("Onboarding wizard", () => {
         await page.evaluate((data: Record<string, string>) => {
             localStorage.setItem("pf_access_token", data.accessToken ?? "");
             localStorage.setItem("pf_refresh_token", data.refreshToken ?? "");
-            localStorage.setItem("pf_active_project", data.activeProjectId ?? "");
         }, regData);
     }
 
