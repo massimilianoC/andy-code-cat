@@ -8,6 +8,39 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0. Release 2026.10.01.1 — open-testing window and rollback point
+
+Deployed for a few days of free testing by webinar attendees. Three changes:
+
+- **No default project.** Registration, admin user creation and login no longer create a
+  "Default Project"; a login is no longer bound to a project (`activeProjectId` is gone from the
+  login/refresh responses). New users start from Vibe or a template.
+- **Style onboarding is optional.** After the first login following registration the dashboard asks
+  "Vuoi impostare preferenze e stili preferiti?" — "Sì" (neutral, left) opens `/onboarding`,
+  "Non adesso" (primary, right) closes it and leaves the profile untouched. A "Preferenze" button
+  in the header reopens the wizard (`/onboarding?edit=1`).
+- **Default model.** `resolvePlatformDefault` replaces provider-list order (which made LM Studio's
+  `local/default-chat` everyone's default). Production: `LLM_DEFAULT_PROVIDER=openrouter` and
+  `google/gemini-3.8-flash` as OpenRouter's active dialogue default.
+
+**Rollback point — what production ran before this release:**
+
+| | value |
+|---|---|
+| release / tag | `2026.09.11.2` (`/health` reported this version) |
+| commit | `5ae4d369b7f12d233d8482cd97bd31f6aceace0e` (no app code changed up to `2026.09.11.4`) |
+| api image | `andy-code-cat-api:droplet` id `dcb33bc8e445`, retagged `andy-code-cat-api:rollback-2026.09.11.2-pre` |
+| web image | `andy-code-cat-web:droplet` id `072ee40ffb52`, retagged `andy-code-cat-web:rollback-2026.09.11.2-pre` |
+| `.env.droplet` | copied to `.env.droplet.bak-2026.10.01` before `LLM_DEFAULT_PROVIDER` changed |
+
+To roll back on `docker-2` (`/opt/docker/projects/pageforge`): restore the env backup, retag the
+rollback images as `:droplet`, `up -d --no-deps api web`, then `docker restart andy-code-cat-nginx`.
+The catalog change (Gemini 3.8 Flash as OpenRouter dialogue default) is data and can stay; revert it
+from `/admin/models` if needed. Accounts registered during the window simply have no project until
+they create one — the previous code recreates a "Default Project" for them at their next login.
+
+---
+
 ## 1. The thread, in one paragraph
 
 "Didactic mode says fetch failed" turned out to be an expired TLS certificate on the configured
