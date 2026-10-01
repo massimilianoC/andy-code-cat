@@ -1,4 +1,5 @@
 import type { LlmProviderCatalog } from "../../domain/entities/LlmCatalog";
+import type { PlatformDefaultModel } from "./catalogModels";
 
 /**
  * Pin-down of today's model-resolution cascades used by VibeClassify, VibePrefill, and
@@ -77,6 +78,13 @@ export interface ResolveModelSelectionInput {
     gateOverrideOnOpenAiCompatible: boolean;
     /** Defaults to "legacy". No caller in this PR ever passes "strict" — that's for later work. */
     policy?: "legacy" | "strict";
+    /**
+     * "vibe-cascade" only: the platform default (`resolvePlatformDefault`) — what the pickers
+     * pre-select for a user who has not chosen. Consulted after the task setting and before the
+     * hardcoded fallback provider, so a run started without a choice gets the same model the
+     * interface shows. Callers driven by a superadmin task setting leave it unset.
+     */
+    platformDefault?: PlatformDefaultModel;
 }
 
 const LMSTUDIO_PROVIDER = "lmstudio";
@@ -157,15 +165,20 @@ function resolveVibeCascade(input: ResolveModelSelectionInput, policy: "legacy" 
         });
     } else {
         const taskCatalog = activeProviders.find((p) => p.provider === taskSettingProvider);
+        const platformDefaultCatalog = input.platformDefault
+            ? activeProviders.find((p) => p.provider === input.platformDefault!.provider)
+            : undefined;
         const fallbackCatalog = activeProviders.find((p) => p.provider === fallbackProvider);
         const nonLmStudioCatalog = activeProviders.find((p) => p.provider !== LMSTUDIO_PROVIDER);
-        providerCatalog = taskCatalog ?? fallbackCatalog ?? nonLmStudioCatalog ?? activeProviders[0];
+        providerCatalog = taskCatalog ?? platformDefaultCatalog ?? fallbackCatalog ?? nonLmStudioCatalog ?? activeProviders[0];
         providerSource = taskCatalog
             ? "task-setting"
-            : fallbackCatalog
-                ? "catalog-default"
-                // covers both "first non-lmstudio active provider" and the final activeProviders[0]
-                : "catalog-first";
+            : platformDefaultCatalog
+                ? "catalog-role-default"
+                : fallbackCatalog
+                    ? "catalog-default"
+                    // covers both "first non-lmstudio active provider" and the final activeProviders[0]
+                    : "catalog-first";
     }
 
     if (!providerCatalog) {
@@ -198,16 +211,21 @@ function resolveVibeCascade(input: ResolveModelSelectionInput, policy: "legacy" 
         });
     } else {
         const taskModel = providerCatalog.models.find((m) => m.isActive && m.id === taskSettingModel);
+        const platformDefaultModel = input.platformDefault?.provider === providerCatalog.provider
+            ? providerCatalog.models.find((m) => m.isActive && m.id === input.platformDefault!.model)
+            : undefined;
         const defaultModel = providerCatalog.models.find((m) => m.isActive && m.isDefault);
         const firstActive = providerCatalog.models.find((m) => m.isActive);
-        modelId = taskModel?.id ?? defaultModel?.id ?? firstActive?.id ?? hardcodedFallbackModel;
+        modelId = taskModel?.id ?? platformDefaultModel?.id ?? defaultModel?.id ?? firstActive?.id ?? hardcodedFallbackModel;
         modelSource = taskModel
             ? "task-setting"
-            : defaultModel
-                ? "catalog-default"
-                : firstActive
-                    ? "catalog-first"
-                    : "hardcoded-fallback";
+            : platformDefaultModel
+                ? "catalog-role-default"
+                : defaultModel
+                    ? "catalog-default"
+                    : firstActive
+                        ? "catalog-first"
+                        : "hardcoded-fallback";
     }
 
     return {

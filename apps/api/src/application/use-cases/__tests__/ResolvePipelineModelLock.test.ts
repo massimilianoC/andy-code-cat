@@ -177,6 +177,30 @@ describe("ResolvePipelineModelLock — createRun", () => {
     });
 });
 
+describe("ResolvePipelineModelLock — createRun without a choice", () => {
+    it("locks the platform default, not the hardcoded fallback provider", async () => {
+        const repo = new InMemoryPipelineRunRepository();
+        const providers = [
+            fakeCatalog(),
+            fakeCatalog({
+                provider: "openrouter",
+                models: [
+                    { id: "google/gemini-2.5-pro", provider: "openrouter", role: "quality_check", capabilities: ["chat"], isDefault: true, isFallback: false, isActive: true },
+                    { id: "google/gemini-3.8-flash", provider: "openrouter", role: "dialogue", capabilities: ["chat"], isDefault: true, isFallback: false, isActive: true },
+                ],
+            }),
+        ];
+        const getLlmCatalog = { execute: vi.fn(async () => ({ source: "mongo" as const, providers, activeProvider: "openrouter" })) };
+        const useCase = new ResolvePipelineModelLock(repo, getLlmCatalog as never);
+
+        const run = await useCase.createRun({ projectId: "project-1", ownerUserId: "user-1", entryMode: "vibe", optimizationPolicy: "skip" });
+
+        // The dialogue default of the platform-default provider: the model the picker shows.
+        expect(run.modelLock.effective).toEqual({ providerId: "openrouter", modelId: "google/gemini-3.8-flash" });
+        expect(run.modelLock.selectedBy).toBe("catalog-proposal");
+    });
+});
+
 describe("ResolvePipelineModelLock — dispatch", () => {
     it("returns not-blocked when the locked model is still active", async () => {
         const repo = new InMemoryPipelineRunRepository();

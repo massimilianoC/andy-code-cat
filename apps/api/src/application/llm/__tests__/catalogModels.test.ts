@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LlmProviderCatalog } from "../../../domain/entities/LlmCatalog";
-import { dedupeModelsById, resolveComposerCascade } from "../catalogModels";
+import { dedupeModelsById, resolveComposerCascade, resolvePlatformDefault } from "../catalogModels";
 
 /**
  * Characterization tests for the composer cascade extracted out of ResolvePromptExecution.
@@ -250,5 +250,53 @@ describe("resolveComposerCascade — an unhonoured request is reported, not abso
         expect(result.requestedModelUnavailable).toBe(true);
         expect(result.requestedProviderUnavailable).toBe(true);
         expect(result.providerCatalog).toBeUndefined();
+    });
+});
+
+describe("resolvePlatformDefault", () => {
+    // Mongo lists providers alphabetically, so a local provider comes first.
+    const lmstudio = provider({
+        provider: "lmstudio",
+        models: [model({ id: "local/default-chat", provider: "lmstudio", isDefault: true })],
+    });
+    const openrouter = provider({
+        provider: "openrouter",
+        models: [
+            model({ id: "google/gemini-2.5-pro", provider: "openrouter", role: "quality_check", isDefault: true }),
+            model({ id: "google/gemini-3.8-flash", provider: "openrouter", isDefault: true }),
+        ],
+    });
+    const siliconflow = provider({
+        provider: "siliconflow",
+        models: [model({ id: "MiniMaxAI/MiniMax-M3", provider: "siliconflow", isDefault: true })],
+    });
+
+    it("prefers the configured provider's dialogue default", () => {
+        expect(resolvePlatformDefault([lmstudio, openrouter, siliconflow], "openrouter"))
+            .toEqual({ provider: "openrouter", model: "google/gemini-3.8-flash" });
+    });
+
+    it("never lets list order put a local provider first", () => {
+        expect(resolvePlatformDefault([lmstudio, openrouter], "siliconflow"))
+            .toEqual({ provider: "openrouter", model: "google/gemini-3.8-flash" });
+    });
+
+    it("skips an inactive configured provider and inactive defaults", () => {
+        const inactiveDefault = provider({
+            provider: "openrouter",
+            models: [model({ id: "google/gemini-3.8-flash", provider: "openrouter", isDefault: true, isActive: false })],
+        });
+        expect(resolvePlatformDefault([lmstudio, inactiveDefault, { ...siliconflow, isActive: false }], "siliconflow"))
+            .toEqual({ provider: "lmstudio", model: "local/default-chat" });
+    });
+
+    it("falls back to a default of any role, then to nothing", () => {
+        const onlyQualityCheck = provider({
+            provider: "openrouter",
+            models: [model({ id: "google/gemini-2.5-pro", provider: "openrouter", role: "quality_check", isDefault: true })],
+        });
+        expect(resolvePlatformDefault([onlyQualityCheck], "openrouter"))
+            .toEqual({ provider: "openrouter", model: "google/gemini-2.5-pro" });
+        expect(resolvePlatformDefault([provider({ provider: "openrouter" })], "openrouter")).toBeUndefined();
     });
 });

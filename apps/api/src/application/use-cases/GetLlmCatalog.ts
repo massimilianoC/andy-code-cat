@@ -4,6 +4,7 @@ import { buildDefaultSiliconFlowCatalog } from "../llm/defaultSiliconFlowCatalog
 import { buildDefaultLmStudioCatalog } from "../llm/defaultLmStudioCatalog";
 import { buildDefaultOpenRouterCatalog } from "../llm/defaultOpenRouterCatalog";
 import { hydrateProviderCatalog } from "../llm/liveProviderCatalog";
+import { resolvePlatformDefault } from "../llm/catalogModels";
 
 export class GetLlmCatalog {
     constructor(
@@ -64,10 +65,7 @@ export class GetLlmCatalog {
             )),
         );
 
-        const activeProvider =
-            providers.find((provider) => provider.models.some((model) => model.isDefault && model.role === "dialogue"))?.provider
-            ?? providers.find((provider) => provider.models.some((model) => model.isDefault))?.provider
-            ?? this.defaultProvider;
+        const activeProvider = resolvePlatformDefault(providers, this.defaultProvider)?.provider ?? this.defaultProvider;
 
         return {
             ...baseCatalog,
