@@ -4,15 +4,11 @@ import {
     type RegisterInput
 } from "@andy-code-cat/contracts";
 import type { UserRepository } from "../../domain/repositories/UserRepository";
-import type { ProjectRepository } from "../../domain/repositories/ProjectRepository";
 import { hashPassword } from "../../infra/security/password";
 import { env } from "../../config";
 
 export class RegisterUser {
-    constructor(
-        private readonly userRepository: UserRepository,
-        private readonly projectRepository: ProjectRepository
-    ) { }
+    constructor(private readonly userRepository: UserRepository) { }
 
     async execute(rawInput: RegisterInput) {
         const input = registerSchema.parse(rawInput);
@@ -35,8 +31,10 @@ export class RegisterUser {
             }
         });
 
-        const defaultProject = await this.projectRepository.create(user.id, "Default Project");
-
+        // No project is created here. A new account starts from the dashboard, where the first
+        // project comes from Vibe or from a template. The placeholder "Default Project" this used
+        // to create was the project nobody ever completed, and it carried no preset, so a user
+        // who opened it got none of the template guidance either entry point provides.
         return {
             user: {
                 id: user.id,
@@ -44,8 +42,7 @@ export class RegisterUser {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 emailVerified: user.emailVerified
-            },
-            defaultProject
+            }
         };
     }
 }

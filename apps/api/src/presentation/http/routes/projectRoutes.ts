@@ -303,7 +303,6 @@ export function createProjectRoutes(): Router {
             const refreshPayload = verifyRefreshToken(refreshToken);
             await sessionRepository.create({
                 userId: req.auth!.userId,
-                projectId: req.sandbox!.projectId,
                 tokenId,
                 refreshTokenHash: await hashPassword(refreshToken),
                 expiresAt: new Date((refreshPayload.exp ?? 0) * 1000),

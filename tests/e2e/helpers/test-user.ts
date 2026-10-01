@@ -188,9 +188,8 @@ export async function deleteTestProject(page: Page, projectId: string): Promise<
 }
 
 /**
- * Deletes ALL projects owned by the bot user EXCEPT the "Default Project"
- * created at registration.  LoginUser requires at least one project to exist
- * (to bind the session), so we must always keep the default project alive.
+ * Deletes ALL projects owned by the bot user. A login no longer needs a project
+ * (sessions are not bound to one), so nothing has to be kept alive.
  * Use in afterAll to leave the database clean.
  */
 export async function deleteAllTestProjects(page: Page): Promise<void> {
@@ -207,8 +206,6 @@ export async function deleteAllTestProjects(page: Page): Promise<void> {
         { apiUrl: API_URL, token },
     );
     for (const p of projects) {
-        // Keep the default project so subsequent loginTestUser calls succeed
-        if (p.name === "Default Project") continue;
         await deleteTestProject(page, p.id);
     }
 }
@@ -277,7 +274,6 @@ export async function deleteAllBot2Projects(page: Page, bot2Token: string): Prom
     await page.evaluate(
         async ({ apiUrl, token, items }) => {
             for (const p of items) {
-                if (p.name === "Default Project") continue;
                 await fetch(`${apiUrl}/v1/projects/${p.id}`, {
                     method: "DELETE",
                     headers: {

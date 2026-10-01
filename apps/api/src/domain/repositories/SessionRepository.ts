@@ -2,7 +2,6 @@ import type { Session } from "../entities/Session";
 
 export interface CreateSessionInput {
     userId: string;
-    projectId: string;
     tokenId: string;
     refreshTokenHash: string;
     expiresAt: Date;

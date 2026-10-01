@@ -23,7 +23,7 @@ function LoginContent() {
     const prefillEmail = searchParams.get("email") ?? undefined;
 
     function handleSuccess(data: LoginResult) {
-        saveSession(data.accessToken, data.refreshToken, data.activeProjectId);
+        saveSession(data.accessToken, data.refreshToken);
         setPasswordChangeRequired(data.requiresPasswordChange);
         router.push(afterOnboarding ? "/onboarding" : "/dashboard");
     }

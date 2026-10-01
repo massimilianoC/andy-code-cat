@@ -73,7 +73,6 @@ export class RefreshSession {
         return {
             accessToken: newAccessToken,
             refreshToken: newRefreshToken,
-            activeProjectId: updatedSession.projectId,
             emailVerificationRequired: !user.emailVerified,
             requiresPasswordChange: (user.passwordPolicyVersion ?? 1) < CURRENT_PASSWORD_POLICY_VERSION
         };

@@ -18,7 +18,7 @@ export function createAuthRoutes(): Router {
     const sessionRepository = new MongoSessionRepository();
     const platformConfigRepository = new MongoPlatformConfigRepository();
 
-    const registerUser = new RegisterUser(userRepository, projectRepository);
+    const registerUser = new RegisterUser(userRepository);
     const loginUser = new LoginUser(userRepository, projectRepository, sessionRepository);
     const refreshSession = new RefreshSession(sessionRepository, userRepository);
     const changePassword = new ChangePassword(userRepository, sessionRepository);
