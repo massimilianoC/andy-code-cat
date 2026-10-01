@@ -25,7 +25,8 @@ function LoginContent() {
     function handleSuccess(data: LoginResult) {
         saveSession(data.accessToken, data.refreshToken);
         setPasswordChangeRequired(data.requiresPasswordChange);
-        router.push(afterOnboarding ? "/onboarding" : "/dashboard");
+        // Style onboarding is offered, not imposed: the dashboard asks once and "not now" is the default.
+        router.push(afterOnboarding ? "/dashboard?welcome=1" : "/dashboard");
     }
 
     return (

@@ -82,6 +82,13 @@
       "duplicateError": "Errore nella duplicazione",
       "promptCopied": "Prompt copiato negli appunti",
       "noPrompt": "Nessun prompt configurato per questo progetto"
+    },
+    "stylePrefs": "Preferenze",
+    "welcomePrefs": {
+      "title": "Vuoi impostare preferenze e stili preferiti?",
+      "description": "Bastano un paio di minuti: i tuoi gusti diventano il punto di partenza di ogni progetto. Puoi farlo anche più tardi dal pulsante «Preferenze» in alto.",
+      "yes": "Sì",
+      "notNow": "Non adesso"
     }
   },
   "onboarding": {
