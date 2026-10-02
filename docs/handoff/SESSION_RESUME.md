@@ -8,9 +8,14 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
-## 0. Release 2026.10.01.1 — open-testing window and rollback point
+## 0. Releases 2026.10.01.1 + 2026.10.02.1 — open-testing window and rollback point
 
-Deployed for a few days of free testing by webinar attendees. Three changes:
+Deployed for a few days of free testing by webinar attendees. 2026.10.02.1 adds a fourth change to
+the three of 2026.10.01.1 — **Zero Effort budget for thinking models**: `vibe_intent_classify` and
+`vibe_intent_prefill` send `max_tokens = clamp(setting, 24k, 32k)` (`application/llm/zeroEffortBudget.ts`);
+classify was capped at 512 and prefill floored at 4k under persisted admin settings of 256 / 6,000.
+
+The 2026.10.01.1 changes:
 
 - **No default project.** Registration, admin user creation and login no longer create a
   "Default Project"; a login is no longer bound to a project (`activeProjectId` is gone from the
