@@ -98,7 +98,9 @@ export const DEFAULT_PROMPT_TASK_SETTINGS: Record<string, PromptTaskSetting> = {
         provider: "siliconflow",
         model: "MiniMaxAI/MiniMax-M3",
         temperature: 0.0,
-        maxCompletionTokens: 256,
+        // A ceiling, not a spend: the JSON is ~100 tokens, but a reasoning model thinks first.
+        // VibeClassify floors it at 24k anyway (application/llm/zeroEffortBudget.ts).
+        maxCompletionTokens: 24000,
         systemTemplate: "",
     },
     // VibeCore — Guided Mode LLM prefill (brief field extraction)

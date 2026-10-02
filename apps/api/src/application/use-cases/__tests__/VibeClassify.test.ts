@@ -132,6 +132,35 @@ describe("VibeClassify", () => {
         expect(result.templateId).toBe(templateId);
     });
 
+    it("gives a thinking model room to answer even when an older release persisted a 256-token setting", async () => {
+        const fetchMock = stubLlm({ templateId: "landing", formatHint: null, confidence: 0.8, reasoning: "n/a" });
+        const { useCase } = createUseCase({
+            platformConfig: {
+                governanceByProduct: { default: { promptTaskSettings: { vibe_intent_classify: { maxCompletionTokens: 256 } } } },
+            },
+        });
+
+        await useCase.execute({ prompt: "landing page for a bakery" });
+
+        const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(requestBody.max_tokens).toBe(24_000);
+    });
+
+    it("uses the fields of an answer cut off by max_tokens instead of discarding it", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+            choices: [{
+                message: { content: '<think>maybe {landing}? no: {"x":1}</think>{"templateId": "landing", "formatHint": null, "confidence": 0.82, "reasoning": "single conv' },
+                finish_reason: "length",
+            }],
+        }), { status: 200, headers: { "Content-Type": "application/json" } })));
+        const { useCase } = createUseCase();
+
+        const result = await useCase.execute({ prompt: "landing page for a bakery" });
+
+        expect(result.templateId).toBe("landing");
+        expect(result.confidence).toBe(0.82);
+    });
+
     it("rejects a templateId that is not in the catalog", async () => {
         stubLlm({ templateId: "not-a-preset", formatHint: null, confidence: 0.95, reasoning: "hallucinated id" });
         const { useCase } = createUseCase();
