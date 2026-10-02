@@ -15,6 +15,7 @@ import { buildCanonicalPresetSelectionRules } from "../prompting/vibePresetCatal
 import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
 import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
 import { describeError } from "../errors/describeError";
+import { zeroEffortCompletionBudget } from "../llm/zeroEffortBudget";
 import { ExecutionLogger } from "../services/ExecutionLogger";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ const TASK_KEY = "vibe_intent_prefill";
 const FALLBACK_PROVIDER = "siliconflow";
 const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
 const MAX_PROMPT_CHARS = 2000;
-// MIN_TOKENS/MAX_TOKENS: enforce a floor and ceiling regardless of DB task settings.
+// Completion budget: a floor and ceiling enforced regardless of DB task settings.
 // Char budget from SYSTEM_PROMPT's own field-length hints + the zod caps in
 // packages/contracts/src/pipeline.ts, at ~4 chars/token:
 //   floor     ~4,100 chars  ~1,025 tok  (terse but complete — all 19 fields present)
@@ -40,16 +41,13 @@ const MAX_PROMPT_CHARS = 2000;
 // fields. The ceiling therefore has to cover reasoning + the full brief, not the brief
 // alone. Measured: reasoning models need roughly 6-8k of thinking before ~2k of JSON.
 //
-// Why 24k default under a 32k ceiling, and not more: this budget is COMPLETION tokens, so
-// it does not need to grow with the number of attachments — attachments inflate the prompt
-// side (8,603 tokens in the run that failed), while the brief's own length is bounded by
-// the schema caps at ~5,800 tokens. 24k therefore leaves ~18k of thinking room in front of
-// a maximal brief, which is well past anything measured. The remaining headroom to 32k is
-// left to operator config rather than spent by default: the catalog does not record
-// per-model output limits, so a max_tokens above what a model accepts can be rejected by
-// the provider, and a default nobody needs is a default that can only cost us.
-const MIN_TOKENS = 4000;
-const MAX_TOKENS = 32000;
+// This budget is COMPLETION tokens, so it does not need to grow with the number of
+// attachments — attachments inflate the prompt side (8,603 tokens in the run that failed),
+// while the brief's own length is bounded by the schema caps at ~5,800 tokens. A 24k floor
+// leaves ~18k of thinking room in front of a maximal brief. It used to be 4,000: a floor
+// that let a task setting persisted by an older release (2048-16000) starve a thinking model
+// into finish_reason=length. Floor and 32k ceiling are shared with VibeClassify — see
+// application/llm/zeroEffortBudget.ts.
 
 // All valid preset IDs from the catalog — kept in sync at startup.
 const VALID_PRESET_IDS: Set<string> = new Set(PRESET_CATALOG.map((p) => p.id));
@@ -768,7 +766,7 @@ export class VibePrefill {
                 body: JSON.stringify(buildChatCompletionRequestBody({
                     provider: providerCatalog.provider,
                     model: modelId,
-                    maxTokens: Math.min(Math.max(taskSettings.maxCompletionTokens, MIN_TOKENS), MAX_TOKENS),
+                    maxTokens: zeroEffortCompletionBudget(taskSettings.maxCompletionTokens),
                     temperature: taskSettings.temperature ?? 0.3,
                     messages: [
                         { role: "system" as const, content: systemPrompt },
@@ -910,7 +908,7 @@ export class VibePrefill {
                             (usage as { completion_tokens_details?: { reasoning_tokens?: number } } | undefined)
                                 ?.completion_tokens_details?.reasoning_tokens ?? 0,
                         ),
-                        maxCompletionTokens: Math.min(Math.max(taskSettings.maxCompletionTokens, MIN_TOKENS), MAX_TOKENS),
+                        maxCompletionTokens: zeroEffortCompletionBudget(taskSettings.maxCompletionTokens),
                     },
                 });
             }

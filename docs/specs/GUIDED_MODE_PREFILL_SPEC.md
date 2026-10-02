@@ -121,7 +121,16 @@ Rules:
 
 ### 5.3 Max tokens
 
-512 — the structured JSON is small and bounded.
+~~512 — the structured JSON is small and bounded.~~ Superseded: the JSON is bounded, the
+reasoning a thinking model spends before it is not.
+
+Since 2026.10.02 both calls of this layer — `vibe_intent_classify` and `vibe_intent_prefill` —
+send `max_tokens = clamp(task setting, 24 000, 32 000)` (`apps/api/src/application/llm/zeroEffortBudget.ts`).
+It is a ceiling, not a spend: a model without reasoning still stops after its few hundred or few
+thousand tokens of JSON. The floor sits over the operator setting because task settings saved by
+older releases (256 for classify, 6 000 for prefill, from the admin Guided Mode page) override the
+code defaults. An answer cut off by `max_tokens` is still parsed: the prefill closes the truncated
+JSON and flags the brief as partial, the classifier repairs it with `jsonrepair`.
 
 ### 5.4 Validation
 
