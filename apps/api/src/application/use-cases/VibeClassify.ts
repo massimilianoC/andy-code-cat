@@ -14,6 +14,8 @@ import { ResourceType } from "../../domain/entities/CostTransaction";
 import { resolveModelSelection, type ResolveModelSelectionInput } from "../llm/modelSelection";
 import { observeModelSelectionShadow } from "../llm/modelSelectionShadow";
 import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
+import { jsonrepair } from "jsonrepair";
+import { zeroEffortCompletionBudget } from "../llm/zeroEffortBudget";
 
 const TASK_KEY = "vibe_intent_classify";
 const FALLBACK_PROVIDER = "siliconflow";
@@ -126,9 +128,14 @@ function parseClassifyResponse(raw: string): Omit<VibeClassifyResponse, "skipped
     let text = raw.trim();
     // Strip optional code fences from models that ignore instructions
     text = text.replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
-    const candidate = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
+    // Reasoning emitted inline rather than in reasoning_content can itself contain braces.
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+    // From the first brace, not between the first and last: an answer cut off by max_tokens has no
+    // closing brace, and jsonrepair recovers the fields it did deliver instead of discarding them.
+    const start = text.indexOf("{");
+    const candidate = start >= 0 ? text.slice(start) : text;
     try {
-        const parsed = JSON.parse(candidate) as Record<string, unknown>;
+        const parsed = JSON.parse(jsonrepair(candidate)) as Record<string, unknown>;
         const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0;
         const templateId = typeof parsed.templateId === "string" && parsed.templateId !== "null" && VALID_PRESET_IDS.has(parsed.templateId)
             ? parsed.templateId
@@ -291,7 +298,9 @@ export class VibeClassify {
                 body: JSON.stringify(buildChatCompletionRequestBody({
                     provider: providerCatalog.provider,
                     model: modelId,
-                    maxTokens: Math.min(taskSettings.maxCompletionTokens, 512),
+                    // Was min(setting, 512): a reasoning model spent all of it thinking and
+                    // returned no JSON, so the classification was paid for and then skipped.
+                    maxTokens: zeroEffortCompletionBudget(taskSettings.maxCompletionTokens),
                     temperature: taskSettings.temperature,
                     messages,
                 })),

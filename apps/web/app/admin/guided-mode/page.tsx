@@ -38,8 +38,8 @@ const PROJECT_MODE_GENERATE_TASK_KEY = "god_mode_generate";
 // exists) always comes from the /v1/admin/prompt-registry endpoint, never from a literal
 // string here. See taskPromptRegistry.ts on the backend for the source of truth.
 const TASK_ROUTING_DEFAULTS: Record<string, Omit<PromptTaskSettingDto, "systemTemplate" | "systemTemplateBaselineHash">> = {
-    [CLASSIFY_TASK_KEY]:          { enabled: true, provider: "", model: "", temperature: 0.0, maxCompletionTokens: 256 },
-    [PREFILL_TASK_KEY]:           { enabled: true, provider: "", model: "", temperature: 0.3, maxCompletionTokens: 6000 },
+    [CLASSIFY_TASK_KEY]:          { enabled: true, provider: "", model: "", temperature: 0.0, maxCompletionTokens: 24000 },
+    [PREFILL_TASK_KEY]:           { enabled: true, provider: "", model: "", temperature: 0.3, maxCompletionTokens: 32000 },
     [OPTIMIZE_TASK_KEY]:          { enabled: true, provider: "", model: "", temperature: 0.7, maxCompletionTokens: 32000 },
     [GENERATE_TASK_KEY]:          { enabled: true, provider: "", model: "", temperature: 0.5, maxCompletionTokens: 14000 },
     [VIBE_GENERATE_TASK_KEY]:     { enabled: true, provider: "", model: "", temperature: 0.5, maxCompletionTokens: 14000 },
