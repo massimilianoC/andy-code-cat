@@ -54,6 +54,20 @@ describe("Template Skills Layer S filesystem resolver", () => {
         expect(resolved!.layer).not.toContain("Folder notes");
     });
 
+    it("produces the same layer for CRLF and LF skill files", async () => {
+        const { resolveFilesystemTemplateSkills } = await loadModules();
+        writeSkill("lf", "a-skill.md", "# Skill\n\nLine one\nLine two\n");
+        writeSkill("crlf", "a-skill.md", "# Skill\r\n\r\nLine one\r\nLine two\r\n");
+
+        const lf = resolveFilesystemTemplateSkills({ presetId: "lf", rootPath: tmpRoot, maxChars: 10_000 });
+        const crlf = resolveFilesystemTemplateSkills({ presetId: "crlf", rootPath: tmpRoot, maxChars: 10_000 });
+
+        expect(crlf!.layer).not.toContain("\r");
+        expect(crlf!.layer.replace(/Template id: crlf|by-template\/crlf/g, "X")).toBe(
+            lf!.layer.replace(/Template id: lf|by-template\/lf/g, "X"),
+        );
+    });
+
     it("drops whole skill files when the Layer S budget is full", async () => {
         const { resolveFilesystemTemplateSkills } = await loadModules();
         writeSkill("website", "a-small.md", "# Small\n\nFits");

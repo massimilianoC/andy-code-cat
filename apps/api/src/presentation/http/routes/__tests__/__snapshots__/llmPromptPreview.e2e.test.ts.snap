@@ -539,7 +539,7 @@ Minimal example (shape only):
 { "version": "media-manifest-v1", "requests": [ { "key": "hero-main", "kind": "background", "role": "hero", "sourceStrategy": "stock", "semanticQuery": "bright modern design studio workspace", "alt": "Bright modern design studio", "priority": 10, "width": 1600, "height": 900 } ] }
 Place mediaManifest at the TOP LEVEL of the JSON, as a sibling of chat and artifacts — NOT inside artifacts.
 
-- TOTAL OUTPUT MUST stay under 64.000 tokens. Target 8000–32000 tokens for typical requests, up to budget for large/complex outputs. Never repeat the entire artifact if only a small change is needed.
+- TOTAL OUTPUT MUST stay under 64,000 tokens. Target 8000–32000 tokens for typical requests, up to budget for large/complex outputs. Never repeat the entire artifact if only a small change is needed.
 - For chat-preview artifact generation, target roughly 24000–32000 completion tokens total (thinking + final JSON/artifacts) for most requests. Use larger budgets only when artifact complexity genuinely requires it.
 - HTML target: under 30 KB. Factor repeated visual blocks into CSS classes rather than duplicating markup.
 - Keep artifacts concise and functional; avoid unnecessary boilerplate.
@@ -601,14 +601,14 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     ],
   },
   {
-    "chars": 7705,
+    "chars": 7560,
     "id": "S",
     "key": "template-skills",
     "label": "Layer S — Template skills",
     "source": "filesystem-template-skills:landing:anti-ai-slop-ui-review,brand-led-identity-system,landing-conversion-copy,modern-impact-visual-direction,premium-landing-art-direction",
     "span": [
       9168,
-      16940,
+      16795,
     ],
   },
   {
@@ -618,8 +618,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Layer T — Template resolution",
     "source": "empty",
     "span": [
-      16940,
-      16940,
+      16795,
+      16795,
     ],
   },
   {
@@ -629,8 +629,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Layer C — Style context",
     "source": "empty",
     "span": [
-      16940,
-      16940,
+      16795,
+      16795,
     ],
   },
   {
@@ -640,8 +640,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Layer G — Global brand identity",
     "source": "empty",
     "span": [
-      16940,
-      16940,
+      16795,
+      16795,
     ],
   },
   {
@@ -651,8 +651,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Layer D — Document context",
     "source": "empty",
     "span": [
-      16940,
-      16940,
+      16795,
+      16795,
     ],
   },
   {
@@ -662,8 +662,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Layer X — Grounded data context",
     "source": "empty",
     "span": [
-      16940,
-      16940,
+      16795,
+      16795,
     ],
   },
   {
@@ -673,8 +673,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Layer E — Pre-prompt template",
     "source": "project-config+model-template",
     "span": [
-      16947,
-      29848,
+      16802,
+      29703,
     ],
   },
   {
@@ -684,8 +684,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Layer F — Governance system prompt",
     "source": "empty",
     "span": [
-      29848,
-      29848,
+      29703,
+      29703,
     ],
   },
   {
@@ -695,8 +695,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Output budget policy",
     "source": "code-default",
     "span": [
-      29855,
-      34604,
+      29710,
+      34459,
     ],
   },
   {
@@ -706,8 +706,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Request-level system prompt override",
     "source": "empty",
     "span": [
-      34604,
-      34604,
+      34459,
+      34459,
     ],
   },
   {
@@ -717,8 +717,8 @@ exports[`GET /projects/:projectId/llm/prompt-preview > 200 — dry-run resolves 
     "label": "Layer Q — Focused edit protocol",
     "source": "empty",
     "span": [
-      34604,
-      34604,
+      34459,
+      34459,
     ],
   },
 ]
