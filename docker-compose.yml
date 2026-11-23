@@ -83,6 +83,33 @@ services:
     networks:
       - andy-code-cat-net
 
+  # Background runs (docs/specs/BACKGROUND_RUNS.md): the API code, a different entry point.
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    container_name: andy-code-cat-worker
+    restart: unless-stopped
+    working_dir: /workspace/apps/api
+    command: ["npx", "tsx", "watch", "src/worker.ts"]
+    env_file:
+      - .env.docker
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/andy-code-cat
+      - NODE_ENV=development
+    depends_on:
+      - mongodb
+    volumes:
+      - ./apps/api:/workspace/apps/api
+      - ./packages:/workspace/packages
+      - ./docs/skills/template-skills:/workspace/docs/skills/template-skills:ro
+      - /workspace/apps/api/node_modules
+      - /workspace/packages/contracts/node_modules
+      - ./data:/workspace/data
+    networks:
+      - andy-code-cat-net
+
   web:
     build:
       context: .
