@@ -15,7 +15,8 @@ import { PublishProject } from "../../../application/use-cases/PublishProject";
 import { UnpublishProject } from "../../../application/use-cases/UnpublishProject";
 import { GetSiteDeployment } from "../../../application/use-cases/GetSiteDeployment";
 import { publishProjectSchema, customSlugSchema, classifySlugFormat, isPublicSiteSlug } from "@andy-code-cat/contracts";
-import { resolvePublicSitesConfig, resolvePublicSiteUrl } from "../../../application/publish/publicSiteAddress";
+import { appHostnames, decideSiteRequest, resolvePublicSitesConfig, resolvePublicSiteUrl } from "../../../application/publish/publicSiteAddress";
+import { env } from "../../../config";
 import type { PublicSitesConfig } from "../../../domain/entities/PlatformConfig";
 import type { SlugCheckResponse } from "@andy-code-cat/contracts";
 import type { RequestWithContext } from "../types";
@@ -320,6 +321,37 @@ export function createPublishRoutes() {
     // The slug router only translates its slug to the live deployment's publishId; suspension
     // checks, headers, caching and file resolution are the same code for both.
 
+    const APP_HOSTS = appHostnames(env.CORS_ORIGIN);
+
+    /**
+     * Site content is never executed on the app's origin (see decideSiteRequest): on an app host
+     * the request is redirected to the site's own address, or refused when there is none.
+     * Returns true when the response has been sent. Off the app hosts it costs nothing.
+     */
+    async function divertFromAppOrigin(req: Request, res: Response, publishId: string, deployment: SiteDeployment | null, sitePrefix: string): Promise<boolean> {
+        const requestHostname = (req.hostname ?? "").toLowerCase();
+        if (!APP_HOSTS.includes(requestHostname)) return false;
+        const sitePath = req.originalUrl.startsWith(sitePrefix) ? req.originalUrl.slice(sitePrefix.length) : "/";
+        const decision = decideSiteRequest({
+            requestHostname,
+            appHosts: APP_HOSTS,
+            config: await publicSites(),
+            deployment,
+            publishId,
+            sitePath,
+        });
+        if (decision.action === "redirect") {
+            res.redirect(301, decision.location);
+            return true;
+        }
+        if (decision.action === "refuse") {
+            console.warn("[published-site] refused on the app origin", { host: requestHostname, path: req.originalUrl, reason: decision.reason });
+            res.status(404).send("Not found");
+            return true;
+        }
+        return false;
+    }
+
     /** Sends 403 and returns true when the site or its owner is suspended. */
     async function rejectSuspended(res: Response, deploymentRecord: SiteDeployment | null): Promise<boolean> {
         if (deploymentRecord?.isAdminBlocked) {
@@ -453,6 +485,7 @@ export function createPublishRoutes() {
             return;
         }
         const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        if (await divertFromAppOrigin(req, res, publishId, deploymentRecord, `/p/${publishId}`)) return;
         await sendSiteIndex(req, res, publishId, `/p/${publishId}/`, deploymentRecord);
     });
 
@@ -463,6 +496,7 @@ export function createPublishRoutes() {
             return;
         }
         const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        if (await divertFromAppOrigin(req, res, publishId, deploymentRecord, `/p/${publishId}`)) return;
         await sendSiteFile(req, res, publishId, file, "asset", deploymentRecord);
     });
 
@@ -473,6 +507,7 @@ export function createPublishRoutes() {
             return;
         }
         const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        if (await divertFromAppOrigin(req, res, publishId, deploymentRecord, `/p/${publishId}`)) return;
         await sendSiteFile(req, res, publishId, file, "data", deploymentRecord);
     });
 
@@ -494,6 +529,7 @@ export function createPublishRoutes() {
             res.status(404).send("Not found");
             return;
         }
+        if (await divertFromAppOrigin(req, res, deployment.publishId, deployment, `/${slug}`)) return;
         await sendSiteIndex(req, res, deployment.publishId, `/${slug}/`, deployment);
     });
 
@@ -505,6 +541,7 @@ export function createPublishRoutes() {
             res.status(404).send("Not found");
             return;
         }
+        if (await divertFromAppOrigin(req, res, deployment.publishId, deployment, `/${slug}`)) return;
         await sendSiteFile(req, res, deployment.publishId, file, "asset", deployment);
     });
 
@@ -516,6 +553,7 @@ export function createPublishRoutes() {
             res.status(404).send("Not found");
             return;
         }
+        if (await divertFromAppOrigin(req, res, deployment.publishId, deployment, `/${slug}`)) return;
         await sendSiteFile(req, res, deployment.publishId, file, "data", deployment);
     });
 

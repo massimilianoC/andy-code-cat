@@ -27,6 +27,23 @@ Routing:
   API root mounts). `apps/web/lib/__tests__/publishedSiteRouting.test.ts` fails if a new top-level
   web route or public entry is added without reserving it.
 
+## Site code never runs on the app's origin
+
+A published site runs code written by any user. On the app's origin that code would share the app's
+storage — the session tokens live in `localStorage` (`apps/web/lib/token-store.ts`) — so a site opened
+by a logged-in superadmin could act as them. Therefore:
+
+- the **app hosts** are the hostnames in `CORS_ORIGIN`;
+- a request for site content (`/p/{id}/…`, `/{slug}/…`) that arrives on an app host is **redirected
+  (301)** to the same file on the site's own address — so links handed out on the app host keep
+  working — or **refused (404, logged)** when the installation has no separate address to send it to
+  (`decideSiteRequest` in `publicSiteAddress.ts`);
+- the web middleware forwards the browser's host to the API (`x-forwarded-host`) so the API can tell.
+
+A single-host installation (app and API on one origin, e.g. office-01) therefore needs a **sites
+origin**: a second hostname for the same stack, e.g. `https://siti.camillucci.com:8443`. On a split
+deployment (`app.` and `api.` hosts) the API host already is a separate origin.
+
 ## Which address is shown: the publish URL mode
 
 Set by the superadmin in **/admin/config → Published sites** (`PlatformConfig.publicSites`), one value
@@ -34,7 +51,7 @@ for the whole installation:
 
 | Mode | Shown address | Needs |
 |---|---|---|
-| `path` (default) | `{origin}/{slug}/`, or `{origin}/p/{publishId}/` without a slug | Nothing beyond the app's own origin and certificate |
+| `path` (default) | `{sitesOrigin}/{slug}/`, or `{sitesOrigin}/p/{publishId}/` without a slug; without a sites origin, relative to the API origin | One hostname and certificate for all sites, distinct from the app's |
 | `subdomain` | `https://{slug or publishId}.{publicDomain}` | Wildcard DNS and a wildcard certificate for `*.{publicDomain}` routed to the published-site server |
 
 The address is computed at read time by one function, `resolvePublicSiteUrl`
@@ -49,11 +66,11 @@ Subdomain mode cannot be saved without a bare public domain (no scheme, port or 
 
 Nothing is stored per site except `/p/{publishId}` and the slug, so:
 
-- **path mode**: nothing to do — addresses follow the new origin.
+- **path mode**: set the new sites origin (none needed if the new API origin is its own host).
 - **subdomain mode**: set the new domain (or switch to path) in /admin/config, or from a shell:
 
 ```bash
-docker exec andy-code-cat-api node apps/api/dist/scripts/set-public-sites.js path
+docker exec andy-code-cat-api node apps/api/dist/scripts/set-public-sites.js path https://sites.example.com
 docker exec andy-code-cat-api node apps/api/dist/scripts/set-public-sites.js subdomain example.com
 ```
 

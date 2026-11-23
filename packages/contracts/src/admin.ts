@@ -50,9 +50,40 @@ const mediaProviderPolicySchema = z.object({
  */
 export const PUBLIC_SITES_DOMAIN_RE = /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;
 
+/**
+ * Normalises a sites origin to `scheme://host[:port]` (no path, no trailing slash), or returns null
+ * when it is not one. Empty input is allowed by the schema and means "not configured".
+ */
+export function normalizeSitesOrigin(raw: string): string | null {
+    try {
+        const url = new URL(raw);
+        if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+        if (url.username || url.password || (url.pathname !== "/" && url.pathname !== "") || url.search || url.hash) return null;
+        return url.origin;
+    } catch {
+        return null;
+    }
+}
+
 export const publicSitesConfigSchema = z.object({
     urlMode: z.enum(PUBLISH_URL_MODES),
     publicDomain: z.string().trim().toLowerCase().max(253).default(""),
+    /**
+     * Path mode: the origin that serves published sites, e.g. https://sites.example.com. It must
+     * differ from the app's origin — sites run user code, and on the app's origin that code could
+     * read the app's session (tokens live in localStorage). Requests for a site on the app origin
+     * are redirected here. Empty: sites are addressed on the API origin.
+     */
+    sitesOrigin: z.string().trim().max(2048).default("")
+        .transform((value, ctx) => {
+            if (!value) return "";
+            const origin = normalizeSitesOrigin(value);
+            if (!origin) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Sites origin must be scheme://host[:port], e.g. https://sites.example.com" });
+                return z.NEVER;
+            }
+            return origin;
+        }),
 }).superRefine((value, ctx) => {
     if (value.urlMode !== "subdomain") return;
     const domain = value.publicDomain;
@@ -68,6 +99,8 @@ export const publicSitesConfigSchema = z.object({
 export interface PublicSitesConfigDto {
     urlMode: PublishUrlMode;
     publicDomain: string;
+    /** Path mode: origin serving published sites ("" = the API origin). */
+    sitesOrigin: string;
 }
 
 export const setPlatformConfigSchema = z.object({

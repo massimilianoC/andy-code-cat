@@ -12,7 +12,11 @@ export function middleware(request: NextRequest) {
     const decision = decideWebRoute(pathname);
 
     if (decision.kind === "published-site") {
-        return NextResponse.rewrite(new URL(`${decision.apiPath}${search}`, API_INTERNAL_URL));
+        // The API decides whether a site may run on this host (never on the app's own origin), so
+        // it must see the host the browser asked for, not api:4000.
+        const headers = new Headers(request.headers);
+        headers.set("x-forwarded-host", request.headers.get("host") ?? request.nextUrl.host);
+        return NextResponse.rewrite(new URL(`${decision.apiPath}${search}`, API_INTERNAL_URL), { request: { headers } });
     }
     if (decision.kind === "strip-trailing-slash") {
         // A plain URL, not nextUrl.clone(): NextURL re-applies the incoming trailing slash when it

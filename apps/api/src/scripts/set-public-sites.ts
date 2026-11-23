@@ -4,7 +4,8 @@
  * at hand. It validates with the same schema as the panel, so it refuses what the panel refuses.
  *
  * Usage (inside the api container):
- *   node apps/api/dist/scripts/set-public-sites.js path
+ *   node apps/api/dist/scripts/set-public-sites.js path https://sites.example.com
+ *   node apps/api/dist/scripts/set-public-sites.js path            (sites on the API origin)
  *   node apps/api/dist/scripts/set-public-sites.js subdomain example.com
  *
  * Nothing is migrated: deployments store only /p/{publishId} and their slug, so every existing
@@ -16,11 +17,13 @@ import { MongoPlatformConfigRepository } from "../infra/repositories/MongoPlatfo
 import { resolvePublicSitesConfig } from "../application/publish/publicSiteAddress";
 
 async function run() {
-    const [urlMode, publicDomain = ""] = process.argv.slice(2);
-    const parsed = publicSitesConfigSchema.safeParse({ urlMode, publicDomain });
+    const [urlMode, value = ""] = process.argv.slice(2);
+    const parsed = publicSitesConfigSchema.safeParse(
+        urlMode === "subdomain" ? { urlMode, publicDomain: value } : { urlMode, sitesOrigin: value },
+    );
     if (!parsed.success) {
         throw new Error(
-            `Usage: set-public-sites path | set-public-sites subdomain <domain> — ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+            `Usage: set-public-sites path [<sites origin>] | set-public-sites subdomain <domain> — ${parsed.error.issues.map((i) => i.message).join("; ")}`,
         );
     }
 

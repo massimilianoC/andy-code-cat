@@ -12,7 +12,7 @@ import type { PlatformConfig, PublicSitesConfig } from "../../domain/entities/Pl
  */
 
 /** Installations that predate the setting, and fresh ones, address sites by path. */
-export const DEFAULT_PUBLIC_SITES_CONFIG: PublicSitesConfig = { urlMode: "path", publicDomain: "" };
+export const DEFAULT_PUBLIC_SITES_CONFIG: PublicSitesConfig = { urlMode: "path", publicDomain: "", sitesOrigin: "" };
 
 export function resolvePublicSitesConfig(config: Pick<PlatformConfig, "publicSites"> | null | undefined): PublicSitesConfig {
     const stored = config?.publicSites;
@@ -20,6 +20,7 @@ export function resolvePublicSitesConfig(config: Pick<PlatformConfig, "publicSit
     return {
         urlMode: stored.urlMode === "subdomain" ? "subdomain" : "path",
         publicDomain: (stored.publicDomain ?? "").trim().toLowerCase(),
+        sitesOrigin: (stored.sitesOrigin ?? "").trim().replace(/\/+$/, ""),
     };
 }
 
@@ -30,8 +31,9 @@ export interface AddressableDeployment {
 
 /**
  * Subdomain mode: `https://{slug|publishId}.{publicDomain}` (absolute).
- * Path mode: `/{slug}/`, or `/p/{publishId}/` for a site without a slug (origin-relative — the
- * client resolves it against its own API origin, so it follows the installation wherever it runs).
+ * Path mode: `{sitesOrigin}/{slug}/`, or `{sitesOrigin}/p/{publishId}/` for a site without a slug.
+ * Without a sitesOrigin the address is origin-relative — the client resolves it against its API
+ * origin (a separate host on a split app/api deployment).
  *
  * The superadmin cannot save subdomain mode without a valid domain (publicSitesConfigSchema), so an
  * empty domain here means a document edited outside the API; it is addressed by path rather than
@@ -42,5 +44,57 @@ export function resolvePublicSiteUrl(deployment: AddressableDeployment, config: 
     if (config.urlMode === "subdomain" && config.publicDomain) {
         return `https://${slug ?? deployment.publishId}.${config.publicDomain}`;
     }
-    return slug ? `/${slug}/` : `/p/${deployment.publishId}/`;
+    const path = slug ? `/${slug}/` : `/p/${deployment.publishId}/`;
+    return config.sitesOrigin ? `${config.sitesOrigin}${path}` : path;
+}
+
+// ── Site content is never executed on the app's origin ────────────────────────────────────────
+//
+// A published site runs code written by any user. On the app's own origin that code shares the
+// app's storage — the session tokens in localStorage — so a site opened by a logged-in superadmin
+// could act as them. Requests for site content that arrive on an app host are therefore redirected
+// to the site's own address, or refused when the installation has none to offer.
+
+/** Hostnames of the app's own origins, from CORS_ORIGIN ("*" or unset: none known, e.g. local dev). */
+export function appHostnames(corsOrigin: string | undefined): string[] {
+    return (corsOrigin ?? "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry && entry !== "*")
+        .map((entry) => {
+            try { return new URL(entry).hostname.toLowerCase(); } catch { return ""; }
+        })
+        .filter(Boolean);
+}
+
+export type SiteRequestDecision =
+    | { action: "serve" }
+    | { action: "redirect"; location: string }
+    | { action: "refuse"; reason: string };
+
+/**
+ * `sitePath` is the part of the request after the site's own prefix (`/{slug}` or `/p/{id}`),
+ * query string included — "/" for the index, "/style.css", "/data/rows.json".
+ */
+export function decideSiteRequest(input: {
+    requestHostname: string;
+    appHosts: string[];
+    config: PublicSitesConfig;
+    deployment: AddressableDeployment | null;
+    publishId: string;
+    sitePath: string;
+}): SiteRequestDecision {
+    const host = input.requestHostname.toLowerCase();
+    if (!input.appHosts.includes(host)) return { action: "serve" };
+
+    const target = resolvePublicSiteUrl(input.deployment ?? { publishId: input.publishId, customSlug: null }, input.config);
+    if (/^https?:\/\//i.test(target)) {
+        const base = target.replace(/\/+$/, "");
+        const location = `${base}${input.sitePath.startsWith("/") ? input.sitePath : `/${input.sitePath}`}`;
+        if (new URL(location).hostname.toLowerCase() !== host) return { action: "redirect", location };
+    }
+    return {
+        action: "refuse",
+        reason: "published sites are not served on the app origin; set a sites origin (path mode) or a public domain (subdomain mode) in /admin/config",
+    };
 }

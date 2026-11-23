@@ -23,6 +23,8 @@ process.env.EXPORT_JWT_SECRET = "test-export-secret-min-32-chars-!!xyz";
 process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/placeholder";
 process.env.DATA_DIR = DATA_DIR;
 process.env.STORAGE_ADAPTER = "local";
+// The app's own origin: site content must never run there (requests below without Host use 127.0.0.1).
+process.env.CORS_ORIGIN = "https://app.example.test";
 
 let mongod: MongoMemoryServer;
 let app: Express;
@@ -153,7 +155,7 @@ describe("published site by slug — /{slug}/", () => {
 
         const initial = await request(app).get("/v1/admin/config").set(auth);
         expect(initial.status).toBe(200);
-        expect(initial.body.publicSites).toEqual({ urlMode: "path", publicDomain: "" });
+        expect(initial.body.publicSites).toEqual({ urlMode: "path", publicDomain: "", sitesOrigin: "" });
 
         const rejected = await request(app).patch("/v1/admin/config").set(auth)
             .send({ publicSites: { urlMode: "subdomain", publicDomain: "andy.camillucci.com:8443" } });
@@ -162,13 +164,40 @@ describe("published site by slug — /{slug}/", () => {
         const saved = await request(app).patch("/v1/admin/config").set(auth)
             .send({ publicSites: { urlMode: "subdomain", publicDomain: "Example.com" } });
         expect(saved.status).toBe(200);
-        expect(saved.body.publicSites).toEqual({ urlMode: "subdomain", publicDomain: "example.com" });
+        expect(saved.body.publicSites).toEqual({ urlMode: "subdomain", publicDomain: "example.com", sitesOrigin: "" });
 
         // Serving does not depend on the mode: /{slug}/ still answers in subdomain mode.
         expect((await request(app).get(`/${LIVE.slug}/`)).status).toBe(200);
 
         const back = await request(app).patch("/v1/admin/config").set(auth)
             .send({ publicSites: { urlMode: "path", publicDomain: "" } });
-        expect(back.body.publicSites).toEqual({ urlMode: "path", publicDomain: "" });
+        expect(back.body.publicSites).toEqual({ urlMode: "path", publicDomain: "", sitesOrigin: "" });
+    });
+
+    it("never runs a site on the app origin: refused without a sites origin, redirected with one", async () => {
+        const auth = { Authorization: `Bearer ${superadminToken}` };
+        const onAppHost = () => request(app).get(`/${LIVE.slug}/style.css?v=1`).set("X-Forwarded-Host", "app.example.test");
+
+        // No separate address configured: nothing to redirect to, so it is not served here.
+        expect((await onAppHost()).status).toBe(404);
+        expect((await request(app).get(`/p/${LIVE.publishId}/`).set("X-Forwarded-Host", "app.example.test")).status).toBe(404);
+
+        await request(app).patch("/v1/admin/config").set(auth)
+            .send({ publicSites: { urlMode: "path", publicDomain: "", sitesOrigin: "https://sites.example.test:8443" } });
+
+        const redirected = await onAppHost();
+        expect(redirected.status).toBe(301);
+        expect(redirected.headers.location).toBe(`https://sites.example.test:8443/${LIVE.slug}/style.css?v=1`);
+
+        const byId = await request(app).get(`/p/${LIVE.publishId}/`).set("X-Forwarded-Host", "app.example.test");
+        expect(byId.status).toBe(301);
+        expect(byId.headers.location).toBe(`https://sites.example.test:8443/${LIVE.slug}/`);
+
+        // On the sites host itself it is served.
+        const served = await request(app).get(`/${LIVE.slug}/`).set("X-Forwarded-Host", "sites.example.test");
+        expect(served.status).toBe(200);
+        expect(served.text).toContain("Antares live");
+
+        await request(app).patch("/v1/admin/config").set(auth).send({ publicSites: { urlMode: "path", publicDomain: "" } });
     });
 });

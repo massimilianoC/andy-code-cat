@@ -152,6 +152,11 @@ docker exec andy-code-cat-api node apps/api/dist/scripts/set-public-sites.js sub
 
 or set it in /admin/config → Published sites. See `docs/guides/PUBLISHED_SITE_ADDRESSES.md`.
 
+From 2026.11.23.3 site content is never served on an app host (`CORS_ORIGIN`): it is redirected to the
+site's own address, or refused when there is none. A **single-host** installation (app and API on one
+origin) must have a sites origin set *before* it takes that release, or its site links stop working:
+`set-public-sites.js path https://<sites host>` (and the sites host routed to the stack).
+
 ## 11. Final Agent Sanity Check
 
 - The branch name matches the Gitflow policy.
