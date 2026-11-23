@@ -69,6 +69,7 @@ describe("published sites and user files — security regressions", () => {
         const now = new Date();
         const base = { snapshotId: "s", filesDeployed: ["index.html"], createdAt: now, updatedAt: now, status: "live" };
         await db.collection<Record<string, unknown> & { _id: string }>("site_deployments").insertMany([
+            { _id: "orph", ...base, projectId: "p4", userId: new ObjectId().toHexString(), publishId: "ab12ab12", customSlug: "orfano", url: "/p/ab12ab12" },
             { _id: "live", ...base, projectId: "p1", userId: ownerId, publishId: "aa11bb22", customSlug: "antares", url: "/p/aa11bb22" },
             { _id: "susp", ...base, projectId: "p2", userId: ownerId, publishId: "cc33dd44", customSlug: "sospesa", url: "/p/cc33dd44", isAdminBlocked: true },
             { _id: "ownb", ...base, projectId: "p3", userId: blockedOwnerId, publishId: "ee55ff66", customSlug: "bloccato", url: "/p/ee55ff66" },
@@ -76,6 +77,7 @@ describe("published sites and user files — security regressions", () => {
         writeSite("aa11bb22", "Antares live");
         writeSite("cc33dd44", "Suspended");
         writeSite("ee55ff66", "Owner blocked");
+        writeSite("ab12ab12", "Orphan owner");
         // Slug copies (subdomain mode) and an orphan directory: never reachable through /p/.
         writeSite("antares", "Antares slug copy");
         writeSite("sospesa", "Suspended slug copy");
@@ -183,6 +185,12 @@ describe("published sites and user files — security regressions", () => {
             const bySlug = await request(app).get("/antares/");
             expect(bySlug.status).toBe(200);
             expect(bySlug.text).toContain("Antares live"); // the publishId directory, not the slug copy
+        });
+
+        it("keeps serving a live site whose owner account no longer exists (not a suspension)", async () => {
+            const res = await request(app).get("/orfano/");
+            expect(res.status).toBe(200);
+            expect(res.text).toContain("Orphan owner");
         });
 
         it("keeps a suspended site and a blocked owner's site unreachable on both addresses", async () => {
