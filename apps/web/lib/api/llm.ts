@@ -68,6 +68,14 @@ export interface LlmChatInput {
      * modelLock instead of the legacy cascade (see ResolvePromptExecution.execute on the API).
      */
     pipelineRunId?: string;
+    /**
+     * The conversation this turn belongs to. With it the server persists the turn itself — the
+     * assistant message and, when the turn produced an artifact, the activated version — and
+     * returns both as `result.persisted` (BACKGROUND_RUNS.md §3.1).
+     */
+    conversationId?: string;
+    /** AL-040 — the version this turn is based on, verified server-side when the version is committed. */
+    artifactBase?: { parentSnapshotId?: string; baseContentHash?: string };
 }
 
 /**

@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { ArtifactMediaManifest } from "./mediaManifest";
 import type { MediaResolutionMetadata } from "./mediaResolution";
 import type { ServiceManifestV1 } from "./serviceManifest";
+import type { MessageDto } from "./conversation";
+import type { PreviewSnapshotDto } from "./preview";
 
 const optionalTrimmedString = (max: number) =>
     z.preprocess(
@@ -128,6 +130,16 @@ export const llmChatPreviewSchema = z.object({
      * every ordinary turn.
      */
     resumedFromPromptExecutionId: z.string().min(1).max(120).optional(),
+    /**
+     * AL-040 — the version this turn is based on, as the client loaded it. With `conversationId`
+     * the server persists the turn itself (assistant message + version, BACKGROUND_RUNS.md §3.1)
+     * and declares this base on the write; CreatePreviewSnapshot verifies it (AL-041). Omitted,
+     * the new version continues from the active one (AL-012).
+     */
+    artifactBase: z.object({
+        parentSnapshotId: z.string().min(1).max(120).optional(),
+        baseContentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    }).optional(),
 });
 
 export const llmPromptConfigSchema = z.object({
@@ -392,4 +404,30 @@ export interface LlmChatPreviewResult {
     };
     durationMs: number;
     simulated: boolean;
+    /**
+     * The turn as the server persisted it — present when the request named a `conversationId`
+     * (BACKGROUND_RUNS.md §3.1). The generation engine writes the assistant message and, when
+     * the turn produced a usable artifact, commits and activates the version through the same
+     * code as POST /preview-snapshots. The client does not write either any more.
+     */
+    persisted?: LlmPersistedTurn;
+}
+
+export interface LlmPersistedTurn {
+    /** Role "error" when the generation could not be parsed (it is a failure, not a reply). */
+    assistantMessage: MessageDto;
+    /** The version this turn produced, in its preview-runtime form. Absent when none applies. */
+    snapshot?: PreviewSnapshotDto;
+    /** AL-045 — false when the version matched its base and history did not move. */
+    snapshotCreated?: boolean;
+    /**
+     * The version write was refused (e.g. 409 ARTIFACT_BASE_STALE, 422
+     * INVALID_GENERATED_JAVASCRIPT). The generation itself succeeded and the message is saved.
+     */
+    snapshotError?: {
+        status: number;
+        code?: string;
+        userMessage: string;
+        details?: unknown;
+    };
 }

@@ -2246,6 +2246,14 @@ function WorkspacePageContent() {
             }
 
             const attachedAssetIds = chatAttachedFiles.map((file) => file.id).slice(0, maxChatAttachments);
+            // AL-040/042 — the version this turn is based on, declared on the generation request
+            // itself: the server persists the turn (BACKGROUND_RUNS.md §3.1) and verifies this
+            // base when it commits the version. Read at send time, i.e. the version whose
+            // artifacts were sent as currentArtifacts above.
+            const generationBaseId = selectedBackendSnapshotIdRef.current ?? undefined;
+            const artifactBase = generationBaseId
+                ? { parentSnapshotId: generationBaseId, baseContentHash: certifiedHashOf(generationBaseId) }
+                : undefined;
             let llm: Awaited<ReturnType<typeof llmChatPreview>>;
             let interruptedMeta: Extract<LlmChatStreamEvent, { type: "interrupted" }> | null = null;
             try {
@@ -2272,6 +2280,8 @@ function WorkspacePageContent() {
                         currentArtifacts,
                         focusContext,
                         pipelineRunId: pipelineRunIdRef.current || undefined,
+                        conversationId: convId,
+                        artifactBase,
                     },
                     (event) => {
                         if (event.type === "thinking") {
@@ -2405,38 +2415,21 @@ function WorkspacePageContent() {
                     currentArtifacts,
                     focusContext: retryWithoutFocusContext ? undefined : focusContext,
                     pipelineRunId: pipelineRunIdRef.current || undefined,
+                    conversationId: convId,
+                    artifactBase,
                 });
             }
 
-            const assistantContent = (llm.reply?.trim()
-                || llm.structured?.chat?.summary?.trim()
-                || "Risposta AI generata senza testo visibile.").slice(0, 50000);
-
-            // A generation whose JSON could not be parsed is a failure, not a reply. Storing it
-            // as "assistant" is what made it render like a normal turn and, worse, fed its
-            // empty artifacts back as conversation history on the next request. Role "error"
-            // is already excluded from the history window built above.
-            const assistantSaved = await addMessage(token, projectId, convId, {
-                role: llm.generationParseError ? "error" : "assistant",
-                content: assistantContent,
-                metadata: {
-                    model: llm.model,
-                    provider: llm.provider,
-                    executionTimeMs: llm.durationMs,
-                    finishReason: llm.finishReason,
-                    rawResponse: llm.rawResponse,
-                    structuredParseValid: llm.structuredParseValid,
-                    promptingTrace: llm.promptingTrace,
-                    tokenUsage: llm.usage,
-                    costEstimate: llm.costEstimate,
-                    // WP1 step 3 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md) — this used to
-                    // write generatedArtifacts here, creating a second, independently-updated
-                    // copy of the artifact alongside the PreviewSnapshot committed a few lines
-                    // below. Steps 1-2 already removed every read of that copy; this stops
-                    // producing it.
-                    chatStructured: llm.structuredParseValid ? llm.structured?.chat : undefined,
-                },
-            });
+            // The engine persisted the turn itself (BACKGROUND_RUNS.md §3.1): the assistant message
+            // (role "error" for an unparseable generation, so it never feeds back as history) and,
+            // when the turn produced a usable artifact, the version, committed through the same
+            // CommitArtifactVersion as every other write. The client no longer writes either, so
+            // the workspace and the background worker leave exactly the same turn behind.
+            const persistedTurn = llm.persisted;
+            if (!persistedTurn) {
+                throw new Error("The generation was not persisted (no conversation on the request)");
+            }
+            const assistantSaved = { message: persistedTurn.assistantMessage };
 
             // Keep promptOpsSummary in sync so the workspace header total cost
             // reflects chat costs immediately (backend now writes chat to PromptExecutionLog).
@@ -2493,60 +2486,26 @@ function WorkspacePageContent() {
                 });
             }
 
-            // Persist preview snapshot to DB — only when html is non-empty AND the
-            // structured parse succeeded. A parse failure now returns empty artifacts
-            // (buildParseFailureStructured) and generationParseError=true; persisting it
-            // would activate a snapshot with no usable HTML and break every later
-            // focused edit (see FOCUSED_EDIT_SPEC isActive invariant).
-            // In focused-patch mode the LLM returns artifacts:{html:"",…}; the server
-            // merges the patch and returns the full HTML. If html is still empty after
-            // the merge (anchor not found AND base was empty) we skip snapshot creation
-            // to avoid versioning an empty artifact and corrupting the active baseline.
-            // Also skip when the server explicitly reports focusPatchApplied === false
-            // (anchor not found, fallback returned) to avoid creating no-op versions.
-            if (llm.structured?.artifacts && llm.structured.artifacts.html && convId
-                && llm.focusPatchApplied !== false && llm.generationParseError !== true) {
-                try {
-                    const snap = await commitArtifactVersion(token, {
-                        conversationId: convId,
-                        sourceMessageId: assistantSaved.message.id,
-                        artifacts: {
-                            html: llm.structured.artifacts.html ?? "",
-                            css: llm.structured.artifacts.css ?? "",
-                            js: llm.structured.artifacts.js ?? "",
-                        },
-                        serviceManifest: llm.structured.serviceManifest,
-                        // In focused-patch mode the rawResponse has artifacts.html=""; the
-                        // server already merged the patch and returned full HTML via
-                        // structured.artifacts. Sending rawResponse here would cause the
-                        // snapshot route to overwrite the correct merged HTML with empty.
-                        rawLlmResponse: llm.focusPatchApplied ? undefined : (llm.rawResponse ?? undefined),
-                        // AL-029 — records which element (or code selection) this generation
-                        // targeted, on the version it produced. 0 of 195 stored snapshots carry
-                        // this today because no client call site ever sent it.
-                        focusContext,
-                        metadata: {
-                            model: llm.model,
-                            provider: llm.provider,
-                            durationMs: llm.durationMs,
-                            finishReason: llm.finishReason,
-                            structuredParseValid: llm.structuredParseValid,
-                            tokenUsage: llm.usage,
-                            promptingTrace: llm.promptingTrace,
-                            mediaResolution: llm.mediaResolution,
-                            // AL-026 — the durable PromptExecutionLog id this response was
-                            // persisted under (packages/contracts llm.ts:332). The contract
-                            // field on the snapshot side (preview.ts) is landing in a parallel
-                            // change; until it does, the backend simply drops this key.
-                            promptExecutionId: llm.promptExecutionId,
-                        },
-                        activate: true,
-                    });
+            // The version (if any) was committed by the server with the turn. It decides exactly
+            // as this client used to: only non-empty html from a successful parse is a version —
+            // never a parse failure (empty artifacts) nor an unapplied focus patch (the base,
+            // unchanged) — so the active baseline is never corrupted (FOCUSED_EDIT_SPEC isActive
+            // invariant). A refused write comes back as snapshotError and is handled below exactly
+            // as a refused client commit was.
+            if (persistedTurn.snapshot) {
+                {
+                    const snap = { snapshot: persistedTurn.snapshot };
+                    // Keep the certification current without waiting for the list to reload, so
+                    // the next write in this interaction declares the version just produced.
+                    previewSnapshotsRef.current = [
+                        snap.snapshot,
+                        ...previewSnapshotsRef.current.filter((snapshot) => snapshot.id !== snap.snapshot.id),
+                    ];
                     // Cache thumbnail and prompt excerpt locally for ProjectCard display
                     saveThumbnail(projectId, {
-                        html: llm.structured.artifacts.html ?? "",
-                        css: llm.structured.artifacts.css ?? "",
-                        js: llm.structured.artifacts.js ?? "",
+                        html: llm.structured?.artifacts?.html ?? "",
+                        css: llm.structured?.artifacts?.css ?? "",
+                        js: llm.structured?.artifacts?.js ?? "",
                     });
                     savePromptExcerpt(projectId, llm.promptingTrace?.prePromptTemplate);
                     incrementSnapCount(projectId);
@@ -2572,9 +2531,9 @@ function WorkspacePageContent() {
                     const snapArt = snap.snapshot.artifacts;
                     setPreviewSnapshots(freshSnapshots);
                     setSelectedBackendSnapshotId(snap.snapshot.id);
-                    setEditorHtml(snapArt?.html ?? llm.structured.artifacts.html ?? "");
-                    setEditorCss(snapArt?.css ?? llm.structured.artifacts.css ?? "");
-                    setEditorJs(snapArt?.js ?? llm.structured.artifacts.js ?? "");
+                    setEditorHtml(snapArt?.html ?? llm.structured?.artifacts?.html ?? "");
+                    setEditorCss(snapArt?.css ?? llm.structured?.artifacts?.css ?? "");
+                    setEditorJs(snapArt?.js ?? llm.structured?.artifacts?.js ?? "");
                     // The message enters state already carrying the snapshotId it produced —
                     // there is no intermediate render where one exists without the other.
                     addAssistantMessageToConv(buildAssistantMessageForConv(assistantSaved.message, snap.snapshot));
@@ -2585,7 +2544,17 @@ function WorkspacePageContent() {
                         setPreviewRefreshing(false);
                     }, 3000);
                     previewVersionSaved = true;
-                } catch (err) {
+                }
+            } else if (persistedTurn.snapshotError) {
+                {
+                    const refusal = persistedTurn.snapshotError;
+                    const err = new ApiError(refusal.status, {
+                        error: refusal.userMessage,
+                        code: refusal.code,
+                        status: refusal.status,
+                        userMessage: refusal.userMessage,
+                        details: refusal.details,
+                    });
                     // AL-042 — a refused base is not "snapshot persistence is optional": the
                     // model produced a version that could not be attached to what the user is
                     // looking at, and they need to know before they build on it.
@@ -2603,9 +2572,7 @@ function WorkspacePageContent() {
                     // time this happened the error existed nowhere and the cause had to be
                     // guessed at from what survived in the database.
                     if (!handled) {
-                        const detail = err instanceof ApiError
-                            ? (err.userMessage ?? err.message)
-                            : err instanceof Error ? err.message : String(err);
+                        const detail = err.userMessage ?? err.message;
                         // The commonest real cause, measured: the server refuses to store an
                         // artifact whose JavaScript does not parse (422
                         // INVALID_GENERATED_JAVASCRIPT). That refusal is correct — storing it
@@ -2614,8 +2581,8 @@ function WorkspacePageContent() {
                         // falling back to metadata.generatedArtifacts, which displayed the very
                         // artifact the server had just rejected. The fallback is gone; the
                         // silence must go with it.
-                        const invalidJs = err instanceof ApiError && err.code === "INVALID_GENERATED_JAVASCRIPT";
-                        console.error("[snapshot] commit failed — the preview will not update", {
+                        const invalidJs = err.code === "INVALID_GENERATED_JAVASCRIPT";
+                        console.error("[snapshot] version refused — the preview will not update", {
                             projectId,
                             conversationId: convId,
                             messageId: assistantSaved.message.id,

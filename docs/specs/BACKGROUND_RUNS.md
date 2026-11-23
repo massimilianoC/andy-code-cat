@@ -1,7 +1,8 @@
 # Background runs — spec
 
-**Status: proposed, not scheduled.** Written 2026-11-23 from the code on `develop` (release
-2026.11.23.5). Nothing here is built yet.
+**Status: in delivery (MVP, phases 0–3).** Written 2026-11-23 from the code on `develop` (release
+2026.11.23.5); decisions in §6 taken by the product owner on 2026-11-23. Delivery state per phase
+in §7.
 
 ---
 
@@ -188,10 +189,31 @@ each call), the per-user concurrency limit, and the ledger entries attributed to
 
 ---
 
-## 6. Open decisions
+## 6. Decisions (product owner, 2026-11-23)
 
-1. Auto-publish, or stop at "ready to publish" and let the user press one button?
-2. Draft/noindex for background publishes — yes/no.
-3. Per-user concurrency and per-run cost ceiling (proposed: 2 runs, a configurable EUR cap).
-4. Which notification channels for the first release (proposed: in-app only).
-5. Queue in MongoDB (proposed) or reinstated Redis/BullMQ.
+These replace the open questions of the first draft.
+
+1. **Auto-publish, without a custom slug.** A background run auto-approves the Zero Effort brief and
+   publishes on its own at the site's permanent address `/p/{publishId}/` (shown as `publicUrl`,
+   `resolvePublicSiteUrl`). No temporary slug is reserved. The completion notification carries the
+   public link **and a proposed slug** derived from the project/brief, validated with
+   `classifySlugFormat`/`isPublicSiteSlug` and checked free with `isCustomSlugTaken`; the user accepts
+   it with one click, which calls the existing `PATCH /v1/projects/:projectId/publish/slug`. Nothing
+   is reserved until the user accepts (so §3.4's temporary-slug reservation is not built).
+2. **No draft/noindex** handling in the MVP.
+3. **Limits:** at most **2 concurrent runs per user**, a **global pool of 2**, and a **per-run cost
+   ceiling** read from configuration (`BACKGROUND_RUN_MAX_COST_EUR`, conservative default, see
+   `.env.example`) checked against the journal after each LLM call.
+4. **Notifications: in-app only** (`system_notifications`). No e-mail, no Telegram in this release.
+5. **Queue in MongoDB** (atomic `findOneAndUpdate` claim with lease and heartbeat). No Redis.
+
+---
+
+## 7. Delivery
+
+| Phase | State | Notes |
+|---|---|---|
+| 0 | ✅ built | `GenerateArtifact` (application) is the one generation engine; `/llm/chat-preview` and `/stream` are transport adapters (SSE, abort on `res.on("close")`). The turn is persisted server-side: assistant message via `AddMessage`, version via `CommitArtifactVersion` → `CreatePreviewSnapshot` (AL-047). The workspace declares its base (`artifactBase`) and reads `result.persisted`. Characterisation suites: `llmChatPreview.characterization.e2e.test.ts`, `previewSnapshotCommit.e2e.test.ts`, `llmGenerateTurnPersistence.e2e.test.ts`; golden prompt-preview snapshot unchanged |
+| 1 | planned | `BackgroundRun` aggregate, Mongo queue with leases, `worker` process |
+| 2 | planned | orchestrator, run principal, guards, slug proposal, notification |
+| 3 | planned | API + UI |

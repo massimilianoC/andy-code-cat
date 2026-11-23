@@ -260,6 +260,7 @@ Rows marked ✅ with a date were verified live against the running stack, not on
 | AL-030 project-wide compacted history | ❌ not implemented | — |
 | AL-046 the artifact shape is declared once | ✅ 2026-08-27 | Was declared four times and had drifted: the web client sent `promptingTrace.promptConfigId`, which the schema never declared, so zod stripped it from every write. One schema now, everything else infers. Live: the field survives a write |
 | AL-047 one write path | ✅ 2026-08-27 | `CommitWysiwygSession` called the repository directly and produced versions with no hash, no no-op suppression, and two metadata keys smuggled past the contract by an `as` cast. It goes through `CreatePreviewSnapshot` now |
+| AL-047 one write path — chat turns | ✅ 2026-11-24 | The version a generation produces is committed **server-side** by `GenerateArtifact` through `CommitArtifactVersion` (the preparation that lived in the POST /preview-snapshots handler, now one use case) → `CreatePreviewSnapshot`. The workspace no longer writes the assistant message or the version of a chat turn; it declares its base on the generation request (`artifactBase`, AL-040) and receives `result.persisted`. Decided and argued in `BACKGROUND_RUNS.md` §3.1/§6 (AL-031/032): one engine for the workspace and the background worker. Other editing modes still write through POST /preview-snapshots, i.e. the same use case |
 
 ---
 
