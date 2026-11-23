@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { setPublicUserFileHeaders } from "../security/userFileHeaders";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
 
@@ -39,8 +40,12 @@ export function createPublicMediaRoutes(): Router {
                 return;
             }
 
-            // URL references: redirect to external URL
+            // URL references: redirect to the external URL — http(s) only, never javascript:/data: etc.
             if (asset.externalUrl) {
+                if (!/^https?:\/\//i.test(asset.externalUrl)) {
+                    res.status(404).json({ error: "Asset not found" });
+                    return;
+                }
                 res.redirect(302, asset.externalUrl);
                 return;
             }
@@ -55,9 +60,9 @@ export function createPublicMediaRoutes(): Router {
 
             const actualSize = await storage.fileSize(filePath).catch(() => asset.fileSize);
 
-            res.setHeader("Content-Type", asset.mimeType);
-            // Inline disposition so browsers render images directly
-            res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(asset.originalName)}"`);
+            // The declared MIME type never decides execution: passive types inline, the rest as a
+            // download with a sandbox CSP (see userFileHeaders.ts).
+            setPublicUserFileHeaders(res, asset.mimeType, asset.originalName);
             // Cache for 7 days — public, immutable per assetId
             res.setHeader("Cache-Control", "public, max-age=604800, immutable");
             if (actualSize > 0) {

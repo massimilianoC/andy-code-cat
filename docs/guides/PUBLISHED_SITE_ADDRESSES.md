@@ -44,6 +44,27 @@ A single-host installation (app and API on one origin, e.g. office-01) therefore
 origin**: a second hostname for the same stack, e.g. `https://siti.camillucci.com:8443`. On a split
 deployment (`app.` and `api.` hosts) the API host already is a separate origin.
 
+### Rules added by the 2026-11-23 security review (release 2026.11.23.4)
+
+- **Sites origin is an allow-list.** With a sites origin configured, site content is served on that
+  host only; every other host is redirected there. A sites origin equal to an app host is refused.
+- **Only live deployments are served.** `/p/{x}/` answers only when `x` is the publishId of a live
+  deployment — never a slug copy or an orphan directory — so suspension (admin block, blocked owner)
+  applies on every address. The owner check fails closed (503) if the user cannot be read.
+- **Slug lock.** A unique MongoDB index (`customSlug_unique_active`, partial on `deploying`/`live`)
+  is the semaphore: a concurrent second claim gets 409. The database claim happens before any slug
+  directory is written, copied or deleted.
+- **Separate namespaces.** Slugs shaped like a publishId (8 lowercase hex chars,
+  `PUBLISH_ID_SHAPE_RE`) are reserved: slug copies and publishIds share `data/www/`.
+- **User files never execute.** `/p/media/:assetId` ignores the declared MIME type for execution:
+  passive types (jpeg/png/gif/webp/avif/bmp/ico, mp4/webm, mp3/ogg/wav, pdf) are inline; everything
+  else is `attachment`, script-capable types become `application/octet-stream`, SVG keeps its type for
+  `<img>`; all with `nosniff` and a `sandbox` CSP (`apps/api/src/presentation/http/security/userFileHeaders.ts`).
+  External references redirect to `http(s)` only.
+- **Preview and workspace.** Asset ids read from generated HTML must be plain ids of the current
+  project before an authenticated fetch; the workspace accepts `postMessage` only from its own preview
+  iframe, and EDIT saves only in EDIT mode.
+
 ## Which address is shown: the publish URL mode
 
 Set by the superadmin in **/admin/config → Published sites** (`PlatformConfig.publicSites`), one value

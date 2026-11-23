@@ -99,8 +99,14 @@ describe("decideSiteRequest — site code never runs on the app origin", () => {
     it("serves on any host that is not an app host", () => {
         expect(decideSiteRequest({ requestHostname: "siti.camillucci.com", appHosts, config: path, deployment: withSlug, publishId: "ab12cd34", sitePath: "/" }))
             .toEqual({ action: "serve" });
-        expect(decideSiteRequest({ requestHostname: "anything", appHosts: [], config: path, deployment: withSlug, publishId: "ab12cd34", sitePath: "/" }))
+        const noOrigin = { urlMode: "path" as const, publicDomain: "", sitesOrigin: "" };
+        expect(decideSiteRequest({ requestHostname: "anything", appHosts: [], config: noOrigin, deployment: withSlug, publishId: "ab12cd34", sitePath: "/" }))
             .toEqual({ action: "serve" });
+    });
+
+    it("with a sites origin, only the sites host serves — any other host (even one missing from CORS_ORIGIN) is redirected", () => {
+        expect(decideSiteRequest({ requestHostname: "forgotten-alias.example", appHosts: [], config: path, deployment: withSlug, publishId: "ab12cd34", sitePath: "/x.css" }))
+            .toEqual({ action: "redirect", location: "https://siti.camillucci.com:8443/antares/x.css" });
     });
 
     it("redirects an app-host request to the same file on the site's own address — old links keep working", () => {
