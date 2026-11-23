@@ -3,6 +3,7 @@
 import { useEffect, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
+import { resolvePublicSiteAddress } from "@/app/workspace/features/header/publishUrl";
 import {
     adminListProjects,
     adminDeleteProject,
@@ -412,12 +413,12 @@ export default function AdminProjectsPage() {
                                                         <>
                                                             <span className="text-muted-foreground">Live URL</span>
                                                             <a
-                                                                href={selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                                href={resolvePublicSiteAddress(selectedProject.activeDeployment.publicUrl)}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 className="text-primary hover:underline text-xs break-all"
                                                             >
-                                                                {selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                                {resolvePublicSiteAddress(selectedProject.activeDeployment.publicUrl)}
                                                             </a>
                                                         </>
                                                     )}
@@ -462,12 +463,12 @@ export default function AdminProjectsPage() {
                                                     <div className="flex gap-2">
                                                         <span className="text-muted-foreground">URL:</span>
                                                         <a
-                                                            href={selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                            href={resolvePublicSiteAddress(selectedProject.activeDeployment.publicUrl)}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
                                                             className="text-primary hover:underline text-xs break-all"
                                                         >
-                                                            {selectedProject.activeDeployment.subdomainUrl ?? selectedProject.activeDeployment.url}
+                                                            {resolvePublicSiteAddress(selectedProject.activeDeployment.publicUrl)}
                                                         </a>
                                                     </div>
                                                     <div className="pt-1">

@@ -126,8 +126,6 @@ const EMPTY_GOVERNANCE: ProductGovernanceDto = {
         cookiePolicyHtml: {},
     },
     nginx: {
-        publicDomain: "",
-        publishSubdomainPattern: "{publishId}",
         cacheTtlSeconds: 300,
         clientMaxBodySizeMb: 20,
         extraServerDirectives: "",
@@ -1186,25 +1184,11 @@ export default function AdminGovernancePage() {
                                         to runtime nginx files, domain switches, or SSL certificate generation.
                                     </p>
                                 )}
+                                <p className="text-xs text-muted-foreground">
+                                    The public domain and the address of published sites (path or subdomain) are an
+                                    installation setting: see <span className="font-medium">Published sites</span> in Config.
+                                </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <Label>Public domain</Label>
-                                        <Input
-                                            disabled={!NGINX_RUNTIME_ENABLED}
-                                            value={governance.nginx.publicDomain}
-                                            onChange={(e) => setNginx("publicDomain", e.target.value)}
-                                            placeholder="example.com"
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label>Subdomain pattern</Label>
-                                        <Input
-                                            disabled={!NGINX_RUNTIME_ENABLED}
-                                            value={governance.nginx.publishSubdomainPattern}
-                                            onChange={(e) => setNginx("publishSubdomainPattern", e.target.value)}
-                                            placeholder="{publishId}"
-                                        />
-                                    </div>
                                     <div className="space-y-1">
                                         <Label>Cache TTL (seconds)</Label>
                                         <Input

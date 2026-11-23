@@ -81,6 +81,7 @@ import { DualView } from "../../../components/workspace/DualView";
 import { PF_INSPECT_SCRIPT, PF_EDIT_SCRIPT } from "./iframe-scripts";
 import { WorkspaceLayoutProvider, useWorkspaceLayout } from "../contexts/WorkspaceLayoutContext";
 import { usePublish } from "../features/header/usePublish";
+import { resolvePublicSiteAddress } from "../features/header/publishUrl";
 import {
     clipIdentifier,
     estimateTokens,
@@ -4265,28 +4266,28 @@ function WorkspacePageContent() {
                                     (v{publishedVersionNumber})
                                 </span>
                             )}
-                            {/* Subdomain URL (primary) */}
-                            {publishDeployment.subdomainUrl ? (
+                            {/* Public address (primary): what the installation's publish URL mode advertises */}
+                            {publishUrl ? (
                                 <a
-                                    href={publishDeployment.subdomainUrl}
+                                    href={publishUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     style={{ color: "#7dd3fc", textDecoration: "underline" }}
                                 >
-                                    {publishDeployment.customSlug
-                                        ? publishDeployment.customSlug
-                                        : publishDeployment.subdomainUrl}
+                                    {publishDeployment.customSlug ?? publishUrl}
                                 </a>
                             ) : null}
-                            {/* Path URL (secondary / always shown) */}
-                            <a
-                                href={publishUrl ?? publishDeployment.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ color: "#7dd3fc", textDecoration: "underline", opacity: publishDeployment.subdomainUrl ? 0.6 : 1 }}
-                            >
-                                /p/{publishDeployment.publishId}
-                            </a>
+                            {/* Permanent path (secondary): /p/{publishId} answers in every mode, also after a slug change */}
+                            {publishDeployment.customSlug ? (
+                                <a
+                                    href={resolvePublicSiteAddress(`/p/${publishDeployment.publishId}/`)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: "#7dd3fc", textDecoration: "underline", opacity: 0.6 }}
+                                >
+                                    /p/{publishDeployment.publishId}
+                                </a>
+                            ) : null}
                             <button
                                 type="button"
                                 onClick={handleCopyPublishLink}
