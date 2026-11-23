@@ -8,6 +8,14 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0. Release 2026.11.23.3 — published sites never run on the app's origin
+
+Site code is user-written and the session tokens live in localStorage, so a site served on the app's
+origin could act as whoever opens it. Site requests on an app host (`CORS_ORIGIN`) are now 301-redirected
+to the site's own address (`publicSites.sitesOrigin` in path mode, the subdomain in subdomain mode) or
+refused when there is none. office-01: sites on `https://siti.camillucci.com:8443`; old
+`andy.camillucci.com:8443/{slug}/` links redirect there.
+
 ## 0. Release 2026.11.23.2 — published sites at /{slug}/, URL mode set by the superadmin
 
 - Sites answer at `/{slug}/` as well as `/p/{publishId}/` (same serving code, same suspension rules),
