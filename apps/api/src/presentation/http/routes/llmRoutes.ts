@@ -1,34 +1,16 @@
 import { Router } from "express";
 import {
-    llmChatPreviewSchema,
     llmPromptConfigSchema,
     optimizePromptSchema,
-    type LlmChatPreviewResult,
-    type MediaResolutionMetadata,
 } from "@andy-code-cat/contracts";
-import { tryParseStructuredJson, buildFormattedReply } from "../../../application/llm/llmParser";
-import { applyFocusPatch } from "../../../application/llm/llmPatchMerger";
-import { assertPromptTraceParity } from "../../../application/llm/promptTraceParity";
-import { buildChatCompletionRequestBody } from "../../../application/llm/chatRequestAdapter";
-import {
-    buildParseFailureStructured,
-    isGenerationParseFailure,
-    tryBuildSectionContextOpts,
-    resolveUsageWithFallback,
-    buildMessagesWithHistory,
-} from "../../../application/llm/llmMessageBuilder";
 import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
 import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
-import { estimateCost } from "../../../application/llm/costPolicy";
-import { readProviderCostUsd } from "../../../application/cost/resolveLlmCallCost";
 import { env } from "../../../config";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
-import { CostTransactionService } from "../../../application/cost/CostTransactionService";
-import { ResourceType } from "../../../domain/entities/CostTransaction";
 import { MongoUserStyleProfileRepository } from "../../../infra/repositories/MongoUserStyleProfileRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
@@ -46,6 +28,9 @@ import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptC
 import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptConfig";
 import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
+import { GenerateArtifact, GenerationStreamReadError } from "../../../application/use-cases/GenerateArtifact";
+import { getProviderStatus } from "../../../application/llm/providerAuth";
+import { emitLlmFailureLog } from "../../../application/llm/llmFailureLog";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
@@ -54,196 +39,13 @@ import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/Plat
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
 import { ResolveBrandContext } from "../../../application/use-cases/ResolveBrandContext";
 import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
-import { ResolvePromptExecution, type LlmRuntimeContext } from "../../../application/use-cases/ResolvePromptExecution";
+import { ResolvePromptExecution } from "../../../application/use-cases/ResolvePromptExecution";
 import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
 import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
-import { describeGeneratedJavaScriptSyntaxError } from "../../../application/artifacts/generatedJavaScriptSyntax";
-
-type LlmProviderStatus = {
-    requiresKey: boolean;
-    hasApiKeyConfigured: boolean;
-    keyEnvironmentVariable?: string;
-};
-
-const PROVIDER_KEY_ENV_HINTS: Record<string, string> = {
-    siliconflow: "SILICONFLOW_API_KEY",
-    openrouter: "OPENROUTER_API_KEY",
-};
-
-/**
- * I11 (SSOT program): a "pending" PromptExecutionLog older than this is treated as abandoned
- * (e.g. the API process crashed mid-call) and no longer blocks a retry using the same
- * idempotencyKey. Matches the generous end of this route's own generation timeouts.
- */
-const PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS = 5 * 60_000;
-
-/**
- * The work session a generation belongs to, opening one when nothing has yet.
- *
- * `workSessionMiddleware` only RESOLVES a session — it reads the header, and failing that looks for
- * one already open on the project. That covers every entry that opens a session upstream: Vibe does
- * it at classify/prefill, and the launch route does it for the guided handoff.
- *
- * Project Mode opens none. It creates a blank project and sends the browser straight to the
- * workspace, which dispatches the first prompt through this route — so the generation that produced
- * the artifact was journalled with no session, and the Prompt tab answered "no activity recorded
- * yet" on a project that had just been built. Measured in production on 2026-09-10: two `generate`
- * rows minutes apart, the Vibe one carrying a session and the Project Mode one carrying none, and
- * not a single work session with an entry mode other than `vibe`.
- *
- * A generation IS an intent. If none is open when one starts, this opens it rather than recording
- * the work as belonging to nothing. `reuseOrOpen` is the existing machinery and already has exactly
- * these semantics; it never throws, because tracing must not fail a generation.
- */
-async function resolveGenerationWorkSessionId(
-    req: RequestWithContext,
-    openWorkSession: OpenWorkSession,
-): Promise<string | undefined> {
-    if (req.workSession?.id) return req.workSession.id;
-    const opened = await openWorkSession.reuseOrOpen(undefined, {
-        userId: req.auth!.userId,
-        entryMode: "workspace",
-        projectId: req.sandbox!.projectId,
-    });
-    if (opened) req.workSession = { id: opened.id };
-    return opened?.id;
-}
-
-function resolveChatPreviewMaxTokens(requestedMaxTokens?: number): number {
-    const previewCeiling = 64_000;
-    const defaultPreviewBudget = Math.min(env.LLM_DEFAULT_MAX_COMPLETION_TOKENS, previewCeiling);
-    return Math.min(requestedMaxTokens ?? defaultPreviewBudget, env.LLM_MAX_COMPLETION_TOKENS, previewCeiling);
-}
 
 function sendSse(res: RequestWithContext["res"], payload: unknown) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (res as any).write(`data: ${JSON.stringify(payload)}\n\n`);
-}
-
-function buildPromptExecutionMediaResolutionSummary(metadata?: MediaResolutionMetadata) {
-    if (!metadata) {
-        return undefined;
-    }
-
-    const resolvedCount = metadata.directives?.filter((directive) => directive.status === "resolved" || directive.status === "fallback_resolved").length
-        ?? metadata.assetIds?.length
-        ?? 0;
-    const failedCount = metadata.directives?.filter((directive) => directive.status === "unresolved").length ?? 0;
-
-    if (!metadata.degraded && resolvedCount === 0 && failedCount === 0 && (!metadata.mediaKeys || metadata.mediaKeys.length === 0)) {
-        return undefined;
-    }
-
-    return {
-        version: metadata.version,
-        resolvedCount,
-        failedCount,
-        degraded: metadata.degraded,
-        mediaKeys: metadata.mediaKeys,
-        traceIds: metadata.traceIds,
-    };
-}
-
-function getProviderStatus(providerKey: string, authType?: "api-key" | "bearer" | "none"): LlmProviderStatus {
-    const requiresKey = authType !== "none";
-    return {
-        requiresKey,
-        hasApiKeyConfigured: requiresKey ? Boolean(env.providerApiKeys[providerKey]) : true,
-        keyEnvironmentVariable: requiresKey ? (PROVIDER_KEY_ENV_HINTS[providerKey] ?? "LLM_PROVIDER_API_KEYS_JSON") : undefined,
-    };
-}
-
-function buildProviderApiKeyMissingError(context: LlmRuntimeContext): HttpError {
-    const providerStatus = getProviderStatus(context.providerCatalog.provider, context.providerCatalog.authType);
-    return new HttpError(`Missing API key for provider ${context.providerCatalog.provider}`, {
-        statusCode: 503,
-        code: "LLM_PROVIDER_API_KEY_MISSING",
-        userMessage: `Il provider ${context.providerCatalog.provider} richiede una API key che non e configurata.`,
-        details: {
-            provider: context.providerCatalog.provider,
-            model: context.modelId,
-            authType: context.providerCatalog.authType,
-            keyEnvironmentVariable: providerStatus.keyEnvironmentVariable,
-        },
-    });
-}
-
-function buildProviderResponseError(input: {
-    statusCode: number;
-    code: string;
-    message: string;
-    userMessage: string;
-    provider: string;
-    model: string;
-    providerStatus?: number;
-    providerBody?: unknown;
-}): HttpError {
-    return new HttpError(input.message, {
-        statusCode: input.statusCode,
-        code: input.code,
-        userMessage: input.userMessage,
-        details: {
-            provider: input.provider,
-            model: input.model,
-            providerStatus: input.providerStatus,
-            providerBody: input.providerBody,
-        },
-    });
-}
-
-function emitLlmFailureLog(input: {
-    projectId: string;
-    durationMs: number;
-    provider?: string;
-    model?: string;
-    code?: string;
-    message: string;
-    details?: unknown;
-    isFocusedMode?: boolean;
-}) {
-    ExecutionLogger.instance.emit({
-        projectId: input.projectId,
-        domain: "llm",
-        eventType: "llm_generation_failed",
-        level: "error",
-        status: "failure",
-        durationMs: input.durationMs,
-        metadata: {
-            provider: input.provider,
-            model: input.model,
-            code: input.code,
-            message: input.message,
-            details: input.details,
-            isFocusedMode: input.isFocusedMode,
-        },
-    });
-}
-
-function parseLlmChatPreviewBody(raw: unknown) {
-    const parsed = llmChatPreviewSchema.safeParse(raw);
-    if (parsed.success) {
-        return parsed.data;
-    }
-
-    const focusOnlyError =
-        parsed.error.issues.length > 0 &&
-        parsed.error.issues.every((issue) => issue.path[0] === "focusContext");
-
-    if (focusOnlyError && raw && typeof raw === "object") {
-        const fallbackParsed = llmChatPreviewSchema.safeParse({
-            ...(raw as Record<string, unknown>),
-            focusContext: undefined,
-        });
-
-        if (fallbackParsed.success) {
-            console.warn("[llm] invalid focusContext ignored - falling back to full-project context.", {
-                focusContextErrors: parsed.error.flatten().fieldErrors.focusContext,
-            });
-            return fallbackParsed.data;
-        }
-    }
-
-    throw parsed.error;
 }
 
 export function createLlmRoutes(): Router {
@@ -311,20 +113,6 @@ export function createLlmRoutes(): Router {
         getFileStorage(),
     );
 
-    function resolveAuthHeader(providerKey: string, authType?: "api-key" | "bearer" | "none") {
-        if (authType === "none") {
-            return undefined;
-        }
-
-        const key = env.providerApiKeys[providerKey];
-        if (!key) {
-            return undefined;
-        }
-
-        const kind = authType ?? "bearer";
-        return kind === "api-key" ? key : `Bearer ${key}`;
-    }
-
     // I10 of the SSOT program: the composer previously nested here as `resolveContext()` is now
     // ResolvePromptExecution — a pure move (see that file's doc comment), constructed once here
     // with the same dependency instances the closure used to capture.
@@ -341,6 +129,14 @@ export function createLlmRoutes(): Router {
         resolveBrandContext,
         resolvePipelineModelLock,
         getFileStorage(),
+    );
+    const generateArtifact = new GenerateArtifact(
+        resolvePromptExecution,
+        promptExecutionLogRepository,
+        openWorkSession,
+        snapshotRepository,
+        resolveArtifactMedia,
+        userRepo,
     );
 
     router.get("/llm/providers", async (_req, res, next) => {
@@ -603,1150 +399,100 @@ export function createLlmRoutes(): Router {
         }
     });
 
+    // Both generation routes are transport adapters over GenerateArtifact (BACKGROUND_RUNS.md
+    // §3.1): one engine, two ways of delivering its result. Nothing about what is sent to the
+    // model, parsed, journalled or costed is decided here.
     router.post("/projects/:projectId/llm/chat-preview", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
-        const startedAt = Date.now();
-        // I11 (SSOT program): set once the durable pending record is written, read in the catch
-        // block to mark that same record failed. Declared outside the try so both see it.
-        let promptExecutionLogId: string | undefined;
-
         try {
-            const body = parseLlmChatPreviewBody(req.body);
-            const isFocusedMode = Boolean(
-                body.focusContext
-                && body.focusContext.mode !== "project"
-                && body.currentArtifacts
-                && (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
-            );
-            const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
-            const context = await resolvePromptExecution.execute({
-                projectId: req.sandbox!.projectId,
-                userId: req.auth!.userId,
-                pipelineRole: body.pipelineRole,
-                provider: body.provider,
-                model: body.model,
-                capability: body.capability,
-                assetIds: body.assetIds,
-                systemPrompt: body.systemPrompt,
-                outputLanguage: body.uiLanguage,
-                focusedMode: isFocusedMode ? {
-                    focusContext: body.focusContext!,
-                    pageMap: sectionOpts?.pageMap,
-                } : undefined,
-                pipelineRunId: body.pipelineRunId,
-            });
-            const effectiveSystemPrompt = context.systemPrompt;
-
-            const { messages } = buildMessagesWithHistory(
-                effectiveSystemPrompt,
-                body.message,
-                body.history,
-                body.currentArtifacts,
-                body.focusContext,
-                sectionOpts,
-            );
-            assertPromptTraceParity({
-                effectiveSystemPrompt,
-                layers: context.promptLayers,
-                messagesSentToLlm: messages,
-            });
-
-            const authHeader = resolveAuthHeader(context.providerCatalog.provider, context.providerCatalog.authType);
-
-            if (!authHeader && context.providerCatalog.authType !== "none") {
-                throw buildProviderApiKeyMissingError(context);
-            }
-
-            // ── I11: durable pending journal write, AWAITED before the provider call ──────
-            if (body.idempotencyKey) {
-                const activeDuplicate = await promptExecutionLogRepository.findActiveByIdempotencyKey(
-                    req.sandbox!.projectId,
-                    req.auth!.userId,
-                    body.idempotencyKey,
-                    PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS,
-                );
-                if (activeDuplicate) {
-                    throw new HttpError("A request with this idempotency key is already in flight or has already completed", {
-                        statusCode: 409,
-                        code: "DUPLICATE_REQUEST",
-                        userMessage: "Questa richiesta è già stata inviata. Attendi il completamento prima di ripetere.",
-                        details: { promptExecutionId: activeDuplicate.id, status: activeDuplicate.status },
-                    });
-                }
-            }
-            const endpoint = `${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`;
-            const pendingLog = await promptExecutionLogRepository.createPending({
-                taskKey: "chat",
-                projectId: req.sandbox!.projectId,
-                userId: req.auth!.userId,
-                conversationId: body.conversationId,
-                workSessionId: await resolveGenerationWorkSessionId(req, openWorkSession),
-                pipelineRunId: body.pipelineRunId,
-                pipelineStage: "generate",
-                endpoint,
-                provider: context.providerCatalog.provider,
-                model: context.modelId,
-                inputPrompt: body.message.slice(0, 2000),
-                renderedSystemPrompt: effectiveSystemPrompt,
-                renderedUserPrompt: messages[messages.length - 1]?.content,
-                contextMeta: {
-                    projectPresetId: context.projectPresetId,
-                    assetIds: context.contextAssetIds,
-                    usedMoodboard: false,
-                    usedUserProfile: false,
-                },
-                idempotencyKey: body.idempotencyKey,
-                // Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — the
-                // only new field a resumed generation adds. Absent on every ordinary turn.
-                resumedFromPromptExecutionId: body.resumedFromPromptExecutionId,
-            });
-            promptExecutionLogId = pendingLog.id;
-            // ── end I11 pending write ───────────────────────────────────────────────────
-
-            const sfRes = await fetch(endpoint, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(authHeader ? { Authorization: authHeader } : {}),
-                },
-                body: JSON.stringify(buildChatCompletionRequestBody({
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                    maxTokens: resolveChatPreviewMaxTokens(body.max_tokens),
-                    temperature: body.temperature ?? 0.4,
-                    messages,
-                    thinkingBudget: body.thinking_budget,
-                })),
-            });
-
-            const sfJson = await sfRes.json().catch(() => ({}));
-
-            if (!sfRes.ok) {
-                console.error("[LLM provider error]", {
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                    providerStatus: sfRes.status,
-                    providerBody: sfJson,
-                });
-                // Pass through 429 (rate limit) and 404 (model not found) directly
-                // so the client knows the actual reason instead of seeing a generic 502.
-                const outStatus = sfRes.status === 429 ? 429 : sfRes.status === 404 ? 404 : 502;
-                throw buildProviderResponseError({
-                    statusCode: outStatus,
-                    code: outStatus === 429 ? "LLM_PROVIDER_RATE_LIMIT" : outStatus === 404 ? "LLM_MODEL_NOT_FOUND" : "LLM_PROVIDER_REQUEST_FAILED",
-                    message: outStatus === 429
-                        ? "LLM provider rate limit reached"
-                        : outStatus === 404
-                            ? "Model not found at provider"
-                            : "LLM provider call failed",
-                    userMessage: outStatus === 429
-                        ? "Il provider ha raggiunto il rate limit. Riprova tra poco o seleziona un altro modello."
-                        : outStatus === 404
-                            ? "Il modello selezionato non e disponibile presso il provider. Scegli un modello diverso."
-                            : "La chiamata al provider LLM non e andata a buon fine.",
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                    providerStatus: sfRes.status,
-                    providerBody: sfJson,
-                });
-            }
-
-            const rawReply = String(sfJson?.choices?.[0]?.message?.content ?? "").trim();
-            if (!rawReply) {
-                throw buildProviderResponseError({
-                    statusCode: 502,
-                    code: "LLM_PROVIDER_EMPTY_RESPONSE",
-                    message: "LLM provider returned empty content",
-                    userMessage: "Il provider ha restituito una risposta vuota.",
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                    providerBody: sfJson,
-                });
-            }
-
-            const parsed = tryParseStructuredJson(rawReply);
-            const generationParseError = isGenerationParseFailure({
-                parseValid: parsed.parseValid,
-                isFocusedMode,
-                hasCurrentArtifacts: Boolean(body.currentArtifacts?.html),
-            });
-            let structured = parsed.structured ?? buildParseFailureStructured();
-            let mediaResolutionMetadata: MediaResolutionMetadata | undefined;
-            let focusPatchApplied: boolean | undefined;
-            let focusPatchParseError: boolean | undefined;
-            if (isFocusedMode && body.currentArtifacts) {
-                if (parsed.structured?.focusPatch) {
-                    // When selectedElement is present, derive anchor server-side from outerHtml
-                    // so the LLM doesn't need to include it (avoids JSON encoding failures).
-                    const serverAnchor = body.focusContext?.selectedElement?.outerHtml;
-                    const patchResult = applyFocusPatch(body.currentArtifacts, parsed.structured.focusPatch, {
-                        html: body.currentArtifacts.html ?? "",
-                        css: body.currentArtifacts.css ?? "",
-                        js: body.currentArtifacts.js ?? "",
-                    }, serverAnchor);
-                    // When the focused patch targets HTML, the LLM may also provide companion
-                    // CSS/JS rules required to style the new element (even though focused mode
-                    // instructs empty strings). Carry those through so the new element renders
-                    // correctly without a second round-trip for the user.
-                    const patchType = parsed.structured.focusPatch.targetType;
-                    const companionCss = patchType === "html" ? (parsed.structured.artifacts?.css ?? "") : "";
-                    const companionJs = patchType === "html" ? (parsed.structured.artifacts?.js ?? "") : "";
-                    // Append companion CSS/JS produced by the LLM to the existing
-                    // base CSS/JS (patchResult.artifacts already carries the base).
-                    // Using || would silently drop the base styles when the LLM
-                    // breaks the focused-mode protocol and returns non-empty artifacts.
-                    const patchedArtifacts = {
-                        ...patchResult.artifacts,
-                        css: [patchResult.artifacts.css, companionCss].filter(Boolean).join("\n"),
-                        js: [patchResult.artifacts.js, companionJs].filter(Boolean).join("\n"),
-                    };
-                    structured = { ...structured, artifacts: patchedArtifacts };
-                    focusPatchApplied = patchResult.patchApplied;
-                    // Fallback: client HTML may have been truncated (htmlLimit) so the target
-                    // element was cut off. Retry the merge against the server's stored active
-                    // snapshot which always contains the full artifact HTML.
-                    if (!focusPatchApplied) {
-                        const activeSnap = await snapshotRepository.getActiveForProject(req.sandbox!.projectId).catch(() => null);
-                        if (activeSnap?.artifacts.html) {
-                            const retryResult = applyFocusPatch(
-                                activeSnap.artifacts,
-                                parsed.structured.focusPatch,
-                                activeSnap.artifacts,
-                                serverAnchor
-                            );
-                            if (retryResult.patchApplied) {
-                                console.info("[focusPatch] server-snapshot fallback applied successfully");
-                                structured = {
-                                    ...structured,
-                                    artifacts: {
-                                        ...retryResult.artifacts,
-                                        css: [retryResult.artifacts.css, companionCss].filter(Boolean).join("\n"),
-                                        js: [retryResult.artifacts.js, companionJs].filter(Boolean).join("\n"),
-                                    },
-                                };
-                                focusPatchApplied = true;
-                            }
-                        }
-                    }
-                } else {
-                    // Focused mode but no focusPatch (parse failed or LLM chat-only) —
-                    // preserve currentArtifacts so no snapshot is created with fallback HTML.
-                    structured = {
-                        ...structured,
-                        artifacts: {
-                            html: body.currentArtifacts.html ?? "",
-                            css: body.currentArtifacts.css ?? "",
-                            js: body.currentArtifacts.js ?? "",
-                        },
-                    };
-                    focusPatchApplied = false;
-                    // When the JSON parse itself failed in focused mode, craft a
-                    // user-friendly reply instead of dumping the raw LLM output,
-                    // and flag the error so the frontend can suggest a model switch.
-                    if (!parsed.parseValid) {
-                        focusPatchParseError = true;
-                        structured = {
-                            ...structured,
-                            chat: {
-                                summary: "Il modello ha prodotto una risposta non interpretabile (JSON malformato). L'elemento non è stato modificato.",
-                                bullets: [
-                                    "La pagina resta invariata.",
-                                    "Prova a cambiare modello o ripetere la richiesta.",
-                                ],
-                                nextActions: [],
-                            },
-                        };
-                    }
-                }
-            }
-            // Post-process media placeholders and legacy provider URLs into stable ProjectAsset URLs.
-            // Wrapped in try/catch: media resolution must never abort the artifact delivery.
-            // If resolution fails entirely the user gets the raw artifacts and a logged warning.
-            if (!generationParseError && (structured.artifacts?.html || structured.artifacts?.css)) {
-                try {
-                    const mediaResolution = await resolveArtifactMedia.execute({
-                        projectId: req.sandbox!.projectId,
-                        userId: req.auth!.userId,
-                        artifacts: structured.artifacts,
-                        mediaManifest: structured.mediaManifest,
-                        sourceContext: {
-                            route: "chat-preview",
-                            conversationId: body.conversationId,
-                            focusPatchApplied,
-                        },
-                        mode: isFocusedMode ? "focused_edit" : "initial_generation",
-                    });
-                    structured = {
-                        ...structured,
-                        artifacts: mediaResolution.artifacts,
-                    };
-                    mediaResolutionMetadata = mediaResolution.metadata;
-                } catch (mediaError) {
-                    console.error("[llm/chat-preview] media resolution failed — delivering artifacts without resolved media:", mediaError);
-                    ExecutionLogger.instance.emit({
-                        projectId: req.sandbox!.projectId,
-                        domain: "system",
-                        eventType: "artifact_media_resolution_error",
-                        level: "error",
-                        status: "failure",
-                        metadata: { error: mediaError instanceof Error ? mediaError.message : String(mediaError) },
-                    });
-                }
-            }
-            const reply = (parsed.parseValid || focusPatchParseError || generationParseError) ? buildFormattedReply(structured) : rawReply;
-            const resolvedUsage = resolveUsageWithFallback({
-                usage: sfJson?.usage
-                    ? {
-                        promptTokens: Number(sfJson.usage.prompt_tokens ?? 0),
-                        completionTokens: Number(sfJson.usage.completion_tokens ?? 0),
-                        totalTokens: Number(sfJson.usage.total_tokens ?? 0),
-                    }
-                    : undefined,
-                messages,
-                outputText: rawReply,
-            });
-            userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => { });
-
-            const providerCostUsd = readProviderCostUsd({
-                provider: context.providerCatalog.provider,
-                modelId: context.modelId,
-                providerUsage: sfJson?.usage,
-                usage: resolvedUsage,
-            });
-
-            const result: LlmChatPreviewResult = {
-                reply,
-                rawResponse: rawReply,
-                structuredParseValid: parsed.parseValid,
-                // Reported, never thrown here: refusing at the generation boundary would discard a
-                // complete artifact over a syntax slip. The storage boundary still refuses it.
-                generatedJavaScriptError: parsed.structured?.artifacts?.js
-                    ? describeGeneratedJavaScriptSyntaxError(parsed.structured.artifacts.js)
-                    : undefined,
-                promptingTrace: {
-                    originalUserMessage: body.message,
-                    promptConfigId: context.promptConfigId,
-                    prePromptTemplate: context.prePromptTemplate,
-                    effectiveSystemPrompt: effectiveSystemPrompt,
-                    layers: context.promptLayers,
-                    messagesSentToLlm: messages,
-                    focusContext: body.focusContext,
-                },
-                structured,
-                mediaResolution: mediaResolutionMetadata,
-                focusPatchApplied,
-                focusPatchParseError,
-                generationParseError: generationParseError || undefined,
-                provider: context.providerCatalog.provider,
-                model: context.modelId,
-                finishReason: sfJson?.choices?.[0]?.finish_reason,
-                usage: resolvedUsage,
-                costEstimate: estimateCost(
-                    {
-                        capability: body.capability,
-                        tokenUsage: resolvedUsage,
-                        providerCostUsd,
-                    },
-                    {
-                        textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                        imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                        videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                        usdToEurRate: env.COST_POLICY_USD_TO_EUR_RATE,
-                        providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
-                    }
-                ),
-                durationMs: Date.now() - startedAt,
-                simulated: false,
-                promptExecutionId: promptExecutionLogId,
-            };
-            const mediaResolutionSummary = buildPromptExecutionMediaResolutionSummary(result.mediaResolution);
-
-            // ── Execution log (fire-and-forget) ──────────────────────────────
-            ExecutionLogger.instance.emit({
-                projectId: req.sandbox!.projectId,
-                domain: "llm",
-                eventType: "llm_generation_complete",
-                level: parsed.parseValid ? "info" : "warn",
-                status: parsed.parseValid ? "success" : "partial",
-                durationMs: result.durationMs,
-                metadata: {
-                    provider: result.provider,
-                    model: result.model,
-                    finishReason: result.finishReason,
-                    promptTokens: result.usage?.promptTokens,
-                    completionTokens: result.usage?.completionTokens,
-                    costEur: result.costEstimate?.amount,
-                    structuredParseValid: result.structuredParseValid,
-                    simulated: result.simulated,
-                    isFocusedMode,
-                    focusPatchPresent: Boolean(focusPatchApplied !== undefined),
-                },
-            });
-            if (generationParseError) {
-                const rawLen = rawReply.length;
-                ExecutionLogger.instance.emit({
-                    projectId: req.sandbox!.projectId,
-                    conversationId: body.conversationId,
-                    domain: "llm",
-                    eventType: "llm_generation_parse_failed",
-                    level: "error",
-                    status: "failure",
-                    durationMs: result.durationMs,
-                    metadata: {
-                        provider: result.provider,
-                        model: result.model,
-                        finishReason: result.finishReason,
-                        completionTokens: result.usage?.completionTokens,
-                        isFocusedMode,
-                        streaming: false,
-                        rawLength: rawLen,
-                        rawPrefix: rawReply.slice(0, 1200),
-                        rawSuffix: rawLen > 1800 ? rawReply.slice(-600) : "",
-                    },
-                });
-            }
-            if (isFocusedMode && focusPatchApplied !== undefined) {
-                ExecutionLogger.instance.emit({
-                    projectId: req.sandbox!.projectId,
-                    domain: "focus_patch",
-                    eventType: focusPatchApplied ? "focus_patch_applied" : "focus_patch_failed",
-                    level: focusPatchApplied ? "info" : "warn",
-                    status: focusPatchApplied ? "success" : "failure",
-                    durationMs: result.durationMs,
-                    metadata: {
-                        anchorTag: body.focusContext?.selectedElement?.tag,
-                        anchorPfIdPresent: Boolean(body.focusContext?.selectedElement?.outerHtml?.includes("data-pf-id")),
-                    },
-                });
-            }
-            // ── end execution log ─────────────────────────────────────────────
-
-            // ── I11: durable journal completion, AWAITED before the response is sent ──
-            // This ensures chat costs are included in project cost totals alongside
-            // optimize/suggest costs, and that the record a retry's idempotencyKey check
-            // would find is guaranteed to reflect the final outcome before the client sees it.
-            if (promptExecutionLogId) {
-                await promptExecutionLogRepository.complete(promptExecutionLogId, {
-                    status: "succeeded",
-                    usage: result.usage,
-                    mediaResolutionSummary,
-                    costEstimate: result.costEstimate,
-                    durationMs: result.durationMs,
-                    finishReason: result.finishReason,
-                    // The reply before parsing and repair. Its absence here was a real hole found by
-                    // running the certificate against a live session: the generate row proved WHICH
-                    // prompt produced the artifact but not what the model actually emitted, which is
-                    // the half that says whether a repair fired.
-                    rawResponse: result.rawResponse,
-                });
-            }
-            // ── end I11 journal completion ──────────────────────────────────────
-
-            // ── Cost ledger: append-only transaction record ───────────────────
-            CostTransactionService.instance.record({
+            const outcome = await generateArtifact.execute({
                 userId: req.auth!.userId,
                 projectId: req.sandbox!.projectId,
-                resourceType: ResourceType.LLM_CHAT,
-                resourceSubtype: context.modelId,
-                providerCostUsd: providerCostUsd,
-                precomputedTotalEur: result.costEstimate?.amount,
-                units: result.usage ? {
-                    promptTokens: result.usage.promptTokens,
-                    completionTokens: result.usage.completionTokens,
-                    totalTokens: result.usage.totalTokens,
-                } : {},
-                sourceRef: { conversationId: body.conversationId },
-                meta: {
-                    provider: result.provider,
-                    model: result.model,
-                    finishReason: result.finishReason,
-                    isFocusedMode,
-                },
+                rawBody: req.body,
+                workSessionId: req.workSession?.id,
+                transport: "single",
             });
-            // ── end cost ledger ───────────────────────────────────────────────
-
-            res.json(result);
+            if (outcome.kind !== "completed") {
+                // A single call has no interruption path; reaching here would be a defect.
+                throw new HttpError("Generation ended without a result", { statusCode: 502, code: "LLM_GENERATION_INCOMPLETE" });
+            }
+            res.json(outcome.result);
         } catch (error) {
-            const normalized = normalizeHttpError(error);
-            emitLlmFailureLog({
-                projectId: req.sandbox!.projectId,
-                durationMs: Date.now() - startedAt,
-                provider: req.body?.provider,
-                model: req.body?.model,
-                code: normalized.code,
-                message: normalized.userMessage,
-                details: normalized.details,
-            });
-            // I11: best-effort — never let a failed journal write mask the real error.
-            if (promptExecutionLogId) {
-                promptExecutionLogRepository.complete(promptExecutionLogId, {
-                    status: "failed",
-                    errorMessage: normalized.userMessage,
-                    durationMs: Date.now() - startedAt,
-                }).catch(() => { });
-            }
             next(error);
         }
     });
 
     router.post("/projects/:projectId/llm/chat-preview/stream", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         const startedAt = Date.now();
-        // I11 (SSOT program): set once the durable pending record is written, read wherever
-        // this handler exits (success, interrupted, or the outer catch) to complete that record.
-        let promptExecutionLogId: string | undefined;
+        // Abort provider fetch on client disconnect.
+        // IMPORTANT: use res.on("close"), NOT req.on("close").
+        // After express.json() consumes the body, req emits "close" in the next
+        // tick — long before this code runs — making req.on("close") a dead
+        // listener. res.on("close") fires when the HTTP response socket actually
+        // closes (client disconnect or res.end()), which is what we need for SSE.
+        const clientGone = new AbortController();
+        const onClientClose = () => {
+            console.log(`[stream-debug] res close event fired at ${Date.now() - startedAt}ms → aborting fetch`);
+            clientGone.abort();
+        };
+        res.on("close", onClientClose);
+        const responseOpen = () => !res.writableEnded && !res.destroyed;
 
         try {
-            const body = parseLlmChatPreviewBody(req.body);
-            const isFocusedMode = Boolean(
-                body.focusContext
-                && body.focusContext.mode !== "project"
-                && body.currentArtifacts
-                && (body.currentArtifacts.html || body.currentArtifacts.css || body.currentArtifacts.js)
-            );
-            const sectionOpts = tryBuildSectionContextOpts(isFocusedMode, body);
-            const context = await resolvePromptExecution.execute({
-                projectId: req.sandbox!.projectId,
+            const outcome = await generateArtifact.execute({
                 userId: req.auth!.userId,
-                pipelineRole: body.pipelineRole,
-                provider: body.provider,
-                model: body.model,
-                capability: body.capability,
-                assetIds: body.assetIds,
-                systemPrompt: body.systemPrompt,
-                outputLanguage: body.uiLanguage,
-                focusedMode: isFocusedMode ? {
-                    focusContext: body.focusContext!,
-                    pageMap: sectionOpts?.pageMap,
-                } : undefined,
-                pipelineRunId: body.pipelineRunId,
-            });
-            const effectiveSystemPrompt = context.systemPrompt;
-
-            const { messages, historyIncluded } = buildMessagesWithHistory(
-                effectiveSystemPrompt,
-                body.message,
-                body.history,
-                body.currentArtifacts,
-                body.focusContext,
-                sectionOpts,
-            );
-            assertPromptTraceParity({
-                effectiveSystemPrompt,
-                layers: context.promptLayers,
-                messagesSentToLlm: messages,
-            });
-
-            const authHeader = resolveAuthHeader(context.providerCatalog.provider, context.providerCatalog.authType);
-            console.log(`[stream-debug] provider=${context.providerCatalog.provider} model=${context.modelId} authType=${context.providerCatalog.authType} hasAuth=${Boolean(authHeader)} historyIncluded=${historyIncluded} msgCount=${messages.length}`);
-
-            if (!authHeader && context.providerCatalog.authType !== "none") {
-                throw buildProviderApiKeyMissingError(context);
-            }
-
-            // ── I11: durable pending journal write, AWAITED before the provider call ──────
-            if (body.idempotencyKey) {
-                const activeDuplicate = await promptExecutionLogRepository.findActiveByIdempotencyKey(
-                    req.sandbox!.projectId,
-                    req.auth!.userId,
-                    body.idempotencyKey,
-                    PROMPT_EXECUTION_IDEMPOTENCY_STALE_MS,
-                );
-                if (activeDuplicate) {
-                    throw new HttpError("A request with this idempotency key is already in flight or has already completed", {
-                        statusCode: 409,
-                        code: "DUPLICATE_REQUEST",
-                        userMessage: "Questa richiesta è già stata inviata. Attendi il completamento prima di ripetere.",
-                        details: { promptExecutionId: activeDuplicate.id, status: activeDuplicate.status },
-                    });
-                }
-            }
-            const endpoint = `${context.providerCatalog.baseUrl.replace(/\/$/, "")}/chat/completions`;
-            const pendingLog = await promptExecutionLogRepository.createPending({
-                taskKey: "chat",
                 projectId: req.sandbox!.projectId,
-                userId: req.auth!.userId,
-                conversationId: body.conversationId,
-                workSessionId: await resolveGenerationWorkSessionId(req, openWorkSession),
-                pipelineRunId: body.pipelineRunId,
-                pipelineStage: "generate",
-                endpoint,
-                provider: context.providerCatalog.provider,
-                model: context.modelId,
-                inputPrompt: body.message.slice(0, 2000),
-                renderedSystemPrompt: effectiveSystemPrompt,
-                renderedUserPrompt: messages[messages.length - 1]?.content,
-                contextMeta: {
-                    projectPresetId: context.projectPresetId,
-                    assetIds: context.contextAssetIds,
-                    usedMoodboard: false,
-                    usedUserProfile: false,
-                },
-                idempotencyKey: body.idempotencyKey,
-                // Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — the
-                // only new field a resumed generation adds. Absent on every ordinary turn.
-                resumedFromPromptExecutionId: body.resumedFromPromptExecutionId,
-            });
-            promptExecutionLogId = pendingLog.id;
-            // ── end I11 pending write ───────────────────────────────────────────────────
-
-            // Abort provider fetch on client disconnect or after 5-minute hard timeout.
-            // IMPORTANT: use res.on("close"), NOT req.on("close").
-            // After express.json() consumes the body, req emits "close" in the next
-            // tick — long before this code runs — making req.on("close") a dead
-            // listener. res.on("close") fires when the HTTP response socket actually
-            // closes (client disconnect or res.end()), which is what we need for SSE.
-            const fetchAbort = new AbortController();
-            const onClientClose = () => {
-                console.log(`[stream-debug] res close event fired at ${Date.now() - startedAt}ms → aborting fetch`);
-                fetchAbort.abort();
-            };
-            res.on("close", onClientClose);
-            console.log(`[stream-debug] starting fetch to provider at ${Date.now() - startedAt}ms`);
-            const fetchTimeout = setTimeout(() => fetchAbort.abort(), 20 * 60 * 1000);
-
-            let sfRes: Response;
-            try {
-                sfRes = await fetch(endpoint, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...(authHeader ? { Authorization: authHeader } : {}),
+                rawBody: req.body,
+                workSessionId: req.workSession?.id,
+                transport: "stream",
+                startedAt,
+                abortSignal: clientGone.signal,
+                isStopped: () => res.destroyed || res.writableEnded,
+                sink: {
+                    streamOpened: () => {
+                        res.setHeader("Content-Type", "text/event-stream");
+                        res.setHeader("Cache-Control", "no-cache, no-transform");
+                        res.setHeader("Connection", "keep-alive");
+                        res.setHeader("X-Accel-Buffering", "no");
+                        res.flushHeaders?.();
                     },
-                    body: JSON.stringify(buildChatCompletionRequestBody({
-                        provider: context.providerCatalog.provider,
-                        model: context.modelId,
-                        stream: true,
-                        maxTokens: resolveChatPreviewMaxTokens(body.max_tokens),
-                        temperature: body.temperature ?? 0.4,
-                        messages,
-                        thinkingBudget: body.thinking_budget,
-                    })),
-                    signal: fetchAbort.signal,
-                });
-            } catch (fetchErr) {
-                clearTimeout(fetchTimeout);
-                res.off("close", onClientClose);
-                if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
-                    console.log(`[stream-debug] AbortError from fetch at ${Date.now() - startedAt}ms`);
-                    if (!res.writableEnded) res.end();
-                    return;
-                }
-                console.log(`[stream-debug] fetch threw non-abort error at ${Date.now() - startedAt}ms:`, fetchErr);
-                throw buildProviderResponseError({
-                    statusCode: 502,
-                    code: "LLM_PROVIDER_CONNECTION_FAILED",
-                    message: fetchErr instanceof Error ? fetchErr.message : "Provider connection error",
-                    userMessage: "Non e stato possibile contattare il provider LLM.",
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                });
-            }
-            clearTimeout(fetchTimeout);
-
-            if (!sfRes.ok || !sfRes.body) {
-                res.off("close", onClientClose);
-                const providerBody = await sfRes.text().catch(() => "");
-                console.log(`[stream-debug] provider error status=${sfRes.status} at ${Date.now() - startedAt}ms body=${providerBody.slice(0, 200)}`);
-                throw buildProviderResponseError({
-                    statusCode: sfRes.status === 429 ? 429 : sfRes.status === 404 ? 404 : 502,
-                    code: sfRes.status === 429 ? "LLM_PROVIDER_RATE_LIMIT" : sfRes.status === 404 ? "LLM_MODEL_NOT_FOUND" : "LLM_PROVIDER_REQUEST_FAILED",
-                    message: `Provider error ${sfRes.status}`,
-                    userMessage: sfRes.status === 429
-                        ? "Il provider ha raggiunto il rate limit. Riprova tra poco o seleziona un altro modello."
-                        : sfRes.status === 404
-                            ? "Il modello selezionato non e disponibile presso il provider. Scegli un modello diverso."
-                            : "La chiamata al provider LLM non e andata a buon fine.",
-                    provider: context.providerCatalog.provider,
-                    model: context.modelId,
-                    providerStatus: sfRes.status,
-                    providerBody,
-                });
-            }
-
-            res.setHeader("Content-Type", "text/event-stream");
-            res.setHeader("Cache-Control", "no-cache, no-transform");
-            res.setHeader("Connection", "keep-alive");
-            res.setHeader("X-Accel-Buffering", "no");
-            res.flushHeaders?.();
-            console.log(`[stream-debug] provider response ok, starting stream read at ${Date.now() - startedAt}ms`);
-
-            const reader = sfRes.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-            let rawReply = "";
-            // Reasoning is billed from the same completion budget as the answer, so on a truncated
-            // call this is the only surviving record of work already paid for. It was previously
-            // forwarded to the client and dropped server-side.
-            let rawThinking = "";
-            let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
-            let providerCostUsdStream: number | undefined;
-            let finishReason: string | undefined;
-            let streamAborted = false;
-
-            try {
-                while (true) {
-                    if (res.destroyed || res.writableEnded) { streamAborted = true; break; }
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split("\n");
-                    buffer = lines.pop() ?? "";
-
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!trimmed.startsWith("data:")) continue;
-
-                        const data = trimmed.slice(5).trim();
-                        if (!data || data === "[DONE]") {
-                            continue;
-                        }
-
-                        try {
-                            const json = JSON.parse(data) as {
-                                choices?: Array<{
-                                    delta?: {
-                                        content?: string;
-                                        reasoning_content?: string;
-                                        reasoning?: string;
-                                        thinking?: string;
-                                    };
-                                    finish_reason?: string | null;
-                                }>;
-                                usage?: {
-                                    prompt_tokens?: number;
-                                    completion_tokens?: number;
-                                    total_tokens?: number;
-                                    /** OpenRouter real cost in USD */
-                                    cost?: number | string;
-                                };
-                            };
-
-                            const delta = json.choices?.[0]?.delta;
-                            const thinking =
-                                delta?.reasoning_content ??
-                                delta?.reasoning ??
-                                delta?.thinking;
-
-                            const content = delta?.content;
-
-                            if (thinking) {
-                                rawThinking += String(thinking);
-                                sendSse(res, { type: "thinking", content: String(thinking) });
-                            }
-
-                            if (content) {
-                                rawReply += String(content);
-                                sendSse(res, { type: "answer", content: String(content) });
-                            }
-
-                            const fr = json.choices?.[0]?.finish_reason;
-                            if (fr) {
-                                finishReason = String(fr);
-                            }
-
-                            if (json.usage) {
-                                usage = {
-                                    promptTokens: Number(json.usage.prompt_tokens ?? 0),
-                                    completionTokens: Number(json.usage.completion_tokens ?? 0),
-                                    totalTokens: Number(json.usage.total_tokens ?? 0),
-                                };
-                                const rc = json.usage.cost;
-                                if (typeof rc === "number") providerCostUsdStream = rc;
-                                else if (typeof rc === "string") { const p = parseFloat(rc); if (!isNaN(p)) providerCostUsdStream = p; }
-                            }
-                        } catch {
-                            // Ignore malformed chunk.
-                        }
-                    }
-                }
-            } catch (streamReadErr) {
-                if (streamReadErr instanceof Error && streamReadErr.name === "AbortError") {
-                    streamAborted = true;
-                } else {
-                    // Headers already flushed — send SSE error instead of next(error).
-                    res.off("close", onClientClose);
-                    console.log(`[stream-debug] stream read error at ${Date.now() - startedAt}ms:`, streamReadErr);
-                    if (promptExecutionLogId) {
-                        await promptExecutionLogRepository.complete(promptExecutionLogId, {
-                            status: "failed",
-                            errorMessage: streamReadErr instanceof Error ? streamReadErr.message : "Stream read error",
-                            durationMs: Date.now() - startedAt,
-                        }).catch(() => { });
-                    }
-                    sendSse(res, { type: "error", message: streamReadErr instanceof Error ? streamReadErr.message : "Stream read error", durationMs: Date.now() - startedAt });
-                    res.end();
-                    return;
-                }
-            }
-
+                    thinking: (content) => sendSse(res, { type: "thinking", content }),
+                    answer: (content) => sendSse(res, { type: "answer", content }),
+                    // Deterministic media-resolution steps, forwarded in real time.
+                    mediaProgress: (event) => {
+                        if (responseOpen()) sendSse(res, { type: "media_progress", ...event });
+                    },
+                },
+            });
             res.off("close", onClientClose);
 
-            // The stream carries no final usage object, so whatever was accumulated from the chunks
-            // is passed in as the explicit figure; the shared rule supplies the fallback.
-            if (usage) {
-                providerCostUsdStream = readProviderCostUsd({
-                    provider: context.providerCatalog.provider,
-                    modelId: context.modelId,
-                    usage,
-                    explicitCostUsd: providerCostUsdStream,
-                });
-            }
-
-            if (streamAborted || res.destroyed || res.writableEnded) {
-                // Send an "interrupted" event with partial metadata so the client
-                // can persist the cost/token info even for aborted generations.
-                const partialUsage = resolveUsageWithFallback({ usage, messages, outputText: rawReply });
-                userRepo.incrementTokensConsumed(req.auth!.userId, partialUsage.totalTokens).catch(() => { });
-                const partialCost = estimateCost(
-                    { capability: body.capability, tokenUsage: partialUsage, providerCostUsd: providerCostUsdStream },
-                    {
-                        textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                        imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                        videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                        usdToEurRate: env.COST_POLICY_USD_TO_EUR_RATE,
-                        providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
-                    }
-                );
-                // I11: the journal never got a success write for this run — mark it failed
-                // (interrupted) rather than leaving it "pending" forever.
-                if (promptExecutionLogId) {
-                    await promptExecutionLogRepository.complete(promptExecutionLogId, {
-                        status: "failed",
-                        errorMessage: "Generation interrupted (client disconnect or timeout)",
-                        durationMs: Date.now() - startedAt,
-                        finishReason: finishReason ?? "interrupted",
-                        // The work already paid for. Both were in scope here and discarded: an
-                        // interrupted generation is precisely the case where the partial answer and
-                        // the reasoning behind it are worth more than the error message, because
-                        // they are what a resumed attempt would start from instead of starting over.
-                        rawResponse: rawReply || undefined,
-                        reasoningTrace: rawThinking ? rawThinking.slice(0, 20_000) : undefined,
-                    }).catch(() => { });
-                }
-                if (!res.writableEnded && !res.destroyed) {
-                    sendSse(res, {
-                        type: "interrupted",
-                        provider: context.providerCatalog.provider,
-                        model: context.modelId,
-                        usage: partialUsage,
-                        costEstimate: partialCost,
-                        durationMs: Date.now() - startedAt,
-                        partialReply: rawReply.length > 0 ? rawReply.slice(0, 200) : undefined,
-                    });
-                }
+            if (outcome.kind === "aborted") {
                 if (!res.writableEnded) res.end();
                 return;
             }
-
-            const trimmedRaw = rawReply.trim();
-            const parsed = tryParseStructuredJson(trimmedRaw);
-            const generationParseErrorStream = isGenerationParseFailure({
-                parseValid: parsed.parseValid,
-                isFocusedMode,
-                hasCurrentArtifacts: Boolean(body.currentArtifacts?.html),
-            });
-            let structured = parsed.structured ?? buildParseFailureStructured();
-            let mediaResolutionMetadata: MediaResolutionMetadata | undefined;
-            let focusPatchAppliedStream: boolean | undefined;
-            let focusPatchParseErrorStream: boolean | undefined;
-            if (isFocusedMode && body.currentArtifacts) {
-                if (parsed.structured?.focusPatch) {
-                    const serverAnchor = body.focusContext?.selectedElement?.outerHtml;
-                    const patchResult = applyFocusPatch(body.currentArtifacts, parsed.structured.focusPatch, {
-                        html: body.currentArtifacts.html ?? "",
-                        css: body.currentArtifacts.css ?? "",
-                        js: body.currentArtifacts.js ?? "",
-                    }, serverAnchor);
-                    const patchTypeStream = parsed.structured.focusPatch.targetType;
-                    const companionCssStream = patchTypeStream === "html" ? (parsed.structured.artifacts?.css ?? "") : "";
-                    const companionJsStream = patchTypeStream === "html" ? (parsed.structured.artifacts?.js ?? "") : "";
-                    const patchedArtifactsStream = {
-                        ...patchResult.artifacts,
-                        css: [patchResult.artifacts.css, companionCssStream].filter(Boolean).join("\n"),
-                        js: [patchResult.artifacts.js, companionJsStream].filter(Boolean).join("\n"),
-                    };
-                    structured = { ...structured, artifacts: patchedArtifactsStream };
-                    focusPatchAppliedStream = patchResult.patchApplied;
-                    // Fallback: client HTML may have been truncated (htmlLimit) so the target
-                    // element was cut off. Retry the merge against the server's stored active
-                    // snapshot which always contains the full artifact HTML.
-                    if (!focusPatchAppliedStream) {
-                        const activeSnap = await snapshotRepository.getActiveForProject(req.sandbox!.projectId).catch(() => null);
-                        if (activeSnap?.artifacts.html) {
-                            const retryResult = applyFocusPatch(
-                                activeSnap.artifacts,
-                                parsed.structured.focusPatch,
-                                activeSnap.artifacts,
-                                serverAnchor
-                            );
-                            if (retryResult.patchApplied) {
-                                console.info("[focusPatch] server-snapshot fallback applied successfully");
-                                structured = {
-                                    ...structured,
-                                    artifacts: {
-                                        ...retryResult.artifacts,
-                                        css: [retryResult.artifacts.css, companionCssStream].filter(Boolean).join("\n"),
-                                        js: [retryResult.artifacts.js, companionJsStream].filter(Boolean).join("\n"),
-                                    },
-                                };
-                                focusPatchAppliedStream = true;
-                            }
-                        }
-                    }
-                } else {
-                    structured = {
-                        ...structured,
-                        artifacts: {
-                            html: body.currentArtifacts.html ?? "",
-                            css: body.currentArtifacts.css ?? "",
-                            js: body.currentArtifacts.js ?? "",
-                        },
-                    };
-                    focusPatchAppliedStream = false;
-                    if (!parsed.parseValid) {
-                        focusPatchParseErrorStream = true;
-                        structured = {
-                            ...structured,
-                            chat: {
-                                summary: "Il modello ha prodotto una risposta non interpretabile (JSON malformato). L'elemento non è stato modificato.",
-                                bullets: [
-                                    "La pagina resta invariata.",
-                                    "Prova a cambiare modello o ripetere la richiesta.",
-                                ],
-                                nextActions: [],
-                            },
-                        };
-                    }
-                }
+            if (outcome.kind === "interrupted") {
+                // Partial metadata, so the client can persist the cost/token info even for
+                // aborted generations.
+                if (responseOpen()) sendSse(res, { type: "interrupted", ...outcome.interrupted });
+                if (!res.writableEnded) res.end();
+                return;
             }
-            // Post-process media placeholders and legacy provider URLs into stable ProjectAsset URLs.
-            if (!generationParseErrorStream && (structured.artifacts?.html || structured.artifacts?.css)) {
-                try {
-                    const mediaResolution = await resolveArtifactMedia.execute({
-                        projectId: req.sandbox!.projectId,
-                        userId: req.auth!.userId,
-                        artifacts: structured.artifacts,
-                        mediaManifest: structured.mediaManifest,
-                        sourceContext: {
-                            route: "chat-preview-stream",
-                            conversationId: body.conversationId,
-                            focusPatchApplied: focusPatchAppliedStream,
-                        },
-                        mode: isFocusedMode ? "focused_edit" : "initial_generation",
-                        // Forward deterministic media-resolution steps to the client in real time.
-                        onProgress: (event) => {
-                            if (!res.writableEnded && !res.destroyed) {
-                                sendSse(res, { type: "media_progress", ...event });
-                            }
-                        },
-                    });
-                    structured = {
-                        ...structured,
-                        artifacts: mediaResolution.artifacts,
-                    };
-                    mediaResolutionMetadata = mediaResolution.metadata;
-                } catch (mediaError) {
-                    console.error("[llm/chat-preview-stream] media resolution failed — delivering artifacts without resolved media:", mediaError);
-                    ExecutionLogger.instance.emit({
-                        projectId: req.sandbox!.projectId,
-                        domain: "system",
-                        eventType: "artifact_media_resolution_error",
-                        level: "error",
-                        status: "failure",
-                        metadata: { error: mediaError instanceof Error ? mediaError.message : String(mediaError) },
-                    });
-                }
-            }
-            const reply = (parsed.parseValid || focusPatchParseErrorStream || generationParseErrorStream) ? buildFormattedReply(structured) : trimmedRaw;
-            const resolvedUsage = resolveUsageWithFallback({
-                usage,
-                messages,
-                outputText: trimmedRaw,
-            });
-            userRepo.incrementTokensConsumed(req.auth!.userId, resolvedUsage.totalTokens).catch(() => { });
-
-            const result: LlmChatPreviewResult = {
-                reply,
-                rawResponse: trimmedRaw,
-                structuredParseValid: parsed.parseValid,
-                // Reported, never thrown here: refusing at the generation boundary would discard a
-                // complete artifact over a syntax slip. The storage boundary still refuses it.
-                generatedJavaScriptError: parsed.structured?.artifacts?.js
-                    ? describeGeneratedJavaScriptSyntaxError(parsed.structured.artifacts.js)
-                    : undefined,
-                promptingTrace: {
-                    originalUserMessage: body.message,
-                    promptConfigId: context.promptConfigId,
-                    prePromptTemplate: context.prePromptTemplate,
-                    effectiveSystemPrompt: effectiveSystemPrompt,
-                    layers: context.promptLayers,
-                    messagesSentToLlm: messages,
-                    focusContext: body.focusContext,
-                },
-                structured,
-                mediaResolution: mediaResolutionMetadata,
-                provider: context.providerCatalog.provider,
-                model: context.modelId,
-                finishReason,
-                usage: resolvedUsage,
-                costEstimate: estimateCost(
-                    {
-                        capability: body.capability,
-                        tokenUsage: resolvedUsage,
-                        providerCostUsd: providerCostUsdStream,
-                    },
-                    {
-                        textEurPer1kTokens: env.COST_POLICY_TEXT_EUR_PER_1K_TOKENS,
-                        imageEurPerAsset: env.COST_POLICY_IMAGE_EUR_PER_ASSET,
-                        videoEurPerAsset: env.COST_POLICY_VIDEO_EUR_PER_ASSET,
-                        usdToEurRate: env.COST_POLICY_USD_TO_EUR_RATE,
-                        providerMarkupFactor: env.COST_POLICY_PROVIDER_MARKUP_FACTOR,
-                    }
-                ),
-                durationMs: Date.now() - startedAt,
-                simulated: false,
-                focusPatchApplied: focusPatchAppliedStream,
-                focusPatchParseError: focusPatchParseErrorStream,
-                generationParseError: generationParseErrorStream || undefined,
-                promptExecutionId: promptExecutionLogId,
-            };
-            const mediaResolutionSummary = buildPromptExecutionMediaResolutionSummary(result.mediaResolution);
-
-            // ── Execution log (fire-and-forget) ──────────────────────────────
-            ExecutionLogger.instance.emit({
-                projectId: req.sandbox!.projectId,
-                domain: "llm",
-                eventType: "llm_generation_complete",
-                level: parsed.parseValid ? "info" : "warn",
-                status: parsed.parseValid ? "success" : "partial",
-                durationMs: result.durationMs,
-                metadata: {
-                    provider: result.provider,
-                    model: result.model,
-                    finishReason: result.finishReason,
-                    promptTokens: result.usage?.promptTokens,
-                    completionTokens: result.usage?.completionTokens,
-                    costEur: result.costEstimate?.amount,
-                    structuredParseValid: result.structuredParseValid,
-                    simulated: result.simulated,
-                    isFocusedMode,
-                    focusPatchPresent: Boolean(focusPatchAppliedStream !== undefined),
-                    streaming: true,
-                },
-            });
-            if (generationParseErrorStream) {
-                const rawLenStream = trimmedRaw.length;
-                ExecutionLogger.instance.emit({
-                    projectId: req.sandbox!.projectId,
-                    conversationId: body.conversationId,
-                    domain: "llm",
-                    eventType: "llm_generation_parse_failed",
-                    level: "error",
-                    status: "failure",
-                    durationMs: result.durationMs,
-                    metadata: {
-                        provider: result.provider,
-                        model: result.model,
-                        finishReason: result.finishReason,
-                        completionTokens: result.usage?.completionTokens,
-                        isFocusedMode,
-                        streaming: true,
-                        rawLength: rawLenStream,
-                        rawPrefix: trimmedRaw.slice(0, 1200),
-                        rawSuffix: rawLenStream > 1800 ? trimmedRaw.slice(-600) : "",
-                    },
-                });
-            }
-            if (isFocusedMode && focusPatchAppliedStream !== undefined) {
-                ExecutionLogger.instance.emit({
-                    projectId: req.sandbox!.projectId,
-                    domain: "focus_patch",
-                    eventType: focusPatchAppliedStream ? "focus_patch_applied" : "focus_patch_failed",
-                    level: focusPatchAppliedStream ? "info" : "warn",
-                    status: focusPatchAppliedStream ? "success" : "failure",
-                    durationMs: result.durationMs,
-                    metadata: {
-                        anchorTag: body.focusContext?.selectedElement?.tag,
-                        anchorPfIdPresent: Boolean(body.focusContext?.selectedElement?.outerHtml?.includes("data-pf-id")),
-                        streaming: true,
-                    },
-                });
-            }
-            // ── end execution log ─────────────────────────────────────────────
-
-            // ── I11: durable journal completion, AWAITED before the SSE "done" event ──
-            if (promptExecutionLogId) {
-                await promptExecutionLogRepository.complete(promptExecutionLogId, {
-                    status: "succeeded",
-                    usage: result.usage,
-                    mediaResolutionSummary,
-                    costEstimate: result.costEstimate,
-                    durationMs: result.durationMs,
-                    finishReason: result.finishReason,
-                    // Kept only when the call was cut off: on a clean stop the trace is dead weight,
-                    // but on "length" it is the work already paid for that a retry can resume from.
-                    // Kept whenever the call did not end cleanly, not only on truncation. A "stop"
-                    // finish means the model said what it meant to say and the trace is dead weight;
-                    // anything else means work was cut short, and the trace is the only record of it.
-                    reasoningTrace: finishReason && finishReason !== "stop"
-                        ? rawThinking.slice(0, 20_000)
-                        : undefined,
-                    rawResponse: result.rawResponse,
-                }).catch(() => { });
-            }
-            // ── end I11 journal completion ──────────────────────────────────────
-
-            // ── Cost ledger: append-only transaction record ───────────────────
-            CostTransactionService.instance.record({
-                userId: req.auth!.userId,
-                projectId: req.sandbox!.projectId,
-                resourceType: ResourceType.LLM_CHAT,
-                resourceSubtype: context.modelId,
-                providerCostUsd: providerCostUsdStream,
-                precomputedTotalEur: result.costEstimate?.amount,
-                units: result.usage ? {
-                    promptTokens: result.usage.promptTokens,
-                    completionTokens: result.usage.completionTokens,
-                    totalTokens: result.usage.totalTokens,
-                } : {},
-                sourceRef: { conversationId: body.conversationId },
-                meta: {
-                    provider: result.provider,
-                    model: result.model,
-                    finishReason: result.finishReason,
-                    isFocusedMode,
-                    streaming: true,
-                },
-            });
-            // ── end cost ledger ───────────────────────────────────────────────
-
-            sendSse(res, { type: "done", result });
+            sendSse(res, { type: "done", result: outcome.result });
             res.end();
         } catch (error) {
-            const normalized = normalizeHttpError(error);
-            emitLlmFailureLog({
-                projectId: req.sandbox!.projectId,
-                durationMs: Date.now() - startedAt,
-                provider: req.body?.provider,
-                model: req.body?.model,
-                code: normalized.code,
-                message: normalized.userMessage,
-                details: normalized.details,
-            });
-            // I11: best-effort — never let a failed journal write mask the real error.
-            if (promptExecutionLogId) {
-                promptExecutionLogRepository.complete(promptExecutionLogId, {
-                    status: "failed",
-                    errorMessage: normalized.userMessage,
-                    durationMs: Date.now() - startedAt,
-                }).catch(() => { });
+            res.off("close", onClientClose);
+            if (error instanceof GenerationStreamReadError) {
+                // Headers already flushed and the journal row already failed: say so and stop.
+                sendSse(res, { type: "error", message: error.message, durationMs: error.durationMs });
+                res.end();
+                return;
             }
-            // If headers have already been flushed (SSE started), we cannot use
-            // next(error) which would try res.status().json() and crash. Instead
-            // send an SSE error event so the client can handle it gracefully.
+            // If headers have already been flushed (SSE started), we cannot use next(error),
+            // which would try res.status().json() and crash. Send an SSE error event instead so
+            // the client can handle it gracefully.
             if (res.headersSent) {
+                const normalized = normalizeHttpError(error);
                 console.error(`[stream-debug] post-flush error at ${Date.now() - startedAt}ms:`, error);
-                if (!res.writableEnded && !res.destroyed) {
+                if (responseOpen()) {
                     sendSse(res, {
                         type: "error",
                         message: normalized.userMessage,
