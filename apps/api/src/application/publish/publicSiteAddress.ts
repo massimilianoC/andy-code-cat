@@ -85,6 +85,22 @@ export function decideSiteRequest(input: {
     sitePath: string;
 }): SiteRequestDecision {
     const host = input.requestHostname.toLowerCase();
+
+    // A configured sites origin is an allow-list, not a deny-list of app hosts: site content is
+    // served on that host only, so an app hostname missing from CORS_ORIGIN (or CORS_ORIGIN="*")
+    // cannot reopen same-origin execution. Every other host is sent to the same file there.
+    if (input.config.urlMode === "path" && input.config.sitesOrigin) {
+        const sitesHost = new URL(input.config.sitesOrigin).hostname.toLowerCase();
+        // A sites origin on an app host is no separation at all: refuse rather than serve there.
+        if (input.appHosts.includes(sitesHost)) {
+            return { action: "refuse", reason: "the configured sites origin is an app host; set a separate host in /admin/config" };
+        }
+        if (host === sitesHost) return { action: "serve" };
+        const target = resolvePublicSiteUrl(input.deployment ?? { publishId: input.publishId, customSlug: null }, input.config);
+        const location = `${target.replace(/\/+$/, "")}${input.sitePath.startsWith("/") ? input.sitePath : `/${input.sitePath}`}`;
+        return { action: "redirect", location };
+    }
+
     if (!input.appHosts.includes(host)) return { action: "serve" };
 
     const target = resolvePublicSiteUrl(input.deployment ?? { publishId: input.publishId, customSlug: null }, input.config);

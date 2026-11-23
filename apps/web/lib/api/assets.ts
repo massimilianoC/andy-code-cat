@@ -538,13 +538,13 @@ export async function downloadProjectAssetDataUrl(token: string, projectId: stri
 /** Returns a public (no-auth) URL for serving an asset file inline. */
 export function getPublicAssetUrl(assetId: string): string {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-    return `${baseUrl}/p/media/${assetId}`;
+    return `${baseUrl}/p/media/${encodeURIComponent(assetId)}`;
 }
 
 /** Returns the download URL for an asset (use with fetch + Authorization header). */
 export function getAssetDownloadUrl(projectId: string, assetId: string): string {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-    return `${baseUrl}/v1/projects/${projectId}/assets/${assetId}/download`;
+    return `${baseUrl}/v1/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}/download`;
 }
 
 /** Lists all assets owned by the current user across all projects (user media library). */

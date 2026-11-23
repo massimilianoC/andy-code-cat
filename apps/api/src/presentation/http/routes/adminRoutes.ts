@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { setAuthenticatedUserFileHeaders } from "../security/userFileHeaders";
 import { adminDraftProjectTemplateSchema, adminLlmModelActivationSchema, adminLlmModelPatchSchema, adminProjectPresetPatchSchema, adminSeedLlmRegistrySchema, adminSeedPresetRegistrySchema, createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { requireSuperAdmin } from "../middlewares/requireSuperAdmin";
@@ -1049,6 +1050,7 @@ export function createAdminRoutes(): Router {
             const actualSize = await brandStorage.fileSize(filePath).catch(() => asset.fileSize ?? 0);
             res.setHeader("Content-Type", asset.mimeType ?? "application/octet-stream");
             res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(asset.originalName ?? asset.storedFilename)}"`);
+            setAuthenticatedUserFileHeaders(res, asset.mimeType);
             if (actualSize > 0) res.setHeader("Content-Length", actualSize);
             const stream = await brandStorage.createReadStream(filePath);
             stream.pipe(res);

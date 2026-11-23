@@ -1657,9 +1657,17 @@ function WorkspacePageContent() {
         }
     }, [token, projectId, activeConvId, editorHtml, editorCss, editorJs, loadSnapshots, addNotification, handleStaleArtifactBase]);
 
+    // EDIT saves are accepted only while EDIT mode is on (read from a ref: the listener is long-lived).
+    const editModeRef = useRef(editMode);
+    useEffect(() => { editModeRef.current = editMode; }, [editMode]);
+
     // Receive element selections + EDIT mode messages from the sandboxed preview iframe
     useEffect(() => {
         function onMessage(event: MessageEvent) {
+            // Only this session's preview iframe may talk to the workspace. Without this check any
+            // window holding a handle on the tab (an opener, a frame nested inside the preview,
+            // another site) could post pf-edit-save and have a version saved with the owner's token.
+            if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
             if (!event.data || typeof event.data !== "object") return;
             if (event.data.type === "pf-select") {
                 const safeElement = sanitizeSelectedElementForFocus(event.data.element as LlmFocusContext["selectedElement"]);
@@ -1678,7 +1686,8 @@ function WorkspacePageContent() {
                 return;
             }
             if (event.data.type === "pf-edit-save") {
-                // Triggered when user confirms save from EDIT Light mode
+                // Triggered when user confirms save from EDIT Light mode — never outside EDIT mode.
+                if (!editModeRef.current) return;
                 const html = String(event.data.html ?? "");
                 pendingEditHtmlRef.current = html;
                 void handleCommitEditVersionRef.current(html);

@@ -279,22 +279,23 @@ export function createPublishRoutes() {
                 const oldSlug = deployment.customSlug ?? null;
 
                 if (newSlug !== null) {
-                    // Check availability (exclude current deployment)
+                    // Friendly early answer; the unique slug index below is the actual lock.
                     const taken = await deploymentRepository.isCustomSlugTaken(newSlug, deployment.id);
                     if (taken) {
                         res.status(409).json({ error: "Slug is already taken" });
                         return;
                     }
-                    // Copy published files to new slug dir
-                    await localFileStorage.copyPublishDir(deployment.publishId, newSlug);
                 }
 
-                // Delete old slug dir (best-effort) when slug changes
+                // Claim the slug in the database first (unique index → 409 on a concurrent claim);
+                // only the holder then writes the new slug directory and removes the old one.
+                const updated = await deploymentRepository.updateCustomSlug(deployment.id, newSlug);
+                if (newSlug !== null) {
+                    await localFileStorage.copyPublishDir(deployment.publishId, newSlug);
+                }
                 if (oldSlug && oldSlug !== newSlug) {
                     await localFileStorage.deletePublishDir(oldSlug).catch(() => { /* best-effort */ });
                 }
-
-                const updated = await deploymentRepository.updateCustomSlug(deployment.id, newSlug);
                 res.json(toDto(updated ?? deployment, await publicSites()));
             } catch (error) {
                 next(error);
@@ -328,14 +329,20 @@ export function createPublishRoutes() {
      * the request is redirected to the site's own address, or refused when there is none.
      * Returns true when the response has been sent. Off the app hosts it costs nothing.
      */
+    if (APP_HOSTS.length === 0 && env.NODE_ENV === "production") {
+        console.warn("[published-site] CORS_ORIGIN names no app host: only a configured sites origin keeps published sites off the app's origin");
+    }
+
     async function divertFromAppOrigin(req: Request, res: Response, publishId: string, deployment: SiteDeployment | null, sitePrefix: string): Promise<boolean> {
         const requestHostname = (req.hostname ?? "").toLowerCase();
-        if (!APP_HOSTS.includes(requestHostname)) return false;
+        const config = await publicSites();
+        // Fast path: no sites origin configured and not an app host — nothing to decide.
+        if (!(config.urlMode === "path" && config.sitesOrigin) && !APP_HOSTS.includes(requestHostname)) return false;
         const sitePath = req.originalUrl.startsWith(sitePrefix) ? req.originalUrl.slice(sitePrefix.length) : "/";
         const decision = decideSiteRequest({
             requestHostname,
             appHosts: APP_HOSTS,
-            config: await publicSites(),
+            config,
             deployment,
             publishId,
             sitePath,
@@ -353,7 +360,7 @@ export function createPublishRoutes() {
     }
 
     /** Sends 403 and returns true when the site or its owner is suspended. */
-    async function rejectSuspended(res: Response, deploymentRecord: SiteDeployment | null): Promise<boolean> {
+    async function rejectSuspended(res: Response, deploymentRecord: SiteDeployment): Promise<boolean> {
         if (deploymentRecord?.isAdminBlocked) {
             res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
                 "This site has been suspended by the platform administrator."
@@ -361,8 +368,16 @@ export function createPublishRoutes() {
             return true;
         }
         if (deploymentRecord) {
-            const owner = await userRepository.findById(deploymentRecord.userId).catch(() => null);
-            if (owner?.isBlocked) {
+            // Fail closed: if the owner cannot be checked, the site is not served.
+            let owner;
+            try {
+                owner = await userRepository.findById(deploymentRecord.userId);
+            } catch (error) {
+                console.error("[published-site] owner check failed; not serving", { publishId: deploymentRecord.publishId, error });
+                res.status(503).setHeader("Content-Type", "text/plain; charset=utf-8").send("Temporarily unavailable");
+                return true;
+            }
+            if (!owner || owner.isBlocked) {
                 res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
                     "This site is unavailable because the owner account has been suspended."
                 );
@@ -377,7 +392,7 @@ export function createPublishRoutes() {
      * (`/p/{publishId}/` or `/{slug}/`): the browser must be there so the site's relative
      * style.css / script.js resolve inside it.
      */
-    async function sendSiteIndex(req: Request, res: Response, publishId: string, canonicalPath: string, deploymentRecord: SiteDeployment | null) {
+    async function sendSiteIndex(req: Request, res: Response, publishId: string, canonicalPath: string, deploymentRecord: SiteDeployment) {
         if (!(req.originalUrl.split("?")[0] ?? "").endsWith("/")) {
             res.redirect(301, canonicalPath);
             return;
@@ -424,7 +439,7 @@ export function createPublishRoutes() {
     }
 
     /** Any other file of a site: a top-level asset, or a dataset under data/. */
-    async function sendSiteFile(req: Request, res: Response, publishId: string, file: string, kind: "asset" | "data", deploymentRecord: SiteDeployment | null) {
+    async function sendSiteFile(req: Request, res: Response, publishId: string, file: string, kind: "asset" | "data", deploymentRecord: SiteDeployment) {
         if (await rejectSuspended(res, deploymentRecord)) return;
 
         // Only allow simple filenames — no path traversal
@@ -484,7 +499,13 @@ export function createPublishRoutes() {
             res.status(404).send("Not found");
             return;
         }
-        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        const deploymentRecord = await deploymentRepository.findByPublishId(publishId);
+        // Only a live deployment is served. Without this, /p/{x} served any directory named x —
+        // a slug's copy or an orphan — skipping the suspension checks, which need the record.
+        if (!deploymentRecord) {
+            res.status(404).send("Not found");
+            return;
+        }
         if (await divertFromAppOrigin(req, res, publishId, deploymentRecord, `/p/${publishId}`)) return;
         await sendSiteIndex(req, res, publishId, `/p/${publishId}/`, deploymentRecord);
     });
@@ -495,7 +516,13 @@ export function createPublishRoutes() {
             res.status(404).send("Not found");
             return;
         }
-        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        const deploymentRecord = await deploymentRepository.findByPublishId(publishId);
+        // Only a live deployment is served. Without this, /p/{x} served any directory named x —
+        // a slug's copy or an orphan — skipping the suspension checks, which need the record.
+        if (!deploymentRecord) {
+            res.status(404).send("Not found");
+            return;
+        }
         if (await divertFromAppOrigin(req, res, publishId, deploymentRecord, `/p/${publishId}`)) return;
         await sendSiteFile(req, res, publishId, file, "asset", deploymentRecord);
     });
@@ -506,7 +533,13 @@ export function createPublishRoutes() {
             res.status(404).send("Not found");
             return;
         }
-        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        const deploymentRecord = await deploymentRepository.findByPublishId(publishId);
+        // Only a live deployment is served. Without this, /p/{x} served any directory named x —
+        // a slug's copy or an orphan — skipping the suspension checks, which need the record.
+        if (!deploymentRecord) {
+            res.status(404).send("Not found");
+            return;
+        }
         if (await divertFromAppOrigin(req, res, publishId, deploymentRecord, `/p/${publishId}`)) return;
         await sendSiteFile(req, res, publishId, file, "data", deploymentRecord);
     });
