@@ -57,28 +57,8 @@ import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import type { BrandAsset } from "../../../domain/entities/BrandAsset";
 import type { BrandAssetDto } from "@andy-code-cat/contracts";
 import type { RequestWithContext } from "../types";
+import { resolvePublicSitesConfig, resolvePublicSiteUrl } from "../../../application/publish/publicSiteAddress";
 
-/**
- * Computes a subdomain URL for a published site.
- * Returns null for local/dev setups or when PUBLIC_DOMAIN is not configured.
- * This mirrors the same guard logic used in publishRoutes.ts — never stored, always computed.
- */
-function buildSubdomainUrlFromParts(identifier: string): string | null {
-    const domain = env.PUBLIC_DOMAIN?.trim();
-    if (!domain) return null;
-    if (
-        domain.includes(":") ||
-        domain.includes("/") ||
-        /^https?:/i.test(domain) ||
-        domain === "localhost" ||
-        domain.startsWith("localhost.") ||
-        domain.endsWith(".localhost") ||
-        domain === "127.0.0.1"
-    ) {
-        return null;
-    }
-    return `https://${identifier}.${domain}`;
-}
 
 function getRequiredRouteParam(value: string | undefined, name: string): string {
     if (!value) {
@@ -588,17 +568,17 @@ export function createAdminRoutes(): Router {
                 presetId: req.query.presetId as string | undefined,
             });
 
-            // Augment each project with a computed subdomainUrl for its active deployment.
-            // The stored deployment.url is always a relative path (/p/publishId); subdomainUrl
-            // is the correct public URL in domain-mode deployments (never stored, always derived).
+            // Augment each project with the public address of its active deployment. The stored
+            // deployment.url is always /p/{publishId}; publicUrl is derived from the installation's
+            // publicSites setting (resolvePublicSiteUrl — never stored, always derived).
+            const publicSites = resolvePublicSitesConfig(await configRepo.get());
             const projects = result.projects.map(p => {
                 if (!p.activeDeployment) return p;
-                const identifier = p.activeDeployment.customSlug ?? p.activeDeployment.publishId;
                 return {
                     ...p,
                     activeDeployment: {
                         ...p.activeDeployment,
-                        subdomainUrl: buildSubdomainUrlFromParts(identifier),
+                        publicUrl: resolvePublicSiteUrl(p.activeDeployment, publicSites),
                     },
                 };
             });

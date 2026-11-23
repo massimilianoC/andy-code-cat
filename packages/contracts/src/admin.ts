@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PUBLISH_URL_MODES, type PublishUrlMode } from "./publish";
 
 // ── Plan & limits ─────────────────────────────────────────────────────────────
 
@@ -43,7 +44,34 @@ const mediaProviderPolicySchema = z.object({
     }).partial().optional(),
 }).partial();
 
+/**
+ * A bare hostname a wildcard `*.{domain}` can sit under: no scheme, port, path or localhost.
+ * Subdomain mode is meaningless without one, so the setting cannot be saved without it.
+ */
+export const PUBLIC_SITES_DOMAIN_RE = /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;
+
+export const publicSitesConfigSchema = z.object({
+    urlMode: z.enum(PUBLISH_URL_MODES),
+    publicDomain: z.string().trim().toLowerCase().max(253).default(""),
+}).superRefine((value, ctx) => {
+    if (value.urlMode !== "subdomain") return;
+    const domain = value.publicDomain;
+    if (!PUBLIC_SITES_DOMAIN_RE.test(domain) || domain === "localhost" || domain.endsWith(".localhost")) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["publicDomain"],
+            message: "Subdomain mode needs a bare public domain (e.g. example.com) with wildcard DNS and certificate",
+        });
+    }
+});
+
+export interface PublicSitesConfigDto {
+    urlMode: PublishUrlMode;
+    publicDomain: string;
+}
+
 export const setPlatformConfigSchema = z.object({
+    publicSites: publicSitesConfigSchema.optional(),
     registrationOpen: z.boolean().optional(),
     emailVerificationRequired: z.boolean().optional(),
     defaultUserLimits: setUserLimitsSchema.optional(),
@@ -91,8 +119,6 @@ export const setPlatformConfigSchema = z.object({
             cookiePolicyHtml: z.record(z.string().min(2).max(10), z.string().max(100000)).default({}),
         }).partial().optional(),
         nginx: z.object({
-            publicDomain: z.string().max(255).default(""),
-            publishSubdomainPattern: z.string().max(255).default("{publishId}"),
             cacheTtlSeconds: z.number().int().min(0).max(86400).default(300),
             clientMaxBodySizeMb: z.number().int().min(1).max(1024).default(20),
             extraServerDirectives: z.string().max(40000).default(""),
@@ -335,6 +361,7 @@ export interface PlatformStatsDto {
 }
 
 export interface PlatformConfigDto {
+    publicSites: PublicSitesConfigDto;
     registrationOpen: boolean;
     emailVerificationRequired: boolean;
     defaultUserLimits: {
@@ -384,8 +411,6 @@ export interface PlatformConfigDto {
             cookiePolicyHtml: Record<string, string>;
         };
         nginx: {
-            publicDomain: string;
-            publishSubdomainPattern: string;
             cacheTtlSeconds: number;
             clientMaxBodySizeMb: number;
             extraServerDirectives: string;

@@ -1,3 +1,4 @@
+import type { PublishUrlMode } from "@andy-code-cat/contracts";
 import type { UserLimits } from "./User";
 
 export interface ProductPromptTemplates {
@@ -200,8 +201,6 @@ export interface ProductLegalConfig {
 }
 
 export interface ProductNginxConfig {
-    publicDomain: string;
-    publishSubdomainPattern: string;
     cacheTtlSeconds: number;
     clientMaxBodySizeMb: number;
     extraServerDirectives: string;
@@ -293,8 +292,19 @@ export interface MediaProviderPolicy {
  * Singleton platform-wide configuration document.
  * Stored in the `platform_config` collection under id "global".
  */
+/**
+ * How published sites are addressed — installation-level, one value for the whole platform.
+ * See PUBLISH_URL_MODES in @andy-code-cat/contracts. `publicDomain` is only read in subdomain mode.
+ */
+export interface PublicSitesConfig {
+    urlMode: PublishUrlMode;
+    publicDomain: string;
+}
+
 export interface PlatformConfig {
     id: string;
+    /** Absent on documents written before the setting existed; read through resolvePublicSitesConfig. */
+    publicSites?: PublicSitesConfig;
     /** When false, the public POST /v1/auth/register endpoint returns 403. */
     registrationOpen: boolean;
     /** When true, newly registered users must verify their email before accessing the platform. */
