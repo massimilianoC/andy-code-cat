@@ -44,6 +44,7 @@ Read in this order before making changes:
 | [docs/architecture/PIPELINE_LAYERS.md](architecture/PIPELINE_LAYERS.md) | Layer 1 preview flow, Layer 2 generation pipeline, and transition mechanics |
 | [docs/architecture/PLATFORM_CAPABILITY_RUNTIME.md](architecture/PLATFORM_CAPABILITY_RUNTIME.md) | Current deferred-R4 architecture decision for declarative capabilities, Layer V/runtime separation, tenant/project/capability data scope, Forms Inbox, GDPR tooling, secure automations and service roadmap |
 | [docs/security/SECURITY_BASELINE.md](security/SECURITY_BASELINE.md) | Auth baseline, tenant isolation, and operational security rules |
+| [docs/security/NODE22_RUNTIME_UPGRADE.md](security/NODE22_RUNTIME_UPGRADE.md) | Node 20 (EOL) → Node 22 runtime upgrade for CVE-2026-111497: images on `node:22.23.5-alpine` |
 
 ---
 
