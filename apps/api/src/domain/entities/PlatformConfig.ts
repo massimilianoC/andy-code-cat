@@ -299,6 +299,8 @@ export interface MediaProviderPolicy {
 export interface PublicSitesConfig {
     urlMode: PublishUrlMode;
     publicDomain: string;
+    /** Path mode: origin serving published sites, scheme://host[:port]; "" = the API origin. */
+    sitesOrigin: string;
 }
 
 export interface PlatformConfig {
