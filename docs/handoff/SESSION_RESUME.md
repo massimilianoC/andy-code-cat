@@ -8,6 +8,16 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0. Release 2026.11.24.1 — one generation engine, turn persisted server-side (background runs, Phase 0)
+
+`POST /llm/chat-preview[/stream]` are now adapters over the `GenerateArtifact` use case; the
+generation core left `llmRoutes.ts` unchanged (characterisation suite + golden prompt snapshot).
+With a `conversationId` the engine also writes the assistant message and commits/activates the
+version via `CommitArtifactVersion` (the preparation formerly inside POST /preview-snapshots) →
+`CreatePreviewSnapshot`. The workspace sends `conversationId` + `artifactBase` and reads
+`result.persisted`; it no longer writes the reply or the version of a chat turn. No data migration.
+Spec: docs/specs/BACKGROUND_RUNS.md §3.1, §6 (decisions), §7 (delivery).
+
 ## 0. Release 2026.11.23.4 — security review of published sites and user files
 
 Fixes from the 2026-11-23 review: user uploads on /p/media never execute (passive types inline,
