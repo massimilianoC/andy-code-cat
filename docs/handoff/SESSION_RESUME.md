@@ -8,6 +8,15 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0. Release 2026.11.24.2 — background-run queue and worker process (Phase 1)
+
+New collection `background_runs` (additive) and a `worker` container (same image as the API,
+`node apps/api/dist/worker.js`, no ports, internal network, data volume). The queue claims with an
+atomic lease, renews it by heartbeat, resumes a run at its step after a lost worker, honours cancel
+and gives leases back on SIGTERM. The Vibe steps are not installed yet: no endpoint creates runs, and
+a run that reached the worker would be refused with `BACKGROUND_RUN_STEPS_NOT_INSTALLED`. Limits:
+`BACKGROUND_RUN_*` (`.env.example`). Spec §7.
+
 ## 0. Release 2026.11.24.1 — one generation engine, turn persisted server-side (background runs, Phase 0)
 
 `POST /llm/chat-preview[/stream]` are now adapters over the `GenerateArtifact` use case; the

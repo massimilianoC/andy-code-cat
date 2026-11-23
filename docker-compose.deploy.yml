@@ -74,6 +74,31 @@ services:
     networks:
       - andy-code-cat-net
 
+  # Background runs (docs/specs/BACKGROUND_RUNS.md): same image build as the API, different command.
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: prod
+      args:
+        RELEASE_VERSION: ${RELEASE_VERSION:-unknown}
+    container_name: andy-code-cat-worker
+    restart: unless-stopped
+    command: ["node", "apps/api/dist/worker.js"]
+    env_file:
+      - .env.docker
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongodb:27017/andy-code-cat
+    depends_on:
+      - mongodb
+    volumes:
+      - ./data:/workspace/data
+      - ./docs/skills/template-skills:/workspace/docs/skills/template-skills:ro
+    stop_grace_period: 15s
+    networks:
+      - andy-code-cat-net
+
   web:
     build:
       context: .

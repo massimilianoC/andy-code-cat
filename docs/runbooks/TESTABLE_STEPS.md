@@ -891,3 +891,13 @@ If provider fails: `4xx` error (no fallback in edit mode).
 | Generation request returns 500 | API logs: media resolution error | Since fix 2026-05-29, media errors are caught and artifacts delivered without images. If still 500, check LLM key / provider config. |
 | `fallbackUsed: true` in traces | Primary provider failed | Check API key validity. In edit mode regeneration always fails explicitly (no fallback). |
 | Snapshot `degraded: true` | Some images failed during generation | Use Edit mode to regenerate failed images individually before publishing. |
+
+## Background runs — queue and worker (BACKGROUND_RUNS.md, Phase 1)
+
+1. `npm test -w apps/api -- src/application/background src/domain/entities/__tests__/BackgroundRun.test.ts`
+   — claim exclusivity, persisted transitions, resume after a lost worker, lease ownership, cancel,
+   cost ceiling, guard refusal, deferral, graceful shutdown, attempts ceiling.
+2. Deploy stack: `docker ps --format '{{.Names}}: {{.Status}}'` shows `andy-code-cat-worker` healthy
+   (the health check reads `/tmp/background-worker.alive`, touched on every loop turn).
+3. Worker log on start: `[background-worker] <id> started — pool N, lease …ms, poll …ms, cost ceiling €…`.
+
