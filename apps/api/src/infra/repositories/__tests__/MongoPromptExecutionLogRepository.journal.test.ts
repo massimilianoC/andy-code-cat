@@ -124,8 +124,11 @@ describe("MongoPromptExecutionLogRepository — I11 journal + idempotency", () =
     it("findActiveByIdempotencyKey() ignores a stale pending record (staleAfterMs=0 → any pending is stale)", async () => {
         await repo.createPending(basePending({ idempotencyKey: "key-find-pending-stale" }));
 
-        // staleAfterMs=0 means the threshold is "now" — a record created microseconds ago is
-        // already older than the threshold, simulating an abandoned pending write.
+        // staleAfterMs=0 means the threshold is "now" — a record created moments ago is already
+        // older than the threshold, simulating an abandoned pending write. Dates have millisecond
+        // resolution and the window is inclusive ($gte), so let the clock move past createdAt
+        // first; otherwise a write and a read in the same millisecond make this test flaky.
+        await new Promise((resolve) => setTimeout(resolve, 5));
         const found = await repo.findActiveByIdempotencyKey("project-1", "user-1", "key-find-pending-stale", 0);
         expect(found).toBeNull();
     });
