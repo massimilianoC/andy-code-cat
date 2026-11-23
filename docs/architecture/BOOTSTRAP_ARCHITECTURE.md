@@ -12,6 +12,9 @@ and `docs/project/ROADMAP.md`.
 
 - **web**: Next.js App Router client application
 - **api**: Express + TypeScript backend following Clean Architecture
+- **worker**: the API image with a different entry point (`apps/api/dist/worker.js`) — executes
+  background runs from the MongoDB queue `background_runs` (lease + heartbeat), no ports
+  (docs/specs/BACKGROUND_RUNS.md)
 - **mongodb**: primary database (host port `27018`)
 - **redis**: cache and queue support (host port `6380`)
 - **minio**: S3-compatible object storage for project/user media (host ports `9000`, `9001`)
