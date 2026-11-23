@@ -86,7 +86,7 @@ export function resolveFilesystemTemplateSkills(input: {
         .map((entry) => entry.name)
         .filter((name) => MARKDOWN_FILE_PATTERN.test(name))
         .filter((name) => !EXCLUDED_MARKDOWN.has(name))
-        .sort((a, b) => a.localeCompare(b));
+        .sort((a, b) => a.localeCompare(b, "en"));
 
     const documents: TemplateSkillDocument[] = [];
     const skipped: ResolvedTemplateSkillsLayer["skipped"] = [];
@@ -94,7 +94,9 @@ export function resolveFilesystemTemplateSkills(input: {
 
     for (const fileName of files) {
         const absolutePath = path.join(folderPath, fileName);
-        const body = fs.readFileSync(absolutePath, "utf8").trim();
+        // Normalise line endings: a Windows checkout (core.autocrlf) must not change what is sent
+        // to the provider, nor the budget accounting below (Rule Zero — one knowable prompt).
+        const body = fs.readFileSync(absolutePath, "utf8").replace(/\r\n?/g, "\n").trim();
         if (!body) {
             skipped.push({ fileName, reason: "empty" });
             continue;

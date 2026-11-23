@@ -8,6 +8,17 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0a. Release 2026.11.23.1 — Node 22 runtime and a host-independent prompt
+
+- **Runtime:** api and web images move from EOL Node 20 to `node:22.23.5-alpine`
+  (CVE-2026-111497, `docs/security/NODE22_RUNTIME_UPGRADE.md`). The plan had been written on
+  2026-10-23 in an uncommitted working copy and was recovered from it.
+- **Prompt determinism (Rule Zero):** the composed system prompt no longer depends on the machine
+  running the API. The output budget was formatted with the host locale (`64.000` on it-IT vs
+  `64,000` in the containers) and Layer S kept CRLF from a Windows checkout. The golden
+  prompt-preview snapshot had been recorded under both conditions and failed everywhere else.
+- **Tests:** a same-millisecond race in the stale-pending idempotency test is removed.
+
 ## 0. Releases 2026.10.01.1 + 2026.10.02.1 — open-testing window and rollback point
 
 Deployed for a few days of free testing by webinar attendees. 2026.10.02.1 adds a fourth change to
