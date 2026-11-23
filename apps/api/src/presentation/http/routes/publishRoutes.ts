@@ -377,11 +377,19 @@ export function createPublishRoutes() {
                 res.status(503).setHeader("Content-Type", "text/plain; charset=utf-8").send("Temporarily unavailable");
                 return true;
             }
-            if (!owner || owner.isBlocked) {
+            if (owner?.isBlocked) {
                 res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
                     "This site is unavailable because the owner account has been suspended."
                 );
                 return true;
+            }
+            // A live site whose owner record is gone (deleted account) is not a suspension: it keeps
+            // being served, as before, and is reported so the superadmin can decide (admin block).
+            if (!owner) {
+                console.warn("[published-site] owner account not found; serving live site — block it from the admin panel if unwanted", {
+                    publishId: deploymentRecord.publishId,
+                    userId: deploymentRecord.userId,
+                });
             }
         }
         return false;
