@@ -2,11 +2,7 @@ import { Router } from "express";
 import {
     activatePreviewSnapshotSchema,
     createPreviewSnapshotSchema,
-    type ProjectFormSettingsInput,
 } from "@andy-code-cat/contracts";
-import { tryParseStructuredJson } from "../../../application/llm/llmParser";
-import { injectStableIds, normalizeStoredHtml } from "../../../application/llm/htmlIdInjector";
-import { repairArtifactsForVisibility } from "../../../application/llm/artifactSafetyRepair";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import type { RequestWithContext } from "../types";
@@ -16,6 +12,7 @@ import { MongoConversationRepository } from "../../../infra/repositories/MongoCo
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
 import { CreatePreviewSnapshot } from "../../../application/use-cases/CreatePreviewSnapshot";
+import { CommitArtifactVersion, withConfiguredFormRuntime } from "../../../application/use-cases/CommitArtifactVersion";
 import { ListPreviewSnapshots } from "../../../application/use-cases/ListPreviewSnapshots";
 import { ActivatePreviewSnapshot } from "../../../application/use-cases/ActivatePreviewSnapshot";
 import { GetPreviewSnapshot } from "../../../application/use-cases/GetPreviewSnapshot";
@@ -24,27 +21,7 @@ import { DeletePreviewSnapshot } from "../../../application/use-cases/DeletePrev
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { SnapshotThumbnailJob } from "../../../application/services/SnapshotThumbnailJob";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
-import { prepareArtifactServices } from "../../../application/platform-runtime/prepareArtifactServices";
 import { assertGeneratedJavaScriptSyntax } from "../../../application/artifacts/generatedJavaScriptSyntax";
-import type { PreviewSnapshot } from "../../../domain/entities/PreviewSnapshot";
-import type { RuntimePlanV1 } from "@andy-code-cat/contracts";
-
-function withConfiguredFormRuntime(
-    snapshot: PreviewSnapshot,
-    settings: ProjectFormSettingsInput | undefined,
-): PreviewSnapshot & { runtimePlan?: RuntimePlanV1 } {
-    const prepared = prepareArtifactServices({
-        artifacts: snapshot.artifacts,
-        serviceManifest: snapshot.serviceManifest,
-        formSettings: settings,
-        delivery: "inline-preview",
-    });
-    return {
-        ...snapshot,
-        artifacts: prepared.artifacts,
-        runtimePlan: prepared.runtimePlan,
-    };
-}
 
 export function createPreviewSnapshotRoutes(): Router {
     const router = Router();
@@ -60,6 +37,12 @@ export function createPreviewSnapshotRoutes(): Router {
         previewSnapshotRepository,
         mediaResolutionTraceRepository,
         conversationRepository,
+    );
+    const commitArtifactVersion = new CommitArtifactVersion(
+        conversationRepository,
+        projectRepository,
+        previewSnapshotRepository,
+        createPreviewSnapshot,
     );
     const listPreviewSnapshots = new ListPreviewSnapshots(previewSnapshotRepository);
     const activatePreviewSnapshot = new ActivatePreviewSnapshot(previewSnapshotRepository);
@@ -107,172 +90,15 @@ export function createPreviewSnapshotRoutes(): Router {
         async (req: RequestWithContext, res, next) => {
             try {
                 const body = createPreviewSnapshotSchema.parse(req.body);
-
-                const conversation = await conversationRepository.findById(body.conversationId, req.sandbox!.projectId);
-                if (!conversation) {
-                    res.status(404).json({ error: "Conversation not found" });
-                    return;
-                }
-
-                // If rawLlmResponse is provided, let the backend be the authority on parsing.
-                // Re-parse and override artifacts + structuredParseValid if the parse succeeds.
-                // IMPORTANT: only override when the raw response contains non-empty html.
-                // In focused-patch mode the LLM emits artifacts.html="" (only focusPatch
-                // is populated); the server already merged the patch and returned the full
-                // HTML to the client, which passes it back here as body.artifacts.html.
-                // Overriding with empty html would corrupt the stored snapshot.
-                let artifacts = body.artifacts;
-                let structuredParseValid = body.metadata?.structuredParseValid ?? false;
-
-                if (body.rawLlmResponse && !artifacts.html.trim()) {
-                    const parsed = tryParseStructuredJson(body.rawLlmResponse);
-                    if (parsed.parseValid && parsed.structured && parsed.structured.artifacts.html) {
-                        artifacts = {
-                            html: parsed.structured.artifacts.html,
-                            css: parsed.structured.artifacts.css,
-                            js: parsed.structured.artifacts.js,
-                        };
-                        structuredParseValid = true;
-                    }
-                }
-
-                // Normalise then inject stable IDs before storing.
-                // normalizeStoredHtml removes comments, collapses blank lines, and strips
-                // empty style= attributes — typically saves 10–17% on LLM output.
-                // repairArtifactsForVisibility patches the highest-impact recurrent
-                // failure modes (orphan AOS, CSS literal escapes, Phaser parent on
-                // <canvas>) so the preview is never blank because of a known bug.
-                // injectStableIds tags every block element with data-pf-id for focused edits.
-                if (artifacts.html) {
-                    const repaired = repairArtifactsForVisibility({
-                        html: artifacts.html,
-                        css: artifacts.css ?? "",
-                        js: artifacts.js ?? "",
-                    });
-                    if (repaired.repairs.length > 0) {
-                        ExecutionLogger.instance.emit({
-                            projectId: req.sandbox!.projectId,
-                            conversationId: body.conversationId,
-                            domain: "snapshot",
-                            eventType: "artifact_repaired",
-                            level: "info",
-                            status: "success",
-                            metadata: { repairs: repaired.repairs },
-                        });
-                    }
-                    artifacts = {
-                        html: injectStableIds(normalizeStoredHtml(repaired.html)),
-                        css: repaired.css,
-                        js: repaired.js,
-                    };
-                }
-
-                const project = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
-                const inheritedManifest = body.parentSnapshotId
-                    ? (await previewSnapshotRepository.findById(req.sandbox!.projectId, body.parentSnapshotId))?.serviceManifest
-                    : undefined;
-                // Validate and prepare the response/thumbnail view, but persist only
-                // canonical LLM artifacts. Runtime settings can then change without
-                // regenerating or mutating the immutable snapshot.
-                if (body.activate) assertGeneratedJavaScriptSyntax(artifacts.js);
-                const compiledForms = prepareArtifactServices({
-                    artifacts,
-                    serviceManifest: body.serviceManifest ?? inheritedManifest,
-                    formSettings: project?.serviceConfig?.forms,
-                    delivery: "inline-preview",
-                });
-                const runtimeArtifacts = compiledForms.artifacts;
-
-                const { snapshot, created, baseVerification } = await createPreviewSnapshot.execute({
+                const { created, snapshot } = await commitArtifactVersion.execute({
                     projectId: req.sandbox!.projectId,
-                    conversationId: body.conversationId,
-                    sourceMessageId: body.sourceMessageId,
-                    parentSnapshotId: body.parentSnapshotId,
-                    // AL-040 — forwarded verbatim; the use case is where the claim is checked.
-                    baseContentHash: body.baseContentHash,
-                    artifacts,
-                    serviceManifest: body.serviceManifest,
-                    focusContext: body.focusContext,
-                    metadata: body.metadata ? { ...body.metadata, structuredParseValid } : undefined,
-                    activate: body.activate,
+                    userId: req.auth!.userId,
+                    request: body,
                 });
-
-                // ── Execution log (fire-and-forget) ──────────────────────────
-                if (baseVerification === "unverifiable") {
-                    // AL-041 — accepted without certification because the base predates AL-039.
-                    // Rare and shrinking, but the one case where the guarantee does not hold, so
-                    // it has to be findable rather than silent.
-                    ExecutionLogger.instance.emit({
-                        projectId: req.sandbox!.projectId,
-                        conversationId: body.conversationId,
-                        snapshotId: body.parentSnapshotId,
-                        domain: "snapshot",
-                        eventType: "artifact_base_unverifiable",
-                        level: "warn",
-                        status: "success",
-                        metadata: {
-                            baseSnapshotId: body.parentSnapshotId,
-                            declaredContentHash: body.baseContentHash,
-                            reason: "base carries no stored contentHash",
-                        },
-                    });
-                }
-                ExecutionLogger.instance.emit({
-                    projectId: req.sandbox!.projectId,
-                    conversationId: body.conversationId,
-                    snapshotId: snapshot.id,
-                    domain: "snapshot",
-                    eventType: created ? "snapshot_created" : "snapshot_noop_skipped",
-                    level: "info",
-                    status: "success",
-                    metadata: {
-                        snapshotId: snapshot.id,
-                        parentSnapshotId: body.parentSnapshotId,
-                        sourceMessageId: body.sourceMessageId,
-                        activated: body.activate,
-                        // AL-045 — false means the base was returned unchanged, no version added.
-                        created,
-                        contentHash: snapshot.metadata?.contentHash,
-                        htmlBytes: artifacts.html?.length ?? 0,
-                        finishReason: body.metadata?.finishReason,
-                        model: body.metadata?.model,
-                        provider: body.metadata?.provider,
-                        structuredParseValid,
-                        hasFocusContext: Boolean(body.focusContext),
-                        mediaResolutionTraceIds: snapshot.metadata?.mediaResolution?.traceIds,
-                        mediaResolutionAssetIds: snapshot.metadata?.mediaResolution?.assetIds,
-                        mediaResolutionMediaKeys: snapshot.metadata?.mediaResolution?.mediaKeys,
-                        mediaResolutionDegraded: snapshot.metadata?.mediaResolution?.degraded,
-                        mediaResolutionResolvedCount: snapshot.metadata?.mediaResolution?.directives?.filter(
-                            (directive) => directive.status === "resolved" || directive.status === "fallback_resolved",
-                        ).length ?? snapshot.metadata?.mediaResolution?.assetIds?.length ?? 0,
-                        mediaResolutionFailedCount: snapshot.metadata?.mediaResolution?.directives?.filter(
-                            (directive) => directive.status === "unresolved",
-                        ).length ?? 0,
-                    },
-                });
-                // ── end execution log ─────────────────────────────────────────
-
-                // ── Background thumbnail job (fire-and-forget) ────────────────
-                if (body.activate && runtimeArtifacts.html && (created || !snapshot.thumbnailPath)) {
-                    SnapshotThumbnailJob.schedule(
-                        req.sandbox!.projectId,
-                        snapshot.id,
-                        runtimeArtifacts,
-                        previewSnapshotRepository
-                    );
-                }
-                // ── end thumbnail job ─────────────────────────────────────────
-
                 // AL-045 — a no-op write is not a creation. 200 says "here is the version you
                 // are on"; 201 says "here is the version you just made". The client shows a
                 // different message for each, so the distinction has to survive the response.
-                res.status(created ? 201 : 200).json({
-                    created,
-                    snapshot: created
-                        ? { ...snapshot, artifacts: runtimeArtifacts, runtimePlan: compiledForms.runtimePlan }
-                        : withConfiguredFormRuntime(snapshot, project?.serviceConfig?.forms),
-                });
+                res.status(created ? 201 : 200).json({ created, snapshot });
             } catch (error) {
                 next(error);
             }

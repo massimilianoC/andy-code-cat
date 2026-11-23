@@ -1,0 +1,42 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`POST /preview-snapshots — characterisation > 201 a second version continues the chain from the active one 1`] = `
+{
+  "activatedAt": "string",
+  "artifacts": {
+    "css": "",
+    "html": "<html><head></head><body><main data-pf-id=<id>><h1 data-pf-id=<id>>Versione due</h1></main></body></html>",
+    "js": "",
+  },
+  "createdAt": "string",
+  "hasParent": true,
+  "isActive": true,
+  "metadata": {
+    "contentHash": "<hash>",
+  },
+  "serviceManifest": null,
+  "updatedAt": "undefined",
+}
+`;
+
+exports[`POST /preview-snapshots — characterisation > 201 creates, normalises, injects stable ids, activates and links the source message 1`] = `
+{
+  "activatedAt": "string",
+  "artifacts": {
+    "css": "h1{color:red}",
+    "html": "<html><head></head><body><main data-pf-id=<id>><section data-pf-id=<id>><h1 data-pf-id=<id>>Forno</h1></section></main></body></html>",
+    "js": "",
+  },
+  "createdAt": "string",
+  "hasParent": false,
+  "isActive": true,
+  "metadata": {
+    "contentHash": "<hash>",
+    "finishReason": "stop",
+    "model": "m",
+    "provider": "p",
+    "structuredParseValid": true,
+  },
+  "updatedAt": "undefined",
+}
+`;
