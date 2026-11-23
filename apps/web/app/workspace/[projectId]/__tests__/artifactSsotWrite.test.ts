@@ -29,6 +29,14 @@ describe("WP1 step 3 — handleSend no longer writes metadata.generatedArtifacts
     it("keeps writing rawResponse — a history record, not a second authority", () => {
         // Guards against a future cleanup pass conflating the two: rawResponse is explicitly
         // out of scope for WP1 (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md WP1 closing note).
-        expect(fullSource).toContain("rawResponse: llm.rawResponse,");
+        // Since BACKGROUND_RUNS.md §3.1 the assistant message of a generation is written by the
+        // engine itself (GenerateArtifact.persistTurn), so that is where the field must stay —
+        // and where generatedArtifacts must never come back.
+        const engineSource = readFileSync(
+            path.join(__dirname, "..", "..", "..", "..", "..", "api", "src", "application", "use-cases", "GenerateArtifact.ts"),
+            "utf8"
+        );
+        expect(engineSource).toContain("rawResponse: result.rawResponse,");
+        expect(engineSource).not.toMatch(/generatedArtifacts:/);
     });
 });
