@@ -11,17 +11,15 @@ import type { Response, NextFunction } from "express";
 import { z } from "zod";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createWorkSessionMiddleware } from "../middlewares/workSessionMiddleware";
-import { HttpError } from "../errors/httpError";
 import type { RequestWithContext } from "../types";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
-import { buildProjectLayerDContext, PROJECT_LAYER_D_WAIT_FOR_PENDING_MS } from "../../../application/documents/projectLayerDContext";
-import { buildGroundedDataContextLayer, buildProjectKnowledgeLayer, buildBrandDocumentLayerD } from "../../../application/llm/systemPromptLayers";
 import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
-import { ResolveBrandDocumentContext, BRAND_DOC_WAIT_FOR_PENDING_MS } from "../../../application/use-cases/ResolveBrandDocumentContext";
+import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
+import { VibeClassifyStage, VibePrefillStage } from "../../../application/vibe/VibeEntryStages";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { VibeClassify } from "../../../application/use-cases/VibeClassify";
 import { VibePrefill } from "../../../application/use-cases/VibePrefill";
@@ -108,6 +106,15 @@ export function createVibecoreRoutes(): Router {
     const assetRepository = new MongoProjectAssetRepository();
     const resolveBrandDocumentContext = new ResolveBrandDocumentContext(new MongoBrandAssetRepository());
     const storage = getFileStorage();
+    const vibeClassifyStage = new VibeClassifyStage(vibeClassify, openWorkSession, vibeIntakeRepository, projectRepository);
+    const vibePrefillStage = new VibePrefillStage(
+        vibePrefill,
+        openWorkSession,
+        assetRepository,
+        storage,
+        resolveBrandDocumentContext,
+        zeroEffortFormProposalRepository,
+    );
 
     function validateAttachmentMetaLimits(attachmentMeta: Array<{ sizeBytes: number }>, policy: ProductAttachmentPolicy) {
         if (attachmentMeta.length > policy.maxAttachmentsPerPrompt) {
@@ -153,47 +160,6 @@ export function createVibecoreRoutes(): Router {
             return [`Attachment payload is near the cap: ${usedMb} MB / ${capMb} MB.`];
         }
         return [];
-    }
-
-    function assetHasResolvedContext(asset: Awaited<ReturnType<typeof assetRepository.listByProject>>[number], inlineDocumentNames: Set<string>): boolean {
-        if (inlineDocumentNames.has(asset.originalName)) return true;
-        const trace = asset.enrichmentTrace;
-        if (!trace) return false;
-        return Boolean(
-            trace.renderedFragment ||
-            trace.textLayer ||
-            trace.structuredData ||
-            trace.documentBrief ||
-            trace.visualAnalysis ||
-            trace.designSignals ||
-            trace.provenance.enrichmentStatus === "ready",
-        );
-    }
-
-    function assertAttachmentContextReady(input: {
-        attachmentMeta: Array<{ filename: string; sizeBytes: number }>;
-        assets: Awaited<ReturnType<typeof assetRepository.listByProject>>;
-        inlineDocumentNames: string[];
-    }) {
-        if (input.attachmentMeta.length === 0) return;
-
-        const inlineDocumentNames = new Set(input.inlineDocumentNames);
-        const missing = input.attachmentMeta.filter((meta) => {
-            const asset = input.assets.find((candidate) =>
-                candidate.originalName === meta.filename &&
-                candidate.fileSize === meta.sizeBytes
-            );
-            return !asset || !assetHasResolvedContext(asset, inlineDocumentNames);
-        });
-
-        if (missing.length > 0) {
-            throw new HttpError("Attachment context is not ready", {
-                statusCode: 503,
-                code: "ATTACHMENT_CONTEXT_NOT_READY",
-                userMessage: "Sto ancora estraendo il contesto dagli allegati. Riprova tra poco.",
-                details: { files: missing.map((item) => item.filename) },
-            });
-        }
     }
 
     async function resolvePoliciesForProject(
@@ -289,77 +255,29 @@ export function createVibecoreRoutes(): Router {
                 }
                 const warnings = buildAttachmentWarnings(attachmentMeta, attachmentPolicy);
 
-                // The session opens here, at the first tool the user engages, and its id travels
-                // back so every later request can name it via the x-work-session-id header. A
-                // resubmission carries the previous id and continues the same session rather than
-                // splitting one intent into two histories. Never throws: reuseOrOpen returns null
-                // if the store is unreachable, and the generation proceeds untraced.
+                // A resubmission carries the previous session id (x-work-session-id) and continues
+                // it; a fresh prompt starts a new intent (VibeClassifyStage).
                 const headerSessionId = String(req.headers[WORK_SESSION_HEADER] ?? "").trim() || undefined;
-                const continuing = req.workSession?.id ?? headerSessionId;
-                // A fresh Vibe prompt IS a new intent, so this stage starts one and closes whatever
-                // was still open on the project — unless the client explicitly named a session to
-                // continue, which only a deliberate resubmission does.
-                const workSession = continuing
-                    ? await openWorkSession.reuseOrOpen(continuing, { userId, entryMode: "vibe", projectId })
-                    : await openWorkSession.startIntent({ userId, entryMode: "vibe", projectId });
-
-                // Recorded BEFORE classify dispatches: a request that dies in the provider must still
-                // prove it was made. Certificate §3 question 1 — nothing else in the database holds
-                // the prompt as the user actually typed it. Guarded, because a failure to record the
-                // intake must not cost the user their generation.
-                if (workSession) {
-                    await vibeIntakeRepository.record({
-                        workSessionId: workSession.id,
-                        userId,
-                        projectId,
-                        prompt: parsed.data.prompt,
-                        attachments: attachmentMeta.map((a) => ({
-                            filename: a.filename,
-                            mimeType: a.mimeType,
-                            sizeBytes: a.sizeBytes,
-                        })),
-                        requestedProvider: parsed.data.provider,
-                        requestedModel: parsed.data.model,
-                        generationMode: parsed.data.generationMode,
-                    }).catch(() => undefined);
-                }
-
-                const result = await vibeClassify.execute({
+                const { result, workSessionId } = await vibeClassifyStage.execute({
+                    userId,
+                    projectId,
                     prompt: parsed.data.prompt,
                     attachmentMeta,
                     generationMode: parsed.data.generationMode,
                     provider: parsed.data.provider,
                     model: parsed.data.model,
-                    userId,
-                    projectId,
-                    workSessionId: workSession?.id,
+                    continuingSessionId: req.workSession?.id ?? headerSessionId,
                 });
 
-                // Persist the Layer T signal on the project so subsequent generation
-                // turns (chat-preview) re-inject the same format guidance. Layer T
-                // self-suppresses when the project later gains a presetId, so this is
-                // safe to store even when templateId also matched.
-                if (result.formatHint && !result.skipped) {
-                    await projectRepository.update(projectId, userId, {
-                        templateResolution: {
-                            formatHint: result.formatHint,
-                            confidence: result.confidence,
-                            reasoning: result.reasoning,
-                            source: "layer_phi",
-                        },
-                    }).catch(() => null);
-                }
-
-                // Always echo projectId so the client pins follow-up calls
-                // (prefill, generation, conversation) to the same sandbox. workSessionId is echoed
-                // for the same reason at a wider scope: the client sends it back as
-                // x-work-session-id so every later call in this intent joins one history.
+                // Always echo projectId so the client pins follow-up calls (prefill, generation,
+                // conversation) to the same sandbox, and workSessionId so every later call in this
+                // intent joins one history.
                 res.json({
                     ...result,
                     projectId,
                     warnings,
                     attachmentPolicy,
-                    ...(workSession ? { workSessionId: workSession.id } : {}),
+                    ...(workSessionId ? { workSessionId } : {}),
                 });
             } catch (error) {
                 next(error);
@@ -378,10 +296,6 @@ export function createVibecoreRoutes(): Router {
                 }
 
                 const userId = req.auth!.userId;
-                let layerDContext: string | undefined;
-                let layerXDataContext: string | undefined;
-                const layerDocNames: string[] = [];
-                let projectLayerDDocumentNames: string[] = [];
 
                 // Double-sandbox: if client passed a projectId they don't own, refuse.
                 // (Auto-create only when no projectId was provided at all.)
@@ -398,7 +312,6 @@ export function createVibecoreRoutes(): Router {
                 const { attachmentPolicy, documentContextPolicy } = await resolvePoliciesForProject(userId, projectId);
 
                 const attachmentMeta = parsed.data.attachmentMeta ?? [];
-                const hasRequestAttachments = attachmentMeta.length > 0;
                 const violation = validateAttachmentMetaLimits(attachmentMeta, attachmentPolicy);
                 if (violation) {
                     res.status(violation.status).json(violation.body);
@@ -406,114 +319,21 @@ export function createVibecoreRoutes(): Router {
                 }
                 const warnings = buildAttachmentWarnings(attachmentMeta, attachmentPolicy);
 
-                // Layer D injection: use the resolved sandbox project. This covers both
-                // client-pinned projects and backend-created Vibe drafts.
-                if (projectId) {
-                    // Load project assets (ownership already verified above)
-                    let assets = await assetRepository.listByProject(projectId, userId).catch(() => []);
-
-                    if (env.enrichmentInjectLayerD) {
-                        const projectLayerD = await buildProjectLayerDContext({
-                            assetRepository,
-                            storage,
-                            projectId,
-                            userId,
-                            assets,
-                            maxChars: 8000,
-                            maxAssets: documentContextPolicy.maxAssetsPerPrompt,
-                            fallbackInlineExtractionMaxAssets: documentContextPolicy.fallbackInlineExtractionMaxAssets,
-                            waitForPendingMs: env.enrichmentEnabled ? PROJECT_LAYER_D_WAIT_FOR_PENDING_MS : 0,
-                        }).catch((error) => {
-                            if (hasRequestAttachments) {
-                                throw new HttpError("Attachment context extraction failed", {
-                                    statusCode: 503,
-                                    code: "ATTACHMENT_CONTEXT_UNAVAILABLE",
-                                    userMessage: "Non sono riuscito a estrarre il contesto dagli allegati. Riprova tra poco.",
-                                    details: error instanceof Error ? { message: error.message } : undefined,
-                                });
-                            }
-                            return { layer: "", assets, documentNames: [] as string[] };
-                        });
-                        assets = projectLayerD.assets;
-                        layerDContext = projectLayerD.layer || undefined;
-                        projectLayerDDocumentNames = projectLayerD.documentNames;
-                        projectLayerD.documentNames.forEach((name) => layerDocNames.push(name));
-                    }
-
-                    if (hasRequestAttachments) {
-                        assertAttachmentContextReady({
-                            attachmentMeta,
-                            assets,
-                            inlineDocumentNames: projectLayerDDocumentNames,
-                        });
-                    }
-
-                    if (parsed.data.generationMode === "data_dashboard" || parsed.data.templateId === "data-dashboard" || parsed.data.formatHint === "analytics_dashboard") {
-                        const groundedData = buildGroundedDataContextLayer(assets, {
-                            maxChars: 5000,
-                            maxAssets: documentContextPolicy.maxAssetsPerPrompt,
-                        });
-                        if (groundedData) {
-                            layerXDataContext = groundedData;
-                        }
-                    }
-                }
-
-                // Reusable brand documents (user/platform scope) apply to every project — even a
-                // freshly auto-created one — so the brand book guides the prefill from intake.
-                // In-flight analyses are awaited (bounded): the prefill quality depends on them.
-                const brandDocuments = await resolveBrandDocumentContext
-                    .execute({ userId, projectId, waitForPendingMs: BRAND_DOC_WAIT_FOR_PENDING_MS })
-                    .catch(() => []);
-                const brandDocumentLayer = buildBrandDocumentLayerD(brandDocuments, { maxChars: 6000 });
-                if (brandDocumentLayer) {
-                    layerDContext = [brandDocumentLayer, layerDContext].filter(Boolean).join("\n\n");
-                    brandDocuments.forEach((d) => layerDocNames.push(d.title));
-                }
-
-                // Prefill is the second stage of an intent classify already opened, so it reuses
-                // that session rather than starting one; reuseOrOpen only creates when the id is
-                // absent, stale or foreign.
                 const prefillHeaderSessionId = String(req.headers[WORK_SESSION_HEADER] ?? "").trim() || undefined;
-                const prefillWorkSession = await openWorkSession.reuseOrOpen(
-                    req.workSession?.id ?? prefillHeaderSessionId,
-                    { userId, entryMode: "zero-effort", projectId },
-                );
-
-                const result = await vibePrefill.execute({
-                    prompt: parsed.data.prompt,
-                    workSessionId: prefillWorkSession?.id,
-                    layerDContext,
-                    layerXDataContext,
-                    generationMode: parsed.data.generationMode,
-                    attachmentMeta,
-                    templateId: parsed.data.templateId ?? null,
-                    formatHint: (parsed.data.formatHint ?? null) as import("@andy-code-cat/contracts").FormatHint | null,
-                    provider: parsed.data.provider,
-                    model: parsed.data.model,
+                const { result } = await vibePrefillStage.execute({
                     userId,
                     projectId,
+                    prompt: parsed.data.prompt,
+                    attachmentMeta,
+                    documentContextPolicy,
+                    generationMode: parsed.data.generationMode,
+                    templateId: parsed.data.templateId ?? null,
+                    formatHint: parsed.data.formatHint ?? null,
+                    provider: parsed.data.provider,
+                    model: parsed.data.model,
                     uiLanguage: parsed.data.uiLanguage,
+                    continuingSessionId: req.workSession?.id ?? prefillHeaderSessionId,
                 });
-
-                // Attach document names that contributed to the brief (informational, shown to user)
-                if (layerDocNames.length > 0) {
-                    result.draft.attachedDocuments = layerDocNames;
-                }
-
-                // Certificate §3 question 4 — the one fact nothing else in the database holds: what
-                // the model PROPOSED, so that what the user submits can later be diffed against it.
-                // The confirmed side is deliberately not stored here; canonicalBrief.sourceFields
-                // already owns it, and editedFields is filled at launch when both sides exist.
-                if (prefillWorkSession && !result.skipped) {
-                    await zeroEffortFormProposalRepository.record({
-                        workSessionId: prefillWorkSession.id,
-                        userId,
-                        projectId,
-                        prefilled: result.draft as unknown as import("@andy-code-cat/contracts").GuidedLaunchInput,
-                        editedFields: [],
-                    }).catch(() => undefined);
-                }
 
                 // Merge, don't overwrite: `warnings` here are attachment-policy notices, while
                 // the use case adds its own when the automatic prefill fell back. Spreading
