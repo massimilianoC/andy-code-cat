@@ -3,8 +3,6 @@ import {
     llmPromptConfigSchema,
     optimizePromptSchema,
 } from "@andy-code-cat/contracts";
-import { ResolveArtifactMedia } from "../../../application/media/ResolveArtifactMedia";
-import { MongoServiceApiKeyRepository } from "../../../infra/repositories/MongoServiceApiKeyRepository";
 import { env } from "../../../config";
 import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
 import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
@@ -15,35 +13,25 @@ import { MongoUserStyleProfileRepository } from "../../../infra/repositories/Mon
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
-import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
-import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
-import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createWorkSessionMiddleware } from "../middlewares/workSessionMiddleware";
 import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
-import { OpenWorkSession } from "../../../application/use-cases/OpenWorkSession";
 import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/MongoLlmPromptConfigRepository";
 import { GetLlmPromptConfig } from "../../../application/use-cases/GetLlmPromptConfig";
 import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptConfig";
 import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
-import { GenerateArtifact, GenerationStreamReadError } from "../../../application/use-cases/GenerateArtifact";
-import { AddMessage } from "../../../application/use-cases/AddMessage";
-import { CommitArtifactVersion } from "../../../application/use-cases/CommitArtifactVersion";
-import { CreatePreviewSnapshot } from "../../../application/use-cases/CreatePreviewSnapshot";
-import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
+import { GenerationStreamReadError } from "../../../application/use-cases/GenerateArtifact";
+import { composeGenerationEngine } from "../../../composition/composeGenerationEngine";
 import { getProviderStatus } from "../../../application/llm/providerAuth";
 import { emitLlmFailureLog } from "../../../application/llm/llmFailureLog";
+import { CHAT_TURN_DEFAULTS } from "../../../application/llm/chatTurnDefaults";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import type { RequestWithContext } from "../types";
 import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import { HttpError, normalizeHttpError } from "../errors/httpError";
 import { resolveAttachmentPolicyFromConfig } from "../../../domain/entities/PlatformConfig";
-import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
-import { ResolveBrandContext } from "../../../application/use-cases/ResolveBrandContext";
-import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
-import { ResolvePromptExecution } from "../../../application/use-cases/ResolvePromptExecution";
 import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
 import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
 
@@ -64,31 +52,13 @@ export function createLlmRoutes(): Router {
     const assetRepository = new MongoProjectAssetRepository();
     const userRepo = new MongoUserRepository();
     const platformConfigRepo = new MongoPlatformConfigRepository();
-    const presetRepository = new MongoProjectPresetRepository();
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
-    const snapshotRepository = new MongoPreviewSnapshotRepository();
-    const conversationRepository = new MongoConversationRepository();
-    const mediaResolutionTraceRepository = new MongoMediaResolutionTraceRepository();
-    const serviceKeyRepo = new MongoServiceApiKeyRepository();
-    const brandAssetRepository = new MongoBrandAssetRepository();
-    const resolveBrandContext = new ResolveBrandContext(brandAssetRepository);
-    const resolveBrandDocumentContext = new ResolveBrandDocumentContext(brandAssetRepository);
-    const resolveArtifactMedia = new ResolveArtifactMedia(
-        assetRepository,
-        getFileStorage(),
-        serviceKeyRepo,
-        undefined,
-        undefined,
-        platformConfigRepo,
-        mediaResolutionTraceRepository,
-    );
 
     router.use(authMiddleware);
     // Mounted after auth because the session lookup is ownership-scoped. Never rejects: a
     // missing or foreign session id leaves the request untraced rather than refused
     // (docs/specs/SESSION_TRACING_EXECUTION_PLAN.md rule 4).
     router.use(createWorkSessionMiddleware(new MongoWorkSessionRepository()));
-    const openWorkSession = new OpenWorkSession(new MongoWorkSessionRepository());
 
     const llmCatalogRepository = new MongoLlmCatalogRepository();
     const getLlmCatalog = new GetLlmCatalog(
@@ -118,41 +88,10 @@ export function createLlmRoutes(): Router {
         getFileStorage(),
     );
 
-    // I10 of the SSOT program: the composer previously nested here as `resolveContext()` is now
-    // ResolvePromptExecution — a pure move (see that file's doc comment), constructed once here
-    // with the same dependency instances the closure used to capture.
-    const resolvePromptExecution = new ResolvePromptExecution(
-        getLlmCatalog,
-        getLlmPromptConfig,
-        moodboardRepository,
-        userStyleProfileRepository,
-        projectRepository,
-        platformConfigRepo,
-        assetRepository,
-        presetRepository,
-        resolveBrandDocumentContext,
-        resolveBrandContext,
-        resolvePipelineModelLock,
-        getFileStorage(),
-    );
-    const generateArtifact = new GenerateArtifact(
-        resolvePromptExecution,
-        promptExecutionLogRepository,
-        openWorkSession,
-        snapshotRepository,
-        resolveArtifactMedia,
-        userRepo,
-        {
-            conversationRepository,
-            addMessage: new AddMessage(conversationRepository),
-            commitArtifactVersion: new CommitArtifactVersion(
-                conversationRepository,
-                projectRepository,
-                snapshotRepository,
-                new CreatePreviewSnapshot(snapshotRepository, mediaResolutionTraceRepository, conversationRepository),
-            ),
-        },
-    );
+    // One wiring of the generation engine for the API and the background worker
+    // (composition/composeGenerationEngine.ts); ResolvePromptExecution also answers the dry-run
+    // prompt-preview, so the preview and the generation resolve through the same instance.
+    const { resolvePromptExecution, generateArtifact } = composeGenerationEngine(getLlmCatalog);
 
     router.get("/llm/providers", async (_req, res, next) => {
         try {
@@ -190,9 +129,7 @@ export function createLlmRoutes(): Router {
                     // Backend-driven defaults for every consumer (web, tablet, mobile, branded clients).
                     // Clients must NOT hardcode these values — always read from this response.
                     chatDefaults: {
-                        temperature: 0.4,
-                        pipelineRole: "dialogue",
-                        capability: "chat",
+                        ...CHAT_TURN_DEFAULTS,
                         historyMaxMessages: env.LLM_MAX_HISTORY_MESSAGES,
                         historyMessageMaxChars: env.LLM_HISTORY_MESSAGE_MAX_CHARS,
                         maxCompletionTokens: env.LLM_DEFAULT_MAX_COMPLETION_TOKENS,
