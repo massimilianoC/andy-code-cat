@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:22.23.5-alpine AS base
 
 # Install Chromium for Puppeteer — official guide: https://pptr.dev/guides/docker
 # Using system Chromium on Alpine to avoid downloading a full bundled Chrome.
@@ -36,7 +36,7 @@ COPY . .
 RUN npm install
 RUN npm run build -w packages/contracts && npm run build -w apps/api
 
-FROM node:20-alpine AS prod
+FROM node:22.23.5-alpine AS prod
 # Chromium needed for Puppeteer at runtime — https://pptr.dev/guides/docker
 RUN apk add --no-cache \
     chromium \

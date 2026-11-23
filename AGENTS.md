@@ -238,6 +238,8 @@ Mandatory networking rules:
 - host mongo port mapped to non-default 27018 to avoid conflicts.
 - host redis port mapped to non-default 6380.
 
+Runtime: Node.js base images must be a supported, patched release (>= 22.23.4, no EOL Node 20). See `docs/security/NODE22_RUNTIME_UPGRADE.md`.
+
 ## CRITICAL: Two Docker Compose Stacks — Never Mix
 
 This project has TWO compose files with DIFFERENT MongoDB storage strategies:

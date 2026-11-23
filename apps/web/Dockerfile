@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:22.23.5-alpine AS base
 
 WORKDIR /workspace
 COPY package*.json ./
@@ -26,7 +26,7 @@ ENV NEXT_PUBLIC_RELEASE_VERSION=$RELEASE_VERSION
 RUN npm install
 RUN npm run build -w packages/contracts && npm run build -w apps/web
 
-FROM node:20-alpine AS prod
+FROM node:22.23.5-alpine AS prod
 WORKDIR /workspace
 ENV NODE_ENV=production
 COPY --from=build /workspace/node_modules ./node_modules
