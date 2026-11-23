@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import path from "path";
 import fs from "fs";
 import { authMiddleware } from "../middlewares/authMiddleware";
@@ -14,9 +14,10 @@ import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { PublishProject } from "../../../application/use-cases/PublishProject";
 import { UnpublishProject } from "../../../application/use-cases/UnpublishProject";
 import { GetSiteDeployment } from "../../../application/use-cases/GetSiteDeployment";
-import { publishProjectSchema, customSlugSchema, classifySlugFormat } from "@andy-code-cat/contracts";
+import { publishProjectSchema, customSlugSchema, classifySlugFormat, isPublicSiteSlug } from "@andy-code-cat/contracts";
+import { resolvePublicSitesConfig, resolvePublicSiteUrl } from "../../../application/publish/publicSiteAddress";
+import type { PublicSitesConfig } from "../../../domain/entities/PlatformConfig";
 import type { SlugCheckResponse } from "@andy-code-cat/contracts";
-import { env } from "../../../config";
 import type { RequestWithContext } from "../types";
 import type { SiteDeployment } from "../../../domain/entities/SiteDeployment";
 import type { PublishHistoryEntry } from "../../../domain/entities/PublishHistory";
@@ -42,37 +43,14 @@ const MIME_MAP: Record<string, string> = {
 // Validate publishId: only lowercase alphanumeric, 6-12 chars
 const PUBLISH_ID_RE = /^[a-z0-9]{6,12}$/;
 
-function buildSubdomainUrl(d: SiteDeployment): string | null {
-    const domain = env.PUBLIC_DOMAIN?.trim();
-    if (!domain) return null;
-
-    // Localhost/ports/schemes are not valid wildcard publish domains.
-    // In those cases the safe local URL is the path-based /p/{publishId} route.
-    if (
-        domain.includes(":") ||
-        domain.includes("/") ||
-        /^https?:/i.test(domain) ||
-        domain === "localhost" ||
-        domain.startsWith("localhost.") ||
-        domain.endsWith(".localhost") ||
-        domain === "127.0.0.1"
-    ) {
-        return null;
-    }
-
-    const identifier = d.customSlug ?? d.publishId;
-    return `https://${identifier}.${domain}`;
-}
-
-function toDto(d: SiteDeployment) {
-    const subdomainUrl = buildSubdomainUrl(d);
+function toDto(d: SiteDeployment, publicSites: PublicSitesConfig) {
     return {
         id: d.id,
         publishId: d.publishId,
         projectId: d.projectId,
         status: d.status,
         url: d.url,
-        subdomainUrl,
+        publicUrl: resolvePublicSiteUrl(d, publicSites),
         customSlug: d.customSlug ?? null,
         filesDeployed: d.filesDeployed,
         snapshotId: d.snapshotId,
@@ -101,7 +79,8 @@ function toHistoryDto(e: PublishHistoryEntry) {
  * 1. publicRouter — mounted at /v1 BEFORE any auth-applying router, no auth.
  *    Holds /publish/check-slug, which must stay reachable without a token.
  * 2. apiRouter — mounted at /v1, require auth + sandbox
- * 3. staticRouter — mounted at /p, public, serve static files
+ * 3. staticRouter — mounted at /p, public, serve static files by publishId
+ * 4. siteRouter — mounted at the API root LAST, public, serves the same files by custom slug
  *
  * Why publicRouter is separate: several /v1 routers call `router.use(authMiddleware)`,
  * and Express runs those for every /v1 request that reaches them in mount order. If the
@@ -112,6 +91,7 @@ function toHistoryDto(e: PublishHistoryEntry) {
 export function createPublishRoutes() {
     const apiRouter = Router();
     const staticRouter = Router();
+    const siteRouter = Router();
     const publicRouter = Router();
 
     const projectRepository = new MongoProjectRepository();
@@ -126,6 +106,7 @@ export function createPublishRoutes() {
     const publishProject = new PublishProject(deploymentRepository, snapshotRepository, localFileStorage, assetRepository, historyRepository, platformConfigRepository);
     const unpublishProject = new UnpublishProject(deploymentRepository, localFileStorage);
     const getSiteDeployment = new GetSiteDeployment(deploymentRepository);
+    const publicSites = async () => resolvePublicSitesConfig(await platformConfigRepository.get());
 
     // -----------------------------------------------------------------
     // POST /v1/projects/:projectId/publish — publish current snapshot
@@ -148,7 +129,7 @@ export function createPublishRoutes() {
                     formSettings: project?.serviceConfig?.forms,
                 });
 
-                res.status(201).json(toDto(deployment));
+                res.status(201).json(toDto(deployment, await publicSites()));
             } catch (error) {
                 next(error);
             }
@@ -175,7 +156,7 @@ export function createPublishRoutes() {
                     res.status(403).json({ error: "Access denied" });
                     return;
                 }
-                res.json(toDto(deployment));
+                res.json(toDto(deployment, await publicSites()));
             } catch (error) {
                 next(error);
             }
@@ -313,7 +294,7 @@ export function createPublishRoutes() {
                 }
 
                 const updated = await deploymentRepository.updateCustomSlug(deployment.id, newSlug);
-                res.json(toDto(updated ?? deployment));
+                res.json(toDto(updated ?? deployment, await publicSites()));
             } catch (error) {
                 next(error);
             }
@@ -335,27 +316,17 @@ export function createPublishRoutes() {
         "connect-src 'self' https:; " +
         "frame-src 'self' https:;";
 
-    staticRouter.get("/:publishId", async (req, res) => {
-        const { publishId } = req.params;
-        if (!PUBLISH_ID_RE.test(publishId)) {
-            res.status(404).send("Not found");
-            return;
-        }
+    // One serving path for both public addresses of a site: /p/{publishId}/ and /{slug}/.
+    // The slug router only translates its slug to the live deployment's publishId; suspension
+    // checks, headers, caching and file resolution are the same code for both.
 
-        // Redirect to trailing-slash URL so the browser resolves relative paths
-        // (style.css, script.js) relative to /p/{publishId}/ not /p/
-        if (!req.originalUrl.endsWith("/")) {
-            res.redirect(301, `/p/${publishId}/`);
-            return;
-        }
-
-        // Admin suspension check — defer to deployment record before serving any content
-        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+    /** Sends 403 and returns true when the site or its owner is suspended. */
+    async function rejectSuspended(res: Response, deploymentRecord: SiteDeployment | null): Promise<boolean> {
         if (deploymentRecord?.isAdminBlocked) {
             res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
                 "This site has been suspended by the platform administrator."
             );
-            return;
+            return true;
         }
         if (deploymentRecord) {
             const owner = await userRepository.findById(deploymentRecord.userId).catch(() => null);
@@ -363,9 +334,23 @@ export function createPublishRoutes() {
                 res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
                     "This site is unavailable because the owner account has been suspended."
                 );
-                return;
+                return true;
             }
         }
+        return false;
+    }
+
+    /**
+     * index.html of a site. `canonicalPath` is the trailing-slash address the request came in on
+     * (`/p/{publishId}/` or `/{slug}/`): the browser must be there so the site's relative
+     * style.css / script.js resolve inside it.
+     */
+    async function sendSiteIndex(req: Request, res: Response, publishId: string, canonicalPath: string, deploymentRecord: SiteDeployment | null) {
+        if (!(req.originalUrl.split("?")[0] ?? "").endsWith("/")) {
+            res.redirect(301, canonicalPath);
+            return;
+        }
+        if (await rejectSuspended(res, deploymentRecord)) return;
 
         const filePath = localFileStorage.resolvePublishFile(publishId, "index.html");
         if (!filePath) {
@@ -404,31 +389,11 @@ export function createPublishRoutes() {
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("X-Content-Type-Options", "nosniff");
         fs.createReadStream(filePath).pipe(res);
-    });
+    }
 
-    staticRouter.get("/:publishId/:file", async (req, res) => {
-        const { publishId, file } = req.params;
-        if (!PUBLISH_ID_RE.test(publishId) || !file) {
-            res.status(404).send("Not found");
-            return;
-        }
-
-        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
-        if (deploymentRecord?.isAdminBlocked) {
-            res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
-                "This site has been suspended by the platform administrator."
-            );
-            return;
-        }
-        if (deploymentRecord) {
-            const owner = await userRepository.findById(deploymentRecord.userId).catch(() => null);
-            if (owner?.isBlocked) {
-                res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
-                    "This site is unavailable because the owner account has been suspended."
-                );
-                return;
-            }
-        }
+    /** Any other file of a site: a top-level asset, or a dataset under data/. */
+    async function sendSiteFile(req: Request, res: Response, publishId: string, file: string, kind: "asset" | "data", deploymentRecord: SiteDeployment | null) {
+        if (await rejectSuspended(res, deploymentRecord)) return;
 
         // Only allow simple filenames — no path traversal
         if (file.includes("..") || file.includes("/") || file.includes("\\")) {
@@ -436,7 +401,7 @@ export function createPublishRoutes() {
             return;
         }
 
-        const filePath = localFileStorage.resolvePublishFile(publishId, file);
+        const filePath = localFileStorage.resolvePublishFile(publishId, kind === "data" ? `data/${file}` : file);
         if (!filePath) {
             res.status(404).send("Not found");
             return;
@@ -469,8 +434,8 @@ export function createPublishRoutes() {
 
         // CSS and JS are cache-busted via ?v=<hash> injected into index.html at publish time.
         // Because their effective URL changes on every content change they can be cached
-        // indefinitely.  All other assets (images, fonts) get a 1-day cache.
-        const cacheControl = [".css", ".js"].includes(ext)
+        // indefinitely.  All other assets (images, fonts) and datasets get a 1-day cache.
+        const cacheControl = kind === "asset" && [".css", ".js"].includes(ext)
             ? "public, max-age=31536000, immutable"
             : "public, max-age=86400";
 
@@ -478,6 +443,27 @@ export function createPublishRoutes() {
         res.setHeader("Cache-Control", cacheControl);
         res.setHeader("X-Content-Type-Options", "nosniff");
         fs.createReadStream(filePath).pipe(res);
+    }
+
+    // ---- /p/{publishId}/ ----
+    staticRouter.get("/:publishId", async (req, res) => {
+        const { publishId } = req.params;
+        if (!PUBLISH_ID_RE.test(publishId)) {
+            res.status(404).send("Not found");
+            return;
+        }
+        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        await sendSiteIndex(req, res, publishId, `/p/${publishId}/`, deploymentRecord);
+    });
+
+    staticRouter.get("/:publishId/:file", async (req, res) => {
+        const { publishId, file } = req.params;
+        if (!PUBLISH_ID_RE.test(publishId) || !file) {
+            res.status(404).send("Not found");
+            return;
+        }
+        const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
+        await sendSiteFile(req, res, publishId, file, "asset", deploymentRecord);
     });
 
     staticRouter.get("/:publishId/data/:file", async (req, res) => {
@@ -486,62 +472,52 @@ export function createPublishRoutes() {
             res.status(404).send("Not found");
             return;
         }
-
         const deploymentRecord = await deploymentRepository.findByPublishId(publishId).catch(() => null);
-        if (deploymentRecord?.isAdminBlocked) {
-            res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
-                "This site has been suspended by the platform administrator."
-            );
-            return;
-        }
-        if (deploymentRecord) {
-            const owner = await userRepository.findById(deploymentRecord.userId).catch(() => null);
-            if (owner?.isBlocked) {
-                res.status(403).setHeader("Content-Type", "text/plain; charset=utf-8").send(
-                    "This site is unavailable because the owner account has been suspended."
-                );
-                return;
-            }
-        }
-
-        if (file.includes("..") || file.includes("/") || file.includes("\\")) {
-            res.status(400).send("Invalid path");
-            return;
-        }
-
-        const relativePath = `data/${file}`;
-        const filePath = localFileStorage.resolvePublishFile(publishId, relativePath);
-        if (!filePath) {
-            res.status(404).send("Not found");
-            return;
-        }
-
-        try {
-            await fs.promises.access(filePath);
-        } catch {
-            res.status(404).send("Not found");
-            return;
-        }
-
-        const ext = path.extname(file).toLowerCase();
-        const contentType = MIME_MAP[ext] ?? "application/octet-stream";
-        const stat = await fs.promises.stat(filePath);
-        const etag = `"${stat.mtimeMs.toString(16)}-${stat.size.toString(16)}"`;
-
-        res.removeHeader("Content-Security-Policy");
-        res.setHeader("Content-Security-Policy", PUBLISHED_PAGE_CSP);
-        res.setHeader("ETag", etag);
-        res.setHeader("Last-Modified", stat.mtime.toUTCString());
-        if (req.headers["if-none-match"] === etag) {
-            res.status(304).end();
-            return;
-        }
-
-        res.setHeader("Content-Type", contentType);
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        res.setHeader("X-Content-Type-Options", "nosniff");
-        fs.createReadStream(filePath).pipe(res);
+        await sendSiteFile(req, res, publishId, file, "data", deploymentRecord);
     });
 
-    return { apiRouter, staticRouter, publicRouter };
+    // ---- /{slug}/ ----
+    // Mounted at the API root, after every other route. A first segment that cannot be a slug
+    // (bad shape, or a reserved root segment such as v1/p/health) is left to the next handler.
+    // A slug-shaped segment with no live deployment is a 404 here: the namespace is the sites'.
+    // The web app forwards the same paths here (apps/web/middleware.ts), so `/{slug}/` works on
+    // the web origin and on the API origin alike.
+    async function liveDeploymentForSlug(slug: string): Promise<SiteDeployment | null> {
+        return deploymentRepository.findLiveByCustomSlug(slug);
+    }
+
+    siteRouter.get("/:slug", async (req, res, next) => {
+        const { slug } = req.params;
+        if (!isPublicSiteSlug(slug)) return next();
+        const deployment = await liveDeploymentForSlug(slug);
+        if (!deployment) {
+            res.status(404).send("Not found");
+            return;
+        }
+        await sendSiteIndex(req, res, deployment.publishId, `/${slug}/`, deployment);
+    });
+
+    siteRouter.get("/:slug/:file", async (req, res, next) => {
+        const { slug, file } = req.params;
+        if (!isPublicSiteSlug(slug)) return next();
+        const deployment = await liveDeploymentForSlug(slug);
+        if (!deployment || !file) {
+            res.status(404).send("Not found");
+            return;
+        }
+        await sendSiteFile(req, res, deployment.publishId, file, "asset", deployment);
+    });
+
+    siteRouter.get("/:slug/data/:file", async (req, res, next) => {
+        const { slug, file } = req.params;
+        if (!isPublicSiteSlug(slug)) return next();
+        const deployment = await liveDeploymentForSlug(slug);
+        if (!deployment || !file) {
+            res.status(404).send("Not found");
+            return;
+        }
+        await sendSiteFile(req, res, deployment.publishId, file, "data", deployment);
+    });
+
+    return { apiRouter, staticRouter, publicRouter, siteRouter };
 }

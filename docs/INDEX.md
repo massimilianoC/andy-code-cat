@@ -73,6 +73,7 @@ Read in this order before making changes:
 | [docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md](runbooks/BETA_LAUNCH_HARDENING_PLAN.md) | Beta-readiness checklist |
 | [install.sh](../install.sh) | Self-configuring one-file installer — local and domain modes, auto SSL via certbot |
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker workflow for dev and deploy-like stacks |
+| [docs/guides/PUBLISHED_SITE_ADDRESSES.md](guides/PUBLISHED_SITE_ADDRESSES.md) | Published site addresses: `/p/{id}/` and `/{slug}/`, the superadmin publish URL mode (path or subdomain), server and domain moves |
 | [docs/guides/AGENT_RELEASE_CHECKLIST.md](guides/AGENT_RELEASE_CHECKLIST.md) | Release and branch checklist for agents |
 | [docs/guides/GITFLOW_RELEASE_POLICY.md](guides/GITFLOW_RELEASE_POLICY.md) | Gitflow branch semantics and release policy |
 | [docs/guides/PUBLIC_REPO_CHECKLIST.md](guides/PUBLIC_REPO_CHECKLIST.md) | Public repository safety and sanitization checklist |

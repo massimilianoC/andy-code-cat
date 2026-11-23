@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { resolvePublicSiteAddress } from "@/app/workspace/features/header/publishUrl";
 import { useTranslation } from "react-i18next";
 import type { Project } from "../lib/api";
 import {
@@ -294,11 +295,7 @@ export default function ProjectCard({ project, onOpen, onOpenData, onDuplicate, 
                         )}
                         {project.publishedUrl && (
                             <a
-                                href={
-                                    project.publishedUrl.startsWith("/")
-                                        ? `${(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000")}${project.publishedUrl}`
-                                        : project.publishedUrl
-                                }
+                                href={resolvePublicSiteAddress(project.publishedUrl)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 bg-primary/10 rounded px-1.5 py-0.5 transition-colors"

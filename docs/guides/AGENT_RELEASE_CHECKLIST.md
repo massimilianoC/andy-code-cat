@@ -140,6 +140,18 @@ npm run droplet:seed -- --only-presets
 Local deploy stack: see `docs/runbooks/PRESET_RESEED.md` for the per-stack commands and
 verification steps (including the `viewportModel` check).
 
+### Published-site address setting — binding once, for deployments that used `PUBLIC_DOMAIN`
+
+The release that introduced `PlatformConfig.publicSites` removed the `PUBLIC_DOMAIN` environment
+variable. A deployment that had it set (subdomain links, e.g. the droplet) shows path addresses
+until the setting is saved — sites keep being served either way. In the same deploy operation:
+
+```bash
+docker exec andy-code-cat-api node apps/api/dist/scripts/set-public-sites.js subdomain <the old PUBLIC_DOMAIN>
+```
+
+or set it in /admin/config → Published sites. See `docs/guides/PUBLISHED_SITE_ADDRESSES.md`.
+
 ## 11. Final Agent Sanity Check
 
 - The branch name matches the Gitflow policy.

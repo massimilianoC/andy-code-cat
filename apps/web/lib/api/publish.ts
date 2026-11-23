@@ -5,8 +5,10 @@ export interface SiteDeploymentDto {
     publishId: string;
     projectId: string;
     status: "deploying" | "live" | "failed";
+    /** Stored canonical path, always /p/{publishId}. */
     url: string;
-    subdomainUrl: string | null;
+    /** Address to show and share: absolute in subdomain mode, origin-relative (/slug/, /p/id/) in path mode. */
+    publicUrl: string;
     customSlug: string | null;
     filesDeployed: string[];
     snapshotId?: string;

@@ -8,6 +8,17 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0. Release 2026.11.23.2 — published sites at /{slug}/, URL mode set by the superadmin
+
+- Sites answer at `/{slug}/` as well as `/p/{publishId}/` (same serving code, same suspension rules),
+  on the API origin and — through `apps/web/middleware.ts` — on the web origin.
+- The shown address is an installation setting, `PlatformConfig.publicSites`
+  (`/admin/config` → Published sites): `path` (default, `{origin}/{slug}/`) or `subdomain`
+  (`https://{slug}.{domain}`). `PUBLIC_DOMAIN` is gone. **Droplet deploy step**: run
+  `set-public-sites.js subdomain <old PUBLIC_DOMAIN>` (AGENT_RELEASE_CHECKLIST §10), otherwise its links
+  switch to path addresses (still served).
+- Guide: `docs/guides/PUBLISHED_SITE_ADDRESSES.md`.
+
 ## 0a. Release 2026.11.23.1 — Node 22 runtime and a host-independent prompt
 
 - **Runtime:** api and web images move from EOL Node 20 to `node:22.23.5-alpine`

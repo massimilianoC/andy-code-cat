@@ -15,6 +15,7 @@ const SINGLETON_ID = "global";
 
 interface PlatformConfigDocument {
     _id: string;
+    publicSites?: PlatformConfig["publicSites"];
     registrationOpen: boolean;
     emailVerificationRequired: boolean;
     defaultUserLimits: PlatformConfig["defaultUserLimits"];
@@ -28,6 +29,7 @@ interface PlatformConfigDocument {
 function toEntity(doc: PlatformConfigDocument): PlatformConfig {
     return {
         id: doc._id,
+        publicSites: doc.publicSites,
         registrationOpen: doc.registrationOpen,
         emailVerificationRequired: doc.emailVerificationRequired,
         defaultUserLimits: doc.defaultUserLimits,
@@ -72,8 +74,6 @@ const DEFAULT_PRODUCT_GOVERNANCE: NonNullable<PlatformConfig["governanceByProduc
         cookiePolicyHtml: {},
     },
     nginx: {
-        publicDomain: "",
-        publishSubdomainPattern: "{publishId}",
         cacheTtlSeconds: 300,
         clientMaxBodySizeMb: 20,
         extraServerDirectives: "",
@@ -178,6 +178,9 @@ export class MongoPlatformConfigRepository implements PlatformConfigRepository {
             defaultUserLimits: mergedLimits,
             governanceByProduct: mergedGovernance,
         };
+        if (input.publicSites !== undefined) {
+            setFields.publicSites = { ...input.publicSites };
+        }
         if (input.registrationOpen !== undefined) {
             setFields.registrationOpen = input.registrationOpen;
         }

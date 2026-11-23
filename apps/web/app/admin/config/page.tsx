@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
-import { getAdminConfig, updateAdminConfig, type PlatformConfigDto, type UserLimitsDto } from "@/lib/api/admin";
+import { getAdminConfig, updateAdminConfig, type PlatformConfigDto, type PublishUrlMode, type UserLimitsDto } from "@/lib/api/admin";
+import { resolvePublicSiteAddress } from "@/app/workspace/features/header/publishUrl";
 import { getAdminCostDashboard, updateCostRates, type CostRatesDto, type ResourceTypeCostPolicyDto } from "@/lib/api/cost";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,13 @@ export default function AdminConfigPage() {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
+    // Form state — published sites (installation-level, saved on its own)
+    const [urlMode, setUrlMode] = useState<PublishUrlMode>("path");
+    const [publicDomain, setPublicDomain] = useState("");
+    const [savingSites, setSavingSites] = useState(false);
+    const [savedSites, setSavedSites] = useState(false);
+    const [sitesError, setSitesError] = useState<string | null>(null);
+
     // Form state — access control
     const [registrationOpen, setRegistrationOpen] = useState(true);
     const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
@@ -109,6 +117,8 @@ export default function AdminConfigPage() {
             if (configResult.status === "fulfilled") {
                 const c = configResult.value;
                 setConfig(c);
+                setUrlMode(c.publicSites?.urlMode ?? "path");
+                setPublicDomain(c.publicSites?.publicDomain ?? "");
                 setRegistrationOpen(c.registrationOpen);
                 setEmailVerificationRequired(c.emailVerificationRequired);
                 setDefaultLimits(c.defaultUserLimits ?? {});
@@ -153,6 +163,28 @@ export default function AdminConfigPage() {
             setError(e instanceof Error ? e.message : "Failed to save");
         } finally {
             setSaving(false);
+        }
+    }
+
+    async function handleSaveSites() {
+        const token = getToken();
+        if (!token) return;
+        setSavingSites(true);
+        setSavedSites(false);
+        setSitesError(null);
+        try {
+            const updated = await updateAdminConfig(token, {
+                publicSites: { urlMode, publicDomain: publicDomain.trim().toLowerCase() },
+            });
+            setConfig(updated);
+            setUrlMode(updated.publicSites.urlMode);
+            setPublicDomain(updated.publicSites.publicDomain);
+            setSavedSites(true);
+            setTimeout(() => setSavedSites(false), 3000);
+        } catch (e: unknown) {
+            setSitesError(e instanceof Error ? e.message : "Failed to save");
+        } finally {
+            setSavingSites(false);
         }
     }
 
@@ -220,6 +252,56 @@ export default function AdminConfigPage() {
             {error && <p className="text-destructive text-sm">{error}</p>}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                {/* Published sites — how a published site is addressed */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base">Published sites</CardTitle>
+                        <CardDescription className="text-xs">
+                            How the address of a published site is built. Applies to every site at once, existing ones
+                            included: nothing is stored per site, so changing it (or moving to another server or domain)
+                            re-addresses all of them. Both <span className="font-mono">/p/&#123;id&#125;/</span> and{" "}
+                            <span className="font-mono">/&#123;slug&#125;/</span> always keep working.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Address mode</Label>
+                            <div className="flex flex-col gap-2 text-sm">
+                                <label className="flex items-start gap-2 cursor-pointer">
+                                    <input type="radio" name="urlMode" className="mt-1" checked={urlMode === "path"} onChange={() => setUrlMode("path")} />
+                                    <span>
+                                        <span className="font-medium">Path</span> — <span className="font-mono text-xs">{resolvePublicSiteAddress("/antares/")}</span>
+                                        <span className="block text-xs text-muted-foreground">Same origin as the app. Needs no DNS or certificate beyond the app&apos;s own.</span>
+                                    </span>
+                                </label>
+                                <label className="flex items-start gap-2 cursor-pointer">
+                                    <input type="radio" name="urlMode" className="mt-1" checked={urlMode === "subdomain"} onChange={() => setUrlMode("subdomain")} />
+                                    <span>
+                                        <span className="font-medium">Subdomain</span> — <span className="font-mono text-xs">https://antares.{publicDomain.trim() || "example.com"}</span>
+                                        <span className="block text-xs text-muted-foreground">Needs wildcard DNS and a wildcard certificate for *.domain pointing at this server.</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Public domain {urlMode === "subdomain" ? "(required)" : "(subdomain mode only)"}</Label>
+                            <Input
+                                value={publicDomain}
+                                onChange={(e) => setPublicDomain(e.target.value)}
+                                placeholder="example.com"
+                                disabled={urlMode !== "subdomain"}
+                            />
+                        </div>
+                        {sitesError && <p className="text-destructive text-xs">{sitesError}</p>}
+                        <div className="flex items-center gap-3">
+                            <Button size="sm" onClick={handleSaveSites} disabled={savingSites}>
+                                {savingSites ? "Saving…" : "Save published sites"}
+                            </Button>
+                            {savedSites && <span className="text-xs text-emerald-500">Saved</span>}
+                        </div>
+                    </CardContent>
+                </Card>
+
                 {/* Access Control */}
                 <Card>
                     <CardHeader>

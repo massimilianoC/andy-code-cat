@@ -19,6 +19,8 @@ export interface SiteDeploymentRepository {
     create(input: CreateSiteDeploymentInput): Promise<SiteDeployment>;
     findById(id: string): Promise<SiteDeployment | null>;
     findByPublishId(publishId: string): Promise<SiteDeployment | null>;
+    /** The live deployment answering `/{slug}/`, or null. Slugs are unique among deploying/live rows. */
+    findLiveByCustomSlug(slug: string): Promise<SiteDeployment | null>;
     findActiveByProjectId(projectId: string): Promise<SiteDeployment | null>;
     findByProjectId(projectId: string): Promise<SiteDeployment[]>;
     /**

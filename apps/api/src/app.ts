@@ -65,7 +65,7 @@ export function createApp() {
     // Publish routes are created up-front so the PUBLIC check-slug router can be
     // mounted before any router that applies a global authMiddleware. The auth-protected
     // apiRouter and the static /p router are mounted later, at their normal positions.
-    const { apiRouter: publishApi, staticRouter: publishStatic, publicRouter: publishPublic } = createPublishRoutes();
+    const { apiRouter: publishApi, staticRouter: publishStatic, publicRouter: publishPublic, siteRouter: publishSites } = createPublishRoutes();
 
     app.use("/", createHealthRoutes());
     app.use("/v1/auth", createAuthRoutes());
@@ -108,6 +108,10 @@ export function createApp() {
 
     // Super admin routes — auth + requireSuperAdmin guard applied inside the router
     app.use("/v1", createAdminRoutes());
+
+    // Published sites by custom slug: /{slug}/. Last, so it can never shadow a platform route;
+    // reserved root segments (RESERVED_ROOT_SEGMENTS) are passed through untouched.
+    app.use(publishSites);
 
     app.use(errorHandler);
 
