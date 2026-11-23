@@ -84,6 +84,12 @@ export class MongoSiteDeploymentRepository implements SiteDeploymentRepository {
         return doc ? toEntity(doc) : null;
     }
 
+    async findLiveByCustomSlug(slug: string): Promise<SiteDeployment | null> {
+        const col = await this.col();
+        const doc = await col.findOne({ customSlug: slug, status: "live" }, { sort: { updatedAt: -1 } });
+        return doc ? toEntity(doc) : null;
+    }
+
     async findActiveByProjectId(projectId: string): Promise<SiteDeployment | null> {
         const col = await this.col();
         const doc = await col.findOne(

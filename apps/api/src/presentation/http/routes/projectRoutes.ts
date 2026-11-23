@@ -13,6 +13,8 @@ import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/Mong
 import { MongoSessionRepository } from "../../../infra/repositories/MongoSessionRepository";
 import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
+import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
+import { resolvePublicSitesConfig, resolvePublicSiteUrl } from "../../../application/publish/publicSiteAddress";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoCostTransactionRepository } from "../../../infra/repositories/MongoCostTransactionRepository";
 import { MongoMediaResolutionTraceRepository } from "../../../infra/repositories/MongoMediaResolutionTraceRepository";
@@ -96,6 +98,7 @@ export function createProjectRoutes(): Router {
     const promptConfigRepository = new MongoLlmPromptConfigRepository();
     const presetRepository = new MongoProjectPresetRepository();
     const siteDeploymentRepository = new MongoSiteDeploymentRepository();
+    const platformConfigRepository = new MongoPlatformConfigRepository();
     const previewSnapshotRepository = new MongoPreviewSnapshotRepository();
     const costTransactionRepository = new MongoCostTransactionRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
@@ -137,16 +140,20 @@ export function createProjectRoutes(): Router {
 
             const projectIds = projects.map((p) => p.id);
 
-            const [costMap, liveDeployments, activeSnapshotMap] = await Promise.all([
+            const [costMap, liveDeployments, activeSnapshotMap, platformConfig] = await Promise.all([
                 costTransactionRepository.summarizeProjectsByUser(userId),
                 siteDeploymentRepository.findActivesByUserId(userId),
                 previewSnapshotRepository.getActiveForProjects(projectIds),
+                platformConfigRepository.get(),
             ]);
 
+            // publishedUrl is the site's public address (resolvePublicSiteUrl), not the stored
+            // /p/{publishId} path — the dashboard card links to what the publish dialog shows.
+            const publicSites = resolvePublicSitesConfig(platformConfig);
             const deploymentByProject = new Map<string, string>();
             for (const d of liveDeployments) {
                 if (!deploymentByProject.has(d.projectId)) {
-                    deploymentByProject.set(d.projectId, d.url);
+                    deploymentByProject.set(d.projectId, resolvePublicSiteUrl(d, publicSites));
                 }
             }
 

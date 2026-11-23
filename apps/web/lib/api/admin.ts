@@ -68,7 +68,15 @@ export interface MediaProviderPolicyDto {
     };
 }
 
+export type PublishUrlMode = "path" | "subdomain";
+
+export interface PublicSitesConfigDto {
+    urlMode: PublishUrlMode;
+    publicDomain: string;
+}
+
 export interface PlatformConfigDto {
+    publicSites: PublicSitesConfigDto;
     registrationOpen: boolean;
     emailVerificationRequired: boolean;
     defaultUserLimits: UserLimitsDto;
@@ -129,8 +137,6 @@ export interface ProductLegalDto {
 }
 
 export interface ProductNginxDto {
-    publicDomain: string;
-    publishSubdomainPattern: string;
     cacheTtlSeconds: number;
     clientMaxBodySizeMb: number;
     extraServerDirectives: string;
@@ -370,6 +376,7 @@ export function getAdminPromptRegistry(token: string): Promise<AdminPromptRegist
 export function updateAdminConfig(
     token: string,
     body: Partial<{
+        publicSites: PublicSitesConfigDto;
         registrationOpen: boolean;
         emailVerificationRequired: boolean;
         defaultUserLimits: Partial<UserLimitsDto>;
@@ -608,7 +615,8 @@ export interface AdminProjectActiveDeploymentDto {
     publishId: string;
     customSlug?: string;
     url: string;
-    subdomainUrl?: string | null;
+    /** Public address (resolvePublicSiteUrl): absolute in subdomain mode, relative in path mode. */
+    publicUrl: string;
     isAdminBlocked: boolean;
 }
 

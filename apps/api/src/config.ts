@@ -75,10 +75,6 @@ const envSchema = z.object({
     COST_POLICY_USD_TO_EUR_RATE: z.coerce.number().positive().default(0.92),
     /** Multiplier applied on top of provider-reported EUR cost (1.1 = +10% safety margin). */
     COST_POLICY_PROVIDER_MARKUP_FACTOR: z.coerce.number().positive().default(1.1),
-    // --- Public domain (used to build subdomain URLs for published sites) ---
-    // Set to the base domain (e.g. yourdomain.com) when nginx wildcard is active.
-    // If unset, only the path-based URL (/p/{publishId}) is returned.
-    PUBLIC_DOMAIN: z.string().optional(),
     // --- CORS ---
     // Comma-separated list of allowed origins, or "*" for development.
     // Production example: https://app.yourdomain.com

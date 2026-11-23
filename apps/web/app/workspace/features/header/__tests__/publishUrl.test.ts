@@ -8,7 +8,7 @@ const deployment: SiteDeploymentDto = {
     projectId: "project-1",
     status: "live",
     url: "/p/f74d7bf6",
-    subdomainUrl: null,
+    publicUrl: "/p/f74d7bf6/",
     customSlug: null,
     filesDeployed: ["index.html", "style.css", "script.js"],
     createdAt: "2026-07-13T00:00:00.000Z",
@@ -37,10 +37,21 @@ describe("workspace public deployment URL", () => {
         })).toBe("https://api.example.test/p/f74d7bf6/");
     });
 
-    it("prefers the deployment subdomain when present", () => {
+    it("resolves a path-mode slug address against the API origin", () => {
         expect(resolvePublicDeploymentUrl({
             ...deployment,
-            subdomainUrl: "https://school.example.test",
+            customSlug: "antares",
+            publicUrl: "/antares/",
+        }, {
+            apiBaseUrl: "https://andy.camillucci.com:8443",
+            browserUrl: "https://andy.camillucci.com:8443/workspace/project-1",
+        })).toBe("https://andy.camillucci.com:8443/antares/");
+    });
+
+    it("uses an absolute subdomain-mode address as it is", () => {
+        expect(resolvePublicDeploymentUrl({
+            ...deployment,
+            publicUrl: "https://school.example.test",
         }, {
             apiBaseUrl: "http://localhost:4000",
             browserUrl: "http://localhost:8081/workspace/project-1",

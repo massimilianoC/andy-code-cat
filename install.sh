@@ -112,12 +112,10 @@ else
     EXPORT_SECRET=$(openssl rand -hex 32)
 
     if [[ "$MODE" == "local" ]]; then
-        PUBLIC_DOMAIN="localhost"
         NEXT_PUBLIC_API_URL="http://localhost"
         CORS_ORIGIN="http://localhost"
         MINIO_ENDPOINT="http://minio:9000"
     else
-        PUBLIC_DOMAIN="$DOMAIN"
         NEXT_PUBLIC_API_URL="https://api.${DOMAIN}"
         CORS_ORIGIN="https://app.${DOMAIN}"
         MINIO_ENDPOINT="http://minio:9000"
@@ -143,9 +141,8 @@ API_PORT=4000
 WEB_PORT=8081
 MONGO_EXTERNAL_PORT=27018
 
-# ── CORS & public domain ──────────────────────────────────────────────────────
+# ── CORS ──────────────────────────────────────────────────────────────────────
 CORS_ORIGIN=${CORS_ORIGIN}
-PUBLIC_DOMAIN=${PUBLIC_DOMAIN}
 NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 # ── LLM ───────────────────────────────────────────────────────────────────────

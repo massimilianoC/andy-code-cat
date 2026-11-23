@@ -2,9 +2,12 @@ import type { PlatformConfig } from "../entities/PlatformConfig";
 import type { ProductGovernanceConfig } from "../entities/PlatformConfig";
 import type { PlatformCostRates } from "../entities/PlatformConfig";
 import type { MediaProviderPolicy } from "../entities/PlatformConfig";
+import type { PublicSitesConfig } from "../entities/PlatformConfig";
 import type { UserLimits } from "../entities/User";
 
 export interface UpdatePlatformConfigInput {
+    /** Replaced as a whole: urlMode and publicDomain are validated together. */
+    publicSites?: PublicSitesConfig;
     registrationOpen?: boolean;
     emailVerificationRequired?: boolean;
     defaultUserLimits?: Partial<UserLimits>;

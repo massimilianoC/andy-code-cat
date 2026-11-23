@@ -1,6 +1,7 @@
 import type { PlatformConfigRepository } from "../../../domain/repositories/PlatformConfigRepository";
 import { DEFAULT_USER_LIMITS } from "../../../domain/entities/User";
 import { resolveMediaProviderPolicy } from "../../media/mediaProviderPolicy";
+import { resolvePublicSitesConfig } from "../../publish/publicSiteAddress";
 import {
     DEFAULT_PRODUCT_ATTACHMENT_POLICY,
     DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY,
@@ -68,8 +69,6 @@ export class GetPlatformConfig {
                         cookiePolicyHtml: governance.legal?.cookiePolicyHtml ?? {},
                     },
                     nginx: {
-                        publicDomain: governance.nginx.publicDomain ?? "",
-                        publishSubdomainPattern: governance.nginx.publishSubdomainPattern ?? "{publishId}",
                         cacheTtlSeconds: governance.nginx.cacheTtlSeconds ?? 300,
                         clientMaxBodySizeMb: governance.nginx.clientMaxBodySizeMb ?? 20,
                         extraServerDirectives: governance.nginx.extraServerDirectives ?? "",
@@ -101,6 +100,7 @@ export class GetPlatformConfig {
         );
 
         return {
+            publicSites: resolvePublicSitesConfig(effective),
             registrationOpen: effective.registrationOpen,
             emailVerificationRequired: effective.emailVerificationRequired,
             defaultUserLimits: {

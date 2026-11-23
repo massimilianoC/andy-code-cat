@@ -1,6 +1,7 @@
 import { setPlatformConfigSchema } from "@andy-code-cat/contracts";
 import type { PlatformConfigRepository } from "../../../domain/repositories/PlatformConfigRepository";
 import { resolveMediaProviderPolicy } from "../../media/mediaProviderPolicy";
+import { resolvePublicSitesConfig } from "../../publish/publicSiteAddress";
 
 export class SetPlatformConfig {
     constructor(private readonly configRepository: PlatformConfigRepository) { }
@@ -12,6 +13,7 @@ export class SetPlatformConfig {
             updatedByUserId: callerUserId,
         });
         return {
+            publicSites: resolvePublicSitesConfig(updated),
             registrationOpen: updated.registrationOpen,
             emailVerificationRequired: updated.emailVerificationRequired,
             defaultUserLimits: {
