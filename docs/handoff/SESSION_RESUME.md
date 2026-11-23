@@ -8,6 +8,15 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0. Release 2026.11.23.4 — security review of published sites and user files
+
+Fixes from the 2026-11-23 review: user uploads on /p/media never execute (passive types inline,
+the rest attachment + sandbox CSP); publishId-shaped slugs reserved; /p/{x} serves only live
+deployments (suspension holds on every address); unique slug index as the lock; sites origin is an
+allow-list; preview asset-id validation; workspace postMessage limited to its preview iframe.
+office-01: siti nginx block is an allow-list (/health, /p/, slug paths), so /V1 is not reachable there.
+See docs/guides/PUBLISHED_SITE_ADDRESSES.md.
+
 ## 0. Release 2026.11.23.3 — published sites never run on the app's origin
 
 Site code is user-written and the session tokens live in localStorage, so a site served on the app's
