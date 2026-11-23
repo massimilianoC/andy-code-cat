@@ -88,6 +88,7 @@ export default function AdminConfigPage() {
     // Form state — published sites (installation-level, saved on its own)
     const [urlMode, setUrlMode] = useState<PublishUrlMode>("path");
     const [publicDomain, setPublicDomain] = useState("");
+    const [sitesOrigin, setSitesOrigin] = useState("");
     const [savingSites, setSavingSites] = useState(false);
     const [savedSites, setSavedSites] = useState(false);
     const [sitesError, setSitesError] = useState<string | null>(null);
@@ -119,6 +120,7 @@ export default function AdminConfigPage() {
                 setConfig(c);
                 setUrlMode(c.publicSites?.urlMode ?? "path");
                 setPublicDomain(c.publicSites?.publicDomain ?? "");
+                setSitesOrigin(c.publicSites?.sitesOrigin ?? "");
                 setRegistrationOpen(c.registrationOpen);
                 setEmailVerificationRequired(c.emailVerificationRequired);
                 setDefaultLimits(c.defaultUserLimits ?? {});
@@ -174,11 +176,12 @@ export default function AdminConfigPage() {
         setSitesError(null);
         try {
             const updated = await updateAdminConfig(token, {
-                publicSites: { urlMode, publicDomain: publicDomain.trim().toLowerCase() },
+                publicSites: { urlMode, publicDomain: publicDomain.trim().toLowerCase(), sitesOrigin: sitesOrigin.trim() },
             });
             setConfig(updated);
             setUrlMode(updated.publicSites.urlMode);
             setPublicDomain(updated.publicSites.publicDomain);
+            setSitesOrigin(updated.publicSites.sitesOrigin);
             setSavedSites(true);
             setTimeout(() => setSavedSites(false), 3000);
         } catch (e: unknown) {
@@ -270,8 +273,8 @@ export default function AdminConfigPage() {
                                 <label className="flex items-start gap-2 cursor-pointer">
                                     <input type="radio" name="urlMode" className="mt-1" checked={urlMode === "path"} onChange={() => setUrlMode("path")} />
                                     <span>
-                                        <span className="font-medium">Path</span> — <span className="font-mono text-xs">{resolvePublicSiteAddress("/antares/")}</span>
-                                        <span className="block text-xs text-muted-foreground">Same origin as the app. Needs no DNS or certificate beyond the app&apos;s own.</span>
+                                        <span className="font-medium">Path</span> — <span className="font-mono text-xs">{sitesOrigin.trim() ? `${sitesOrigin.trim().replace(/\/+$/, "")}/antares/` : resolvePublicSiteAddress("/antares/")}</span>
+                                        <span className="block text-xs text-muted-foreground">One host for all sites. Needs one DNS name and certificate — never the app&apos;s own.</span>
                                     </span>
                                 </label>
                                 <label className="flex items-start gap-2 cursor-pointer">
@@ -282,6 +285,21 @@ export default function AdminConfigPage() {
                                     </span>
                                 </label>
                             </div>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Sites origin {urlMode === "path" ? "" : "(path mode only)"}</Label>
+                            <Input
+                                value={sitesOrigin}
+                                onChange={(e) => setSitesOrigin(e.target.value)}
+                                placeholder="https://sites.example.com"
+                                disabled={urlMode !== "path"}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Must be a different host from the app: published sites run user code, and on the app&apos;s
+                                origin that code could read the session of whoever opens it. Site links that arrive on the
+                                app&apos;s host are redirected here. Empty: sites are addressed on the API origin, which is only
+                                safe when the API has its own host.
+                            </p>
                         </div>
                         <div className="space-y-1">
                             <Label>Public domain {urlMode === "subdomain" ? "(required)" : "(subdomain mode only)"}</Label>

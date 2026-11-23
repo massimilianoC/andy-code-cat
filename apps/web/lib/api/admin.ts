@@ -73,6 +73,8 @@ export type PublishUrlMode = "path" | "subdomain";
 export interface PublicSitesConfigDto {
     urlMode: PublishUrlMode;
     publicDomain: string;
+    /** Path mode: origin serving published sites, e.g. https://sites.example.com ("" = API origin). */
+    sitesOrigin: string;
 }
 
 export interface PlatformConfigDto {
