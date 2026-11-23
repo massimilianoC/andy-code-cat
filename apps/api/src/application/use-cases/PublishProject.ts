@@ -363,12 +363,8 @@ export class PublishProject {
 
         const filesDeployed = await this.storage.writePublishFiles(publishId, files);
 
-        // 7. Also write to custom slug dir so {customSlug}.domain.tld is served
-        if (input.customSlug) {
-            await this.storage.writePublishFiles(input.customSlug, files);
-        }
-
-        // 8. Create SiteDeployment record
+        // 7. Create SiteDeployment record — this is what reserves the slug: the unique slug index
+        //    rejects a second deploying/live deployment with 409 before any slug directory exists.
         const deployment = await this.deploymentRepo.create({
             publishId,
             customSlug: input.customSlug,
@@ -378,6 +374,11 @@ export class PublishProject {
             url,
             filesDeployed,
         });
+
+        // 8. Only the holder of the slug writes its directory ({customSlug}.domain.tld in subdomain mode)
+        if (input.customSlug) {
+            await this.storage.writePublishFiles(input.customSlug, files);
+        }
 
         // 9. Mark as live
         const live = await this.deploymentRepo.updateStatus(deployment.id, "live", {
@@ -461,14 +462,13 @@ export class PublishProject {
         const oldSlug = existing.customSlug;
         const slugChanged = newCustomSlug !== undefined && newCustomSlug !== oldSlug;
         if (slugChanged) {
+            // Claim the new slug first (unique index → 409 if taken); only then touch directories.
+            await this.deploymentRepo.updateCustomSlug(existing.id, newCustomSlug ?? null);
             if (oldSlug) {
                 await this.storage.deletePublishDir(oldSlug).catch(() => { /* best-effort */ });
             }
             if (newCustomSlug) {
                 await this.storage.writePublishFiles(newCustomSlug, files);
-                await this.deploymentRepo.updateCustomSlug(existing.id, newCustomSlug);
-            } else {
-                await this.deploymentRepo.updateCustomSlug(existing.id, null);
             }
         } else if (existing.customSlug) {
             // Keep slug directory in sync with republished content

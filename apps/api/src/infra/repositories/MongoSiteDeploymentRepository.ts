@@ -46,6 +46,15 @@ function toEntity(doc: SiteDeploymentDocument): SiteDeployment {
     };
 }
 
+/** A duplicate key on the slug index means another deployment holds the name: 409, not 500. */
+function rethrowSlugTaken(error: unknown): never {
+    const e = error as { code?: number; keyPattern?: Record<string, unknown> };
+    if (e?.code === 11000 && e.keyPattern && "customSlug" in e.keyPattern) {
+        throw Object.assign(new Error("This slug is already in use by another deployment"), { statusCode: 409 });
+    }
+    throw error;
+}
+
 export class MongoSiteDeploymentRepository implements SiteDeploymentRepository {
     private async col(): Promise<Collection<SiteDeploymentDocument>> {
         const db = await getDb();
@@ -68,7 +77,7 @@ export class MongoSiteDeploymentRepository implements SiteDeploymentRepository {
             createdAt: now,
             updatedAt: now,
         };
-        await col.insertOne(doc);
+        await col.insertOne(doc).catch(rethrowSlugTaken);
         return toEntity(doc);
     }
 
@@ -166,14 +175,28 @@ export class MongoSiteDeploymentRepository implements SiteDeploymentRepository {
         } else {
             (update as any)["$unset"] = { customSlug: "" };
         }
-        const result = await col.findOneAndUpdate({ _id: id }, update, { returnDocument: "after" });
+        const result = await col.findOneAndUpdate({ _id: id }, update, { returnDocument: "after" }).catch(rethrowSlugTaken);
         return result ? toEntity(result) : null;
     }
 
     async ensureIndexes(): Promise<void> {
         const col = await this.col();
         await col.createIndex({ publishId: 1 }, { unique: true });
-        await col.createIndex({ customSlug: 1 }, { sparse: true });  // sparse: allows multiple null/missing
+        // The slug semaphore: at most one deploying/live deployment per slug, enforced by MongoDB so
+        // two concurrent publishes cannot both claim it (the old sparse index only sped up lookups).
+        // Failed and removed deployments keep their slug field without holding the name.
+        const existing = await col.indexes();
+        if (existing.some((index) => index.name === "customSlug_1")) {
+            await col.dropIndex("customSlug_1");
+        }
+        await col.createIndex(
+            { customSlug: 1 },
+            {
+                name: "customSlug_unique_active",
+                unique: true,
+                partialFilterExpression: { customSlug: { $type: "string" }, status: { $in: ["deploying", "live"] } },
+            },
+        );
         await col.createIndex({ projectId: 1, status: 1 });
         await col.createIndex({ userId: 1, createdAt: -1 });
     }

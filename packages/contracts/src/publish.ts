@@ -31,9 +31,20 @@ export const SLUG_BLACKLIST: readonly string[] = [
 // interior hyphens. Mirror this exactly in any client-side pre-validation.
 export const SLUG_FORMAT_RE = /^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$/;
 
+/**
+ * The shape of a generated publishId (8 lowercase hex chars). Slugs and publishIds share the
+ * published-site directory namespace, so a slug with this shape could name — and overwrite or
+ * delete — another user's site. Such slugs are reserved.
+ */
+export const PUBLISH_ID_SHAPE_RE = /^[0-9a-f]{8}$/;
+
+function isReservedSlug(slug: string): boolean {
+    return SLUG_BLACKLIST.includes(slug) || PUBLISH_ID_SHAPE_RE.test(slug);
+}
+
 /** True when `segment` can address a published site at `/{segment}/`: valid shape, not reserved. */
 export function isPublicSiteSlug(segment: string): boolean {
-    return SLUG_FORMAT_RE.test(segment) && !SLUG_BLACKLIST.includes(segment);
+    return SLUG_FORMAT_RE.test(segment) && !isReservedSlug(segment);
 }
 
 /**
@@ -53,7 +64,7 @@ export const customSlugSchema = z
     .regex(SLUG_FORMAT_RE, {
         message: "Slug must be 2-30 lowercase characters (a-z, 0-9, hyphens), no leading/trailing hyphens",
     })
-    .refine((s) => !SLUG_BLACKLIST.includes(s), { message: "This name is reserved" });
+    .refine((s) => !isReservedSlug(s), { message: "This name is reserved" });
 
 // Why this exists: the availability endpoint must give the UI a single, coherent answer
 // for *every* outcome — not just available/taken. Conflating "reserved" and "bad format"
@@ -73,7 +84,7 @@ export interface SlugCheckResponse {
  */
 export function classifySlugFormat(raw: string): { normalized: string; reason: Exclude<SlugCheckReason, "taken"> } {
     const normalized = raw.trim().toLowerCase();
-    if (SLUG_BLACKLIST.includes(normalized)) return { normalized, reason: "reserved" };
+    if (isReservedSlug(normalized)) return { normalized, reason: "reserved" };
     if (!SLUG_FORMAT_RE.test(normalized)) return { normalized, reason: "invalid" };
     return { normalized, reason: "ok" };
 }

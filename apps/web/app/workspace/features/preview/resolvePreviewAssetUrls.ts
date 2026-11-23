@@ -4,13 +4,24 @@ const PROJECT_ASSET_DOWNLOAD_PATH_RE = /\/v1\/projects\/([^/]+)\/assets\/([^/]+)
 const PUBLIC_MEDIA_PATH_RE = /\/p\/media\/([^/?#]+)/i;
 const ARTIFACT_URL_RE = /(?:https?:\/\/[^"'()\s]+|\/(?:p\/media|v1\/projects)\/[^"'()\s]+)/gi;
 
+/**
+ * Ids taken from generated HTML go into an authenticated fetch, so they must be plain ids: a
+ * decoded `%2F..%2F` would otherwise steer the bearer-token request to any API path and hand the
+ * response to the sandboxed page as a data URI. Project ids are Mongo ObjectIds, asset ids UUIDs.
+ */
+const PROJECT_ID_RE = /^[a-f0-9]{24}$/i;
+const ASSET_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
+
 export function parseProtectedAssetDownloadUrl(rawSrc: string): { projectId: string; assetId: string } | null {
     const trimmed = String(rawSrc ?? "").trim();
     if (!trimmed || typeof window === "undefined") return null;
     try {
         const match = new URL(trimmed, window.location.origin).pathname.match(PROJECT_ASSET_DOWNLOAD_PATH_RE);
         if (!match?.[1] || !match?.[2]) return null;
-        return { projectId: decodeURIComponent(match[1]), assetId: decodeURIComponent(match[2]) };
+        const projectId = decodeURIComponent(match[1]);
+        const assetId = decodeURIComponent(match[2]);
+        if (!PROJECT_ID_RE.test(projectId) || !ASSET_ID_RE.test(assetId)) return null;
+        return { projectId, assetId };
     } catch {
         return null;
     }
@@ -21,7 +32,9 @@ function parsePublicMediaUrl(rawSrc: string): { assetId: string } | null {
     if (!trimmed || typeof window === "undefined") return null;
     try {
         const match = new URL(trimmed, window.location.origin).pathname.match(PUBLIC_MEDIA_PATH_RE);
-        return match?.[1] ? { assetId: decodeURIComponent(match[1]) } : null;
+        if (!match?.[1]) return null;
+        const assetId = decodeURIComponent(match[1]);
+        return ASSET_ID_RE.test(assetId) ? { assetId } : null;
     } catch {
         return null;
     }
@@ -42,6 +55,8 @@ export async function resolvePreviewAssetUrls(input: {
         const publicAsset = parsePublicMediaUrl(url);
         const assetId = protectedAsset?.assetId ?? publicAsset?.assetId;
         if (!assetId) return;
+        // Only this project's assets: a URL naming another project is left as it is.
+        if (protectedAsset && protectedAsset.projectId !== input.projectId) return;
         try {
             const dataUrl = await downloadProjectAssetDataUrl(
                 input.token,
