@@ -109,6 +109,21 @@ const envSchema = z.object({
     ENRICHMENT_LAYER_D_MAX_ASSETS: z.coerce.number().int().positive().default(5),
     // ── VibeCore pipeline flags ───────────────────────────────────────────────
     VIBE_CLASSIFIER_ENABLED: z.string().default("true"),
+    // ── Background runs (docs/specs/BACKGROUND_RUNS.md) — limits, not switches ─
+    /** Cost a single background run may spend, in EUR, checked against the journal after each LLM call. */
+    BACKGROUND_RUN_MAX_COST_EUR: z.coerce.number().positive().default(0.5),
+    /** Runs a user may have queued or in progress at once. */
+    BACKGROUND_RUN_MAX_PER_USER: z.coerce.number().int().positive().default(2),
+    /** Runs the worker pool executes at once (whole installation). */
+    BACKGROUND_RUN_POOL_SIZE: z.coerce.number().int().positive().default(2),
+    /** Lease a worker holds on a run; renewed by a heartbeat every third of it. */
+    BACKGROUND_RUN_LEASE_MS: z.coerce.number().int().min(5_000).default(60_000),
+    /** How often an idle worker looks for a claimable run. */
+    BACKGROUND_RUN_POLL_MS: z.coerce.number().int().min(200).default(5_000),
+    /** Claims after which a run that keeps dying is failed instead of retried. */
+    BACKGROUND_RUN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+    /** Ceiling on one background generation call (the worker's own, there is no client to close). */
+    BACKGROUND_RUN_GENERATION_TIMEOUT_MS: z.coerce.number().int().positive().default(25 * 60_000),
 });
 
 const parsed = envSchema.safeParse(process.env);
