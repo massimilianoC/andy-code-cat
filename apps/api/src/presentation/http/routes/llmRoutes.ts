@@ -29,6 +29,10 @@ import { SetLlmPromptConfig } from "../../../application/use-cases/SetLlmPromptC
 import { OptimizeUserPrompt } from "../../../application/use-cases/OptimizeUserPrompt";
 import { GetEffectiveLlmCatalog } from "../../../application/use-cases/GetEffectiveLlmCatalog";
 import { GenerateArtifact, GenerationStreamReadError } from "../../../application/use-cases/GenerateArtifact";
+import { AddMessage } from "../../../application/use-cases/AddMessage";
+import { CommitArtifactVersion } from "../../../application/use-cases/CommitArtifactVersion";
+import { CreatePreviewSnapshot } from "../../../application/use-cases/CreatePreviewSnapshot";
+import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
 import { getProviderStatus } from "../../../application/llm/providerAuth";
 import { emitLlmFailureLog } from "../../../application/llm/llmFailureLog";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
@@ -63,6 +67,7 @@ export function createLlmRoutes(): Router {
     const presetRepository = new MongoProjectPresetRepository();
     const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
     const snapshotRepository = new MongoPreviewSnapshotRepository();
+    const conversationRepository = new MongoConversationRepository();
     const mediaResolutionTraceRepository = new MongoMediaResolutionTraceRepository();
     const serviceKeyRepo = new MongoServiceApiKeyRepository();
     const brandAssetRepository = new MongoBrandAssetRepository();
@@ -137,6 +142,16 @@ export function createLlmRoutes(): Router {
         snapshotRepository,
         resolveArtifactMedia,
         userRepo,
+        {
+            conversationRepository,
+            addMessage: new AddMessage(conversationRepository),
+            commitArtifactVersion: new CommitArtifactVersion(
+                conversationRepository,
+                projectRepository,
+                snapshotRepository,
+                new CreatePreviewSnapshot(snapshotRepository, mediaResolutionTraceRepository, conversationRepository),
+            ),
+        },
     );
 
     router.get("/llm/providers", async (_req, res, next) => {

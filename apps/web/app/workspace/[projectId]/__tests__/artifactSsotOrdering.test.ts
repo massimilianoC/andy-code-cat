@@ -79,29 +79,42 @@ describe("WP1 step 1 — assistant message never precedes its snapshot in active
         expect(reducerBodyIdx).toBeGreaterThan(helperDefIdx);
     });
 
-    it("commits the PreviewSnapshot before the successful-turn message reaches state", () => {
-        const assistantSavedIdx = indexOfOrThrow(
-            "const assistantSaved = await addMessage(token, projectId, convId, {",
-            "the assistantSaved addMessage call"
+    it("takes the turn the server persisted and pushes it only after the version is known", () => {
+        // BACKGROUND_RUNS.md §3.1 — the generation engine persists the turn itself (assistant
+        // message + version, through the same AddMessage / CommitArtifactVersion as every other
+        // write), so the workspace and the background worker cannot leave different turns behind.
+        // handleSend must therefore not write the assistant reply or commit the version itself…
+        expect(handleSendSource).not.toContain("const assistantSaved = await addMessage(");
+        expect(handleSendSource).not.toContain("await commitArtifactVersion(");
+
+        const persistedIdx = indexOfOrThrow(
+            "const assistantSaved = { message: persistedTurn.assistantMessage };",
+            "the persisted assistant message"
         );
-        const commitIdx = indexOfOrThrow(
-            "const snap = await commitArtifactVersion(token, {",
-            "the snapshot commit call"
+        const snapshotIdx = indexOfOrThrow(
+            "const snap = { snapshot: persistedTurn.snapshot };",
+            "the persisted version"
         );
         const successPushIdx = indexOfOrThrow(
             "addAssistantMessageToConv(buildAssistantMessageForConv(assistantSaved.message, snap.snapshot));",
             "the success-path push carrying the committed snapshot"
         );
 
-        // The message is persisted server-side first; the snapshot commit and the state push
-        // both come after, and the push comes strictly after the commit resolves — never
-        // before it, which is what used to leave the message stateless-but-visible.
-        expect(commitIdx).toBeGreaterThan(assistantSavedIdx);
-        expect(successPushIdx).toBeGreaterThan(commitIdx);
+        // …and the ordering invariant still holds: the message reaches state strictly after the
+        // version it produced is known, never before.
+        expect(snapshotIdx).toBeGreaterThan(persistedIdx);
+        expect(successPushIdx).toBeGreaterThan(snapshotIdx);
+    });
+
+    it("declares the version it is based on, on the generation request itself (AL-040)", () => {
+        const declarations = handleSendSource.split("artifactBase,").length - 1;
+        // the streamed call and the non-streamed fallback
+        expect(declarations).toBe(2);
+        expect(handleSendSource).toContain("baseContentHash: certifiedHashOf(generationBaseId)");
     });
 
     it("still reaches state on every path that decided no (or no usable) snapshot applies", () => {
-        // The catch branch (stale-base refusal / commit failure) and the else branch (no
+        // The refused-version branch (stale base / invalid JS reported by the server) and the else branch (no
         // artifact this turn: plain chat reply, parse error, unapplied focus patch) both still
         // call the gate directly with the plain message — the chat keeps working without a
         // snapshot, but only ever through the gate, never by reintroducing a raw push ahead of

@@ -19,12 +19,18 @@
  * transports.
  */
 import {
+    addMessageSchema,
+    createPreviewSnapshotSchema,
     llmChatPreviewSchema,
     type LlmChatPreviewInput,
     type LlmChatPreviewResult,
+    type LlmPersistedTurn,
     type MediaResolutionMetadata,
+    type MessageDto,
+    type PreviewSnapshotDto,
 } from "@andy-code-cat/contracts";
 import { env } from "../../config";
+import type { ConversationRepository } from "../../domain/repositories/ConversationRepository";
 import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
 import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
 import type { UserRepository } from "../../domain/repositories/UserRepository";
@@ -54,6 +60,8 @@ import {
 } from "../llm/providerAuth";
 import type { MediaProgressEvent, ResolveArtifactMedia } from "../media/ResolveArtifactMedia";
 import { ExecutionLogger } from "../services/ExecutionLogger";
+import type { AddMessage } from "./AddMessage";
+import type { CommitArtifactVersion } from "./CommitArtifactVersion";
 import type { OpenWorkSession } from "./OpenWorkSession";
 import type { LlmRuntimeContext, ResolvePromptExecution } from "./ResolvePromptExecution";
 
@@ -199,6 +207,21 @@ function isAbortError(error: unknown): boolean {
     return error instanceof Error && error.name === "AbortError";
 }
 
+/**
+ * Where a generated turn is written. The assistant message goes through the same `AddMessage`
+ * and the same `addMessageSchema` as POST /messages, the version through the same
+ * `CommitArtifactVersion` as POST /preview-snapshots, so a turn persisted here is
+ * indistinguishable from one the workspace used to write itself.
+ */
+export interface TurnPersistence {
+    conversationRepository: ConversationRepository;
+    addMessage: AddMessage;
+    commitArtifactVersion: CommitArtifactVersion;
+}
+
+/** Shown when a reply carries neither text nor a chat summary. */
+const EMPTY_REPLY_CONTENT = "Risposta AI generata senza testo visibile.";
+
 export class GenerateArtifact {
     constructor(
         private readonly resolvePromptExecution: ResolvePromptExecution,
@@ -207,6 +230,7 @@ export class GenerateArtifact {
         private readonly snapshotRepository: PreviewSnapshotRepository,
         private readonly resolveArtifactMedia: ResolveArtifactMedia,
         private readonly userRepository: UserRepository,
+        private readonly turnPersistence: TurnPersistence,
     ) { }
 
     async execute(input: GenerateArtifactInput): Promise<GenerateArtifactOutcome> {
@@ -214,9 +238,15 @@ export class GenerateArtifact {
         // I11 (SSOT program): set once the durable pending record is written, read wherever this
         // generation exits (success, interrupted, or failure) to complete that record.
         let promptExecutionLogId: string | undefined;
+        // Set once the row has its final status: a failure after that point (persisting the
+        // turn) must not rewrite a succeeded generation as failed.
+        let journalClosed = false;
 
         try {
-            return await this.run(input, startedAt, (id) => { promptExecutionLogId = id; });
+            return await this.run(input, startedAt, {
+                pendingWritten: (id) => { promptExecutionLogId = id; },
+                journalClosed: () => { journalClosed = true; },
+            });
         } catch (error) {
             if (error instanceof GenerationStreamReadError) {
                 throw error;
@@ -233,7 +263,7 @@ export class GenerateArtifact {
                 details: normalized.details,
             });
             // I11: best-effort — never let a failed journal write mask the real error.
-            if (promptExecutionLogId) {
+            if (promptExecutionLogId && !journalClosed) {
                 this.promptExecutionLogRepository.complete(promptExecutionLogId, {
                     status: "failed",
                     errorMessage: normalized.userMessage,
@@ -265,10 +295,22 @@ export class GenerateArtifact {
     private async run(
         input: GenerateArtifactInput,
         startedAt: number,
-        onPendingWritten: (id: string) => void,
+        journal: { pendingWritten: (id: string) => void; journalClosed: () => void },
     ): Promise<GenerateArtifactOutcome> {
         const streaming = input.transport === "stream";
         const body = parseLlmChatPreviewBody(input.rawBody);
+        // A conversation id is a request, not an authority: resolve it against the project before
+        // anything is spent, and refuse rather than generate a turn that cannot be persisted.
+        if (body.conversationId) {
+            const conversation = await this.turnPersistence.conversationRepository.findById(body.conversationId, input.projectId);
+            if (!conversation) {
+                throw new HttpError("Conversation not found", {
+                    statusCode: 404,
+                    code: "CONVERSATION_NOT_FOUND",
+                    userMessage: "Conversation not found",
+                });
+            }
+        }
         const isFocusedMode = Boolean(
             body.focusContext
             && body.focusContext.mode !== "project"
@@ -362,7 +404,7 @@ export class GenerateArtifact {
             resumedFromPromptExecutionId: body.resumedFromPromptExecutionId,
         });
         const promptExecutionLogId = pendingLog.id;
-        onPendingWritten(promptExecutionLogId);
+        journal.pendingWritten(promptExecutionLogId);
         // ── end I11 pending write ───────────────────────────────────────────────────
 
         const requestBody = JSON.stringify(buildChatCompletionRequestBody({
@@ -394,6 +436,10 @@ export class GenerateArtifact {
         const result = await this.finalize({
             input, startedAt, body, context, messages, isFocusedMode, reply, promptExecutionLogId,
         });
+        journal.journalClosed();
+        if (body.conversationId) {
+            result.persisted = await this.persistTurn(input, body, body.conversationId, result);
+        }
         return { kind: "completed", result, workSessionId };
     }
 
@@ -722,6 +768,137 @@ export class GenerateArtifact {
             durationMs: Date.now() - args.startedAt,
             partialReply: args.rawReply.length > 0 ? args.rawReply.slice(0, 200) : undefined,
         };
+    }
+
+    /**
+     * Writes the turn the way the workspace used to after receiving it: the assistant message
+     * first (role "error" for an unparseable generation, so it is never fed back as history),
+     * then, only when the turn produced a usable artifact, the version, activated and linked to
+     * that message. A refused version is reported, not thrown: the generation succeeded, was paid
+     * for and is in the chat; the caller decides how to tell the user.
+     */
+    private async persistTurn(
+        input: GenerateArtifactInput,
+        body: LlmChatPreviewInput,
+        conversationId: string,
+        result: LlmChatPreviewResult,
+    ): Promise<LlmPersistedTurn> {
+        const content = (result.reply?.trim()
+            || result.structured?.chat?.summary?.trim()
+            || EMPTY_REPLY_CONTENT).slice(0, 50000);
+        const message = addMessageSchema.parse({
+            role: result.generationParseError ? "error" : "assistant",
+            content,
+            metadata: {
+                model: result.model,
+                provider: result.provider,
+                executionTimeMs: result.durationMs,
+                finishReason: result.finishReason,
+                rawResponse: result.rawResponse,
+                structuredParseValid: result.structuredParseValid,
+                promptingTrace: result.promptingTrace,
+                tokenUsage: result.usage,
+                costEstimate: result.costEstimate,
+                chatStructured: result.structuredParseValid ? result.structured?.chat : undefined,
+            },
+        });
+        const assistantMessage = await this.turnPersistence.addMessage.execute({
+            conversationId,
+            projectId: input.projectId,
+            role: message.role,
+            content: message.content,
+            metadata: message.metadata,
+        });
+        const persisted: LlmPersistedTurn = { assistantMessage: assistantMessage as unknown as MessageDto };
+
+        // Only html that is non-empty after a successful parse is a version. A parse failure
+        // returns empty artifacts; an unapplied focus patch returns the base unchanged. Neither
+        // may become the active version (FOCUSED_EDIT_SPEC isActive invariant, AL-010).
+        const artifacts = result.structured?.artifacts;
+        const committable = Boolean(artifacts?.html)
+            && result.focusPatchApplied !== false
+            && result.generationParseError !== true;
+        if (!committable || !artifacts) return persisted;
+
+        try {
+            const request = createPreviewSnapshotSchema.parse({
+                conversationId,
+                sourceMessageId: assistantMessage.id,
+                parentSnapshotId: body.artifactBase?.parentSnapshotId,
+                baseContentHash: body.artifactBase?.baseContentHash,
+                artifacts: {
+                    html: artifacts.html ?? "",
+                    css: artifacts.css ?? "",
+                    js: artifacts.js ?? "",
+                },
+                serviceManifest: result.structured?.serviceManifest,
+                // In focused-patch mode the raw reply has artifacts.html=""; the merged html above
+                // is the version, and re-parsing the raw reply would overwrite it with empty.
+                rawLlmResponse: result.focusPatchApplied ? undefined : (result.rawResponse ?? undefined),
+                // AL-029: the element (or code selection) this generation targeted.
+                focusContext: body.focusContext,
+                metadata: {
+                    model: result.model,
+                    provider: result.provider,
+                    durationMs: result.durationMs,
+                    finishReason: result.finishReason,
+                    structuredParseValid: result.structuredParseValid,
+                    tokenUsage: result.usage,
+                    promptingTrace: result.promptingTrace,
+                    mediaResolution: result.mediaResolution,
+                    // AL-026: the durable PromptExecutionLog id this version was produced by.
+                    promptExecutionId: result.promptExecutionId,
+                },
+                activate: true,
+            });
+            const committed = await this.turnPersistence.commitArtifactVersion.execute({
+                projectId: input.projectId,
+                userId: input.userId,
+                request,
+            });
+            persisted.snapshot = committed.snapshot as unknown as PreviewSnapshotDto;
+            persisted.snapshotCreated = committed.created;
+            persisted.assistantMessage = {
+                ...persisted.assistantMessage,
+                metadata: { ...persisted.assistantMessage.metadata, snapshotId: committed.snapshot.id },
+            };
+        } catch (error) {
+            const normalized = normalizeHttpError(error);
+            console.error("[generate] version commit refused: the turn is saved without a version", {
+                projectId: input.projectId,
+                conversationId,
+                messageId: assistantMessage.id,
+                promptExecutionId: result.promptExecutionId,
+                status: normalized.statusCode,
+                code: normalized.code,
+                message: normalized.message,
+            });
+            ExecutionLogger.instance.emit({
+                projectId: input.projectId,
+                conversationId,
+                domain: "snapshot",
+                eventType: "snapshot_commit_refused",
+                level: normalized.statusCode >= 500 ? "error" : "warn",
+                status: "failure",
+                metadata: {
+                    promptExecutionId: result.promptExecutionId,
+                    messageId: assistantMessage.id,
+                    status: normalized.statusCode,
+                    code: normalized.code,
+                    message: normalized.message,
+                    htmlChars: (artifacts.html ?? "").length,
+                    cssChars: (artifacts.css ?? "").length,
+                    jsChars: (artifacts.js ?? "").length,
+                },
+            });
+            persisted.snapshotError = {
+                status: normalized.statusCode,
+                code: normalized.code,
+                userMessage: normalized.userMessage,
+                details: normalized.details,
+            };
+        }
+        return persisted;
     }
 
     private async finalize(args: {
