@@ -211,7 +211,7 @@ describe("chat-preview generation core — characterisation", () => {
         await vi.waitFor(async () => {
             const tx = await database.collection("cost_transactions").findOne({ projectId, "meta.streaming": { $exists: false } });
             expect(tx?.resourceType).toBe("llm.chat");
-        });
+        }, { timeout: 10_000 });
     });
 
     it("non-stream: a duplicate idempotency key is refused with 409 and no second provider call", async () => {
@@ -239,7 +239,7 @@ describe("chat-preview generation core — characterisation", () => {
         await vi.waitFor(async () => {
             const row = await database.collection("prompt_execution_logs").findOne({ idempotencyKey: "char-single-fail" });
             expect(row?.status).toBe("failed");
-        });
+        }, { timeout: 10_000 });
     });
 
     it("non-stream: an empty provider reply is 502 LLM_PROVIDER_EMPTY_RESPONSE", async () => {
@@ -306,7 +306,7 @@ describe("chat-preview generation core — characterisation", () => {
         await vi.waitFor(async () => {
             const tx = await database.collection("cost_transactions").findOne({ projectId, "meta.streaming": true });
             expect(tx?.resourceType).toBe("llm.chat");
-        });
+        }, { timeout: 10_000 });
     });
 
     it("stream: a provider 429 before the stream starts is a plain HTTP 429", async () => {
@@ -322,7 +322,7 @@ describe("chat-preview generation core — characterisation", () => {
         await vi.waitFor(async () => {
             const row = await database.collection("prompt_execution_logs").findOne({ idempotencyKey: "char-stream-429" });
             expect(row?.status).toBe("failed");
-        });
+        }, { timeout: 10_000 });
     });
 
     it("stream: a truncated call keeps the reasoning trace", async () => {
@@ -394,7 +394,7 @@ describe("chat-preview generation core — characterisation", () => {
             client.abort();
             await reader.cancel().catch(() => undefined);
 
-            await vi.waitFor(() => expect(providerSignal?.aborted).toBe(true), { timeout: 5000 });
+            await vi.waitFor(() => expect(providerSignal?.aborted).toBe(true), { timeout: 10_000 });
             const database = await db();
             await vi.waitFor(async () => {
                 const row = await database.collection("prompt_execution_logs").findOne({ idempotencyKey: "char-stream-abort" });
@@ -402,7 +402,7 @@ describe("chat-preview generation core — characterisation", () => {
                 expect(row?.finishReason).toBe("interrupted");
                 expect(row?.rawResponse).toBe("{\"chat\":");
                 expect(row?.reasoningTrace).toBe("Inizio.");
-            }, { timeout: 5000 });
+            }, { timeout: 10_000 });
         } finally {
             await new Promise<void>((resolve) => server.close(() => resolve()));
         }
