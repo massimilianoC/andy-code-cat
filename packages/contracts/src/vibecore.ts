@@ -156,3 +156,85 @@ export interface VibeConfigResponse {
     };
 }
 
+
+// ── Draft → intake (the brief a prefill draft launches) ──────────────────────
+
+/** Pre-preset drafts named the site type instead of a preset. */
+const LEGACY_SITE_TYPE_PRESET: Record<string, string> = {
+    landing_page: "landing",
+    business_site: "website",
+    portfolio: "neutral",
+    showcase: "neutral",
+};
+
+function draftText(value: unknown): string | undefined {
+    return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * The launch intake a prefill draft stands for, before the user changes anything.
+ *
+ * One mapping for the two places a draft becomes a brief: the launch page fills its form with it
+ * (the user may then edit), and a background run launches it as-is (BACKGROUND_RUNS.md §6.1:
+ * the brief is auto-approved). Two copies of this mapping would be two brief builders.
+ *
+ * The result is unvalidated: the caller parses it with `launchWorkspacePipelineSchema`, which
+ * refuses a draft too thin to launch (no goal, no audience) instead of inventing the missing parts.
+ */
+export function guidedIntakeFromDraft(
+    draft: Partial<GuidedDraft> & { siteType?: unknown },
+    context: {
+        /** Used when the draft has no business name (the project's own name). */
+        projectName?: string;
+        /** Used when the draft did not infer an output language (the UI language). */
+        defaultOutputLanguage: string;
+        /** Names of the documents the brief was drafted from, when the draft does not list them. */
+        attachmentNames?: string[];
+    },
+): Record<string, unknown> & {
+    businessName: string;
+    presetId: string;
+    primaryGoal: string;
+    audience: string;
+    outputLanguage: string;
+    contactInfo: Array<{ key: string; value: string }>;
+    styleAttributes: string[];
+    attachmentNames: string[];
+} {
+    const presetId = draftText(draft.presetId)?.trim()
+        || LEGACY_SITE_TYPE_PRESET[String(draft.siteType ?? "")]
+        || "landing";
+    const primaryGoal = draftText(draft.primaryGoal) ?? "";
+    const outputLanguage = draftText(draft.outputLanguage)?.trim() || context.defaultOutputLanguage;
+    const attachmentNames = Array.isArray(draft.attachedDocuments) && draft.attachedDocuments.length > 0
+        ? draft.attachedDocuments.filter((name): name is string => typeof name === "string")
+        : context.attachmentNames ?? [];
+    return {
+        businessName: draftText(draft.businessName)?.trim() || context.projectName || "",
+        presetId,
+        primaryGoal,
+        audience: draftText(draft.audience) ?? "",
+        tone: draftText(draft.tone),
+        primaryCta: draftText(draft.primaryCta),
+        styleHint: draftText(draft.styleHint),
+        sourceRequest: draftText(draft.sourceRequest) || primaryGoal,
+        projectSummary: draftText(draft.projectSummary),
+        contentStructure: draftText(draft.contentStructure),
+        contentRequirements: draftText(draft.contentRequirements),
+        functionalRequirements: draftText(draft.functionalRequirements),
+        interactionModel: draftText(draft.interactionModel),
+        visualDirection: draftText(draft.visualDirection),
+        successCriteria: draftText(draft.successCriteria),
+        constraints: draftText(draft.constraints),
+        mustAvoid: draftText(draft.mustAvoid),
+        contactInfo: Array.isArray(draft.contactInfo)
+            ? draft.contactInfo.filter((item) => item && typeof item.key === "string" && typeof item.value === "string"
+                && item.key.trim().length > 0 && item.value.trim().length > 0)
+            : [],
+        styleAttributes: Array.isArray(draft.styleAttributes)
+            ? draft.styleAttributes.filter((attr): attr is string => typeof attr === "string")
+            : [],
+        outputLanguage,
+        attachmentNames,
+    };
+}

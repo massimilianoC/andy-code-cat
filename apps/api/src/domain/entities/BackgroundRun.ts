@@ -14,7 +14,7 @@ import {
     BACKGROUND_RUN_TERMINAL_STATUSES,
     type BackgroundRunStatus,
     type BackgroundRunStep,
-    type GuidedLaunchInput,
+    type LaunchWorkspacePipelineInput,
 } from "@andy-code-cat/contracts";
 
 export type { BackgroundRunStatus, BackgroundRunStep };
@@ -36,13 +36,12 @@ export interface BackgroundRunOutputs {
         formatHint: string | null;
         confidence: number;
         skipped: boolean;
+        resolvedMode?: "website" | "data_dashboard";
         workSessionId?: string;
     };
     brief?: {
-        /** The prefill was skipped or failed and the brief was built from the prompt alone. */
-        fromPromptOnly: boolean;
         /** The intake that was auto-approved, exactly as the launch received it. */
-        intake: GuidedLaunchInput;
+        intake: LaunchWorkspacePipelineInput;
         warnings?: string[];
     };
     launch?: {
@@ -66,6 +65,13 @@ export interface BackgroundRunOutputs {
     };
 }
 
+/** Live output of the step in flight, written by the worker while it streams (not a transition). */
+export interface BackgroundRunLiveProgress {
+    /** Characters streamed so far by the generation (answer and reasoning). */
+    generatedChars: number;
+    updatedAt: Date;
+}
+
 export interface BackgroundRunLease {
     workerId: string;
     expiresAt: Date;
@@ -77,6 +83,7 @@ export interface BackgroundRunInput {
     uiLanguage?: string;
     provider?: string;
     model?: string;
+    generationMode?: "auto" | "website" | "data_dashboard";
 }
 
 export interface BackgroundRunError {
@@ -99,6 +106,7 @@ export interface BackgroundRun {
     cancelRequested: boolean;
     /** Not claimable before this instant (a deferred step waiting on something in flight). */
     notBefore?: Date;
+    progress?: BackgroundRunLiveProgress;
     /** Cost recorded so far, EUR, from the journal rows of this run's project. */
     costEur: number;
     error?: BackgroundRunError;
