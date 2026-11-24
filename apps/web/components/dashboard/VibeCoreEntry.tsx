@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square, Settings, Copy } from "lucide-react";
+import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square, Settings, Copy, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { VibeGenerationMode } from "@andy-code-cat/contracts";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
@@ -14,7 +14,8 @@ import { VibeCoreBackground } from "./VibeCoreBackground";
 import { ScrollBlurOverlay } from "./ScrollBlurOverlay";
 import { classifyVibeIntent, getVibeConfig, prefillGuidedDraft } from "@/lib/api/vibecore";
 import { getGuidedPipelineConfig } from "@/lib/api/pipelines";
-import { createProject, deleteProject, getProjectAsset, uploadProjectAsset, updateProject } from "@/lib/api";
+import { createProject, deleteProject, getProjectAsset, startBackgroundRun, uploadProjectAsset, updateProject } from "@/lib/api";
+import { BACKGROUND_RUN_PROMPT_MAX_CHARS } from "@andy-code-cat/contracts";
 import { ApiError } from "@/lib/api/call";
 import { getLlmProviders, type LlmProviderCatalogDto } from "@/lib/api/llm";
 import { useNotifications } from "@/lib/notifications";
@@ -63,7 +64,7 @@ const ACCEPTED_MIME_TYPES = [
     "image/avif",
 ];
 
-type EntryPhase = "idle" | "classifying" | "creating" | "uploading" | "analyzing" | "prefilling" | "redirecting";
+type EntryPhase = "idle" | "classifying" | "creating" | "uploading" | "analyzing" | "prefilling" | "redirecting" | "queuing";
 type EntryGenerationMode = Extract<VibeGenerationMode, "auto">;
 
 /** i18n keys for phase labels — translated at render time. */
@@ -75,7 +76,28 @@ const PHASE_LABEL_KEYS: Record<EntryPhase, string> = {
     analyzing:   "vibecore.phase.analyzing",
     prefilling:  "vibecore.phase.prefilling",
     redirecting: "vibecore.phase.redirecting",
+    queuing:     "vibecore.phase.queuing",
 };
+
+/** Same floor as the background-run contract (createBackgroundRunSchema). */
+const MIN_BACKGROUND_PROMPT_CHARS = 10;
+const AUTO_MODE_STORAGE_KEY = "andy.vibe.autoMode";
+
+function readAutoModePreference(): boolean {
+    try {
+        return window.localStorage.getItem(AUTO_MODE_STORAGE_KEY) === "1";
+    } catch {
+        return false;
+    }
+}
+
+function writeAutoModePreference(on: boolean): void {
+    try {
+        window.localStorage.setItem(AUTO_MODE_STORAGE_KEY, on ? "1" : "0");
+    } catch {
+        // A preference that cannot be remembered is still applied for this page.
+    }
+}
 
 const MIN_PROMPT_CHARS = 3;
 /**
@@ -234,7 +256,7 @@ interface VibeCoreEntryProps {
 export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps) {
     const router = useRouter();
     const { t, i18n } = useTranslation();
-    const { add: addNotification } = useNotifications();
+    const { add: addNotification, trackBackgroundRun, setPanelOpen } = useNotifications();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const [prompt, setPrompt] = useState("");
@@ -276,6 +298,56 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const [modelOverrideOpen, setModelOverrideOpen] = useState(false);
     const [attachmentPolicy, setAttachmentPolicy] = useState(DEFAULT_ATTACHMENT_POLICY);
     const generationMode: EntryGenerationMode = "auto";
+    // Auto-mode (docs/specs/BACKGROUND_RUNS.md): the whole flow runs on the server — brief
+    // auto-approved, generation, publish — and the notification manager follows it.
+    const [autoMode, setAutoMode] = useState(false);
+    const [backgroundStarted, setBackgroundStarted] = useState<string | null>(null);
+
+    useEffect(() => {
+        setAutoMode(readAutoModePreference());
+    }, []);
+
+    function toggleAutoMode() {
+        setAutoMode((current) => {
+            writeAutoModePreference(!current);
+            return !current;
+        });
+        setError(null);
+        setBackgroundStarted(null);
+    }
+
+    /** Auto-mode submit: queue the run and give the home back at once. */
+    async function handleBackgroundSubmit() {
+        const trimmed = prompt.trim();
+        if (files.length > 0) {
+            setError(t("vibecore.autoMode.noAttachments"));
+            return;
+        }
+        setError(null);
+        setErrorDetails(null);
+        setServerWarnings([]);
+        setBackgroundStarted(null);
+        setEntryPhase("queuing");
+        try {
+            const { run } = await startBackgroundRun(token, {
+                prompt: trimmed,
+                uiLanguage: i18n.language?.split("-")[0] ?? "en",
+                provider: pipelineOverride?.provider,
+                model: pipelineOverride?.model,
+                generationMode,
+            });
+            trackBackgroundRun(run);
+            setPanelOpen(true);
+            setPrompt("");
+            setBackgroundStarted(trimmed.slice(0, 80));
+        } catch (err) {
+            setError(err instanceof ApiError && err.userMessage
+                ? err.userMessage
+                : err instanceof Error ? err.message : t("vibecore.autoMode.startFailed"));
+        } finally {
+            setEntryPhase("idle");
+        }
+    }
 
     function setEntryPhase(next: EntryPhase) {
         phaseRef.current = next;
@@ -507,6 +579,10 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
             phase !== "idle"
         )
             return;
+        if (autoMode) {
+            await handleBackgroundSubmit();
+            return;
+        }
         setError(null);
         setErrorDetails(null);
         setServerWarnings([]);
@@ -924,7 +1000,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             className={cn(
                                 "flex items-center gap-1.5 cursor-pointer text-xs px-2.5 py-1.5 rounded-lg",
                                 "transition-all duration-150 border border-dashed select-none",
-                                (isLoading || files.length >= attachmentPolicy.maxAttachmentsPerPrompt) &&
+                                (isLoading || autoMode || files.length >= attachmentPolicy.maxAttachmentsPerPrompt) &&
                                     "opacity-40 pointer-events-none",
                             )}
                             style={{
@@ -962,7 +1038,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                 accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
                                 className="sr-only"
                                 onChange={handleFileInput}
-                                disabled={isLoading || files.length >= attachmentPolicy.maxAttachmentsPerPrompt}
+                                disabled={isLoading || autoMode || files.length >= attachmentPolicy.maxAttachmentsPerPrompt}
                             />
                         </label>
 
@@ -1003,6 +1079,26 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             {phaseLabel}
                         </span>
 
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            role="switch"
+                            aria-checked={autoMode}
+                            disabled={isLoading}
+                            onClick={toggleAutoMode}
+                            title={autoMode ? t("vibecore.autoMode.onTitle") : t("vibecore.autoMode.offTitle")}
+                            className={cn(
+                                "h-9 shrink-0 gap-1.5 rounded-lg border px-2.5 text-xs",
+                                autoMode
+                                    ? "border-primary/60 bg-primary/15 text-primary hover:bg-primary/20"
+                                    : "border-border text-muted-foreground hover:text-foreground",
+                            )}
+                        >
+                            <Zap className="h-3.5 w-3.5" />
+                            {t("vibecore.autoMode.label")}
+                        </Button>
+
                         <button
                             type="button"
                             disabled={isLoading}
@@ -1030,7 +1126,10 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         {/* Submit */}
                         <button
                             type="submit"
-                            disabled={isLoading || prompt.trim().length < MIN_PROMPT_CHARS || promptOverflow}
+                            disabled={isLoading
+                                || prompt.trim().length < (autoMode ? MIN_BACKGROUND_PROMPT_CHARS : MIN_PROMPT_CHARS)
+                                || promptOverflow
+                                || (autoMode && prompt.length > BACKGROUND_RUN_PROMPT_MAX_CHARS)}
                             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{
                                 background: isLoading
@@ -1136,6 +1235,21 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         </div>
                     );
                 })()}
+
+                {autoMode && !backgroundStarted && !error && (
+                    <p className="mt-3 text-center text-xs text-muted-foreground">
+                        {t("vibecore.autoMode.hint")}
+                    </p>
+                )}
+
+                {backgroundStarted && (
+                    <div
+                        role="status"
+                        className="mt-3 rounded-lg border border-primary/40 bg-primary/10 p-3 text-center text-sm text-foreground"
+                    >
+                        {t("vibecore.autoMode.started", { prompt: backgroundStarted })}
+                    </div>
+                )}
 
                 {/* Error */}
                 {error && (

@@ -917,3 +917,15 @@ If provider fails: `4xx` error (no fallback in edit mode).
    `claimed <id> at queued` and `left at done`; `site.publicUrl` opens the site.
 3. A prefill that is disabled or fails ends the run `failed` at `briefing` with
    `BACKGROUND_RUN_BRIEF_UNAVAILABLE` — the brief is never invented; the project stays.
+
+## Background runs — auto-mode in the home (BACKGROUND_RUNS.md, Phase 3)
+
+1. Home → Vibe → switch **Auto** on, write a prompt (≥ 10 characters), send. The prompt clears at
+   once, the notification manager opens with the run: "Passo n/6 · …", a progress bar, "circa N
+   minuti (stima)". The new project appears in the home list without a refresh, and is renamed when
+   the brief is written.
+2. Close the tab mid-run and reopen the home: the entry is back with the current step.
+3. When done: **Apri nel Workspace** opens the project on the generated conversation; **Apri il
+   sito** opens the published site in a new window; **Usalo** adopts the proposed `/slug/`.
+4. **Annulla** on a running entry ends it `cancelled`; a third start while two run answers with the
+   limit message.
