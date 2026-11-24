@@ -8,6 +8,8 @@ import type { UserLimits } from "../entities/User";
 export interface UpdatePlatformConfigInput {
     /** Replaced as a whole: urlMode and publicDomain are validated together. */
     publicSites?: PublicSitesConfig;
+    /** Merged field by field into the stored limits. */
+    backgroundRuns?: Partial<{ maxPerUser: number; poolSize: number; maxCostEur: number }>;
     registrationOpen?: boolean;
     emailVerificationRequired?: boolean;
     defaultUserLimits?: Partial<UserLimits>;

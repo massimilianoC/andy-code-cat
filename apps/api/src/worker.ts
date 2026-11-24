@@ -15,6 +15,8 @@ import { MongoBackgroundRunRepository } from "./infra/repositories/MongoBackgrou
 import { BackgroundRunEngine } from "./application/background/BackgroundRunEngine";
 import { BackgroundRunWorker } from "./application/background/BackgroundRunWorker";
 import { composeBackgroundRunSteps } from "./background/composeBackgroundRunSteps";
+import { backgroundRunLimitsReader } from "./application/background/backgroundRunLimits";
+import { MongoPlatformConfigRepository } from "./infra/repositories/MongoPlatformConfigRepository";
 import { SystemNotifier } from "./application/services/SystemNotifier";
 import { MongoSystemNotificationRepository } from "./infra/repositories/MongoSystemNotificationRepository";
 
@@ -28,15 +30,17 @@ async function main(): Promise<void> {
     await repository.ensureIndexes();
 
     const workerId = `${hostname()}-${randomUUID().slice(0, 8)}`;
+    // Pool and cost ceiling are read from PlatformConfig at every use (superadmin → Background runs).
+    const limits = backgroundRunLimitsReader(new MongoPlatformConfigRepository());
     // The completion notices are written by this process, not by the API's notification routes.
     SystemNotifier.configure(new MongoSystemNotificationRepository());
     const engine = new BackgroundRunEngine(repository, composeBackgroundRunSteps(repository), {
-        maxCostEur: env.BACKGROUND_RUN_MAX_COST_EUR,
+        maxCostEur: async () => (await limits()).maxCostEur,
         maxAttempts: env.BACKGROUND_RUN_MAX_ATTEMPTS,
     });
     const worker = new BackgroundRunWorker(repository, engine, {
         workerId,
-        poolSize: env.BACKGROUND_RUN_POOL_SIZE,
+        poolSize: async () => (await limits()).poolSize,
         leaseMs: env.BACKGROUND_RUN_LEASE_MS,
         pollMs: env.BACKGROUND_RUN_POLL_MS,
         onTick: () => {
@@ -63,9 +67,9 @@ async function main(): Promise<void> {
 
     worker.start();
     console.log(
-        `[background-worker] ${workerId} started — pool ${env.BACKGROUND_RUN_POOL_SIZE}, `
+        `[background-worker] ${workerId} started — pool ${(await limits()).poolSize}, `
         + `lease ${env.BACKGROUND_RUN_LEASE_MS}ms, poll ${env.BACKGROUND_RUN_POLL_MS}ms, `
-        + `cost ceiling €${env.BACKGROUND_RUN_MAX_COST_EUR} per run`,
+        + `cost ceiling €${(await limits()).maxCostEur} per run (${(await limits()).source})`,
     );
 }
 
