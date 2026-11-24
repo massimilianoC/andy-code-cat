@@ -300,7 +300,46 @@
     "running_one": "{{count}} in corso",
     "running_other": "{{count}} in corso",
     "completed_one": "{{count}} completato",
-    "completed_other": "{{count}} completati"
+    "completed_other": "{{count}} completati",
+    "backgroundRun": {
+      "queued": "In coda, parte tra pochi secondi…",
+      "step": "Passo {{number}}/{{total}} · {{label}}",
+      "steps": {
+        "classifying": "Analisi della richiesta",
+        "briefing": "Scrittura del brief",
+        "launching": "Preparazione del Workspace",
+        "generating": "Generazione del sito",
+        "snapshotting": "Salvataggio della versione",
+        "publishing": "Pubblicazione"
+      },
+      "progressLabel": "Avanzamento {{percent}}%",
+      "remainingUnderMinute": "meno di un minuto (stima)",
+      "remainingMinutes_one": "circa {{count}} minuto (stima)",
+      "remainingMinutes_other": "circa {{count}} minuti (stima)",
+      "cancel": "Annulla",
+      "cancelling": "annullamento in corso…",
+      "done": "Sito generato e pubblicato.",
+      "openWorkspace": "Apri nel Workspace",
+      "openSite": "Apri il sito",
+      "completeBrief": "Completa il brief",
+      "proposedSlug": "Indirizzo proposto: /{{slug}}/",
+      "adoptSlug": "Usalo",
+      "slugSaved": "Indirizzo /{{slug}}/ attivo.",
+      "slugError": "Indirizzo non disponibile.",
+      "cancelled": "Annullata.",
+      "failed": "La generazione si è interrotta.",
+      "errors": {
+        "BACKGROUND_RUN_BRIEF_UNAVAILABLE": "Non sono riuscito a scrivere il brief in automatico. Completalo a mano dal progetto.",
+        "BACKGROUND_RUN_BRIEF_INCOMPLETE": "Il brief scritto in automatico è incompleto. Completalo a mano dal progetto.",
+        "BACKGROUND_RUN_COST_CEILING": "Fermata: ha superato il tetto di costo previsto per una generazione in background.",
+        "BACKGROUND_RUN_GENERATION_TIMEOUT": "La generazione ha impiegato troppo tempo ed è stata fermata.",
+        "BACKGROUND_RUN_GENERATION_INTERRUPTED": "La generazione si è interrotta prima che il modello finisse.",
+        "BACKGROUND_RUN_NO_ARTIFACT": "Il modello ha risposto senza produrre il sito.",
+        "BACKGROUND_RUN_OWNER_BLOCKED": "Account bloccato: la generazione è stata fermata.",
+        "BACKGROUND_RUN_PROJECT_GONE": "Il progetto è stato eliminato durante la generazione.",
+        "BACKGROUND_RUN_TOO_MANY_ATTEMPTS": "Fermata dopo troppi tentativi di ripresa."
+      }
+    }
   },
   "launch": {
     "badge": "Modalità Guidata",
@@ -645,12 +684,22 @@
           "Quasi pronto…",
           "Apertura workspace…"
         ]
-      }
+      },
+      "queuing": "Avvio in background…"
     },
     "tokenCounter": "~ {{count}} token",
     "prefillBanner": "✦ Pre-compilato dall'AI · Rivedi e genera",
     "prefillEdit": "Modifica manualmente",
-    "prefillCta": "Elabora Progetto"
+    "prefillCta": "Elabora Progetto",
+    "autoMode": {
+      "label": "Auto",
+      "onTitle": "Auto-mode attivo: brief approvato in automatico, generazione e pubblicazione in background. Clicca per tornare al flusso guidato.",
+      "offTitle": "Auto-mode: fa tutto in background (brief, generazione, pubblicazione) e ti avvisa quando il sito è pronto.",
+      "hint": "Auto-mode: il brief viene approvato in automatico, il sito generato e pubblicato in background. Segui l'avanzamento nelle notifiche; puoi chiudere la pagina.",
+      "started": "Avviato in background: “{{prompt}}”. Segui l'avanzamento nelle notifiche; puoi avviare un altro progetto.",
+      "noAttachments": "In auto-mode gli allegati non sono ancora supportati: rimuovili o disattiva Auto.",
+      "startFailed": "Non sono riuscito ad avviare la generazione in background."
+    }
   },
   "workspace": {
     "selectionNone": "Nessuna selezione",

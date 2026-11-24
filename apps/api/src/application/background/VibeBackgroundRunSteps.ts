@@ -220,7 +220,7 @@ export class VibeBackgroundRunSteps implements BackgroundRunSteps {
 
         const intake = launchWorkspacePipelineSchema.safeParse({
             ...guidedIntakeFromDraft(
-                { ...result.draft, presetId: result.draft.presetId || classification.templateId || undefined },
+                result.draft,
                 { projectName, defaultOutputLanguage: run.input.uiLanguage ?? "en" },
             ),
             requestedProviderId: run.input.provider ?? undefined,

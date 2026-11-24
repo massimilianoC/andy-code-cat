@@ -300,7 +300,46 @@
     "running_one": "{{count}} running",
     "running_other": "{{count}} running",
     "completed_one": "{{count}} completed",
-    "completed_other": "{{count}} completed"
+    "completed_other": "{{count}} completed",
+    "backgroundRun": {
+      "queued": "Queued, starting in a few seconds…",
+      "step": "Step {{number}}/{{total}} · {{label}}",
+      "steps": {
+        "classifying": "Reading the request",
+        "briefing": "Writing the brief",
+        "launching": "Preparing the Workspace",
+        "generating": "Generating the site",
+        "snapshotting": "Saving the version",
+        "publishing": "Publishing"
+      },
+      "progressLabel": "Progress {{percent}}%",
+      "remainingUnderMinute": "under a minute (estimate)",
+      "remainingMinutes_one": "about {{count}} minute (estimate)",
+      "remainingMinutes_other": "about {{count}} minutes (estimate)",
+      "cancel": "Cancel",
+      "cancelling": "cancelling…",
+      "done": "Site generated and published.",
+      "openWorkspace": "Open in Workspace",
+      "openSite": "Open the site",
+      "completeBrief": "Complete the brief",
+      "proposedSlug": "Suggested address: /{{slug}}/",
+      "adoptSlug": "Use it",
+      "slugSaved": "Address /{{slug}}/ is live.",
+      "slugError": "Address not available.",
+      "cancelled": "Cancelled.",
+      "failed": "The generation stopped.",
+      "errors": {
+        "BACKGROUND_RUN_BRIEF_UNAVAILABLE": "The brief could not be written automatically. Complete it by hand from the project.",
+        "BACKGROUND_RUN_BRIEF_INCOMPLETE": "The automatic brief is incomplete. Complete it by hand from the project.",
+        "BACKGROUND_RUN_COST_CEILING": "Stopped: it went over the cost ceiling of a background generation.",
+        "BACKGROUND_RUN_GENERATION_TIMEOUT": "The generation took too long and was stopped.",
+        "BACKGROUND_RUN_GENERATION_INTERRUPTED": "The generation stopped before the model finished.",
+        "BACKGROUND_RUN_NO_ARTIFACT": "The model answered without producing the site.",
+        "BACKGROUND_RUN_OWNER_BLOCKED": "Account blocked: the generation was stopped.",
+        "BACKGROUND_RUN_PROJECT_GONE": "The project was deleted during the generation.",
+        "BACKGROUND_RUN_TOO_MANY_ATTEMPTS": "Stopped after too many resume attempts."
+      }
+    }
   },
   "launch": {
     "badge": "Guided Mode",
@@ -645,12 +684,22 @@
           "Almost ready…",
           "Opening your workspace…"
         ]
-      }
+      },
+      "queuing": "Starting in the background…"
     },
     "tokenCounter": "~ {{count}} tokens",
     "prefillBanner": "✦ Pre-filled by AI · Review and generate",
     "prefillEdit": "Edit manually",
-    "prefillCta": "Process Project"
+    "prefillCta": "Process Project",
+    "autoMode": {
+      "label": "Auto",
+      "onTitle": "Auto-mode on: brief auto-approved, generation and publishing in the background. Click to go back to the guided flow.",
+      "offTitle": "Auto-mode: does everything in the background (brief, generation, publishing) and tells you when the site is ready.",
+      "hint": "Auto-mode: the brief is approved automatically, the site generated and published in the background. Follow it in the notifications; you can close the page.",
+      "started": "Started in the background: “{{prompt}}”. Follow it in the notifications; you can start another project.",
+      "noAttachments": "Attachments are not supported in auto-mode yet: remove them or turn Auto off.",
+      "startFailed": "Could not start the background generation."
+    }
   },
   "workspace": {
     "selectionNone": "No selection",

@@ -6,6 +6,7 @@ import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { previewCanonicalBrief, getGuidedPipelineConfig, launchWorkspacePipeline, type GuidedLaunchInput, type GuidedPipelineConfig } from "../../../lib/api/pipelines";
 import { getProject, type Project } from "../../../lib/api/projects";
+import { guidedIntakeFromDraft } from "@andy-code-cat/contracts";
 import { getToken } from "../../../lib/token-store";
 import { optimizePrompt } from "../../../lib/api/llm";
 import { uploadProjectAsset } from "../../../lib/api/assets";
@@ -675,42 +676,33 @@ export default function GuidedLaunchPage() {
             if (typeof draft.formatHint === "string" && draft.formatHint.trim()) {
                 setPrefillFormatHint(draft.formatHint);
             }
-            // Backward compat: old drafts may have siteType instead of presetId
-            const siteTypeCompat: Record<string, string> = {
-                landing_page: "landing", business_site: "website",
-                portfolio: "neutral", showcase: "neutral",
-            };
-            const rawPreset = typeof draft.presetId === "string" && draft.presetId.trim()
-                ? draft.presetId.trim()
-                : siteTypeCompat[String(draft.siteType ?? "")] ?? "landing";
+            // The one draft → intake mapping (contracts), shared with background runs: the form
+            // starts from exactly the brief a run would launch without review.
+            const intake = guidedIntakeFromDraft(draft as Parameters<typeof guidedIntakeFromDraft>[0], {
+                defaultOutputLanguage: defaultUiLang,
+            });
+            const optional = (value: unknown) => (typeof value === "string" ? value : "");
             patch({
-                businessName:    typeof draft.businessName === "string" ? draft.businessName : "",
-                presetId:        rawPreset,
-                primaryGoal:     typeof draft.primaryGoal === "string" ? draft.primaryGoal : "",
-                audience:        typeof draft.audience    === "string" ? draft.audience    : "",
-                tone:            typeof draft.tone        === "string" ? draft.tone        : undefined,
-                primaryCta:      typeof draft.primaryCta  === "string" ? draft.primaryCta  : undefined,
-                styleHint:       typeof draft.styleHint   === "string" ? draft.styleHint   : undefined,
-                styleAttributes: Array.isArray(draft.styleAttributes) ? draft.styleAttributes as string[] : [],
-                contactFields:   Array.isArray(draft.contactInfo)
-                    ? (draft.contactInfo as Array<{key:string;value:string}>)
-                        .filter((c) => c && typeof c.key === "string" && typeof c.value === "string")
-                        .map((c) => ({ id: `cf-${c.key}`, key: c.key, value: c.value }))
-                    : [],
-                // Language inferred by VibePrefill; fall back to UI language
-                outputLanguage: typeof draft.outputLanguage === "string" && draft.outputLanguage.trim()
-                    ? draft.outputLanguage.trim()
-                    : defaultUiLang,
-                sourceRequest: typeof draft.sourceRequest === "string" ? draft.sourceRequest : "",
-                projectSummary: typeof draft.projectSummary === "string" ? draft.projectSummary : "",
-                contentStructure: typeof draft.contentStructure === "string" ? draft.contentStructure : "",
-                contentRequirements: typeof draft.contentRequirements === "string" ? draft.contentRequirements : "",
-                functionalRequirements: typeof draft.functionalRequirements === "string" ? draft.functionalRequirements : "",
-                interactionModel: typeof draft.interactionModel === "string" ? draft.interactionModel : "",
-                visualDirection: typeof draft.visualDirection === "string" ? draft.visualDirection : "",
-                successCriteria: typeof draft.successCriteria === "string" ? draft.successCriteria : "",
-                constraints: typeof draft.constraints === "string" ? draft.constraints : "",
-                mustAvoid: typeof draft.mustAvoid === "string" ? draft.mustAvoid : "",
+                businessName:    intake.businessName,
+                presetId:        intake.presetId,
+                primaryGoal:     intake.primaryGoal,
+                audience:        intake.audience,
+                tone:            intake.tone as string | undefined,
+                primaryCta:      intake.primaryCta as string | undefined,
+                styleHint:       intake.styleHint as string | undefined,
+                styleAttributes: intake.styleAttributes,
+                contactFields:   intake.contactInfo.map((c) => ({ id: `cf-${c.key}`, key: c.key, value: c.value })),
+                outputLanguage:  intake.outputLanguage,
+                sourceRequest: optional(intake.sourceRequest),
+                projectSummary: optional(intake.projectSummary),
+                contentStructure: optional(intake.contentStructure),
+                contentRequirements: optional(intake.contentRequirements),
+                functionalRequirements: optional(intake.functionalRequirements),
+                interactionModel: optional(intake.interactionModel),
+                visualDirection: optional(intake.visualDirection),
+                successCriteria: optional(intake.successCriteria),
+                constraints: optional(intake.constraints),
+                mustAvoid: optional(intake.mustAvoid),
             });
             // Restore the names of documents that the AI used to generate this brief
             if (Array.isArray(draft.attachedDocuments)) {
