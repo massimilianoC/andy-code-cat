@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AdminPageHeader } from "@/components/admin/AdminUi";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import {
@@ -331,16 +332,12 @@ export default function AdminModelsPage() {
 
     return (
         <div className="flex w-full max-w-none flex-col gap-6">
-            <div>
-                <h1 className="text-[1.375rem] font-bold text-foreground mb-1">Advanced Runtime LLM Catalog</h1>
-                <p className="text-sm text-muted-foreground max-w-4xl">
-                    This page is secondary infrastructure only. The main superadmin work discussed in chat now lives in Template Models and Preprompting.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={() => router.push("/admin/presets")}>Open Template Models</Button>
-                    <Button type="button" variant="outline" onClick={() => router.push("/admin/governance")}>Open Preprompting</Button>
-                </div>
-            </div>
+            <AdminPageHeader
+                eyebrow="AI"
+                title="Models"
+                description="The providers and models the platform may dispatch to. A model switched off here is refused everywhere (MODEL_NOT_AVAILABLE); which task uses which model is set in Prompts."
+                actions={<Button type="button" variant="outline" size="sm" onClick={() => router.push("/admin/prompts")}>Open Prompts</Button>}
+            />
 
             {error ? (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

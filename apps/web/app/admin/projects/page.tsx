@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useCallback, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import { resolvePublicSiteAddress } from "@/app/workspace/features/header/publishUrl";
 import {
@@ -31,6 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import AiUsageSummaryPanel from "@/components/AiUsageSummaryPanel";
 import ProjectVersionsPanel from "@/components/admin/ProjectVersionsPanel";
+import { AdminPageHeader, AdminTabs } from "@/components/admin/AdminUi";
 
 type ConfirmAction = "delete-project" | "block-deployment" | "unblock-deployment";
 
@@ -42,38 +43,28 @@ interface ConfirmState {
 
 type SidebarTab = "overview" | "ai" | "deployment" | "versions" | "danger";
 
-/** Segment-control tab bar for the project sidebar. */
-function SidebarTabs({ active, onChange }: { active: SidebarTab; onChange: (t: SidebarTab) => void }) {
-    const tabs: { id: SidebarTab; label: string; danger?: boolean }[] = [
-        { id: "overview", label: "Overview" },
-        { id: "ai", label: "AI Usage" },
-        { id: "deployment", label: "Deployment" },
-        { id: "versions", label: "Versions" },
-        { id: "danger", label: "Danger", danger: true },
-    ];
+const SIDEBAR_TABS: { id: SidebarTab; label: string }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "versions", label: "Content" },
+    { id: "ai", label: "AI usage" },
+    { id: "deployment", label: "Site" },
+    { id: "danger", label: "Danger zone" },
+];
+
+export default function AdminProjectsPage() {
     return (
-        <div
-            className="admin-seg-list shrink-0 mx-4 mt-3"
-            style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}
-        >
-            {tabs.map((t) => (
-                <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => onChange(t.id)}
-                    className="admin-seg-tab"
-                    data-active={active === t.id ? "true" : undefined}
-                    data-danger={t.danger ? "true" : undefined}
-                >
-                    {t.label}
-                </button>
-            ))}
-        </div>
+        <Suspense fallback={null}>
+            <AdminProjectsContent />
+        </Suspense>
     );
 }
 
-export default function AdminProjectsPage() {
+function AdminProjectsContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    // Linked from a user in the Users section: the projects of that owner only.
+    const ownerId = searchParams?.get("ownerId") ?? undefined;
+    const ownerEmail = searchParams?.get("ownerEmail") ?? undefined;
     const [projects, setProjects] = useState<AdminProjectDto[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -100,7 +91,7 @@ export default function AdminProjectsPage() {
             setLoading(true);
             setFetchError(null);
             try {
-                const result = await adminListProjects(token, { page: p, limit, search: s || undefined });
+                const result = await adminListProjects(token, { page: p, limit, search: s || undefined, ownerId });
                 setProjects(result.projects);
                 setTotal(result.total);
             } catch (err: unknown) {
@@ -109,7 +100,7 @@ export default function AdminProjectsPage() {
                 setLoading(false);
             }
         },
-        [router],
+        [router, ownerId],
     );
 
     useEffect(() => {
@@ -206,18 +197,18 @@ export default function AdminProjectsPage() {
 
     return (
         <div className={cn("", selectedProject && "xl:pr-[42rem]")}>
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold">Projects</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        {loading ? "Loading…" : `${total} total project${total !== 1 ? "s" : ""} across all users`}
-                    </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => fetchProjects(page, search)}>
-                    Refresh
-                </Button>
-            </div>
+            <AdminPageHeader
+                eyebrow="Manage"
+                title="Projects"
+                description={loading
+                    ? "Loading…"
+                    : `${total} project${total !== 1 ? "s" : ""}${ownerEmail ? ` owned by ${ownerEmail}` : " across all users"}, published or not. Open one to inspect its content, its AI usage and its site.`}
+                actions={(
+                    <Button variant="outline" size="sm" onClick={() => fetchProjects(page, search)}>
+                        Refresh
+                    </Button>
+                )}
+            />
 
             {/* Search */}
             <div className="flex gap-2 mb-4">
@@ -232,6 +223,11 @@ export default function AdminProjectsPage() {
                 {search && (
                     <Button variant="ghost" onClick={() => { setDraftSearch(""); setSearch(""); setPage(1); }}>
                         Clear
+                    </Button>
+                )}
+                {ownerId && (
+                    <Button variant="outline" size="sm" className="ml-auto gap-1.5 self-center" onClick={() => router.replace("/admin/projects")}>
+                        Owner: <span className="font-mono text-xs">{ownerEmail ?? ownerId}</span> ✕
                     </Button>
                 )}
             </div>
@@ -255,7 +251,7 @@ export default function AdminProjectsPage() {
                                     <th className="py-3 px-4 text-left font-medium">Project</th>
                                     <th className="py-3 px-4 text-left font-medium">Owner</th>
                                     <th className="py-3 px-4 text-left font-medium">Preset</th>
-                                    <th className="py-3 px-4 text-left font-medium">Deployment</th>
+                                    <th className="py-3 px-4 text-left font-medium">Site</th>
                                     <th className="py-3 px-4 text-left font-medium">Created</th>
                                 </tr>
                             </thead>
@@ -285,9 +281,9 @@ export default function AdminProjectsPage() {
                                         <td className="py-3 px-4">
                                             {p.activeDeployment
                                                 ? <Badge variant={p.activeDeployment.isAdminBlocked ? "destructive" : "success"} className="text-xs">
-                                                    {p.activeDeployment.isAdminBlocked ? "Blocked" : "Live"}
+                                                    {p.activeDeployment.isAdminBlocked ? "Blocked" : "Published"}
                                                 </Badge>
-                                                : <span className="text-xs text-muted-foreground">—</span>
+                                                : <Badge variant="outline" className="text-xs text-muted-foreground">Not published</Badge>
                                             }
                                         </td>
                                         <td className="py-3 px-4 text-muted-foreground text-xs">
@@ -345,12 +341,19 @@ export default function AdminProjectsPage() {
                                         )}
                                     </div>
                                 </div>
-                                <Button variant="ghost" size="sm" onClick={() => setSelectedProject(null)} className="shrink-0">Close</Button>
+                                <div className="flex shrink-0 gap-2">
+                                    <Button variant="outline" size="sm" onClick={() => setSidebarTab("versions")}>
+                                        Inspect content
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={() => setSelectedProject(null)}>Close</Button>
+                                </div>
                             </div>
                         </div>
 
                         {/* Tab bar */}
-                        <SidebarTabs active={sidebarTab} onChange={setSidebarTab} />
+                        <div className="shrink-0 px-5 pt-2">
+                            <AdminTabs<SidebarTab> tabs={SIDEBAR_TABS} value={sidebarTab} onChange={setSidebarTab} className="mb-0" />
+                        </div>
 
                         <ScrollArea className="flex-1">
                             <div className="p-5 space-y-4">
