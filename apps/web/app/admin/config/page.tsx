@@ -93,6 +93,23 @@ export default function AdminConfigPage() {
     const [savedSites, setSavedSites] = useState(false);
     const [sitesError, setSitesError] = useState<string | null>(null);
 
+    // Form state — background runs (installation-level, saved on its own)
+    const [runLimits, setRunLimits] = useState<{ maxPerUser: string; poolSize: string; maxCostEur: string }>({ maxPerUser: "", poolSize: "", maxCostEur: "" });
+    const [runLimitsSource, setRunLimitsSource] = useState<"config" | "environment" | null>(null);
+    const [savingRuns, setSavingRuns] = useState(false);
+    const [savedRuns, setSavedRuns] = useState(false);
+    const [runsError, setRunsError] = useState<string | null>(null);
+
+    function applyRunLimits(c: PlatformConfigDto) {
+        if (!c.backgroundRuns) return;
+        setRunLimits({
+            maxPerUser: String(c.backgroundRuns.maxPerUser),
+            poolSize: String(c.backgroundRuns.poolSize),
+            maxCostEur: String(c.backgroundRuns.maxCostEur),
+        });
+        setRunLimitsSource(c.backgroundRuns.source);
+    }
+
     // Form state — access control
     const [registrationOpen, setRegistrationOpen] = useState(true);
     const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
@@ -121,6 +138,7 @@ export default function AdminConfigPage() {
                 setUrlMode(c.publicSites?.urlMode ?? "path");
                 setPublicDomain(c.publicSites?.publicDomain ?? "");
                 setSitesOrigin(c.publicSites?.sitesOrigin ?? "");
+                applyRunLimits(c);
                 setRegistrationOpen(c.registrationOpen);
                 setEmailVerificationRequired(c.emailVerificationRequired);
                 setDefaultLimits(c.defaultUserLimits ?? {});
@@ -188,6 +206,31 @@ export default function AdminConfigPage() {
             setSitesError(e instanceof Error ? e.message : "Failed to save");
         } finally {
             setSavingSites(false);
+        }
+    }
+
+    async function handleSaveRunLimits() {
+        const token = getToken();
+        if (!token) return;
+        setSavingRuns(true);
+        setSavedRuns(false);
+        setRunsError(null);
+        try {
+            const updated = await updateAdminConfig(token, {
+                backgroundRuns: {
+                    maxPerUser: Number(runLimits.maxPerUser),
+                    poolSize: Number(runLimits.poolSize),
+                    maxCostEur: Number(runLimits.maxCostEur),
+                },
+            });
+            setConfig(updated);
+            applyRunLimits(updated);
+            setSavedRuns(true);
+            setTimeout(() => setSavedRuns(false), 3000);
+        } catch (e: unknown) {
+            setRunsError(e instanceof Error ? e.message : "Failed to save");
+        } finally {
+            setSavingRuns(false);
         }
     }
 
@@ -316,6 +359,51 @@ export default function AdminConfigPage() {
                                 {savingSites ? "Saving…" : "Save published sites"}
                             </Button>
                             {savedSites && <span className="text-xs text-emerald-500">Saved</span>}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Background runs — Vibe auto-mode limits (docs/specs/BACKGROUND_RUNS.md §6.3) */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base">Background runs</CardTitle>
+                        <CardDescription className="text-xs">
+                            Limits of the Vibe auto-mode, read at every use: a change applies to the next run
+                            without a restart. {runLimitsSource === "environment"
+                                ? "Not saved yet — the deployment defaults (BACKGROUND_RUN_*) apply."
+                                : "Saved here; the BACKGROUND_RUN_* environment values no longer apply."}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="bgrun-per-user">Runs per user</Label>
+                                <Input id="bgrun-per-user" type="number" min={1} max={20} step={1}
+                                    value={runLimits.maxPerUser}
+                                    onChange={(e) => setRunLimits((prev) => ({ ...prev, maxPerUser: e.target.value }))} />
+                                <p className="text-xs text-muted-foreground">In flight at once; at the limit Auto waits.</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="bgrun-pool">Parallel runs (all users)</Label>
+                                <Input id="bgrun-pool" type="number" min={1} max={16} step={1}
+                                    value={runLimits.poolSize}
+                                    onChange={(e) => setRunLimits((prev) => ({ ...prev, poolSize: e.target.value }))} />
+                                <p className="text-xs text-muted-foreground">Executed by the worker together; the rest queue.</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="bgrun-cost">Cost ceiling per run (€)</Label>
+                                <Input id="bgrun-cost" type="number" min={0.01} max={50} step={0.05}
+                                    value={runLimits.maxCostEur}
+                                    onChange={(e) => setRunLimits((prev) => ({ ...prev, maxCostEur: e.target.value }))} />
+                                <p className="text-xs text-muted-foreground">A run above it is stopped after its current step.</p>
+                            </div>
+                        </div>
+                        {runsError && <p className="text-destructive text-xs">{runsError}</p>}
+                        <div className="flex items-center gap-3">
+                            <Button size="sm" onClick={handleSaveRunLimits} disabled={savingRuns}>
+                                {savingRuns ? "Saving…" : "Save background runs"}
+                            </Button>
+                            {savedRuns && <span className="text-xs text-success">Saved</span>}
                         </div>
                     </CardContent>
                 </Card>

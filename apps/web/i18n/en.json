@@ -693,12 +693,14 @@
     "prefillCta": "Process Project",
     "autoMode": {
       "label": "Auto",
-      "onTitle": "Auto-mode on: brief auto-approved, generation and publishing in the background. Click to go back to the guided flow.",
-      "offTitle": "Auto-mode: does everything in the background (brief, generation, publishing) and tells you when the site is ready.",
+      "onTitle": "Auto: brief approved automatically, generation and publishing in the background. Click to switch to Review (check the brief before generating).",
       "hint": "Auto-mode: the brief is approved automatically, the site generated and published in the background. Follow it in the notifications; you can close the page.",
       "started": "Started in the background: “{{prompt}}”. Follow it in the notifications; you can start another project.",
       "noAttachments": "Attachments are not supported in auto-mode yet: remove them or turn Auto off.",
-      "startFailed": "Could not start the background generation."
+      "startFailed": "Could not start the background generation.",
+      "reviewLabel": "Review",
+      "reviewTitle": "Review: check and confirm the brief before the generation (guided flow). Click to go back to Auto.",
+      "atLimit": "You have {{count}} background generations running (max {{max}}): \"Create with AI\" unlocks as soon as one finishes. In Review you can go on right away."
     }
   },
   "workspace": {

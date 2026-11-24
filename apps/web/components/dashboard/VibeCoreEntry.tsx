@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square, Settings, Copy, Zap } from "lucide-react";
+import { Paperclip, ArrowRight, X, ChevronDown, Loader2, Upload, Mic, Square, Settings, Copy, Zap, Eye } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { VibeGenerationMode } from "@andy-code-cat/contracts";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
@@ -83,11 +83,12 @@ const PHASE_LABEL_KEYS: Record<EntryPhase, string> = {
 const MIN_BACKGROUND_PROMPT_CHARS = 10;
 const AUTO_MODE_STORAGE_KEY = "andy.vibe.autoMode";
 
+/** Auto-mode is the default; "Review" (the guided flow with the brief to confirm) is the opt-out. */
 function readAutoModePreference(): boolean {
     try {
-        return window.localStorage.getItem(AUTO_MODE_STORAGE_KEY) === "1";
+        return window.localStorage.getItem(AUTO_MODE_STORAGE_KEY) !== "0";
     } catch {
-        return false;
+        return true;
     }
 }
 
@@ -256,7 +257,7 @@ interface VibeCoreEntryProps {
 export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps) {
     const router = useRouter();
     const { t, i18n } = useTranslation();
-    const { add: addNotification, trackBackgroundRun, setPanelOpen } = useNotifications();
+    const { add: addNotification, trackBackgroundRun, setPanelOpen, backgroundRunLimits } = useNotifications();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const [prompt, setPrompt] = useState("");
@@ -300,7 +301,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const generationMode: EntryGenerationMode = "auto";
     // Auto-mode (docs/specs/BACKGROUND_RUNS.md): the whole flow runs on the server — brief
     // auto-approved, generation, publish — and the notification manager follows it.
-    const [autoMode, setAutoMode] = useState(false);
+    const [autoMode, setAutoMode] = useState(true);
     const [backgroundStarted, setBackgroundStarted] = useState<string | null>(null);
 
     useEffect(() => {
@@ -580,6 +581,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
         )
             return;
         if (autoMode) {
+            if (autoModeAtLimit) return;
             await handleBackgroundSubmit();
             return;
         }
@@ -809,6 +811,11 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
         }
     }
 
+    // Auto-mode stops queueing at the user's limit of runs in flight (superadmin setting) and opens
+    // again as soon as one finishes; Review mode does not queue, so it stays available.
+    const autoModeAtLimit = autoMode
+        && backgroundRunLimits !== null
+        && backgroundRunLimits.active >= backgroundRunLimits.maxPerUser;
     const glowColor = MODE_GLOW[mode];
     const isLoading = phase !== "idle";
     const promptOverflow = prompt.length > MAX_PROMPT_CHARS;
@@ -1087,7 +1094,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             aria-checked={autoMode}
                             disabled={isLoading}
                             onClick={toggleAutoMode}
-                            title={autoMode ? t("vibecore.autoMode.onTitle") : t("vibecore.autoMode.offTitle")}
+                            title={autoMode ? t("vibecore.autoMode.onTitle") : t("vibecore.autoMode.reviewTitle")}
                             className={cn(
                                 "h-9 shrink-0 gap-1.5 rounded-lg border px-2.5 text-xs",
                                 autoMode
@@ -1095,8 +1102,8 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                                     : "border-border text-muted-foreground hover:text-foreground",
                             )}
                         >
-                            <Zap className="h-3.5 w-3.5" />
-                            {t("vibecore.autoMode.label")}
+                            {autoMode ? <Zap className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            {autoMode ? t("vibecore.autoMode.label") : t("vibecore.autoMode.reviewLabel")}
                         </Button>
 
                         <button
@@ -1127,6 +1134,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                         <button
                             type="submit"
                             disabled={isLoading
+                                || autoModeAtLimit
                                 || prompt.trim().length < (autoMode ? MIN_BACKGROUND_PROMPT_CHARS : MIN_PROMPT_CHARS)
                                 || promptOverflow
                                 || (autoMode && prompt.length > BACKGROUND_RUN_PROMPT_MAX_CHARS)}
@@ -1236,7 +1244,13 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                     );
                 })()}
 
-                {autoMode && !backgroundStarted && !error && (
+                {autoModeAtLimit && (
+                    <p role="status" className="mt-3 text-center text-xs font-medium text-muted-foreground">
+                        {t("vibecore.autoMode.atLimit", { count: backgroundRunLimits!.active, max: backgroundRunLimits!.maxPerUser })}
+                    </p>
+                )}
+
+                {autoMode && !autoModeAtLimit && !backgroundStarted && !error && (
                     <p className="mt-3 text-center text-xs text-muted-foreground">
                         {t("vibecore.autoMode.hint")}
                     </p>

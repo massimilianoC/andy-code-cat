@@ -693,12 +693,14 @@
     "prefillCta": "Elabora Progetto",
     "autoMode": {
       "label": "Auto",
-      "onTitle": "Auto-mode attivo: brief approvato in automatico, generazione e pubblicazione in background. Clicca per tornare al flusso guidato.",
-      "offTitle": "Auto-mode: fa tutto in background (brief, generazione, pubblicazione) e ti avvisa quando il sito è pronto.",
+      "onTitle": "Auto: brief approvato in automatico, generazione e pubblicazione in background. Clicca per passare a Review (rivedi il brief prima di generare).",
       "hint": "Auto-mode: il brief viene approvato in automatico, il sito generato e pubblicato in background. Segui l'avanzamento nelle notifiche; puoi chiudere la pagina.",
       "started": "Avviato in background: “{{prompt}}”. Segui l'avanzamento nelle notifiche; puoi avviare un altro progetto.",
       "noAttachments": "In auto-mode gli allegati non sono ancora supportati: rimuovili o disattiva Auto.",
-      "startFailed": "Non sono riuscito ad avviare la generazione in background."
+      "startFailed": "Non sono riuscito ad avviare la generazione in background.",
+      "reviewLabel": "Review",
+      "reviewTitle": "Review: rivedi e conferma il brief prima della generazione (flusso guidato). Clicca per tornare ad Auto.",
+      "atLimit": "Hai {{count}} generazioni in background in corso (massimo {{max}}): «Crea con AI» si sblocca appena una finisce. In Review puoi continuare subito."
     }
   },
   "workspace": {

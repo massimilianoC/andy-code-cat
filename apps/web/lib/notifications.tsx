@@ -15,7 +15,7 @@ import {
     type BackgroundRunDto,
     type SystemNotificationDto,
 } from "@andy-code-cat/contracts";
-import { listBackgroundRuns } from "./api/backgroundRuns";
+import { listBackgroundRuns, type BackgroundRunUserLimits } from "./api/backgroundRuns";
 import { listNotifications, markNotificationRead } from "./api/notifications";
 import { getAccessToken } from "./token-store";
 
@@ -84,6 +84,8 @@ interface NotificationsContextValue {
     trackBackgroundRun: (run: BackgroundRunDto) => void;
     /** Replaces a run with a fresher copy (e.g. after a cancel). */
     refreshBackgroundRuns: () => Promise<void>;
+    /** Runs in flight and the user's limit; null until the first answer. */
+    backgroundRunLimits: BackgroundRunUserLimits | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +99,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     const [panelOpen, setPanelOpen] = useState(false);
     const counterRef = useRef(0);
     const [backgroundRuns, setBackgroundRuns] = useState<BackgroundRunDto[]>([]);
+    const [backgroundRunLimits, setBackgroundRunLimits] = useState<BackgroundRunUserLimits | null>(null);
     const [dismissedRunIds, setDismissedRunIds] = useState<Set<string>>(() => new Set());
     /** Runs seen in flight during this page's life: they stay in the panel once finished. */
     const seenActiveRunIdsRef = useRef<Set<string>>(new Set());
@@ -121,8 +124,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         const token = getAccessToken();
         if (!token) return;
         try {
-            const { runs } = await listBackgroundRuns(token, 10);
+            const { runs, limits } = await listBackgroundRuns(token, 10);
             applyRuns(runs);
+            if (limits) setBackgroundRunLimits(limits);
         } catch {
             // Polling must not disturb the page; the next turn tries again.
         }
@@ -132,6 +136,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         seenActiveRunIdsRef.current.add(run.id);
         anyRunActiveRef.current = true;
         setBackgroundRuns((prev) => [run, ...prev.filter((existing) => existing.id !== run.id)]);
+        // Counted at once, so the limit applies before the next poll confirms it.
+        setBackgroundRunLimits((prev) => prev ? { ...prev, active: prev.active + 1 } : prev);
         window.dispatchEvent(new CustomEvent(PROJECTS_CHANGED_EVENT));
         wakeRunPollRef.current?.();
     }, []);
@@ -274,6 +280,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
                 setPanelOpen,
                 trackBackgroundRun,
                 refreshBackgroundRuns,
+                backgroundRunLimits,
             }}
         >
             {children}

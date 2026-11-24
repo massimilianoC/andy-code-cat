@@ -3,6 +3,7 @@
  * All functions require the caller to hold the "superadmin" role.
  * The bearer token is injected automatically by the `call` helper.
  */
+import type { BackgroundRunLimits, BackgroundRunLimitsDto } from "@andy-code-cat/contracts";
 import { call } from "./call";
 import type { AiUsageAnalyticsDto } from "./assets";
 import type { PreviewSnapshot } from "./snapshots";
@@ -84,6 +85,8 @@ export interface PlatformConfigDto {
     defaultUserLimits: UserLimitsDto;
     governanceByProduct?: Record<string, ProductGovernanceDto>;
     mediaProviderPolicy?: MediaProviderPolicyDto;
+    /** Background-run limits (packages/contracts BackgroundRunLimitsDto). */
+    backgroundRuns: BackgroundRunLimitsDto;
     updatedAt: string;
     updatedByUserId?: string;
 }
@@ -383,6 +386,7 @@ export function updateAdminConfig(
         emailVerificationRequired: boolean;
         defaultUserLimits: Partial<UserLimitsDto>;
         governanceByProduct: Record<string, Partial<ProductGovernanceDto>>;
+        backgroundRuns: Partial<BackgroundRunLimits>;
     }>
 ): Promise<PlatformConfigDto> {
     return call<PlatformConfigDto>("PATCH", "/v1/admin/config", body, auth(token));
