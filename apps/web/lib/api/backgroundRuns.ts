@@ -8,8 +8,14 @@ export function startBackgroundRun(token: string, input: CreateBackgroundRunInpu
     });
 }
 
+/** How many runs the user has in flight, and how many they may have (superadmin setting). */
+export interface BackgroundRunUserLimits {
+    maxPerUser: number;
+    active: number;
+}
+
 export function listBackgroundRuns(token: string, limit = 10) {
-    return call<{ runs: BackgroundRunDto[] }>("GET", `/v1/background-runs?limit=${limit}`, undefined, {
+    return call<{ runs: BackgroundRunDto[]; limits: BackgroundRunUserLimits }>("GET", `/v1/background-runs?limit=${limit}`, undefined, {
         Authorization: `Bearer ${token}`,
     });
 }

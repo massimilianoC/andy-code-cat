@@ -307,6 +307,8 @@ export interface PlatformConfig {
     id: string;
     /** Absent on documents written before the setting existed; read through resolvePublicSitesConfig. */
     publicSites?: PublicSitesConfig;
+    /** Background-run limits; read through resolveBackgroundRunLimits (absent fields: environment defaults). */
+    backgroundRuns?: Partial<{ maxPerUser: number; poolSize: number; maxCostEur: number }>;
     /** When false, the public POST /v1/auth/register endpoint returns 403. */
     registrationOpen: boolean;
     /** When true, newly registered users must verify their email before accessing the platform. */

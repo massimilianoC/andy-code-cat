@@ -103,8 +103,27 @@ export interface PublicSitesConfigDto {
     sitesOrigin: string;
 }
 
+/**
+ * Background runs (docs/specs/BACKGROUND_RUNS.md §6.3): how many runs a user may have in flight,
+ * how many the worker executes at once on the whole installation, and what one run may spend.
+ * Stored in PlatformConfig; until saved, the BACKGROUND_RUN_* environment values apply.
+ */
+export const backgroundRunLimitsSchema = z.object({
+    maxPerUser: z.number().int().min(1).max(20),
+    poolSize: z.number().int().min(1).max(16),
+    maxCostEur: z.number().positive().max(50),
+}).strict();
+
+export type BackgroundRunLimits = z.infer<typeof backgroundRunLimitsSchema>;
+
+export interface BackgroundRunLimitsDto extends BackgroundRunLimits {
+    /** "config" once a superadmin saved them, "environment" while the deployment defaults apply. */
+    source: "config" | "environment";
+}
+
 export const setPlatformConfigSchema = z.object({
     publicSites: publicSitesConfigSchema.optional(),
+    backgroundRuns: backgroundRunLimitsSchema.partial().strict().optional(),
     registrationOpen: z.boolean().optional(),
     emailVerificationRequired: z.boolean().optional(),
     defaultUserLimits: setUserLimitsSchema.optional(),
@@ -451,6 +470,7 @@ export interface PlatformConfigDto {
     }>;
     updatedAt: string;
     updatedByUserId?: string;
+    backgroundRuns: BackgroundRunLimitsDto;
     mediaProviderPolicy?: {
         stockImage: {
             primaryProvider: "pexels" | "pixabay" | "unsplash" | "loremflickr" | "picsum";

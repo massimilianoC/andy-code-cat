@@ -24,6 +24,7 @@ interface PlatformConfigDocument {
     updatedByUserId?: string;
     costRates?: PlatformCostRates;
     mediaProviderPolicy?: PlatformConfig["mediaProviderPolicy"];
+    backgroundRuns?: PlatformConfig["backgroundRuns"];
 }
 
 function toEntity(doc: PlatformConfigDocument): PlatformConfig {
@@ -38,6 +39,7 @@ function toEntity(doc: PlatformConfigDocument): PlatformConfig {
         updatedByUserId: doc.updatedByUserId,
         costRates: doc.costRates,
         mediaProviderPolicy: doc.mediaProviderPolicy,
+        backgroundRuns: doc.backgroundRuns,
     };
 }
 
@@ -205,6 +207,9 @@ export class MongoPlatformConfigRepository implements PlatformConfigRepository {
                 updatedAt: new Date(),
                 updatedByUserId: inputRates.updatedByUserId ?? input.updatedByUserId,
             } as PlatformCostRates;
+        }
+        if (input.backgroundRuns !== undefined) {
+            setFields.backgroundRuns = { ...(existingDoc?.backgroundRuns ?? {}), ...input.backgroundRuns };
         }
         if (input.mediaProviderPolicy !== undefined) {
             setFields.mediaProviderPolicy = {

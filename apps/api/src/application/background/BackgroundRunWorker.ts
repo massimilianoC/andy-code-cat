@@ -10,8 +10,8 @@ import { RunInterrupt, type BackgroundRunEngine } from "./BackgroundRunEngine";
 
 export interface BackgroundRunWorkerOptions {
     workerId: string;
-    /** Runs executed at once, whole installation. */
-    poolSize: number;
+    /** Runs executed at once, whole installation — or how to read it (PlatformConfig) at each claim pass. */
+    poolSize: number | (() => Promise<number>);
     leaseMs: number;
     pollMs: number;
     /** Called on every loop turn (the container health check reads it). */
@@ -62,9 +62,10 @@ export class BackgroundRunWorker {
     async tick(): Promise<number> {
         this.options.onTick?.();
         let claimed = 0;
-        while (!this.stopping && this.active.size < this.options.poolSize) {
+        const poolSize = typeof this.options.poolSize === "function" ? await this.options.poolSize() : this.options.poolSize;
+        while (!this.stopping && this.active.size < poolSize) {
             const now = new Date();
-            if (await this.repository.countLeased(now) >= this.options.poolSize) break;
+            if (await this.repository.countLeased(now) >= poolSize) break;
             const run = await this.repository.claimNext({ workerId: this.options.workerId, leaseMs: this.options.leaseMs, now });
             if (!run) break;
             claimed += 1;

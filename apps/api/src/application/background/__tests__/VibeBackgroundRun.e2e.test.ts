@@ -229,4 +229,28 @@ describe("background run — the Vibe flow carried by the worker", () => {
         expect(third.status).toBe(429);
         expect(third.body.code).toBe("BACKGROUND_RUN_LIMIT_REACHED");
     });
+
+    it("the per-user limit is the superadmin's setting, applied at once and reported to the home", async () => {
+        const db = await getDb();
+        const adminOid = new ObjectId();
+        await db.collection("users").insertOne({ _id: adminOid, email: "admin@example.com", passwordHash: "x", emailVerified: true, isBlocked: false, roles: ["superadmin"], createdAt: new Date() });
+        const adminToken = jwt.sign({ sub: adminOid.toHexString(), roles: ["superadmin"] }, TEST_JWT_ACCESS_SECRET, { expiresIn: "1h" });
+
+        const before = await request(app).get("/v1/admin/config").set("Authorization", `Bearer ${adminToken}`);
+        expect(before.body.backgroundRuns).toMatchObject({ maxPerUser: 2, source: "environment" });
+
+        const saved = await request(app).patch("/v1/admin/config").set("Authorization", `Bearer ${adminToken}`)
+            .send({ backgroundRuns: { maxPerUser: 3 } });
+        expect(saved.status).toBe(200);
+        expect(saved.body.backgroundRuns).toMatchObject({ maxPerUser: 3, source: "config" });
+        expect((await request(app).patch("/v1/admin/config").set("Authorization", `Bearer ${token(owner)}`)
+            .send({ backgroundRuns: { maxPerUser: 9 } })).status).toBe(403);
+
+        const start = () => request(app).post("/v1/background-runs").set("Authorization", `Bearer ${token(owner)}`)
+            .send({ prompt: "Un sito per una libreria indipendente a Bologna" });
+        expect((await start()).status).toBe(201);
+        expect((await start()).status).toBe(429);
+        const list = await request(app).get("/v1/background-runs").set("Authorization", `Bearer ${token(owner)}`);
+        expect(list.body.limits).toEqual({ maxPerUser: 3, active: 3 });
+    });
 });
