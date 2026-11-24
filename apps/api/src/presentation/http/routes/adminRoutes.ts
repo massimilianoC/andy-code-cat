@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { Router } from "express";
 import { setAuthenticatedUserFileHeaders } from "../security/userFileHeaders";
 import { adminDraftProjectTemplateSchema, adminLlmModelActivationSchema, adminLlmModelPatchSchema, adminProjectPresetPatchSchema, adminSeedLlmRegistrySchema, adminSeedPresetRegistrySchema, createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
@@ -101,6 +102,11 @@ function toBrandAssetDto(asset: BrandAsset): BrandAssetDto {
         updatedAt: asset.updatedAt.toISOString(),
     };
 }
+
+
+/** Optional reason a superadmin gives when inspecting a user's project content (audit log). */
+const inspectionReasonSchema = z.string().trim().max(500).optional()
+    .transform((value) => (value ? value : undefined));
 
 export function createAdminRoutes(): Router {
     const router = Router();
@@ -639,6 +645,8 @@ export function createAdminRoutes(): Router {
                 return;
             }
 
+            // Why the superadmin opened someone else's content — optional, recorded verbatim.
+            const reason = inspectionReasonSchema.parse(req.query.reason);
             const actor = await userRepo.findById(req.auth!.userId);
             AdminAuditLogger.instance.emit({
                 actorUserId: req.auth!.userId,
@@ -647,7 +655,11 @@ export function createAdminRoutes(): Router {
                 targetProjectId: projectId,
                 targetUserId: project.ownerUserId,
                 targetSnapshotId: snapshotId,
-                metadata: { conversationId: snapshot.conversationId, isActive: snapshot.isActive },
+                metadata: {
+                    conversationId: snapshot.conversationId,
+                    isActive: snapshot.isActive,
+                    ...(reason ? { reason } : {}),
+                },
             });
 
             res.json({ snapshot });
