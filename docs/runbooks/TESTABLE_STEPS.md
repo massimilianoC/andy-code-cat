@@ -901,3 +901,19 @@ If provider fails: `4xx` error (no fallback in edit mode).
    (the health check reads `/tmp/background-worker.alive`, touched on every loop turn).
 3. Worker log on start: `[background-worker] <id> started — pool N, lease …ms, poll …ms, cost ceiling €…`.
 
+
+## Background runs — Vibe orchestrator and API (BACKGROUND_RUNS.md, Phase 2)
+
+1. `npm test -w apps/api -- src/application/background` — besides the Phase 1 suite:
+   `VibeBackgroundRun.e2e.test.ts` runs the real app and the real worker composition with only the
+   provider stubbed: `POST /v1/background-runs` → classify, prefill, launch (`optimizationPolicy`
+   "skip"), generation journalled under `bgrun-<runId>-generate`, active version, live deployment,
+   `background_run_done` notice with `workspacePath` and `publicUrl`. Also: another user's id gives
+   404 on read, list and cancel; a resumed generation that finds its turn persisted makes no second
+   provider call; a third concurrent start answers 429 `BACKGROUND_RUN_LIMIT_REACHED`.
+   `backgroundRunProgress.test.ts`: progress percentage, estimate sources, draft → intake, slug.
+2. Live (costs one Vibe flow on the configured models): start a run, then
+   `GET /v1/background-runs/<id>` until `status` is `done`; the worker log shows
+   `claimed <id> at queued` and `left at done`; `site.publicUrl` opens the site.
+3. A prefill that is disabled or fails ends the run `failed` at `briefing` with
+   `BACKGROUND_RUN_BRIEF_UNAVAILABLE` — the brief is never invented; the project stays.
