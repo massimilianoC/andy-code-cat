@@ -8,6 +8,18 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0. Release 2026.11.24.3 — background runs end to end: Vibe auto-mode (Phases 2–3)
+
+The worker now runs the Vibe flow (`VibeBackgroundRunSteps`): classify → prefill (brief
+auto-approved through `guidedIntakeFromDraft`) → workspace launch → generation of the canonical
+brief → active version → publish, with the same stages and compositions as the interactive path.
+API `/v1/background-runs` (start, list, read, cancel; per-user limit). Web: **Auto** toggle in the
+home Vibe chat; the notification manager follows each run (step, progress bar, estimated time to go)
+and ends with "Apri nel Workspace" / "Apri il sito"; the home list refreshes on its own. Additive
+data only (`background_runs.progress`, notice types `background_run_done|failed`); no migration.
+The worker container must mount the same `data` volume as the API (it writes the published files).
+Spec §7.
+
 ## 0. Release 2026.11.24.2 — background-run queue and worker process (Phase 1)
 
 New collection `background_runs` (additive) and a `worker` container (same image as the API,
