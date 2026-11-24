@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { AdminPageHeader, NotEnforcedNotice } from "@/components/admin/AdminUi";
 
 // ── Cost policy groups ─────────────────────────────────────────────────────────
 const COST_TYPE_GROUPS: Array<{
@@ -293,7 +294,11 @@ export default function AdminConfigPage() {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold">Platform Configuration</h1>
+            <AdminPageHeader
+                eyebrow="Advanced"
+                title="Platform"
+                description="Installation-wide settings: where published sites live, background-run limits, sign-up and verification, cost policy."
+            />
 
             {error && <p className="text-destructive text-sm">{error}</p>}
 
@@ -436,13 +441,17 @@ export default function AdminConfigPage() {
                 {/* Default User Limits */}
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-base">Default User Limits</CardTitle>
+                        <CardTitle className="text-base">Default user limits</CardTitle>
                         <CardDescription className="text-xs">
-                            Applied to newly created users. Use -1 for unlimited. Individual overrides take precedence.
+                            Intended defaults for new accounts. Use -1 for unlimited.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
+                        <NotEnforcedNotice>
+                            Not copied to new accounts and not checked anywhere yet, so they have no effect.
+                            Read-only until enforced (see the TODO list in SUPER_ADMIN_SPEC.md).
+                        </NotEnforcedNotice>
+                        <fieldset disabled className="m-0 grid grid-cols-2 gap-3 border-0 p-0 opacity-60">
                             <div className="flex flex-col gap-1">
                                 <Label htmlFor="dl-plan" className="text-xs">Plan name</Label>
                                 <Input
@@ -488,7 +497,7 @@ export default function AdminConfigPage() {
                                     onChange={(e) => setDefaultLimits((f) => ({ ...f, maxPublishedSites: Number(e.target.value) }))}
                                 />
                             </div>
-                        </div>
+                        </fieldset>
                     </CardContent>
                 </Card>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AdminPageHeader } from "@/components/admin/AdminUi";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import {
@@ -227,14 +228,12 @@ export default function AdminIntegrationsPage() {
     }
 
     return (
-        <div className="p-6 max-w-4xl mx-auto space-y-6">
-            <div>
-                <h1 className="text-xl font-semibold text-foreground">Integration Hub</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                    Manage encrypted API keys for external image, video, and LLM services.
-                    Keys are stored AES-256-GCM encrypted in MongoDB — never plain-text.
-                </p>
-            </div>
+        <div className="max-w-4xl space-y-6">
+            <AdminPageHeader
+                eyebrow="Advanced"
+                title="Media providers"
+                description="API keys for external image, video and LLM services, and the stock-image provider policy. Keys are stored AES-256-GCM encrypted — never in plain text."
+            />
 
             {/* Env status strip */}
             {envStatus && (

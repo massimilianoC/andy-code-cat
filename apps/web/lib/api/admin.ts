@@ -684,9 +684,18 @@ export function adminListProjectSnapshots(token: string, projectId: string): Pro
     return call("GET", `/v1/admin/projects/${projectId}/preview-snapshots`, undefined, auth(token));
 }
 
-/** Full artifacts for one version — server writes an AdminAuditLog entry on every call. */
-export function adminGetProjectSnapshot(token: string, projectId: string, snapshotId: string): Promise<{ snapshot: PreviewSnapshot }> {
-    return call("GET", `/v1/admin/projects/${projectId}/preview-snapshots/${snapshotId}`, undefined, auth(token));
+/**
+ * Full artifacts for one version — the server writes an AdminAuditLog entry on every call, with
+ * the optional reason the superadmin gave for looking (at most 500 characters).
+ */
+export function adminGetProjectSnapshot(
+    token: string,
+    projectId: string,
+    snapshotId: string,
+    reason?: string,
+): Promise<{ snapshot: PreviewSnapshot }> {
+    const query = reason?.trim() ? `?reason=${encodeURIComponent(reason.trim().slice(0, 500))}` : "";
+    return call("GET", `/v1/admin/projects/${projectId}/preview-snapshots/${snapshotId}${query}`, undefined, auth(token));
 }
 
 // ── Service API keys ──────────────────────────────────────────────────────────

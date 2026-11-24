@@ -253,4 +253,33 @@ describe("background run — the Vibe flow carried by the worker", () => {
         const list = await request(app).get("/v1/background-runs").set("Authorization", `Bearer ${token(owner)}`);
         expect(list.body.limits).toEqual({ maxPerUser: 3, active: 3 });
     });
+
+    it("a superadmin inspecting the generated site leaves an audit row with the reason given", async () => {
+        const db = await getDb();
+        const admin = await db.collection("users").findOne({ email: "admin@example.com" });
+        const adminToken = jwt.sign({ sub: admin!._id.toHexString(), roles: ["superadmin"] }, TEST_JWT_ACCESS_SECRET, { expiresIn: "1h" });
+        const stored = await db.collection("background_runs").findOne({ _id: runId as never });
+        const snapshotId = stored!.outputs.snapshot.snapshotId as string;
+
+        const res = await request(app)
+            .get(`/v1/admin/projects/${projectId}/preview-snapshots/${snapshotId}`)
+            .query({ reason: "  Segnalazione contenuto  " })
+            .set("Authorization", `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.snapshot.artifacts.html).toContain("Forno Rossi");
+
+        let row: Record<string, unknown> | null = null;
+        for (let i = 0; i < 20 && !row; i += 1) {
+            row = await db.collection("admin_audit_logs").findOne({ action: "admin_viewed_project_snapshot", targetSnapshotId: snapshotId });
+            if (!row) await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        expect(row?.metadata).toMatchObject({ reason: "Segnalazione contenuto" });
+        expect(row?.targetUserId).toBe(owner);
+
+        const tooLong = await request(app)
+            .get(`/v1/admin/projects/${projectId}/preview-snapshots/${snapshotId}`)
+            .query({ reason: "x".repeat(501) })
+            .set("Authorization", `Bearer ${adminToken}`);
+        expect(tooLong.status).toBe(400);
+    });
 });

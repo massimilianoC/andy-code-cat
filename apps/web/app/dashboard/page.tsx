@@ -129,7 +129,8 @@ export default function DashboardPage() {
         setAccordionOpen(loadAccordionState());
         setEntryMode(loadMode());
         const roles = getRoles();
-        setCanAccessSuperadmin(roles.includes("admin") || roles.includes("superadmin"));
+        // The admin area admits superadmins only (app/admin/layout.tsx); an "admin" would be sent to /login.
+        setCanAccessSuperadmin(roles.includes("superadmin"));
         setPasswordChangeRequiredState(isPasswordChangeRequired());
         if (new URLSearchParams(window.location.search).get("welcome") === "1") {
             setWelcomePrefsOpen(true);
