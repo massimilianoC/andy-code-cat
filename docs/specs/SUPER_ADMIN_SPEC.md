@@ -189,18 +189,73 @@ to `/login` if either:
 
 ### Pages
 
-| Route | Purpose |
-|---|---|
-| `/admin` | Dashboard: platform stats overview |
-| `/admin/users` | Paginated user list with search + filter |
-| `/admin/users/[userId]` | Master-detail user view: info, block, role, limits, plan |
-| `/admin/config` | Platform configuration editor |
-| `/admin/governance` | Per-product governance editor with Monaco-backed prompt/injection/nginx sections |
+Since 2026-11-24 the superadmin is organised around what a local operator does every week
+(§ "Information architecture — 2026-11-24" below). Routes:
+
+| Route | Section | Purpose |
+|---|---|---|
+| `/admin` | Overview | KPIs, cost ledger summary, AI usage |
+| `/admin/users` | Users | Accounts, roles, blocks; user panel with projects (→ Projects filtered by owner) |
+| `/admin/projects` | Projects | Every project, published or not (`?ownerId=` filter); panel: Overview, **Content** (audited inspection), AI usage, Site, Danger zone |
+| `/admin/models` | Models | LLM catalog: which provider/model may be dispatched |
+| `/admin/prompts` | Prompts | `?tab=tasks` pipeline tasks (model/budget/template per stage), `?tab=system` system prompts, `?tab=attachments` attachment & document-context limits (read-only) |
+| `/admin/config` | Advanced → Platform | Published sites address, background runs, access control, default limits (not enforced), cost policy |
+| `/admin/publishing` | Advanced → Publishing | Analytics, HTML/JS injections, cookie banner and legal pages |
+| `/admin/integrations` | Advanced → Media providers | Service API keys, stock-image provider policy |
+| `/admin/presets` | Advanced → Presets | Project types |
+| `/admin/brand` | Advanced → Brand | Platform brand assets |
+| `/admin/guided-mode`, `/admin/governance` | — | Redirects to `/admin/prompts` (old links) |
 
 The admin UI uses the same shadcn/ui primitives and Tailwind semantic tokens as the rest of the
 application.  It is not linked from the user-facing navigation and is invisible to regular users.
 
 ---
+
+## Information architecture — 2026-11-24
+
+Frontend-only restructure (no change to the admin API except the optional inspection reason).
+
+- **Shell** (`app/admin/layout.tsx`): sidebar with two primary groups — *Manage* (Overview, Users,
+  Projects) and *AI* (Models, Prompts) — and a collapsible *Advanced* group for everything that
+  works but is rarely touched. Drawer on mobile, `next/link` navigation, no inline styles.
+- **Shared kit** (`components/admin/AdminUi.tsx`): `AdminPageHeader`, `AdminTabs` (WAI-ARIA
+  tablist, arrow keys) with `useTabParam` (tab kept in `?tab=`), `NotEnforcedNotice`. The legacy
+  `.admin-tab` / `.admin-seg-*` CSS is removed.
+- **One editor per concern, saving only its own fields.** `PipelineTasksEditor` saves the six
+  pipeline tasks; `GovernanceEditor` (`scope="prompts"`) saves the system prompt templates and
+  its two utility tasks; `GovernanceEditor` (`scope="publishing"`) saves injections, cookie banner
+  and legal pages. The configuration route merges per task and per section, so two editors can no
+  longer overwrite each other (previously the governance save resent every task as loaded).
+- **Inspection of user content.** Projects → Content lists every version; opening one asks for an
+  optional reason, then `GET /v1/admin/projects/:id/preview-snapshots/:snapshotId?reason=` returns
+  the artifacts and writes `admin_viewed_project_snapshot` with the actor, owner, version and
+  `metadata.reason` (≤ 500 chars). The render is a `sandbox="allow-scripts"` frame without the app
+  origin.
+- **Settings that do nothing are shown as such**: user and default limits are read-only with a
+  "Not enforced" notice; attachment/document-context limits are read-only ("the API does not
+  accept changes yet"); the nginx runtime card and the CSS-injection tab are no longer shown.
+- **Language**: English throughout the admin (i18n of ~5,000 lines judged not worth it now).
+
+## TODO — superadmin (2026-11-24)
+
+1. **User limits** (`maxProjects`, `maxMonthlyTokensK`, `maxStorageMb`, `maxPublishedSites`, and the
+   platform defaults): enforce them (ideally on real measured cost) or remove them. Not copied to
+   new accounts (`RegisterUser`) and not checked anywhere today.
+2. **Attachment & document-context policy**: add them to `setPlatformConfigSchema.governanceByProduct`
+   so the Prompts → Attachments panel can become editable (today the API strips them silently).
+3. **`maxCompletionTokens` ceiling**: the contract allows 32,000 while stored task defaults go up to
+   64,000 — saving such a task is refused with 400.
+4. **Publishing injections**: `PublishProject` reads only the preset's scope with no fallback to
+   `default`, and swallows a config read error.
+5. **Cookie banner and legal pages — GDPR**: consent before any tracking tag, records of consent,
+   and how superadmin inspections of user projects are disclosed to users (privacy notice).
+6. **Dead configuration**: remove `nginx.*`, `injections.globalCss`, `promptTemplates.reviewSystem`,
+   `features.didacticMode`, `LLM_CATALOG_SOURCE` from entity, contract, repository (UI no longer shows them).
+7. **Costs**: single ledger at real measured cost, automatic SiliconFlow price list (OpenRouter
+   `/endpoints` + ECB rate), cost chip and unified recap (cost analysis of 2026-11-24).
+8. **Remaining inline styles / raw controls** in Overview, Media providers, Users and the
+   governance panels; the duplicated `POST /admin/service-keys/seed-from-env` route; zod validation
+   of service keys and cost rates; session revocation on role change.
 
 ## Seed & First-Install Wizard
 
