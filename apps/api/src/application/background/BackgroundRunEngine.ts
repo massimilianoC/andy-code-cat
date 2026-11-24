@@ -61,7 +61,8 @@ export interface BackgroundRunSteps {
 }
 
 export interface BackgroundRunEngineOptions {
-    maxCostEur: number;
+    /** A number, or how to read the current ceiling (PlatformConfig) when a run is picked up. */
+    maxCostEur: number | (() => Promise<number>);
     maxAttempts: number;
 }
 
@@ -85,6 +86,9 @@ export class BackgroundRunEngine {
     /** Returns the run as left by this worker (null when the lease was lost along the way). */
     async process(claimed: BackgroundRun, workerId: string, signal: AbortSignal): Promise<BackgroundRun | null> {
         let run: BackgroundRun = claimed;
+        const maxCostEur = typeof this.options.maxCostEur === "function"
+            ? await this.options.maxCostEur()
+            : this.options.maxCostEur;
         try {
             if (run.cancelRequested) throw new RunInterrupt("cancelled");
             if (run.attempts > this.options.maxAttempts) {
@@ -123,10 +127,10 @@ export class BackgroundRunEngine {
                     costEur,
                 });
 
-                if (costEur > this.options.maxCostEur && !isTerminalStatus(run.status)) {
+                if (costEur > maxCostEur && !isTerminalStatus(run.status)) {
                     throw new BackgroundRunStepError(
                         "BACKGROUND_RUN_COST_CEILING",
-                        `The run has cost €${costEur.toFixed(4)}, above its ceiling of €${this.options.maxCostEur.toFixed(2)}; it is stopped.`,
+                        `The run has cost €${costEur.toFixed(4)}, above its ceiling of €${maxCostEur.toFixed(2)}; it is stopped.`,
                     );
                 }
             }

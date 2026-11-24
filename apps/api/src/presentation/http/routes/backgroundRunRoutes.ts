@@ -14,7 +14,8 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { createBackgroundRunSchema, type BackgroundRunDto, type BackgroundRunEstimateDto } from "@andy-code-cat/contracts";
-import { env } from "../../../config";
+import { backgroundRunLimitsReader } from "../../../application/background/backgroundRunLimits";
+import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { EstimateBackgroundRunDuration } from "../../../application/background/EstimateBackgroundRunDuration";
 import { ManageProject } from "../../../application/use-cases/ManageProject";
 import type { BackgroundRun } from "../../../domain/entities/BackgroundRun";
@@ -71,6 +72,7 @@ export function createBackgroundRunRoutes(): Router {
     const projects = new MongoProjectRepository();
     const manageProject = new ManageProject(projects, new MongoProjectPresetRepository(), new MongoProjectMoodboardRepository());
     const estimate = new EstimateBackgroundRunDuration(new MongoBackgroundRunDurationStats());
+    const limits = backgroundRunLimitsReader(new MongoPlatformConfigRepository());
 
     const readLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false });
     const writeLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true, legacyHeaders: false });
@@ -85,13 +87,14 @@ export function createBackgroundRunRoutes(): Router {
             const input = createBackgroundRunSchema.parse(req.body);
             const userId = req.auth!.userId;
 
+            const { maxPerUser } = await limits();
             const active = await runs.countActiveForUser(userId);
-            if (active >= env.BACKGROUND_RUN_MAX_PER_USER) {
+            if (active >= maxPerUser) {
                 res.status(429).json({
-                    error: `At most ${env.BACKGROUND_RUN_MAX_PER_USER} background runs at once`,
+                    error: `At most ${maxPerUser} background runs at once`,
                     code: "BACKGROUND_RUN_LIMIT_REACHED",
                     userMessage: `Hai già ${active} generazioni in background in corso: attendi che una finisca.`,
-                    details: { active, max: env.BACKGROUND_RUN_MAX_PER_USER },
+                    details: { active, max: maxPerUser },
                 });
                 return;
             }
@@ -123,8 +126,13 @@ export function createBackgroundRunRoutes(): Router {
     router.get("/background-runs", readLimiter, authMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const { limit } = listQuerySchema.parse(req.query);
-            const list = await runs.listForUser(req.auth!.userId, limit ?? 20);
-            res.json({ runs: await Promise.all(list.map(present)) });
+            const [list, active, { maxPerUser }] = await Promise.all([
+                runs.listForUser(req.auth!.userId, limit ?? 20),
+                runs.countActiveForUser(req.auth!.userId),
+                limits(),
+            ]);
+            // The home disables "Crea con AI" in auto-mode while the user is at the limit.
+            res.json({ runs: await Promise.all(list.map(present)), limits: { maxPerUser, active } });
         } catch (error) {
             next(error);
         }

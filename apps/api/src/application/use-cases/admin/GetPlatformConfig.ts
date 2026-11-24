@@ -2,6 +2,7 @@ import type { PlatformConfigRepository } from "../../../domain/repositories/Plat
 import { DEFAULT_USER_LIMITS } from "../../../domain/entities/User";
 import { resolveMediaProviderPolicy } from "../../media/mediaProviderPolicy";
 import { resolvePublicSitesConfig } from "../../publish/publicSiteAddress";
+import { resolveBackgroundRunLimits } from "../../background/backgroundRunLimits";
 import {
     DEFAULT_PRODUCT_ATTACHMENT_POLICY,
     DEFAULT_PRODUCT_DOCUMENT_CONTEXT_POLICY,
@@ -109,6 +110,7 @@ export class GetPlatformConfig {
             },
             governanceByProduct,
             mediaProviderPolicy: resolveMediaProviderPolicy(effective),
+            backgroundRuns: resolveBackgroundRunLimits(effective),
             updatedAt: effective.updatedAt.toISOString(),
             updatedByUserId: effective.updatedByUserId,
         };

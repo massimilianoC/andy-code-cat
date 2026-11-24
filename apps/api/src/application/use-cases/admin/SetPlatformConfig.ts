@@ -2,6 +2,7 @@ import { setPlatformConfigSchema } from "@andy-code-cat/contracts";
 import type { PlatformConfigRepository } from "../../../domain/repositories/PlatformConfigRepository";
 import { resolveMediaProviderPolicy } from "../../media/mediaProviderPolicy";
 import { resolvePublicSitesConfig } from "../../publish/publicSiteAddress";
+import { resolveBackgroundRunLimits } from "../../background/backgroundRunLimits";
 
 export class SetPlatformConfig {
     constructor(private readonly configRepository: PlatformConfigRepository) { }
@@ -22,6 +23,7 @@ export class SetPlatformConfig {
             },
             governanceByProduct: updated.governanceByProduct ?? {},
             mediaProviderPolicy: resolveMediaProviderPolicy(updated),
+            backgroundRuns: resolveBackgroundRunLimits(updated),
             updatedAt: updated.updatedAt.toISOString(),
             updatedByUserId: updated.updatedByUserId,
         };
