@@ -25,14 +25,13 @@ import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositori
 import { MongoDidacticArtifactKnowledgeRepository } from "../../../infra/repositories/MongoDidacticArtifactKnowledgeRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
+import { ManageProject } from "../../../application/use-cases/ManageProject";
 import { DeleteProject } from "../../../application/use-cases/DeleteProject";
 import { DuplicateProject } from "../../../application/use-cases/DuplicateProject";
 import { GetProjectMoodboard } from "../../../application/use-cases/GetProjectMoodboard";
 import { UpdateProjectMoodboard } from "../../../application/use-cases/UpdateProjectMoodboard";
 import { hashPassword } from "../../../infra/security/password";
 import { signRefreshToken, verifyRefreshToken } from "../../../infra/security/jwt";
-import { PRESET_MAP } from "../../../domain/entities/ProjectPreset";
-import type { ProjectPreset } from "../../../domain/entities/ProjectPreset";
 import type { RequestWithContext } from "../types";
 
 const createProjectSchema = z.object({
@@ -46,25 +45,6 @@ const updateProjectSchema = z.object({
 }).refine((value) => value.name !== undefined || value.presetId !== undefined, {
     message: "At least one field must be provided",
 });
-
-function buildPresetMoodboardSeed(name: string, preset: ProjectPreset) {
-    const tags = preset.defaultTags;
-    const brief = preset.briefTemplate.replace(/\{\{projectName\}\}/g, name);
-
-    return {
-        inheritFromUser: false,
-        ...(tags.visualTags?.length ? { visualTags: tags.visualTags } : {}),
-        ...(tags.paletteTags?.length ? { paletteTags: tags.paletteTags } : {}),
-        ...(tags.typographyTags?.length ? { typographyTags: tags.typographyTags } : {}),
-        ...(tags.layoutTags?.length ? { layoutTags: tags.layoutTags } : {}),
-        ...(tags.toneTags?.length ? { toneTags: tags.toneTags } : {}),
-        ...(tags.audienceTags?.length ? { audienceTags: tags.audienceTags } : {}),
-        ...(tags.featureTags?.length ? { featureTags: tags.featureTags } : {}),
-        ...(tags.sectorTags?.length ? { sectorTags: tags.sectorTags } : {}),
-        ...(brief ? { projectBrief: brief } : {}),
-        ...(preset.styleTemplate ? { styleNotes: preset.styleTemplate } : {}),
-    };
-}
 
 function mapMoodboardToDto(m: import("../../../domain/entities/ProjectMoodboard").ProjectMoodboard) {
     return {
@@ -97,6 +77,7 @@ export function createProjectRoutes(): Router {
     const moodboardRepository = new MongoProjectMoodboardRepository();
     const promptConfigRepository = new MongoLlmPromptConfigRepository();
     const presetRepository = new MongoProjectPresetRepository();
+    const manageProject = new ManageProject(projectRepository, presetRepository, moodboardRepository);
     const siteDeploymentRepository = new MongoSiteDeploymentRepository();
     const platformConfigRepository = new MongoPlatformConfigRepository();
     const previewSnapshotRepository = new MongoPreviewSnapshotRepository();
@@ -176,26 +157,7 @@ export function createProjectRoutes(): Router {
     router.post("/projects", async (req: RequestWithContext, res, next) => {
         try {
             const { name, presetId } = createProjectSchema.parse(req.body);
-
-            const preset = presetId
-                ? (await presetRepository.findById(presetId).catch(() => null)) ?? PRESET_MAP.get(presetId) ?? null
-                : null;
-
-            if (presetId !== undefined && !preset) {
-                res.status(400).json({ error: `Unknown preset: ${presetId}` });
-                return;
-            }
-
-            const project = await projectRepository.create(req.auth!.userId, name, presetId);
-
-            // Seed moodboard from preset defaults when presetId is provided
-            if (preset) {
-                await moodboardRepository.upsert(
-                    project.id,
-                    req.auth!.userId,
-                    buildPresetMoodboardSeed(name, preset),
-                );
-            }
+            const project = await manageProject.create({ userId: req.auth!.userId, name, presetId });
 
             res.status(201).json({ project });
         } catch (error) {
@@ -221,45 +183,12 @@ export function createProjectRoutes(): Router {
     router.patch("/projects/:projectId", sandboxMiddleware, async (req: RequestWithContext, res, next) => {
         try {
             const { name, presetId } = updateProjectSchema.parse(req.body);
-            const currentProject = await projectRepository.findByIdForUser(req.sandbox!.projectId, req.auth!.userId);
-            if (!currentProject) {
-                res.status(404).json({ error: "Project not found" });
-                return;
-            }
-
-            const preset = presetId
-                ? (await presetRepository.findById(presetId).catch(() => null)) ?? PRESET_MAP.get(presetId) ?? null
-                : null;
-
-            if (presetId !== undefined && !preset) {
-                res.status(400).json({ error: `Unknown preset: ${presetId}` });
-                return;
-            }
-
-            const project = await projectRepository.update(req.sandbox!.projectId, req.auth!.userId, { name, presetId });
-            if (!project) {
-                res.status(404).json({ error: "Project not found" });
-                return;
-            }
-
-            if (preset && currentProject.presetId !== presetId) {
-                const existingMoodboard = await moodboardRepository.findByProjectId(project.id);
-                const presetSeed = buildPresetMoodboardSeed(project.name, preset);
-
-                await moodboardRepository.upsert(project.id, req.auth!.userId, {
-                    ...(existingMoodboard?.inheritFromUser === undefined ? { inheritFromUser: presetSeed.inheritFromUser } : {}),
-                    ...(existingMoodboard?.visualTags?.length ? {} : { visualTags: presetSeed.visualTags }),
-                    ...(existingMoodboard?.paletteTags?.length ? {} : { paletteTags: presetSeed.paletteTags }),
-                    ...(existingMoodboard?.typographyTags?.length ? {} : { typographyTags: presetSeed.typographyTags }),
-                    ...(existingMoodboard?.layoutTags?.length ? {} : { layoutTags: presetSeed.layoutTags }),
-                    ...(existingMoodboard?.toneTags?.length ? {} : { toneTags: presetSeed.toneTags }),
-                    ...(existingMoodboard?.audienceTags?.length ? {} : { audienceTags: presetSeed.audienceTags }),
-                    ...(existingMoodboard?.featureTags?.length ? {} : { featureTags: presetSeed.featureTags }),
-                    ...(existingMoodboard?.sectorTags?.length ? {} : { sectorTags: presetSeed.sectorTags }),
-                    ...(existingMoodboard?.projectBrief ? {} : { projectBrief: presetSeed.projectBrief }),
-                    ...(existingMoodboard?.styleNotes ? {} : { styleNotes: presetSeed.styleNotes }),
-                });
-            }
+            const project = await manageProject.update({
+                projectId: req.sandbox!.projectId,
+                userId: req.auth!.userId,
+                name,
+                presetId,
+            });
 
             res.json({ project });
         } catch (error) {

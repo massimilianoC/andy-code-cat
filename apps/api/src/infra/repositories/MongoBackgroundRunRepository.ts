@@ -159,11 +159,13 @@ export class MongoBackgroundRunRepository implements BackgroundRunRepository {
             set.lease = null;
         }
         if (transition.phase === "started" && transition.expectedStatus === "queued") set.startedAt = now;
+        const unset = transition.phase === "completed" || terminal ? { progress: "" } : undefined;
 
         const doc = await col.findOneAndUpdate(
             { _id: id, "lease.workerId": workerId, status: transition.expectedStatus } as Filter<BackgroundRunDocument>,
             {
                 $set: set,
+                ...(unset ? { $unset: unset } : {}),
                 $push: {
                     transitions: {
                         status: transition.loggedAs ?? transition.status,
@@ -177,6 +179,15 @@ export class MongoBackgroundRunRepository implements BackgroundRunRepository {
             { returnDocument: "after" },
         );
         return doc ? toEntity(doc) : null;
+    }
+
+    async recordProgress(id: string, workerId: string, progress: { generatedChars: number }, now: Date): Promise<boolean> {
+        const col = await this.col();
+        const result = await col.updateOne(
+            { _id: id, "lease.workerId": workerId, status: { $nin: TERMINAL } } as Filter<BackgroundRunDocument>,
+            { $set: { progress: { generatedChars: progress.generatedChars, updatedAt: now } } } as UpdateFilter<BackgroundRunDocument>,
+        );
+        return result.matchedCount === 1;
     }
 
     async requestCancel(id: string, userId: string, now: Date): Promise<BackgroundRun | null> {

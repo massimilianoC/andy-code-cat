@@ -13,21 +13,10 @@ import { authMiddleware } from "../middlewares/authMiddleware";
 import { createWorkSessionMiddleware } from "../middlewares/workSessionMiddleware";
 import type { RequestWithContext } from "../types";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
-import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
-import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
-import { getFileStorage } from "../../../infra/storage/StorageFactory";
-import { MongoBrandAssetRepository } from "../../../infra/repositories/MongoBrandAssetRepository";
-import { ResolveBrandDocumentContext } from "../../../application/use-cases/ResolveBrandDocumentContext";
-import { VibeClassifyStage, VibePrefillStage } from "../../../application/vibe/VibeEntryStages";
-import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
-import { VibeClassify } from "../../../application/use-cases/VibeClassify";
-import { VibePrefill } from "../../../application/use-cases/VibePrefill";
-import { MongoPromptExecutionLogRepository } from "../../../infra/repositories/MongoPromptExecutionLogRepository";
+import { composeGetLlmCatalog } from "../../../composition/composeGenerationEngine";
+import { composeVibeClassifyStage, composeVibePrefillStage } from "../../../composition/composeVibeEntryStages";
 import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
-import { OpenWorkSession } from "../../../application/use-cases/OpenWorkSession";
-import { MongoVibeIntakeRepository } from "../../../infra/repositories/MongoVibeIntakeRepository";
-import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositories/MongoZeroEffortFormProposalRepository";
 import { WORK_SESSION_HEADER } from "../middlewares/workSessionMiddleware";
 import {
     resolveAttachmentPolicyFromConfig,
@@ -35,7 +24,6 @@ import {
     type ProductAttachmentPolicy,
     type ProductDocumentContextPolicy,
 } from "../../../domain/entities/PlatformConfig";
-import { env } from "../../../config";
 
 const attachmentMetaSchema = z.object({
     filename: z.string().max(255),
@@ -85,36 +73,10 @@ export function createVibecoreRoutes(): Router {
     const router = Router();
 
     const platformConfigRepository = new MongoPlatformConfigRepository();
-    const llmCatalogRepository = new MongoLlmCatalogRepository();
-    const getLlmCatalog = new GetLlmCatalog(
-        env.LLM_CATALOG_SOURCE,
-        env.SILICONFLOW_BASE_URL,
-        env.LMSTUDIO_BASE_URL,
-        env.OPENROUTER_BASE_URL,
-        llmCatalogRepository,
-        env.hasOpenRouterApiKey,
-        env.providerApiKeys,
-        env.LLM_DEFAULT_PROVIDER,
-    );
-    const promptExecutionLogRepository = new MongoPromptExecutionLogRepository();
-    const openWorkSession = new OpenWorkSession(new MongoWorkSessionRepository());
-    const vibeIntakeRepository = new MongoVibeIntakeRepository();
-    const zeroEffortFormProposalRepository = new MongoZeroEffortFormProposalRepository();
-    const vibeClassify = new VibeClassify(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
-    const vibePrefill = new VibePrefill(platformConfigRepository, getLlmCatalog, promptExecutionLogRepository);
+    const getLlmCatalog = composeGetLlmCatalog();
     const projectRepository = new MongoProjectRepository();
-    const assetRepository = new MongoProjectAssetRepository();
-    const resolveBrandDocumentContext = new ResolveBrandDocumentContext(new MongoBrandAssetRepository());
-    const storage = getFileStorage();
-    const vibeClassifyStage = new VibeClassifyStage(vibeClassify, openWorkSession, vibeIntakeRepository, projectRepository);
-    const vibePrefillStage = new VibePrefillStage(
-        vibePrefill,
-        openWorkSession,
-        assetRepository,
-        storage,
-        resolveBrandDocumentContext,
-        zeroEffortFormProposalRepository,
-    );
+    const vibeClassifyStage = composeVibeClassifyStage(getLlmCatalog);
+    const vibePrefillStage = composeVibePrefillStage(getLlmCatalog);
 
     function validateAttachmentMetaLimits(attachmentMeta: Array<{ sizeBytes: number }>, policy: ProductAttachmentPolicy) {
         if (attachmentMeta.length > policy.maxAttachmentsPerPrompt) {

@@ -13,6 +13,8 @@ export const systemNotificationSourceEventTypeSchema = z.enum([
     "publish_blocked_unresolved_media",
     "export_blocked_unresolved_media",
     "pipeline_run_blocked",
+    "background_run_done",
+    "background_run_failed",
 ]);
 
 export const listSystemNotificationsQuerySchema = z.object({
