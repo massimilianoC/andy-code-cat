@@ -8,6 +8,13 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0. Release 2026.11.24.4 — Auto by default, Review, background-run limits in the superadmin
+
+The Vibe toggle starts on **Auto**; off, it reads **Review** (guided flow). In Auto, "Crea con AI"
+waits while the user is at the per-user limit of runs in flight. The limits (runs per user, parallel
+runs, cost ceiling per run) are now Admin → Config → Background runs (`PlatformConfig.backgroundRuns`),
+read at every use; `BACKGROUND_RUN_*` are only defaults until saved. No migration.
+
 ## 0. Release 2026.11.24.3 — background runs end to end: Vibe auto-mode (Phases 2–3)
 
 The worker now runs the Vibe flow (`VibeBackgroundRunSteps`): classify → prefill (brief
