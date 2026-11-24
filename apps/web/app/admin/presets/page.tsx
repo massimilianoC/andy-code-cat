@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AdminPageHeader } from "@/components/admin/AdminUi";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
 import {
@@ -230,12 +231,11 @@ export default function AdminPresetsPage() {
 
     return (
         <div className="flex flex-col gap-6 max-w-[1460px]">
-            <div>
-                <h1 className="text-[1.375rem] font-bold text-foreground mb-1">Project Template Models</h1>
-                <p className="text-sm text-muted-foreground max-w-4xl">
-                    Main superadmin surface for project-type template models: landing, website, videogame, free runner, serious game, 3D game, VR with A-Frame, onepager, posters, presentations, and future families.
-                </p>
-            </div>
+            <AdminPageHeader
+                eyebrow="Advanced"
+                title="Presets"
+                description="Project types (landing, website, game, slides…): the categories users start from and the template each one brings to the prompt."
+            />
 
             {error ? (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

@@ -8,6 +8,15 @@ runs that release. Newest sections are §6ter and the corrected §5bis.
 
 ---
 
+## 0. Release 2026.11.24.5 — superadmin reorganised (frontend), inspection reason in the audit log
+
+Sidebar with Manage (Overview, Users, Projects), AI (Models, Prompts) and a collapsible Advanced
+group. Prompts = pipeline tasks + system prompts; Publishing = injections, cookie banner, legal.
+Editors save only their own fields (no more cross-overwrite of tasks). Projects → Content inspects
+any version with an optional reason stored in `admin_audit_logs.metadata.reason`. Limits that are
+not enforced are shown read-only. Old `/admin/guided-mode` and `/admin/governance` redirect. TODO
+list: SUPER_ADMIN_SPEC.md. No migration.
+
 ## 0. Release 2026.11.24.4 — Auto by default, Review, background-run limits in the superadmin
 
 The Vibe toggle starts on **Auto**; off, it reads **Review** (guided flow). In Auto, "Crea con AI"

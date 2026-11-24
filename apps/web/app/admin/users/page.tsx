@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { AdminPageHeader, AdminTabs, NotEnforcedNotice } from "@/components/admin/AdminUi";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/token-store";
@@ -48,38 +51,11 @@ type ConfirmAction =
 
 type SidebarTab = "identity" | "permissions" | "resources";
 
-/** Segment-control tab bar for the user sidebar. */
-function SidebarTabs({
-    active,
-    onChange,
-}: {
-    active: SidebarTab;
-    onChange: (t: SidebarTab) => void;
-}) {
-    const tabs: { id: SidebarTab; label: string }[] = [
-        { id: "identity", label: "Identity" },
-        { id: "permissions", label: "Permissions" },
-        { id: "resources", label: "Resources" },
-    ];
-    return (
-        <div
-            className="admin-seg-list shrink-0 mx-4 mt-3"
-            style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}
-        >
-            {tabs.map((t) => (
-                <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => onChange(t.id)}
-                    className="admin-seg-tab"
-                    data-active={active === t.id ? "true" : undefined}
-                >
-                    {t.label}
-                </button>
-            ))}
-        </div>
-    );
-}
+const SIDEBAR_TABS: { id: SidebarTab; label: string }[] = [
+    { id: "identity", label: "Identity" },
+    { id: "permissions", label: "Permissions" },
+    { id: "resources", label: "Projects & usage" },
+];
 
 export default function AdminUsersPage() {
     const router = useRouter();
@@ -298,10 +274,12 @@ export default function AdminUsersPage() {
 
     return (
         <div className={cn("relative space-y-6", selectedUserId && "xl:pr-[42rem]")}>
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Users</h1>
-                <Button onClick={() => setShowCreate(true)}>Create User</Button>
-            </div>
+            <AdminPageHeader
+                eyebrow="Manage"
+                title="Users"
+                description="Accounts, roles and blocks. Open a user to see their projects — published or not — and their usage."
+                actions={<Button onClick={() => setShowCreate(true)}>Create user</Button>}
+            />
 
             {/* Filters */}
             <div className="flex flex-wrap gap-3 items-end">
@@ -467,7 +445,9 @@ export default function AdminUsersPage() {
 
                             {/* Tab bar */}
                             {selectedUser && !detailLoading && (
-                                <SidebarTabs active={sidebarTab} onChange={setSidebarTab} />
+                                <div className="shrink-0 px-5 pt-2">
+                                    <AdminTabs<SidebarTab> tabs={SIDEBAR_TABS} value={sidebarTab} onChange={setSidebarTab} className="mb-0" />
+                                </div>
                             )}
 
                             <ScrollArea className="flex-1">
@@ -666,10 +646,15 @@ export default function AdminUsersPage() {
                                                     {/* Limits */}
                                                     <Card>
                                                         <CardHeader className="pb-2">
-                                                            <CardTitle className="text-sm">Plan &amp; Limits</CardTitle>
+                                                            <CardTitle className="text-sm">Plan &amp; limits</CardTitle>
                                                         </CardHeader>
                                                         <CardContent className="space-y-3">
-                                                            <div className="grid grid-cols-2 gap-3">
+                                                            <NotEnforcedNotice>
+                                                                Stored on the account, but no part of the platform checks them yet: a
+                                                                user can exceed every value below. Shown read-only until they are
+                                                                enforced (see the TODO list in SUPER_ADMIN_SPEC.md).
+                                                            </NotEnforcedNotice>
+                                                            <fieldset disabled className="m-0 grid grid-cols-2 gap-3 border-0 p-0 opacity-60">
                                                                 <div className="space-y-1">
                                                                     <Label htmlFor="lu-plan">Plan</Label>
                                                                     <Input
@@ -714,22 +699,23 @@ export default function AdminUsersPage() {
                                                                         onChange={(e) => setLimitsForm((f) => ({ ...f, maxPublishedSites: Number(e.target.value) }))}
                                                                     />
                                                                 </div>
-                                                            </div>
-                                                            <p className="text-xs text-muted-foreground">Use -1 for unlimited values.</p>
-                                                            <Button
-                                                                size="sm"
-                                                                onClick={() => setConfirmAction("save-limits")}
-                                                                disabled={actionLoading}
-                                                            >
-                                                                Save limits
-                                                            </Button>
+                                                            </fieldset>
                                                         </CardContent>
                                                     </Card>
 
                                                     {/* Projects */}
                                                     <Card>
                                                         <CardHeader className="pb-2">
-                                                            <CardTitle className="text-sm">Projects ({selectedUser.projects.length})</CardTitle>
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <CardTitle className="text-sm">Projects ({selectedUser.projects.length})</CardTitle>
+                                                                {selectedUser.projects.length > 0 && (
+                                                                    <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                                                                        <Link href={`/admin/projects?ownerId=${encodeURIComponent(selectedUser.id)}&ownerEmail=${encodeURIComponent(selectedUser.email)}`}>
+                                                                            Open in Projects
+                                                                        </Link>
+                                                                    </Button>
+                                                                )}
+                                                            </div>
                                                         </CardHeader>
                                                         <CardContent className="space-y-2 text-sm">
                                                             {selectedUser.projects.length === 0 && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AdminPageHeader } from "@/components/admin/AdminUi";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { getToken } from "@/lib/token-store";
@@ -164,14 +165,11 @@ export default function AdminDashboardPage() {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "1400px" }}>
             {/* ── Header ───────────────────────────────────────────────────── */}
-            <div>
-                <h1 style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--text)", marginBottom: "0.25rem" }}>
-                    Platform Overview
-                </h1>
-                <p style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>
-                    Live stats across users, projects, deployments, and token consumption.
-                </p>
-            </div>
+            <AdminPageHeader
+                eyebrow="Manage"
+                title="Overview"
+                description="Users, projects, published sites, token use and costs across the installation."
+            />
 
             {/* ── Stats grid ───────────────────────────────────────────────── */}
             <div
@@ -402,11 +400,11 @@ export default function AdminDashboardPage() {
                         gap: "10px",
                     }}
                 >
-                    <QuickLink href="/admin/users" label="Users" description="Manage accounts, roles, and limits" />
-                    <QuickLink href="/admin/projects" label="Projects" description="All projects across all users" />
-                    <QuickLink href="/admin/config" label="Config" description="Registration, verification, defaults" />
-                    <QuickLink href="/admin/presets" label="Template Models" description="Project-type templates, categories, and start UX" />
-                    <QuickLink href="/admin/governance" label="Preprompting" description="Optimized preprompt layers, legal, and runtime rules" />
+                    <QuickLink href="/admin/users" label="Users" description="Accounts, roles, blocks" />
+                    <QuickLink href="/admin/projects" label="Projects" description="Every project, published or not — inspect content" />
+                    <QuickLink href="/admin/models" label="Models" description="Which models the platform may use" />
+                    <QuickLink href="/admin/prompts" label="Prompts" description="Pipeline tasks and system prompts" />
+                    <QuickLink href="/admin/config" label="Platform" description="Sites address, background runs, sign-up" />
                 </div>
             </div>
         </div>
