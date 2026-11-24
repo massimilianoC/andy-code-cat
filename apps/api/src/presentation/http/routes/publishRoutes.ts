@@ -4,14 +4,12 @@ import fs from "fs";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
-import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
 import { MongoPublishHistoryRepository } from "../../../infra/repositories/MongoPublishHistoryRepository";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
-import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
-import { PublishProject } from "../../../application/use-cases/PublishProject";
+import { composePublishProject } from "../../../composition/composeVibeEntryStages";
 import { UnpublishProject } from "../../../application/use-cases/UnpublishProject";
 import { GetSiteDeployment } from "../../../application/use-cases/GetSiteDeployment";
 import { publishProjectSchema, customSlugSchema, classifySlugFormat, isPublicSiteSlug } from "@andy-code-cat/contracts";
@@ -96,15 +94,13 @@ export function createPublishRoutes() {
     const publicRouter = Router();
 
     const projectRepository = new MongoProjectRepository();
-    const snapshotRepository = new MongoPreviewSnapshotRepository();
     const deploymentRepository = new MongoSiteDeploymentRepository();
     const historyRepository = new MongoPublishHistoryRepository();
     const userRepository = new MongoUserRepository();
-    const assetRepository = new MongoProjectAssetRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
     const platformConfigRepository = new MongoPlatformConfigRepository();
-    const publishProject = new PublishProject(deploymentRepository, snapshotRepository, localFileStorage, assetRepository, historyRepository, platformConfigRepository);
+    const publishProject = composePublishProject();
     const unpublishProject = new UnpublishProject(deploymentRepository, localFileStorage);
     const getSiteDeployment = new GetSiteDeployment(deploymentRepository);
     const publicSites = async () => resolvePublicSitesConfig(await platformConfigRepository.get());

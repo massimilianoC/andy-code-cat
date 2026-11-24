@@ -47,6 +47,9 @@ export interface BackgroundRunRepository {
     /** Appends a transition and applies it; null when the lease is lost or the status moved. */
     recordTransition(id: string, workerId: string, transition: RecordBackgroundRunTransition): Promise<BackgroundRun | null>;
 
+    /** Stores the live progress of the step in flight; false when the lease is lost. */
+    recordProgress(id: string, workerId: string, progress: { generatedChars: number }, now: Date): Promise<boolean>;
+
     /**
      * The owner asks to stop. A queued run nobody holds is cancelled at once; a run in progress
      * is flagged and the worker stops it at its next heartbeat or step boundary.

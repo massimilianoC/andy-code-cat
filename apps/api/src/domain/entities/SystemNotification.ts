@@ -10,7 +10,9 @@ export type SystemNotificationSourceEventType =
     | "media_persistence_failed"
     | "publish_blocked_unresolved_media"
     | "export_blocked_unresolved_media"
-    | "pipeline_run_blocked";
+    | "pipeline_run_blocked"
+    | "background_run_done"
+    | "background_run_failed";
 
 export interface SystemNotification {
     id: string;

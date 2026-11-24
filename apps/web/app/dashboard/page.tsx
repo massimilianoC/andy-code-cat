@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { VibeCoreEntry } from "@/components/dashboard/VibeCoreEntry";
+import { PROJECTS_CHANGED_EVENT } from "@/lib/notifications";
 import type { EntryMode } from "@/components/dashboard/ModeSelector";
 import {
     Dialog,
@@ -139,6 +140,16 @@ export default function DashboardPage() {
         void load(tok);
         void getPresets().then((res) => setPresetCatalog(res.presets ?? [])).catch(() => undefined);
     }, [router]);
+
+    // A background run creates, renames and finishes projects while the home is open: reload the
+    // list when the notification manager says so (no page refresh).
+    useEffect(() => {
+        if (!token) return;
+        const reload = () => { void load(token); };
+        window.addEventListener(PROJECTS_CHANGED_EVENT, reload);
+        return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, reload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [token]);
 
     useEffect(() => {
         if (createOpen) {

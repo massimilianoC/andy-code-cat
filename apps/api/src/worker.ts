@@ -15,6 +15,8 @@ import { MongoBackgroundRunRepository } from "./infra/repositories/MongoBackgrou
 import { BackgroundRunEngine } from "./application/background/BackgroundRunEngine";
 import { BackgroundRunWorker } from "./application/background/BackgroundRunWorker";
 import { composeBackgroundRunSteps } from "./background/composeBackgroundRunSteps";
+import { SystemNotifier } from "./application/services/SystemNotifier";
+import { MongoSystemNotificationRepository } from "./infra/repositories/MongoSystemNotificationRepository";
 
 /** Touched on every loop turn; the container health check fails when it goes stale. */
 export const WORKER_ALIVE_FILE = "/tmp/background-worker.alive";
@@ -26,7 +28,9 @@ async function main(): Promise<void> {
     await repository.ensureIndexes();
 
     const workerId = `${hostname()}-${randomUUID().slice(0, 8)}`;
-    const engine = new BackgroundRunEngine(repository, composeBackgroundRunSteps(), {
+    // The completion notices are written by this process, not by the API's notification routes.
+    SystemNotifier.configure(new MongoSystemNotificationRepository());
+    const engine = new BackgroundRunEngine(repository, composeBackgroundRunSteps(repository), {
         maxCostEur: env.BACKGROUND_RUN_MAX_COST_EUR,
         maxAttempts: env.BACKGROUND_RUN_MAX_ATTEMPTS,
     });

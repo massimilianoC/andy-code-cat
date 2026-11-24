@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useNotifications, type SystemNotification } from "../lib/notifications";
+import { BackgroundRunNotificationBody, NotificationLinks } from "./notifications/BackgroundRunNotification";
 
 function NotificationRow({ n, onRemove }: { n: SystemNotification; onRemove: () => void }) {
     const { t } = useTranslation();
@@ -38,7 +39,9 @@ function NotificationRow({ n, onRemove }: { n: SystemNotification; onRemove: () 
                     {n.label}
                 </div>
 
-                {isRunning && typeof n.progress === "number" && (
+                {n.backgroundRun && <BackgroundRunNotificationBody run={n.backgroundRun} />}
+
+                {!n.backgroundRun && isRunning && typeof n.progress === "number" && (
                     <div className="mt-1.5">
                         <Badge variant="outline" className="text-[11px]">
                             {Math.min(100, n.progress)}%
@@ -46,11 +49,13 @@ function NotificationRow({ n, onRemove }: { n: SystemNotification; onRemove: () 
                     </div>
                 )}
 
-                {n.message && (
+                {!n.backgroundRun && n.message && (
                     <div className={cn("mt-1 text-xs break-words", isError ? "text-destructive/90" : "text-muted-foreground")}>
                         {n.message}
                     </div>
                 )}
+
+                {!n.backgroundRun && n.links && <NotificationLinks links={n.links} />}
             </div>
 
             <Button

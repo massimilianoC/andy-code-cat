@@ -9,29 +9,13 @@ import {
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import type { RequestWithContext } from "../types";
-import { env } from "../../../config";
 import { buildCanonicalGenerationBrief } from "../../../application/prompting/buildCanonicalGenerationBrief";
 import { MongoProjectRepository } from "../../../infra/repositories/MongoProjectRepository";
-import { MongoProjectMoodboardRepository } from "../../../infra/repositories/MongoProjectMoodboardRepository";
-import { MongoConversationRepository } from "../../../infra/repositories/MongoConversationRepository";
-import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
-import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
-import { MongoPipelineRunRepository } from "../../../infra/repositories/MongoPipelineRunRepository";
-import { MongoLlmCatalogRepository } from "../../../infra/repositories/MongoLlmCatalogRepository";
-import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
-import { PrepareGenerationWorkspace } from "../../../application/use-cases/PrepareGenerationWorkspace";
-import { LaunchGuidedProject } from "../../../application/use-cases/LaunchGuidedProject";
-import { LaunchWorkspacePipeline } from "../../../application/use-cases/LaunchWorkspacePipeline";
-import { OpenWorkSession } from "../../../application/use-cases/OpenWorkSession";
 import { MongoWorkSessionRepository } from "../../../infra/repositories/MongoWorkSessionRepository";
-import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositories/MongoZeroEffortFormProposalRepository";
 import { createWorkSessionMiddleware, WORK_SESSION_HEADER } from "../middlewares/workSessionMiddleware";
-import { diffFormFields } from "../../../domain/entities/ZeroEffortForm";
-import { ResolvePipelineModelLock } from "../../../application/use-cases/ResolvePipelineModelLock";
-import { GetLlmCatalog } from "../../../application/use-cases/GetLlmCatalog";
+import { composeWorkspaceLaunchStage } from "../../../composition/composeVibeEntryStages";
 import type { GenerationWorkspace } from "../../../domain/entities/GenerationWorkspace";
-import { ExecutionLogger } from "../../../application/services/ExecutionLogger";
 import {
     resolveAttachmentPolicyFromConfig,
     resolveDocumentContextPolicyFromConfig,
@@ -55,13 +39,7 @@ export function createPipelineRoutes(): Router {
     const router = Router();
 
     const projectRepository = new MongoProjectRepository();
-    const moodboardRepository = new MongoProjectMoodboardRepository();
-    const conversationRepository = new MongoConversationRepository();
-    const assetRepository = new MongoProjectAssetRepository();
-    const snapshotRepository = new MongoPreviewSnapshotRepository();
     const platformConfigRepository = new MongoPlatformConfigRepository();
-    const pipelineRunRepository = new MongoPipelineRunRepository();
-    const llmCatalogRepository = new MongoLlmCatalogRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
     const pipelineReadLimiter = rateLimit({
         windowMs: 60 * 1000,
@@ -76,37 +54,7 @@ export function createPipelineRoutes(): Router {
         legacyHeaders: false,
     });
 
-    const prepareGenerationWorkspace = new PrepareGenerationWorkspace(
-        assetRepository,
-        snapshotRepository,
-        conversationRepository,
-        localFileStorage,
-    );
-
-    const launchGuidedProject = new LaunchGuidedProject(
-        moodboardRepository,
-        conversationRepository,
-        prepareGenerationWorkspace,
-    );
-
-    const getLlmCatalog = new GetLlmCatalog(
-        env.LLM_CATALOG_SOURCE,
-        env.SILICONFLOW_BASE_URL,
-        env.LMSTUDIO_BASE_URL,
-        env.OPENROUTER_BASE_URL,
-        llmCatalogRepository,
-        env.hasOpenRouterApiKey,
-        env.providerApiKeys,
-        env.LLM_DEFAULT_PROVIDER,
-    );
-    const resolvePipelineModelLock = new ResolvePipelineModelLock(pipelineRunRepository, getLlmCatalog);
-    const openWorkSession = new OpenWorkSession(new MongoWorkSessionRepository());
-    const zeroEffortFormProposalRepository = new MongoZeroEffortFormProposalRepository();
-    const launchWorkspacePipeline = new LaunchWorkspacePipeline(
-        launchGuidedProject,
-        resolvePipelineModelLock,
-        pipelineRunRepository,
-    );
+    const workspaceLaunchStage = composeWorkspaceLaunchStage();
 
     // The guided launch has exactly one HTTP entry point: POST /pipeline/launch-workspace,
     // below. Three more used to reach the same handler without creating a PipelineRun —
@@ -177,61 +125,14 @@ export function createPipelineRoutes(): Router {
             try {
                 const intake = launchWorkspacePipelineSchema.parse(req.body);
 
-                if (intake.presetId || intake.outputLanguage) {
-                    await projectRepository.update(req.sandbox!.projectId, req.auth!.userId, {
-                        ...(intake.presetId ? { presetId: intake.presetId } : {}),
-                        ...(intake.outputLanguage ? { outputLanguage: intake.outputLanguage } : {}),
-                    }).catch(() => {});
-                }
-
-                // The launch is the second half of an intent Vibe already opened, so it joins that
-                // session rather than starting one. Without this the brief, the run and the artifact
-                // are orphaned from everything upstream of them (certificate §4, hole D).
+                // The launch joins the session Vibe opened (x-work-session-id); WorkspaceLaunchStage
+                // owns that, the preset/language update and the proposal decision record.
                 const launchSessionId = String(req.headers[WORK_SESSION_HEADER] ?? "").trim() || undefined;
-                const launchSession = await openWorkSession.reuseOrOpen(
-                    req.workSession?.id ?? launchSessionId,
-                    { userId: req.auth!.userId, entryMode: "workspace", projectId: req.sandbox!.projectId },
-                );
-
-                const result = await launchWorkspacePipeline.execute({
+                const result = await workspaceLaunchStage.execute({
                     userId: req.auth!.userId,
                     projectId: req.sandbox!.projectId,
                     intake,
-                    workSessionId: launchSession?.id,
-                });
-
-                // Certificate §3 question 4: this is the first moment both sides of the comparison
-                // exist — the proposal recorded at prefill, and the form as the user submitted it.
-                if (launchSession) {
-                    await zeroEffortFormProposalRepository.listByWorkSession(launchSession.id, req.auth!.userId)
-                        .then(async (proposals) => {
-                            const latest = proposals[proposals.length - 1];
-                            if (!latest) return;
-                            await zeroEffortFormProposalRepository.recordDecision(
-                                launchSession.id,
-                                req.auth!.userId,
-                                {
-                                    editedFields: diffFormFields(latest.prefilled, intake),
-                                    projectId: req.sandbox!.projectId,
-                                },
-                            );
-                        })
-                        .catch(() => undefined);
-                }
-
-                ExecutionLogger.instance.emit({
-                    projectId: req.sandbox!.projectId,
-                    conversationId: result.conversationId,
-                    domain: "system",
-                    eventType: "workspace_pipeline_prepared",
-                    level: "info",
-                    status: "success",
-                    metadata: {
-                        mode: "workspace",
-                        jobId: result.jobId,
-                        pipelineRunId: result.pipelineRunId,
-                        workspaceRootPath: result.workspace.rootPath,
-                    },
+                    continuingSessionId: req.workSession?.id ?? launchSessionId,
                 });
 
                 const response: LaunchWorkspacePipelineResultDto = {
