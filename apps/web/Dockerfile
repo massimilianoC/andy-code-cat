@@ -25,11 +25,14 @@ ARG RELEASE_VERSION=unknown
 ENV NEXT_PUBLIC_RELEASE_VERSION=$RELEASE_VERSION
 RUN npm install
 RUN npm run build -w packages/contracts && npm run build -w apps/web
+# Workspace-nested dependencies (not hoisted to the root) live here; see apps/api/Dockerfile.
+RUN mkdir -p apps/web/node_modules
 
 FROM node:22.23.5-alpine AS prod
 WORKDIR /workspace
 ENV NODE_ENV=production
 COPY --from=build /workspace/node_modules ./node_modules
+COPY --from=build /workspace/apps/web/node_modules ./apps/web/node_modules
 COPY --from=build /workspace/apps/web/package.json ./apps/web/package.json
 COPY --from=build /workspace/apps/web/.next ./apps/web/.next
 COPY --from=build /workspace/apps/web/next.config.mjs ./apps/web/next.config.mjs
