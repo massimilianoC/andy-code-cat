@@ -127,6 +127,27 @@ and is why there is no anonymous write path yet.
 6. **Lighter templates:** genre-specific sub-presets (shmup, maze, falling blocks…) with their own
    prompt modules and level-data conventions.
 
+### TODO — play while the next game is forging
+
+Today a game started from **New game** shows a progress bar on the shelf (polled every 8 s, also
+while a game is open), but nothing tells the player when it lands. Planned:
+
+- **In-game menu** on START or SELECT: an overlay drawn by the shell over the game frame (Resume ·
+  New game · Shelf). Opening it sends `P` to the game, which the playability contract requires to
+  pause; the frame stays mounted, so closing the menu resumes the same game. The shell cannot
+  freeze the frame's JavaScript itself: a game that ignores `P` keeps running behind the overlay.
+- **New game from the menu** without leaving the game, and a **"ready" toast** when a forging run
+  turns `done` (reusing the background-run notifications the dashboard already shows), with
+  "Play now" / "Later".
+- **Presets:** `vr-aframe` (needs a headset or a mouse) and `interactive-story` (choice-driven,
+  could map A/B to choices) are not on the shelf yet; decide per preset.
+
+### TODO — a more engaging shelf (see the UI notes in the release discussion of 2026-11-25)
+
+Immersive home (big preview of the focused game with genre, best score and top three), rows by
+genre plus "New" and "Forging" rows, text-free cover art, an attract mode when idle, UI sounds and
+gamepad rumble, selectable themes, 10-foot sizing with an overscan-safe area.
+
 ## 7. Building another mode on the same core
 
 A mode is four things layered over the shared platform. To swap the Arcade experience for another
