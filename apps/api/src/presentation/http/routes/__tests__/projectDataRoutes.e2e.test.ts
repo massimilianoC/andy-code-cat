@@ -126,7 +126,7 @@ describe("project data panel", () => {
         expect(all.body.limit).toBe(50);
         expect(all.body.items.map((r: { data: { player: string } }) => r.data.player)).toEqual(newestFirst);
         expect(all.body.items[0]).toEqual({
-            id: siteAScores[7]._id,
+            id: siteAScores[7]!._id,
             groupId: "speedrun",
             createdAt: "2026-11-25T10:08:00.000Z",
             data: { player: "ZOE", score: 2 },
@@ -184,14 +184,14 @@ describe("project data panel", () => {
         const rows = text.split("\r\n");
         expect(rows[0]).toBe("id,group,createdAt,player,score");
         expect(rows).toHaveLength(8 + 2); // header, 8 records, trailing empty line
-        expect(rows).toContain(`${siteAScores[4]._id},default,2026-11-25T10:05:00.000Z,'=SUM(A1),7`);
-        expect(rows).toContain(`${siteAScores[5]._id},default,2026-11-25T10:06:00.000Z,"say ""hi"", ok",8`);
+        expect(rows).toContain(`${siteAScores[4]!._id},default,2026-11-25T10:05:00.000Z,'=SUM(A1),7`);
+        expect(rows).toContain(`${siteAScores[5]!._id},default,2026-11-25T10:06:00.000Z,"say ""hi"", ok",8`);
         expect(text).not.toContain("INTRUDER");
         expect(text).not.toContain("STRANGER");
     });
 
     it("deletes one record of the project, and nothing across scopes", async () => {
-        const target = siteAScores[0]._id;
+        const target = siteAScores[0]!._id;
         // Owned project, but not the one holding the record.
         expect((await as(owner, siteB).delete(`${base(siteB)}/leaderboard/records/${target}`)).status).toBe(404);
         expect((await as(stranger, siteA).delete(`${base(siteA)}/leaderboard/records/${target}`)).status).toBe(403);
