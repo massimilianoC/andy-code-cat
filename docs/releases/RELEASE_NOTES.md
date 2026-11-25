@@ -10,6 +10,32 @@ database.
 
 ---
 
+## 2026.11.25.4 — Andy Arcade (MVP)
+
+### Features
+
+- **Arcade mode at `/arcade`:** the platform as a game console. A shelf of the user's games
+  (projects made with the game presets), played full screen from their active version, with
+  keyboard and USB controller support, controller remapping, and a high-score table per game.
+  **New game** builds a prompt from five wheels (genre, style, world, hero, twist) or a dice roll
+  and makes the game in the background. See [ARCADE_MODE_MVP.md](../specs/ARCADE_MODE_MVP.md).
+- **Leaderboard capability:** `GET/POST/DELETE /v1/projects/:projectId/leaderboard`, the first
+  persistent platform capability — one shared collection, every entry scoped to
+  owner + project + board, owner-only in this version.
+- **Game presets** (`videogame`, `freerunner`, `seriousgame`, `game3d`) share a playability
+  contract: WASD and arrows, Space/Shift/Enter/P, a controls legend, three or more levels, the
+  score reported through `window.AndyArcade.submitScore`, and original characters when a request
+  cites an existing game.
+
+### Upgrade notes
+
+- **Reseed presets** (`docs/runbooks/PRESET_RESEED.md`): the catalog in MongoDB wins over the
+  static one, and the new game block only reaches generation after the reseed.
+- `arcade` is now a reserved root segment: an existing published site with the custom slug
+  `arcade` stops answering at `/arcade/` (it stays reachable at `/p/{publishId}/`).
+
+---
+
 ## 2026.11.25.3 — Work recovered from stale branches
 
 The branches that had sat unmerged for months were reviewed against the current code. What was still
