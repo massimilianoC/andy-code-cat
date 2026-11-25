@@ -559,12 +559,18 @@
     "presetActive": "Active preset — brief and tags pre-filled.",
     "forms": {
       "title": "Operational forms",
-      "subtitle": "Project delivery and privacy settings",
+      "open": "Forms",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "enable": "Enable",
       "disable": "Disable",
       "explanation": "The LLM defines only the form structure. Recipient and privacy settings remain private project configuration and are applied deterministically during preview, publish and export.",
+      "mode": "Delivery",
+      "modeCapture": "Save submissions",
+      "modeMailto": "Open the visitor's email app",
+      "captureExplanation": "Submissions on the published site are validated and saved for you; browse, export or delete them in the project data panel. In preview and in the ZIP export the form does not send anything and says so.",
+      "mailtoExplanation": "The form opens a pre-filled email to the recipient in the visitor's email app. Nothing is saved by the platform.",
+      "republishHint": "Changes reach a published site the next time you publish it.",
       "recipient": "Recipient email",
       "controller": "Data controller",
       "privacyContact": "Privacy contact email",
@@ -574,7 +580,8 @@
       "saving": "Saving…",
       "saved": "Form service settings saved.",
       "loadError": "Unable to load form service settings.",
-      "saveError": "Unable to save form service settings."
+      "saveError": "Unable to save form service settings.",
+      "close": "Close"
     },
     "media": {
       "title": "Project media",

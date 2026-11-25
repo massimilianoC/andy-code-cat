@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Link2, Trash2, FileText, Globe, Bookmark } from "lucide-react";
+import { Upload, Link2, Trash2, FileText, Globe, Bookmark, ClipboardList } from "lucide-react";
 import {
     getProjectMoodboard,
     updateProjectMoodboard,
@@ -35,7 +35,7 @@ import { getToken } from "@/lib/token-store";
 import { cn } from "@/lib/utils";
 import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { BrandAssetsManager } from "@/components/brand/BrandAssetsManager";
-import { ProjectFormSettingsPanel } from "@/components/forms/ProjectFormSettingsPanel";
+import { FormSettingsDialog } from "@/components/forms/FormSettingsDialog";
 
 // ── Tag category → moodboard field mapping ────────────────────────────────────
 
@@ -327,6 +327,7 @@ export default function ProjectConfigPopup({
     const [urlLabel, setUrlLabel] = useState("");
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
+    const [formsOpen, setFormsOpen] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -596,14 +597,6 @@ export default function ProjectConfigPopup({
                                         </DisclosurePanel>
                                     ) : null}
 
-                                    {token ? (
-                                        <DisclosurePanel
-                                            title={t("config.forms.title")}
-                                            subtitle={t("config.forms.subtitle")}
-                                        >
-                                            <ProjectFormSettingsPanel token={token} projectId={projectId} />
-                                        </DisclosurePanel>
-                                    ) : null}
                                 </div>
                             </ScrollArea>
 
@@ -735,6 +728,12 @@ export default function ProjectConfigPopup({
                     )}
 
                     <DialogFooter className="px-6 py-4 border-t border-border shrink-0">
+                        {token ? (
+                            <Button variant="outline" className="sm:mr-auto" onClick={() => setFormsOpen(true)}>
+                                <ClipboardList className="w-4 h-4 mr-1.5" />
+                                {t("config.forms.open")}
+                            </Button>
+                        ) : null}
                         <Button variant="ghost" onClick={onClose} disabled={saving}>
                             {t("config.cancel")}
                         </Button>
@@ -743,6 +742,9 @@ export default function ProjectConfigPopup({
                         </Button>
                     </DialogFooter>
                 </div>
+                {token ? (
+                    <FormSettingsDialog open={formsOpen} onOpenChange={setFormsOpen} token={token} projectId={projectId} />
+                ) : null}
             </DialogContent>
         </Dialog>
     );
