@@ -10,6 +10,15 @@ database.
 
 ---
 
+## 2026.11.25.7 — Hotfix
+
+- **The API image of 2026.11.25.6 does not start** (`MODULE_NOT_FOUND: puppeteer`): a dependency
+  pinned for the API alone is installed under `apps/api/node_modules`, which the Dockerfile did not
+  copy. Both images now include their workspace-nested dependencies, and the API build fails when
+  a runtime dependency is missing. **Do not deploy 2026.11.25.6; deploy this release.**
+
+---
+
 ## 2026.11.25.6 — Saved forms, project data panel, arcade quality
 
 ### Features
