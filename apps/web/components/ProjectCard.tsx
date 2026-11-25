@@ -51,7 +51,7 @@ function relativeTime(dateString: string, t: (key: string, opts?: any) => string
 }
 
 /** Fetch a thumbnail JPEG with auth and return an object URL, or null on failure. */
-async function fetchThumbnailBlobUrl(projectId: string, snapshotId: string): Promise<string | null> {
+export async function fetchThumbnailBlobUrl(projectId: string, snapshotId: string): Promise<string | null> {
     const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
     const url = `${base}/v1/projects/${projectId}/preview-snapshots/${snapshotId}/thumbnail`;
     try {

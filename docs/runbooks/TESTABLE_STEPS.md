@@ -929,3 +929,17 @@ If provider fails: `4xx` error (no fallback in edit mode).
    sito** opens the published site in a new window; **Usalo** adopts the proposed `/slug/`.
 4. **Annulla** on a running entry ends it `cancelled`; a third start while two run answers with the
    limit message.
+
+## Arcade mode (2026.11.25.4)
+
+Prerequisite: presets reseeded (`seed-presets.js`), at least one project made with a game preset.
+
+1. Open `/arcade` (or **🎮 Arcade** in the dashboard header). Only game projects are on the shelf.
+2. Arrows/WASD move the focus, Enter opens a game. The game takes the keyboard immediately.
+3. With a USB controller connected, the d-pad and button 0 drive the game; SELECT returns to the
+   shelf. In **Controls**, **Remap** asks for each button in turn and remembers the controller.
+4. At game over the console asks for three initials; the high-score table shows the new entry and
+   its rank. **Play again** reloads the game, **Shelf** goes back.
+5. Esc pressed twice inside a game returns to the shelf.
+6. **New game** → turn the wheels or press **Random** → **Create**: a "forging" bar appears on the
+   shelf and the game lands there when the background run finishes (a few minutes, AI credit).

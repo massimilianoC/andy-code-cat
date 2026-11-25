@@ -15,6 +15,8 @@ export interface Project {
      * Present only after the background job completes. Used to build the thumbnail URL.
      */
     activeThumbnailSnapshotId?: string;
+    /** Snapshot ID of the active version, with or without a thumbnail. */
+    activeSnapshotId?: string;
 }
 
 export interface PresetOutputSpec {

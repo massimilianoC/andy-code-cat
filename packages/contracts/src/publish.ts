@@ -13,7 +13,7 @@ import { z } from "zod";
  */
 export const RESERVED_ROOT_SEGMENTS = [
     // web app routes
-    "login", "register", "dashboard", "workspace", "onboarding", "launch", "admin", "install",
+    "login", "register", "dashboard", "workspace", "onboarding", "launch", "admin", "install", "arcade",
     // web static assets (apps/web/public)
     "grapesjs",
     // api root mounts

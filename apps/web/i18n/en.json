@@ -89,7 +89,8 @@
       "description": "It takes a couple of minutes: your tastes become the starting point of every project. You can also do it later from the “Preferences” button at the top.",
       "yes": "Yes",
       "notNow": "Not now"
-    }
+    },
+    "arcade": "Arcade"
   },
   "onboarding": {
     "loading": "Loading...",
@@ -1185,5 +1186,49 @@
     "discardConfirmBody": "Removes the project, its prompt history, its recorded costs and its work session. This cannot be undone, and the already-paid work you were about to resume goes with it.",
     "discardConfirm": "Yes, delete",
     "backToChoice": "Go back"
+  },
+  "arcade": {
+    "hint": "Arrows/WASD · Enter/A select · Esc/B back",
+    "newGame": "New game",
+    "controls": "Controls",
+    "forging": "Forging",
+    "forgeFailed": "A game could not be made",
+    "forgingStarted": "Your game is being made: it appears on the shelf in a few minutes.",
+    "loading": "Loading…",
+    "empty": "No games yet. Choose “New game” and let Andy make one.",
+    "noVersion": "This game has no playable version yet.",
+    "newGameTitle": "Make a new game",
+    "wheel": {
+      "genre": "Genre",
+      "style": "Style",
+      "setting": "World",
+      "hero": "Hero",
+      "twist": "Twist"
+    },
+    "extra": "Your idea (optional)",
+    "extraPlaceholder": "e.g. the hero collects lost socks and enemies are vacuum cleaners",
+    "random": "Random",
+    "create": "Create",
+    "createHint": "Takes a few minutes and uses AI credit. You can keep playing meanwhile.",
+    "controlsTitle": "Controls",
+    "action": "Action",
+    "keyboard": "Keyboard",
+    "gamepad": "Gamepad (standard)",
+    "noPads": "No controller detected: plug one in and press any button.",
+    "nonStandard": "non-standard layout, remap it",
+    "pressFor": "Press the button for",
+    "remap": "Remap",
+    "resetMapping": "Reset",
+    "controlsHint": "Games use WASD/arrows, Space, Shift, Enter and P. Any USB controller is turned into those keys. SELECT or Esc twice goes back to the shelf.",
+    "backHint": "SELECT / Esc Esc",
+    "gameOver": "GAME OVER",
+    "enterInitials": "Enter your initials",
+    "saveScore": "Save score",
+    "skip": "Skip",
+    "leaderboard": "High scores",
+    "yourRank": "You are #{{rank}}",
+    "noScores": "No scores yet",
+    "playAgain": "Play again",
+    "library": "Shelf"
   }
 }
