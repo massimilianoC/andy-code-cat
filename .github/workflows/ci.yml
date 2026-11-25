@@ -1,0 +1,76 @@
+name: CI
+
+# The release gates from README.md ("Release gates"), on every pull request into develop and
+# main. public-repo-guard.yml runs the repository-hygiene guard separately.
+#
+# Not run here: tests/e2e (Playwright). Those specs need a live stack and call real LLM
+# providers, so they spend real money.
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitflow:
+    name: Gitflow and release version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # On pull_request HEAD is detached (refs/pull/N/merge): pass the real head branch.
+      - run: node scripts/gitflow-guard.mjs "${{ github.head_ref || github.ref_name }}"
+      - run: node scripts/release-version.mjs validate
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/contracts
+      - run: npx tsc --noEmit -p packages/contracts
+      - run: npx tsc --noEmit -p apps/api
+      - run: npx tsc --noEmit -p apps/web
+
+  test:
+    name: Unit and route tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+      # Route tests start an in-memory MongoDB. Its default version tracks the latest release,
+      # which has been seen to hang the download on GitHub runners: pin the major used by the
+      # compose files and cache the binary between runs.
+      MONGOMS_VERSION: "7.0.14"
+      MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongodb-binaries
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ env.MONGOMS_VERSION }}
+      - run: npm ci
+      - run: npm run build -w packages/contracts
+      - run: npx vitest run
+        working-directory: apps/api
+      - run: npx vitest run
+        working-directory: apps/web
