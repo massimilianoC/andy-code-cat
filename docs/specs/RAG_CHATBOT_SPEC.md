@@ -1,74 +1,74 @@
-# Andy Code Cat — RAG Chatbot per Landing Page: Specifiche
+# Andy Code Cat — RAG Chatbot for Landing Pages: Specification
 
-> **Stato:** spec approvata — da schedulare dopo stabilizzazione BaaS Layer (BS0-BS1)
-> **Dipendenze architetturali:** Asset Manager (✅), double sandbox middleware (✅), BaaS Public Router (⬜), Redis rate-limiting (✅)
-> **Principio guida:** il RAG è un servizio esterno interrogato via API. Andy Code Cat non ospita embeddings.
-> Fa da orchestratore (ingestione documenti → RAG API) e da proxy sicuro (widget → BaaS → RAG API).
+> **Status:** approved spec — to be scheduled after the BaaS Layer stabilizes (BS0-BS1)
+> **Architectural dependencies:** Asset Manager (✅), double sandbox middleware (✅), BaaS Public Router (⬜), Redis rate-limiting (✅)
+> **Guiding principle:** RAG is an external service queried via API. Andy Code Cat does not host embeddings.
+> It acts as an orchestrator (document ingestion → RAG API) and as a secure proxy (widget → BaaS → RAG API).
 
 ---
 
-## 1. Problema e soluzione
+## 1. Problem and Solution
 
 ### 1.1 Scenario
 
-L'utente costruisce una landing page (es. landing per un servizio di consulenza, un prodotto
-SaaS, uno studio professionale). Vuole che i visitatori possano fare domande sul contenuto
-senza leggere l'intera pagina — una UX chatbot "conosci questo prodotto/servizio".
+The user builds a landing page (e.g. a landing page for a consulting service, a SaaS
+product, a professional practice). They want visitors to be able to ask questions about the content
+without reading the entire page — a "know this product/service" chatbot UX.
 
-Il proprietario del sito ha già documenti (PDF, DOCX, TXT, MD) che descrivono i servizi,
-le FAQ, i prezzi, i case study. Questi documenti finiscono automaticamente nel contesto RAG
-e il chatbot risponde a domande dei visitatori in linguaggio naturale.
+The site owner already has documents (PDF, DOCX, TXT, MD) describing the services,
+FAQs, prices, case studies. These documents automatically end up in the RAG context,
+and the chatbot answers visitor questions in natural language.
 
-### 1.2 Approccio
+### 1.2 Approach
 
-| Livello | Soluzione |
+| Layer | Solution |
 |---|---|
-| Storage documenti | Asset Manager Andy Code Cat già esistente |
-| Ingestione RAG | API call verso servizio RAG esterno (BYOK o Managed) |
-| Query visitatori | Widget vanilla JS nella landing → POST BaaS Andy Code Cat → proxy RAG API |
-| Sicurezza chiave RAG | MAI esposta nel HTML — sempre proxiata dal backend Andy Code Cat |
-| Generazione widget | LLM inietta snippet HTML/JS nella landing al momento della generazione |
+| Document storage | Existing Andy Code Cat Asset Manager |
+| RAG ingestion | API call to an external RAG service (BYOK or Managed) |
+| Visitor queries | Vanilla JS widget on the landing page → POST to Andy Code Cat BaaS → proxy to the RAG API |
+| RAG key security | NEVER exposed in the HTML — always proxied by the Andy Code Cat backend |
+| Widget generation | The LLM injects an HTML/JS snippet into the landing page at generation time |
 
-### 1.3 Servizi RAG supportati (fase 1)
+### 1.3 Supported RAG Services (Phase 1)
 
-Il design è **provider-agnostic** tramite adapter. Primo target:
+The design is **provider-agnostic** via an adapter. First targets:
 
-| Provider | Tipo | Modalità |
+| Provider | Type | Mode |
 |---|---|---|
 | [Flowise](https://flowiseai.com) | Self-hosted / Cloud | BYOK |
 | [n8n AI Agent Workflow](https://n8n.io) | Self-hosted / Cloud | BYOK |
-| Qualsiasi API REST `POST /query { question, context? }` | Generico | BYOK |
+| Any REST API `POST /query { question, context? }` | Generic | BYOK |
 
-Tutti i provider vengono normalizzati attraverso un `RagProviderAdapter` che espone
-la stessa interfaccia interna indipendentemente dal provider scelto dall'owner.
+All providers are normalized through a `RagProviderAdapter` that exposes
+the same internal interface regardless of the provider chosen by the owner.
 
 ---
 
-## 2. Architettura end-to-end
+## 2. End-to-end Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  DASHBOARD OWNER (apps/web)                                     │
+│  OWNER DASHBOARD (apps/web)                                     │
 │                                                                 │
-│  Tab "Chatbot RAG" nel progetto                                 │
-│  1. Abilita servizio RAG → sceglie provider → inserisce API key │
-│  2. Lista asset del progetto → seleziona documenti da indicizzare│
-│  3. Clicca "Indicizza documenti" → POST /rag/ingest             │
-│  4. Vede stato indicizzazione (pending / ok / error per file)   │
-│  5. Toggle "Mostra chatbot nella landing" → auto-proposta LLM   │
+│  "RAG Chatbot" tab in the project                                │
+│  1. Enable RAG service → choose provider → enter API key        │
+│  2. List project assets → select documents to index             │
+│  3. Click "Index documents" → POST /rag/ingest                  │
+│  4. See indexing status (pending / ok / error per file)          │
+│  5. Toggle "Show chatbot on the landing page" → auto-proposed by LLM│
 └───────────────────────┬─────────────────────────────────────────┘
-                        │  (owner autenticato, JWT + double sandbox)
+                        │  (authenticated owner, JWT + double sandbox)
                         ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Andy Code Cat API — RAG Management Routes (autenticato)            │
+│  Andy Code Cat API — RAG Management Routes (authenticated)          │
 │                                                                 │
-│  POST /v1/projects/:id/rag/config     → salva RagConfig        │
-│  GET  /v1/projects/:id/rag/config     → legge RagConfig        │
-│  POST /v1/projects/:id/rag/ingest     → ingest documenti       │
-│  GET  /v1/projects/:id/rag/ingest/status → stato indicizzazione│
-│  DELETE /v1/projects/:id/rag/ingest/:docId → rimuovi doc dal RAG│
+│  POST /v1/projects/:id/rag/config     → saves RagConfig         │
+│  GET  /v1/projects/:id/rag/config     → reads RagConfig         │
+│  POST /v1/projects/:id/rag/ingest     → ingest documents        │
+│  GET  /v1/projects/:id/rag/ingest/status → indexing status      │
+│  DELETE /v1/projects/:id/rag/ingest/:docId → remove doc from RAG│
 └───────────────────────┬─────────────────────────────────────────┘
-                        │  chiama RagProviderAdapter
+                        │  calls RagProviderAdapter
                         ▼
              ┌──────────────────────┐
              │  External RAG API    │
@@ -77,39 +77,39 @@ la stessa interfaccia interna indipendentemente dal provider scelto dall'owner.
              └──────────────────────┘
 
 ─────────────────────────────────────────────────────────────────
-  RUNTIME VISITATORI (pagina pubblicata)
+  VISITOR RUNTIME (published page)
 ─────────────────────────────────────────────────────────────────
 
-  Landing Page statica (HTML/CSS/JS generata da LLM)
+  Static Landing Page (HTML/CSS/JS generated by the LLM)
     │
-    │  <script> Widget Chatbot (vanilla JS, ~4KB gzip)
-    │  — bubble FAB bottom-right
-    │  — panel messaggi scrollabile
-    │  — input testo + invio
+    │  <script> Chatbot Widget (vanilla JS, ~4KB gzip)
+    │  — bottom-right FAB bubble
+    │  — scrollable message panel
+    │  — text input + send
     │
     │  POST https://api.Andy Code Cat.io/v1/public/svc/{projectKey}/rag/query
     │       { question: "...", sessionId: "..." }
-    │       Origin: https://abc123.Andy Code Cat.io ← verificato CORS
+    │       Origin: https://abc123.Andy Code Cat.io ← CORS verified
     │
     ▼
   Andy Code Cat BaaS Public Router
-    │  · verifica projectKey → risolve project + owner
-    │  · verifica CORS (origin ∈ project.allowedOrigins)
-    │  · verifica rag abilitato su progetto
-    │  · rate limiting Redis: 30 query/ora per sessionId
-    │  · recupera RagConfig.endpoint + RagConfig.apiKeyRef (da secret vault)
-    │  · chiama RagProviderAdapter.query(question, sessionId)
+    │  · verifies projectKey → resolves project + owner
+    │  · verifies CORS (origin ∈ project.allowedOrigins)
+    │  · verifies RAG is enabled on the project
+    │  · Redis rate limiting: 30 queries/hour per sessionId
+    │  · retrieves RagConfig.endpoint + RagConfig.apiKeyRef (from the secret vault)
+    │  · calls RagProviderAdapter.query(question, sessionId)
     │
     ▼
-  External RAG API → risposta testuale
+  External RAG API → text response
     │
     ▼
-  BaaS risponde al widget: { answer: "...", sources?: [...] }
+  BaaS responds to the widget: { answer: "...", sources?: [...] }
 ```
 
 ---
 
-## 3. Entità dati
+## 3. Data Entities
 
 ### 3.1 RagConfig (embedded in Project)
 
@@ -117,45 +117,45 @@ la stessa interfaccia interna indipendentemente dal provider scelto dall'owner.
 interface RagConfig {
   enabled: boolean;
 
-  // Provider RAG esterno
+  // External RAG provider
   provider: 'flowise' | 'n8n' | 'generic';
 
-  // Endpoint base dell'API RAG esterna
-  endpoint: string;            // es: "https://myFlowise.example.com/api/v1/prediction/abc"
+  // Base endpoint of the external RAG API
+  endpoint: string;            // e.g.: "https://myFlowise.example.com/api/v1/prediction/abc"
 
-  // Chiave API — MAI in chiaro. Solo il riferimento alla secret vault.
-  apiKeyRef: string;           // reference all'entry in RagSecrets collection
+  // API key — NEVER in plaintext. Only the reference to the secret vault.
+  apiKeyRef: string;           // reference to the entry in the RagSecrets collection
 
-  // Documenti del progetto indicizzati nel RAG
+  // Project documents indexed in the RAG
   indexedDocs: RagDocEntry[];
 
-  // Configurazione widget
+  // Widget configuration
   widget: RagWidgetConfig;
 
-  // Metadati
+  // Metadata
   createdAt: Date;
   updatedAt: Date;
 }
 
 interface RagDocEntry {
-  assetId: ObjectId;           // riferimento ad un asset del progetto
-  filename: string;            // denormalizzato per UX
+  assetId: ObjectId;           // reference to a project asset
+  filename: string;            // denormalized for UX
   mimeType: string;
   indexedAt: Date | null;      // null = pending / in progress
   status: 'pending' | 'indexing' | 'indexed' | 'error';
   errorMessage?: string;
-  // Identificatore restituito dal RAG provider per questo documento
+  // Identifier returned by the RAG provider for this document
   ragDocumentId?: string;
 }
 
 interface RagWidgetConfig {
-  visible: boolean;             // toggle "mostra chatbot nella landing"
-  title: string;                // default: "Assistente virtuale"
-  placeholder: string;          // default: "Chiedimi qualcosa..."
-  primaryColor: string;         // default: ereditato da moodboard progetto o "#6366f1"
+  visible: boolean;             // "show chatbot on the landing page" toggle
+  title: string;                // default: "Virtual assistant"
+  placeholder: string;          // default: "Ask me something..."
+  primaryColor: string;         // default: inherited from the project moodboard or "#6366f1"
   position: 'bottom-right' | 'bottom-left';  // default: "bottom-right"
-  welcomeMessage: string;       // messaggio iniziale del bot
-  // Istruzioni di sistema passate al RAG provider (se supportato)
+  welcomeMessage: string;       // the bot's initial message
+  // System instructions passed to the RAG provider (if supported)
   systemPrompt?: string;
 }
 ```
@@ -167,30 +167,30 @@ interface RagSecret {
   _id: ObjectId;
   projectId: ObjectId;
   ownerId: ObjectId;
-  // API key cifrata con AES-256-GCM, chiave derivata da env master key + projectId
-  encryptedApiKey: string;     // base64 del ciphertext
-  iv: string;                  // base64 dell'IV (generato per ogni scrittura)
+  // API key encrypted with AES-256-GCM, key derived from env master key + projectId
+  encryptedApiKey: string;     // base64 of the ciphertext
+  iv: string;                  // base64 of the IV (generated on every write)
   createdAt: Date;
   updatedAt: Date;
 }
 ```
 
-**Regola di sicurezza:** `RagSecret` non viene mai restituita nelle API response.
-Il frontend vede solo `{ hasApiKey: true/false }`. La decifratura avviene solo dentro
-il `RagProviderAdapter`, in memoria, per la durata della richiesta.
+**Security rule:** `RagSecret` is never returned in API responses.
+The frontend only sees `{ hasApiKey: true/false }`. Decryption happens only inside
+the `RagProviderAdapter`, in memory, for the duration of the request.
 
-### 3.3 RagQueryLog (collection: `rag_query_logs`, TTL 30 giorni)
+### 3.3 RagQueryLog (collection: `rag_query_logs`, 30-day TTL)
 
 ```typescript
 interface RagQueryLog {
   _id: ObjectId;
   projectId: ObjectId;
-  sessionId: string;           // UUID generato dal widget, non-autenticato
-  questionHash: string;        // SHA-256 della domanda — PII-safe
+  sessionId: string;           // UUID generated by the widget, unauthenticated
+  questionHash: string;        // SHA-256 of the question — PII-safe
   answeredAt: Date;
   latencyMs: number;
-  providerStatus: number;      // HTTP status del RAG esterno
-  // TTL index su answeredAt (30 giorni)
+  providerStatus: number;      // HTTP status from the external RAG service
+  // TTL index on answeredAt (30 days)
 }
 ```
 
@@ -198,16 +198,16 @@ interface RagQueryLog {
 
 ## 4. API Routes
 
-### 4.1 Routes autenticate (owner)
+### 4.1 Authenticated Routes (owner)
 
 ```
 POST   /v1/projects/:id/rag/config
-       Body: { provider, endpoint, apiKey (plain, solo in input), widget? }
-       → Salva RagConfig, cifra apiKey → RagSecret
-       → 200 { ragConfig } (senza apiKey, con hasApiKey: true)
+       Body: { provider, endpoint, apiKey (plain, input only), widget? }
+       → Saves RagConfig, encrypts apiKey → RagSecret
+       → 200 { ragConfig } (without apiKey, with hasApiKey: true)
 
 GET    /v1/projects/:id/rag/config
-       → 200 { ragConfig } (senza apiKey, con hasApiKey: true/false)
+       → 200 { ragConfig } (without apiKey, with hasApiKey: true/false)
 
 PATCH  /v1/projects/:id/rag/widget
        Body: Partial<RagWidgetConfig>
@@ -215,25 +215,25 @@ PATCH  /v1/projects/:id/rag/widget
 
 POST   /v1/projects/:id/rag/ingest
        Body: { assetIds: string[] }
-       → Avvia ingestione asincrona (job coda Redis / processo diretto)
+       → Starts asynchronous ingestion (Redis queue job / direct process)
        → 202 { jobId, docs: RagDocEntry[] }
 
 GET    /v1/projects/:id/rag/ingest/status
-       → 200 { docs: RagDocEntry[] }  (stato aggiornato)
+       → 200 { docs: RagDocEntry[] }  (updated status)
 
 DELETE /v1/projects/:id/rag/ingest/:assetId
-       → Chiama RAG API per rimuovere il documento dal knowledge base
+       → Calls the RAG API to remove the document from the knowledge base
        → 204
 ```
 
-### 4.2 BaaS Public Route (visitatori anonimi)
+### 4.2 BaaS Public Route (anonymous visitors)
 
 ```
 POST   /v1/public/svc/:projectKey/rag/query
-       Headers: Origin (verificato CORS)
+       Headers: Origin (CORS verified)
        Body: { question: string, sessionId: string }
-       → Rate limit: 30 req/ora per sessionId (Redis sliding window)
-       → Proxy verso external RAG API
+       → Rate limit: 30 req/hour per sessionId (Redis sliding window)
+       → Proxies to the external RAG API
        → 200 { answer: string, sources?: string[] }
        → 429 { error: "rate_limit_exceeded" }
        → 403 { error: "rag_not_enabled" }
@@ -243,11 +243,11 @@ POST   /v1/public/svc/:projectKey/rag/query
 
 ## 5. RagProviderAdapter
 
-Interfaccia interna comune a tutti i provider:
+Internal interface shared by all providers:
 
 ```typescript
 interface RagProviderAdapter {
-  // Ingestione di un documento (buffer + metadati)
+  // Ingests a document (buffer + metadata)
   ingestDocument(
     config: RagConfig,
     apiKey: string,
@@ -256,14 +256,14 @@ interface RagProviderAdapter {
     mimeType: string
   ): Promise<{ ragDocumentId: string }>;
 
-  // Rimzione di un documento dal knowledge base
+  // Removes a document from the knowledge base
   removeDocument(
     config: RagConfig,
     apiKey: string,
     ragDocumentId: string
   ): Promise<void>;
 
-  // Query al RAG
+  // Queries the RAG
   query(
     config: RagConfig,
     apiKey: string,
@@ -273,31 +273,31 @@ interface RagProviderAdapter {
 }
 ```
 
-Implementazioni concrete:
+Concrete implementations:
 
-| Classe | Provider |
+| Class | Provider |
 |---|---|
 | `FlowiseRagAdapter` | Flowise API v1 |
 | `N8nRagAdapter` | n8n AI Agent webhook |
-| `GenericRagAdapter` | Qualsiasi `POST /query { question }` |
+| `GenericRagAdapter` | Any `POST /query { question }` |
 
 ---
 
-## 6. Widget chatbot (vanilla JS)
+## 6. Chatbot Widget (vanilla JS)
 
-Il widget è un snippet HTML/JS generato dall'LLM all'interno della landing page.
-Non è un file esterno: è **inline** nel bundle HTML per rispettare il principio
-"zero dipendenze esterne non incluse" di Layer 1.
+The widget is an HTML/JS snippet generated by the LLM inside the landing page.
+It is not an external file: it is **inline** in the HTML bundle, to respect Layer 1's
+"zero non-included external dependencies" principle.
 
-### 6.1 Struttura del widget
+### 6.1 Widget Structure
 
 ```html
-<!-- RAG Chatbot Widget — generato da Andy Code Cat -->
+<!-- RAG Chatbot Widget — generated by Andy Code Cat -->
 <div id="pf-chatbot-root"></div>
 <script>
 (function() {
   const PF_RAG = {
-    projectKey: "{{PROJECT_PUBLIC_KEY}}",    // iniettato a build time
+    projectKey: "{{PROJECT_PUBLIC_KEY}}",    // injected at build time
     apiBase:    "https://api.Andy Code Cat.io",
     title:      "{{widget.title}}",
     placeholder:"{{widget.placeholder}}",
@@ -306,101 +306,101 @@ Non è un file esterno: è **inline** nel bundle HTML per rispettare il principi
     position:   "{{widget.position}}"
   };
 
-  // ... ~200 righe di vanilla JS
-  // - crea bubble FAB
-  // - gestisce apertura/chiusura panel
-  // - invia POST al BaaS con sessionId (UUID storato in sessionStorage)
-  // - mostra risposta con animazione typing
-  // - gestisce errori e rate limit
+  // ... ~200 lines of vanilla JS
+  // - creates the FAB bubble
+  // - handles opening/closing the panel
+  // - sends a POST to the BaaS with a sessionId (UUID stored in sessionStorage)
+  // - shows the response with a typing animation
+  // - handles errors and rate limiting
 })();
 </script>
 ```
 
-### 6.2 Injection nel prompt LLM
+### 6.2 Injection Into the LLM Prompt
 
-Quando `ragConfig.widget.visible === true` e il progetto viene (ri)generato,
-il system prompt riceve un **LAYER E — RAG Widget Module**:
+When `ragConfig.widget.visible === true` and the project is (re)generated,
+the system prompt receives a **LAYER E — RAG Widget Module**:
 
 ```
 [LAYER E — RAG Chatbot Widget]
-Questo progetto ha un chatbot RAG abilitato.
-Al termine dell'HTML, prima di </body>, inserisci il seguente snippet
-senza modificarne la struttura JS (puoi adattare i CSS al design della pagina):
+This project has a RAG chatbot enabled.
+At the end of the HTML, before </body>, insert the following snippet
+without modifying its JS structure (you can adapt the CSS to the page's design):
 
 {{ragWidgetSnippet}}
 ```
 
-La variabile `{{ragWidgetSnippet}}` viene risolta dal backend prima dell'invio
-all'LLM, con i valori reali di `projectKey`, colori, titolo, ecc.
+The `{{ragWidgetSnippet}}` variable is resolved by the backend before sending
+to the LLM, with the real values of `projectKey`, colors, title, etc.
 
 ---
 
-## 7. UX Dashboard — Tab "Chatbot RAG"
+## 7. Dashboard UX — "RAG Chatbot" Tab
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Chatbot RAG                               [Toggle ON/OFF]│
+│  RAG Chatbot                               [Toggle ON/OFF]│
 ├─────────────────────────────────────────────────────────┤
-│  Provider RAG                                           │
+│  RAG Provider                                            │
 │  [Flowise ▼]  Endpoint: [_________________________]    │
-│  API Key:     [••••••••••••••]  [Cambia]               │
+│  API Key:     [••••••••••••••]  [Change]                │
 │                                                         │
-│  Documenti indicizzati                                  │
+│  Indexed documents                                      │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  ✓ FAQ_servizi.pdf           indexed  [Rimuovi] │   │
-│  │  ✓ Catalogo_2026.pdf         indexed  [Rimuovi] │   │
-│  │  ⏳ Listino_prezzi.docx      indexing...        │   │
-│  │  ✗ old_brochure.pdf          error    [Ritenta] │   │
+│  │  ✓ FAQ_services.pdf          indexed  [Remove]  │   │
+│  │  ✓ Catalog_2026.pdf          indexed  [Remove]  │   │
+│  │  ⏳ Price_list.docx          indexing...        │   │
+│  │  ✗ old_brochure.pdf          error    [Retry]   │   │
 │  └─────────────────────────────────────────────────┘   │
-│  [+ Aggiungi da Asset Manager]  [Indicizza selezionati] │
+│  [+ Add from Asset Manager]  [Index selected]           │
 │                                                         │
-│  Aspetto widget                                         │
-│  Titolo: [Assistente virtuale          ]               │
-│  Colore: [████] #6366f1                                │
-│  Posizione: [Bottom-right ▼]                           │
-│  Messaggio benvenuto: [____________________________]   │
+│  Widget appearance                                       │
+│  Title: [Virtual assistant             ]               │
+│  Color: [████] #6366f1                                 │
+│  Position: [Bottom-right ▼]                             │
+│  Welcome message: [____________________________]        │
 │                                                         │
-│  [Salva configurazione]                                 │
+│  [Save configuration]                                   │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 8. Sicurezza
+## 8. Security
 
-| Rischio | Mitigazione |
+| Risk | Mitigation |
 |---|---|
-| API key RAG esposta nel HTML | Proxy BaaS — la chiave non lascia mai il backend |
-| Abuso endpoint pubblico `/rag/query` | Rate limit Redis 30 req/ora per sessionId + IP |
-| Injection di testo malevolo nella question | Sanificazione input (strip HTML, max 500 chars) |
-| CORS bypass | Verifica `Origin` header contro `project.allowedOrigins` |
-| Accesso cross-project alle API key | Double sandbox su tutte le route autenticate |
-| Exfiltration tramite domande malevole | Monitored via `rag_query_logs` (hash PII-safe) |
-| DoS verso RAG provider esterno | Rate limit Andy Code Cat + timeout 10s con circuit breaker |
+| RAG API key exposed in the HTML | BaaS proxy — the key never leaves the backend |
+| Abuse of the public `/rag/query` endpoint | Redis rate limit: 30 req/hour per sessionId + IP |
+| Malicious text injection in the question | Input sanitization (strip HTML, max 500 chars) |
+| CORS bypass | `Origin` header verified against `project.allowedOrigins` |
+| Cross-project access to API keys | Double sandbox on all authenticated routes |
+| Exfiltration via malicious questions | Monitored via `rag_query_logs` (PII-safe hash) |
+| DoS against the external RAG provider | Andy Code Cat rate limit + 10s timeout with a circuit breaker |
 
 ---
 
-## 9. Roadmap milestones
+## 9. Roadmap Milestones
 
-| Milestone | Contenuto | Dipendenza |
+| Milestone | Content | Dependency |
 |---|---|---|
-| **RAG-0** | RagConfig entity, routes CRUD config, cifratura secret | nessuna |
+| **RAG-0** | RagConfig entity, config CRUD routes, secret encryption | none |
 | **RAG-1** | FlowiseRagAdapter + ingest pipeline (Asset Manager → RAG API) | RAG-0 |
 | **RAG-2** | BaaS public route `/rag/query` + rate limiting + proxy | RAG-1, BaaS BS0 |
-| **RAG-3** | Widget snippet generator + LAYER E injection nel system prompt | RAG-2 |
-| **RAG-4** | UX Dashboard Tab "Chatbot RAG" + stato indicizzazione | RAG-3 |
+| **RAG-3** | Widget snippet generator + LAYER E injection into the system prompt | RAG-2 |
+| **RAG-4** | "RAG Chatbot" Dashboard UX tab + indexing status | RAG-3 |
 | **RAG-5** | GenericRagAdapter + N8nRagAdapter | RAG-1 |
 
 ---
 
-## 10. Integrazione con architettura esistente
+## 10. Integration With the Existing Architecture
 
-| Modulo esistente | Interazione |
+| Existing module | Interaction |
 |---|---|
-| Asset Manager | `RagIngestService` legge buffer da `AssetRepository` per dato `assetId` |
-| Double Sandbox | Tutte le route `/v1/projects/:id/rag/*` passano per `sandboxMiddleware` |
-| BaaS Public Router | `RagService` è un `ServiceHandler` registrato come `'rag'` in `ServiceType` |
+| Asset Manager | `RagIngestService` reads the buffer from `AssetRepository` for a given `assetId` |
+| Double Sandbox | All `/v1/projects/:id/rag/*` routes go through `sandboxMiddleware` |
+| BaaS Public Router | `RagService` is a `ServiceHandler` registered as `'rag'` in `ServiceType` |
 | Project entity | `ragConfig` embedded field (nullable) |
-| LLM Chat Preview system prompt | Nuovo LAYER E opzionale, composto solo se `ragConfig.widget.visible === true` |
-| Execution Logs | Evento `rag_ingest` e `rag_query` loggati su `execution_logs` |
-| ProjectPublish | Al publish, `project.allowedOrigins` aggiornato con il nuovo dominio |
+| LLM Chat Preview system prompt | New optional LAYER E, composed only if `ragConfig.widget.visible === true` |
+| Execution Logs | `rag_ingest` and `rag_query` events logged to `execution_logs` |
+| ProjectPublish | On publish, `project.allowedOrigins` is updated with the new domain |

@@ -321,14 +321,14 @@ export default function AdminConfigPage() {
                                 <label className="flex items-start gap-2 cursor-pointer">
                                     <input type="radio" name="urlMode" className="mt-1" checked={urlMode === "path"} onChange={() => setUrlMode("path")} />
                                     <span>
-                                        <span className="font-medium">Path</span> — <span className="font-mono text-xs">{sitesOrigin.trim() ? `${sitesOrigin.trim().replace(/\/+$/, "")}/antares/` : resolvePublicSiteAddress("/antares/")}</span>
+                                        <span className="font-medium">Path</span> — <span className="font-mono text-xs">{sitesOrigin.trim() ? `${sitesOrigin.trim().replace(/\/+$/, "")}/my-site/` : resolvePublicSiteAddress("/my-site/")}</span>
                                         <span className="block text-xs text-muted-foreground">One host for all sites. Needs one DNS name and certificate — never the app&apos;s own.</span>
                                     </span>
                                 </label>
                                 <label className="flex items-start gap-2 cursor-pointer">
                                     <input type="radio" name="urlMode" className="mt-1" checked={urlMode === "subdomain"} onChange={() => setUrlMode("subdomain")} />
                                     <span>
-                                        <span className="font-medium">Subdomain</span> — <span className="font-mono text-xs">https://antares.{publicDomain.trim() || "example.com"}</span>
+                                        <span className="font-medium">Subdomain</span> — <span className="font-mono text-xs">https://my-site.{publicDomain.trim() || "example.com"}</span>
                                         <span className="block text-xs text-muted-foreground">Needs wildcard DNS and a wildcard certificate for *.domain pointing at this server.</span>
                                     </span>
                                 </label>

@@ -1,450 +1,450 @@
 # andy code cat — Product Vision & Vertical Strategy
 
-> Documento di visione prodotto. Non contiene istruzioni di codice ma direzioni strategiche, funzionalità UX ad alto e medio livello, e implicazioni di sviluppo per ciascuna verticale di mercato. Il documento è pensato come contesto applicativo per orientare le decisioni di sviluppo, non come specifica tecnica.
+> Product vision document. It contains no code instructions, only strategic directions, high- and mid-level UX functionality, and development implications for each market vertical. The document is meant as application context to orient development decisions, not as a technical spec.
 
 ---
 
-## Indice
+## Index
 
-1. [Fondamenta trasversali — Feature core e direzioni generali](#1-fondamenta-trasversali)
-2. [Verticale: Web Agency & Freelance](#2-verticale-web-agency--freelance)
-3. [Verticale: Scuole & Università](#3-verticale-scuole--università)
-4. [Verticale: No Profit & Associazioni](#4-verticale-no-profit--associazioni)
-5. [Verticale: Piccola Impresa — SaaS diretto](#5-verticale-piccola-impresa--saas-diretto)
-6. [Verticale: Venditori di Spazi Pubblicitari](#6-verticale-venditori-di-spazi-pubblicitari)
-7. [Verticale: Eventi & Fiere — Postazioni Fisiche](#7-verticale-eventi--fiere--postazioni-fisiche)
-8. [Verticale: Gaming & Community](#8-verticale-gaming--community)
-9. [Verticale: Developer & Open Source](#9-verticale-developer--open-source)
-10. [Layer trasversali — Pre-prompting, Branding, Moderazione](#10-layer-trasversali)
-11. [Roadmap per priorità](#11-roadmap-per-priorità)
-
----
-
-## 1. Fondamenta trasversali
-
-Andy è un generatore di contenuti visivi web self-contained. Il suo valore centrale è la capacità di trasformare un'intenzione testuale in un artefatto web funzionante, esportabile e indipendente. Tutto il lavoro di personalizzazione verticale si innesta su questo nucleo.
-
-### 1.1 Il motore di pre-prompting
-
-Il pre-prompting è il differenziatore principale di andy rispetto a un semplice wrapper LLM. Non si tratta di costruire prompt migliori per l'utente, ma di creare un sistema di layer componibili che avvolgono l'intenzione dell'utente con contesto, vincoli, stile e obiettivi che l'utente non deve conoscere né gestire.
-
-**Direzioni di sviluppo:**
-
-- Sistema di layer componibili e impilabili, dove ogni layer aggiunge o vincola il contesto della generazione
-- Layer separati per: identità visiva, tono di voce, formato di output, vincoli etici, assets obbligatori
-- Possibilità di layer utente (ciò che scrive), layer operatore (ciò che l'installazione aggiunge), layer brand (ciò che il cliente finale impone)
-- Interfaccia di gestione layer accessibile solo all'amministratore dell'istanza
-- Layer esportabili e importabili come configurazione, così che una verticale possa essere replicata su più installazioni
-
-### 1.2 Multi-modello e multi-provider come infrastruttura
-
-La scelta del modello non è un dettaglio tecnico ma una dimensione di prodotto. Diversi verticali richiedono diversi profili: velocità, qualità, privacy, costo, disponibilità offline.
-
-**Direzioni di sviluppo:**
-
-- Selezione del modello separata per fase di ottimizzazione e fase di generazione — i due momenti hanno profili diversi
-- Profili di modello pre-configurati per verticale (es. "scuola" suggerisce automaticamente modelli locali)
-- Gestione centralizzata delle API key con quota per utente e per tenant
-- Fallback automatico tra provider in caso di errore o indisponibilità
-- Indicatore di costo stimato prima della generazione, configurabile per essere visibile o nascosto all'utente finale
-- Supporto a modelli locali come Ollama e LM Studio come opzione first-class, non come integrazione di secondo livello
-
-### 1.3 L'output come artefatto portabile
-
-Il valore dell'output ZIP non è solo tecnico. È una promessa di libertà: il contenuto generato appartiene a chi lo ha richiesto, funziona ovunque, non richiede abbonamenti né cloud per essere pubblicato.
-
-**Direzioni di sviluppo:**
-
-- Output sempre e comunque self-contained: zero dipendenze esterne, zero CDN, zero richieste di rete in runtime
-- Opzione di pubblicazione diretta su dominio gestito dall'istanza andy
-- Galleria pubblica o privata degli output generati, con controllo di visibilità
-- Storico delle generazioni con possibilità di rieditare, rigenerare o forkare un output precedente
-- Versioning degli output: ogni rigenerazione crea una nuova versione, le precedenti sono accessibili
-- Export in formati alternativi dove applicabile (PDF da HTML, immagine da slide)
-
-### 1.4 L'editor come ambiente creativo
-
-L'editor WYSIWYG e l'editor HTML sono oggi strumenti di rifinitura. La direzione è renderli ambienti creativi a pieno titolo, non solo correttori di output.
-
-**Direzioni di sviluppo:**
-
-- Editing in-place con rigenerazione parziale: seleziona un elemento e richiedine la rigenerazione senza toccare il resto
-- Suggerimenti contestuali durante l'editing, basati sul tipo di contenuto selezionato
-- Blocchi di contenuto componibili: non tutto deve essere generato in un unico shot, si possono comporre sezioni
-- Modalità di editing "guida": l'utente indica la direzione, andy aggiusta
-- Undo/redo multi-livello con differenza visiva tra stati
-- Anteprima responsive integrata (mobile, tablet, desktop) senza uscire dall'editor
+1. [Cross-cutting foundations — Core features and general directions](#1-cross-cutting-foundations)
+2. [Vertical: Web Agency & Freelance](#2-vertical-web-agency--freelance)
+3. [Vertical: Schools & Universities](#3-vertical-schools--universities)
+4. [Vertical: Nonprofits & Associations](#4-vertical-nonprofits--associations)
+5. [Vertical: Small Business — Direct SaaS](#5-vertical-small-business--direct-saas)
+6. [Vertical: Ad-Space Sellers](#6-vertical-ad-space-sellers)
+7. [Vertical: Events & Trade Fairs — On-Site Kiosks](#7-vertical-events--trade-fairs--on-site-kiosks)
+8. [Vertical: Gaming & Community](#8-vertical-gaming--community)
+9. [Vertical: Developers & Open Source](#9-vertical-developers--open-source)
+10. [Cross-cutting layers — Pre-prompting, Branding, Moderation](#10-cross-cutting-layers)
+11. [Roadmap by priority](#11-roadmap-by-priority)
 
 ---
 
-## 2. Verticale: Web Agency & Freelance
+## 1. Cross-cutting foundations
 
-### Contesto
+Andy is a self-contained web visual content generator. Its central value is the ability to turn a textual intent into a working, exportable, independent web artifact. All the vertical-specific customization work builds on this core.
 
-Il CEO di web agency non usa andy direttamente: lo configura e lo delega ai propri collaboratori o lo integra nei flussi di produzione per i clienti. Il valore non è la singola generazione ma la capacità di industrializzare la produzione di contenuti mantenendo qualità e coerenza di brand.
+### 1.1 The pre-prompting engine
 
-### Funzionalità ad alto livello
+Pre-prompting is andy's main differentiator compared to a simple LLM wrapper. It's not about building better prompts for the user, but about creating a system of composable layers that wrap the user's intent with context, constraints, style, and goals the user doesn't need to know about or manage.
 
-**Gestione multi-cliente (tenant)**
-Ogni cliente dell'agenzia è un'entità separata con il proprio brand kit, i propri layer di pre-prompting, i propri utenti abilitati e la propria galleria di output. L'agenzia gestisce tutti i tenant da un pannello unico. Ogni tenant vede solo i propri contenuti.
+**Development directions:**
 
-**Brand kit per cliente**
-Un brand kit è l'insieme di informazioni che andy usa per orientare ogni generazione: palette colori, font, logo, tono di voce, settore, parole da usare e parole da evitare, formato preferito. Il brand kit non è visibile all'utente finale, ma avvolge ogni sua richiesta.
+- A system of composable, stackable layers, where each layer adds to or constrains the generation context
+- Separate layers for: visual identity, tone of voice, output format, ethical constraints, mandatory assets
+- Support for user layers (what the user writes), operator layers (what the installation adds), and brand layers (what the end client imposes)
+- A layer management interface accessible only to the instance administrator
+- Layers exportable and importable as configuration, so a vertical can be replicated across multiple installations
 
-**Template di output proprietari**
-L'agenzia può definire template di struttura — non di stile — che guidano la forma dell'output. Un template "landing page per ristorante" definisce le sezioni attese (hero, menu, contatti, mappa) lasciando la generazione libera di riempirle. I template sono asset dell'agenzia, non dell'utente.
+### 1.2 Multi-model and multi-provider as infrastructure
 
-**Workflow di approvazione**
-Ogni output generato dal cliente può essere inviato in revisione all'agenzia prima della pubblicazione. L'agenzia approva, richiede modifiche o rifiuta. Il flusso è asincrono e notificato.
+Model choice isn't a technical detail but a product dimension. Different verticals require different profiles: speed, quality, privacy, cost, offline availability.
 
-**Reportistica produzione**
-Quante generazioni ha richiesto ogni cliente? Quali formati? Quali modelli sono stati usati? Qual è il costo stimato dei token? Questi dati alimentano la fatturazione e la pianificazione.
+**Development directions:**
 
-### Funzionalità a medio livello
+- Model selection separate for the optimization phase and the generation phase — the two moments have different profiles
+- Pre-configured model profiles per vertical (e.g. "school" automatically suggests local models)
+- Centralized API key management with quotas per user and per tenant
+- Automatic fallback between providers on error or unavailability
+- Estimated cost indicator before generation, configurable to be visible or hidden from the end user
+- Support for local models like Ollama and LM Studio as a first-class option, not a second-tier integration
 
-- Clonazione rapida di brand kit tra clienti simili
-- Pre-visualizzazione del brand kit su un output di esempio prima di attivarlo
-- Libreria di asset condivisi tra tenant (icone, pattern, elementi grafici dell'agenzia)
-- Limite di generazioni mensili per cliente, configurabile per piano commerciale
-- Accesso API per integrare andy nel CMS o nel gestionale dell'agenzia
-- Storico delle versioni per cliente, con possibilità di rollback
-- Esportazione dell'intero parco output di un cliente in ZIP archivio
+### 1.3 Output as a portable artifact
 
-### Implicazioni di sviluppo
+The value of the ZIP output isn't purely technical. It's a promise of freedom: the generated content belongs to whoever requested it, works anywhere, and requires no subscription or cloud service to be published.
 
-Il sistema di multi-tenancy è la feature abilitante per questa verticale. Senza di essa andy è uno strumento individuale, non un prodotto d'agenzia. La struttura dati degli utenti, dei brand kit e degli output deve prevedere fin dall'inizio la separazione per tenant. Il workflow di approvazione richiede un sistema di stato degli output (bozza, in revisione, approvato, pubblicato). La reportistica richiede logging delle generazioni con metadati (costo, modello, formato, utente, tenant).
+**Development directions:**
 
----
+- Output that is always and unconditionally self-contained: zero external dependencies, zero CDN, zero network requests at runtime
+- Option to publish directly to a domain managed by the andy instance
+- Public or private gallery of generated outputs, with visibility control
+- Generation history with the ability to re-edit, regenerate, or fork a previous output
+- Output versioning: every regeneration creates a new version, previous ones remain accessible
+- Export to alternative formats where applicable (PDF from HTML, image from slide)
 
-## 3. Verticale: Scuole & Università
+### 1.4 The editor as a creative environment
 
-### Contesto
+The WYSIWYG editor and the HTML editor are today refinement tools. The direction is to make them full-fledged creative environments, not just output correctors.
 
-Andy in contesto scolastico non è un assistente, è uno strumento didattico. L'obiettivo non è produrre il contenuto migliore ma far vivere all'utente — lo studente — il processo di produzione. La qualità dell'output è secondaria rispetto alla qualità dell'esperienza di apprendimento.
+**Development directions:**
 
-### Funzionalità ad alto livello
-
-**Modalità laboratorio**
-Una modalità operativa alternativa alla normale interfaccia, pensata per sessioni guidate. Il docente definisce un percorso: tema, vincoli di prompt, modello da usare, formato di output. Lo studente opera entro questi vincoli. La modalità laboratorio mostra i passaggi in modo esplicito, rende visibile il prompt ottimizzato, mostra il processo invece di nasconderlo.
-
-**Bacheca creativa scolastica**
-Una galleria pubblica (ma moderata) degli output generati dagli studenti, ospitata sul dominio dell'istituto. Gli studenti vedono i propri lavori pubblicati, i docenti moderano. La bacheca è un artefatto educativo in sé: motiva, crea confronto, mostra l'evoluzione nel tempo.
-
-**Profili modello per contesto scolastico**
-In ambito scolastico la privacy degli studenti è un vincolo non negoziabile. Andy deve rendere semplice e sicuro l'uso esclusivo di modelli locali, senza richiedere competenze tecniche al docente. Un profilo "scuola" configura automaticamente: nessun dato inviato a provider esterni, modello locale pre-selezionato, log minimi.
-
-**Percorsi di prompting strutturati**
-Sequenze guidate di prompting progressivo: il docente definisce una sequenza di esercizi in cui ogni step costruisce sul precedente. Lo studente impara a raffinare, specificare, correggere il proprio prompt osservando come cambia l'output.
-
-**Valutazione del prompt**
-Non dell'output, ma del prompt. Un sotto-sistema che analizza la qualità e la specificità del prompt scritto dallo studente e fornisce un feedback formativo: è troppo vago? manca di contesto? usa parole ambigue? Questo è uno strumento per il docente, non un giudice automatico.
-
-### Funzionalità a medio livello
-
-- Esportazione degli output degli studenti in formato archivio per valutazione docente
-- Integrazione con sistemi di registro elettronico (via API) per associare output a studenti e classi
-- Modalità anonima per esercizi in cui l'identità non deve influenzare la valutazione
-- Timer di sessione per esercizi cronometrati
-- Confronto affiancato di output generati da prompt diversi sullo stesso tema
-- Dashboard docente con panoramica dell'attività della classe
-- Soglia di moderazione configurabile per la bacheca (manuale, semi-automatica)
-
-### Implicazioni di sviluppo
-
-La modalità laboratorio richiede un livello di configurazione della sessione non previsto dall'architettura standard. È essenzialmente un secondo entry point all'applicazione con un flusso UX completamente diverso. La bacheca scolastica richiede un sistema di moderazione con ruoli (studente, docente, amministratore istituto). Il profilo "scuola privacy-first" richiede che il routing verso provider cloud sia disabilitabile a livello di istanza, non solo di singolo utente.
+- In-place editing with partial regeneration: select an element and request its regeneration without touching the rest
+- Contextual suggestions during editing, based on the type of content selected
+- Composable content blocks: not everything has to be generated in a single shot — sections can be composed
+- A "guided" editing mode: the user indicates the direction, andy adjusts
+- Multi-level undo/redo with a visual diff between states
+- Integrated responsive preview (mobile, tablet, desktop) without leaving the editor
 
 ---
 
-## 4. Verticale: No Profit & Associazioni
+## 2. Vertical: Web Agency & Freelance
 
-### Contesto
+### Context
 
-Le organizzazioni no profit hanno risorse limitate, competenze digitali eterogenee e bisogni comunicativi concreti: annunci, volantini, moduli, landing per campagne. Andy deve essere per loro lo strumento più semplice possibile, con la minima curva di apprendimento e il massimo effetto pratico.
+The CEO of a web agency doesn't use andy directly: they configure it and delegate it to their collaborators, or integrate it into production workflows for clients. The value isn't the single generation but the ability to industrialize content production while maintaining brand quality and consistency.
 
-### Funzionalità ad alto livello
+### High-level functionality
 
-**Template operativi per tipologia di contenuto associativo**
-Modelli di output pre-configurati per le esigenze tipiche: volantino evento, pagina raccolta fondi, form di iscrizione, comunicato stampa visivo, aggiornamento per i volontari. Ogni template non è un layout fisso ma un insieme di intenzioni e strutture che guidano la generazione nella direzione giusta.
+**Multi-client (tenant) management**
+Each agency client is a separate entity with its own brand kit, its own pre-prompting layers, its own enabled users, and its own output gallery. The agency manages all tenants from a single panel. Each tenant sees only its own content.
 
-**Modalità semplificata**
-Un'interfaccia ridotta all'essenziale: scrivi cosa ti serve, scegli il formato, genera. Nessun riferimento a LLM, provider, token, pre-prompting. Andy decide per l'utente. La modalità semplificata è il default per questa verticale, la modalità avanzata è accessibile ma non in primo piano.
+**Per-client brand kit**
+A brand kit is the set of information andy uses to steer every generation: color palette, fonts, logo, tone of voice, industry, words to use and words to avoid, preferred format. The brand kit isn't visible to the end user, but wraps every one of their requests.
 
-**Export ottimizzato per stampa e social**
-Il no profit ha bisogno di volantini fisici e post social, non solo di pagine web. Export in PDF con margini di stampa corretti, export in formato immagine per le dimensioni dei principali social network, export in formato A4 pronto per la tipografia.
+**Proprietary output templates**
+The agency can define structural — not stylistic — templates that guide the shape of the output. A "restaurant landing page" template defines the expected sections (hero, menu, contact, map), leaving the generation free to fill them in. Templates are agency assets, not user assets.
 
-**Libreria di contenuti riutilizzabili**
-L'associazione accumula nel tempo contenuti che si ripetono: la propria storia, la propria mission, i propri contatti, le foto degli eventi. Andy dovrebbe poter attingere a questa libreria durante la generazione senza che l'utente debba riscriverla ogni volta.
+**Approval workflow**
+Every output generated by the client can be sent for review to the agency before publication. The agency approves, requests changes, or rejects. The flow is asynchronous and notified.
 
-### Funzionalità a medio livello
+**Production reporting**
+How many generations has each client requested? What formats? What models were used? What's the estimated token cost? This data feeds billing and planning.
 
-- Condivisione dell'account tra volontari con ruoli differenziati
-- Notifica ai volontari quando un contenuto è pronto per essere distribuito
-- Calendario editoriale semplice: pianifica quando un contenuto deve essere generato e pubblicato
-- Integrazione con piattaforme di raccolta fondi per inserire automaticamente link e widget nei contenuti generati
-- Modalità offline: generazione con modello locale quando la connessione è instabile
-- Accesso gratuito o fortemente scontato come programma dedicato
+### Mid-level functionality
 
-### Implicazioni di sviluppo
+- Quick cloning of brand kits between similar clients
+- Brand kit preview on a sample output before activating it
+- Shared asset library across tenants (icons, patterns, agency graphic elements)
+- Monthly generation limit per client, configurable per commercial plan
+- API access to integrate andy into the agency's CMS or management system
+- Version history per client, with rollback capability
+- Export of a client's entire output portfolio as a ZIP archive
 
-La modalità semplificata richiede un secondo flusso UX con decisioni automatiche che oggi sono esplicite. Il sistema di libreria di contenuti riutilizzabili è una forma di memoria dell'istanza: andy deve poter iniettare nel prompt informazioni persistenti legate all'organizzazione senza che l'utente le riscrivo ogni volta. Questo anticipa un sistema di "contesto organizzazione" che è trasversale a più verticali.
+### Development implications
 
----
-
-## 5. Verticale: Piccola Impresa — SaaS diretto
-
-### Contesto
-
-Il titolare di una piccola impresa non sa cosa sia un LLM e non vuole saperlo. Ha bisogno di una landing page per la propria pizzeria, di un volantino per l'offerta del weekend, di una pagina per il proprio evento. Andy deve essere per lui uno strumento semplice come Canva ma con l'output che lui vuole davvero: una pagina web funzionante, non un template da completare.
-
-### Funzionalità ad alto livello
-
-**Onboarding per settore**
-Al primo accesso, andy chiede: che tipo di attività hai? In tre click (ristorante, negozio, servizio, altro) configura un profilo che orienta tutte le generazioni successive. La pizzeria ottiene output con menù, orari, mappa e atmosfera. Il parrucchiere ottiene output con servizi, prenotazione e galleria. Il settore è il layer di pre-prompting più importante per questa verticale.
-
-**Generazione da prompt vocale o fotografico**
-La piccola impresa non sempre ha facilità con la scrittura. Andy dovrebbe accettare l'input in forme diverse: una foto del menu scritto a mano, una foto della vetrina, un messaggio vocale che descrive l'offerta del giorno. L'input multimodale abbassa la barriera d'accesso in modo decisivo.
-
-**Pubblicazione con dominio personalizzato**
-Il titolare vuole che la sua pagina sia su "pizzeria-daluigi.it", non su un sottodominio di andy. La gestione del dominio personalizzato, anche solo tramite redirect o CNAME, è una feature di valore percepito alto per questo segmento.
-
-**QR code generato automaticamente**
-Ogni pagina pubblicata genera automaticamente un QR code scaricabile e pronto per la stampa. Il QR è il punto di contatto fisico-digitale che la piccola impresa capisce e usa.
-
-**Aggiornamento rapido dei contenuti**
-La pizzeria cambia il menu ogni settimana. Andy deve permettere l'aggiornamento rapido di elementi specifici (il menu, le offerte, gli orari) senza rigenerare tutto. Una modalità di editing guidato per i contenuti variabili è più utile della rigenerazione completa.
-
-### Funzionalità a medio livello
-
-- Notifica quando una pagina pubblicata viene visitata (analytics minimo)
-- Suggerimento proattivo: "È venerdì, vuoi aggiornare le offerte del weekend?"
-- Integrazione con Google Business Profile per importare automaticamente orari e informazioni
-- Modalità stagionale: template e tono cambiano automaticamente in base al periodo dell'anno
-- Piano gratuito con limite di generazioni, piano a pagamento senza limiti e con dominio personalizzato
-- Supporto WhatsApp o chat per utenti non a proprio agio con l'interfaccia web
-
-### Implicazioni di sviluppo
-
-L'input multimodale (foto, voce) richiede un preprocessing prima dell'LLM: OCR per immagini, speech-to-text per audio, poi trasformazione in prompt strutturato. Il sistema di aggiornamento rapido richiede che l'output generato abbia una struttura semantica che andy conosce e può modificare in modo puntuale, non solo come testo grezzo. Il QR code è una feature relativamente semplice ma di alto impatto percepito: andrebbe implementata presto e resa visibile.
+The multi-tenancy system is the enabling feature for this vertical. Without it, andy is an individual tool, not an agency product. The data structure for users, brand kits, and outputs must account for tenant separation from the start. The approval workflow requires an output status system (draft, in review, approved, published). Reporting requires generation logging with metadata (cost, model, format, user, tenant).
 
 ---
 
-## 6. Verticale: Venditori di Spazi Pubblicitari
+## 3. Vertical: Schools & Universities
 
-### Contesto
+### Context
 
-Un editore locale, una concessionaria pubblicitaria o una rete di affissioni vende spazi. Il contenuto da mostrare in quegli spazi — la landing page, il mini sito, la locandina digitale — è oggi un problema del cliente. Andy permette all'editore di offrire il contenuto come parte del pacchetto pubblicitario, aumentando il valore percepito dell'offerta senza aumentare proporzionalmente i costi.
+Andy in a school context isn't an assistant, it's a teaching tool. The goal isn't to produce the best content but to let the user — the student — live through the production process. Output quality is secondary to the quality of the learning experience.
 
-### Funzionalità ad alto livello
+### High-level functionality
 
-**White label completo**
-Andy sparisce completamente. L'interfaccia, il dominio, la comunicazione sono del venditore. Il cliente finale non sa che esiste andy. Il white label non è solo cosmesi: include la possibilità di personalizzare il flusso, le opzioni disponibili, i formati offerti.
+**Lab mode**
+An alternative operating mode to the normal interface, designed for guided sessions. The teacher defines a path: topic, prompt constraints, model to use, output format. The student operates within these constraints. Lab mode shows the steps explicitly, makes the optimized prompt visible, shows the process instead of hiding it.
 
-**Pacchetti di formato**
-Il venditore definisce cosa può essere generato: solo landing page? Solo locandine digitali? Solo mini siti one-scroll? L'utente vede solo le opzioni incluse nel proprio pacchetto commerciale. La configurazione dei pacchetti avviene nel pannello del venditore, non in quello dell'utente.
+**School creative board**
+A public (but moderated) gallery of outputs generated by students, hosted on the institution's domain. Students see their own published work, teachers moderate. The board is an educational artifact in itself: it motivates, creates comparison, shows evolution over time.
 
-**Pubblicazione su dominio dell'editore**
-I contenuti generati dai clienti vengono pubblicati su un sottodominio dell'editore (cliente1.editore.it), non su un dominio andy. Questo mantiene il traffico nell'ecosistema dell'editore e rafforza il valore della relazione.
+**Model profiles for the school context**
+In a school setting, student privacy is a non-negotiable constraint. Andy must make exclusive use of local models simple and safe, without requiring technical skills from the teacher. A "school" profile automatically configures: no data sent to external providers, a local model pre-selected, minimal logs.
 
-**Gestione scadenze**
-Un pacchetto pubblicitario ha una durata. La landing page generata dovrebbe scadere insieme alla campagna. Andy gestisce le scadenze di pubblicazione: notifica il cliente in anticipo, offre il rinnovo, archivia il contenuto alla scadenza.
+**Structured prompting paths**
+Guided sequences of progressive prompting: the teacher defines a sequence of exercises where each step builds on the previous one. The student learns to refine, specify, and correct their own prompt by observing how the output changes.
 
-**Reportistica per il venditore**
-Quante landing sono state generate? Quante sono attive? Quante visite hanno ricevuto? Il venditore ha bisogno di questi dati per valorizzare il servizio ai propri clienti e per il rinnovo.
+**Prompt evaluation**
+Not of the output, but of the prompt. A sub-system that analyzes the quality and specificity of the prompt written by the student and gives formative feedback: is it too vague? does it lack context? does it use ambiguous words? This is a tool for the teacher, not an automatic judge.
 
-### Funzionalità a medio livello
+### Mid-level functionality
 
-- Template di onboarding per il cliente del venditore (non per il venditore stesso)
-- Integrazione con il CRM del venditore per importare automaticamente i dati del cliente nell'output
-- Email automatica al cliente con link alla propria landing e QR code allegato
-- Limite di modifiche post-generazione per piano commerciale
-- Watermark opzionale sull'output (es. "realizzato con [nome editore]")
+- Export of student outputs as an archive for teacher evaluation
+- Integration with electronic gradebook systems (via API) to associate outputs with students and classes
+- Anonymous mode for exercises where identity must not influence evaluation
+- Session timer for timed exercises
+- Side-by-side comparison of outputs generated from different prompts on the same topic
+- Teacher dashboard with an overview of class activity
+- Configurable moderation threshold for the board (manual, semi-automatic)
 
-### Implicazioni di sviluppo
+### Development implications
 
-Questa verticale richiede una gerarchia a tre livelli: andy come piattaforma, il venditore come operatore, il cliente finale come utente. Il white label richiede una personalizzazione dell'interfaccia a livello di theme e di copy, non solo di logo. La gestione delle scadenze richiede un sistema di scheduling e notifiche. L'integrazione con CRM esterni è un punto di complessità significativo ma ad alto valore.
+Lab mode requires a level of session configuration not covered by the standard architecture. It's essentially a second entry point into the application with a completely different UX flow. The school board requires a moderation system with roles (student, teacher, institution administrator). The "school privacy-first" profile requires that routing to cloud providers be disableable at the instance level, not just per individual user.
 
 ---
 
-## 7. Verticale: Eventi & Fiere — Postazioni Fisiche
+## 4. Vertical: Nonprofits & Associations
 
-### Contesto
+### Context
 
-Una postazione fisica in fiera è un oggetto ibrido: è uno schermo, ma è anche un'esperienza. Le persone si avvicinano, interagiscono, portano via qualcosa. Andy come "content machine" in fiera genera valore esperienziale, non solo funzionale: il visitatore ha partecipato alla creazione di qualcosa, non solo ricevuto materiale promozionale.
+Nonprofit organizations have limited resources, uneven digital skills, and concrete communication needs: announcements, flyers, forms, campaign landing pages. For them, andy must be the simplest possible tool, with the shallowest learning curve and the greatest practical effect.
 
-### Funzionalità ad alto livello
+### High-level functionality
 
-**Modalità kiosk**
-Un'interfaccia ridotta e touch-friendly, pensata per schermi in posizione verticale o orizzontale, operati da persone che non conoscono andy. Input semplice, output rapido, nessun dettaglio tecnico. La modalità kiosk disabilita tutto ciò che non serve all'esperienza: account, impostazioni, storico.
+**Operational templates by content type**
+Pre-configured output templates for typical needs: event flyer, fundraising page, sign-up form, visual press release, volunteer update. Each template isn't a fixed layout but a set of intents and structures that guide the generation in the right direction.
+
+**Simplified mode**
+An interface stripped to the essentials: write what you need, choose the format, generate. No reference to LLM, provider, tokens, pre-prompting. Andy decides for the user. Simplified mode is the default for this vertical; advanced mode is accessible but not front and center.
+
+**Export optimized for print and social**
+Nonprofits need physical flyers and social posts, not just web pages. PDF export with correct print margins, image export sized for major social networks, print-ready A4 export for the print shop.
+
+**Reusable content library**
+Over time, the association accumulates content that repeats: its own story, its mission, its contacts, event photos. Andy should be able to draw on this library during generation without the user having to rewrite it every time.
+
+### Mid-level functionality
+
+- Account sharing among volunteers with differentiated roles
+- Notification to volunteers when content is ready to be distributed
+- Simple editorial calendar: plan when content should be generated and published
+- Integration with fundraising platforms to automatically insert links and widgets into generated content
+- Offline mode: generation with a local model when the connection is unstable
+- Free or heavily discounted access as a dedicated program
+
+### Development implications
+
+Simplified mode requires a second UX flow with automatic decisions that today are explicit. The reusable content library system is a form of instance memory: andy must be able to inject persistent, organization-related information into the prompt without the user rewriting it every time. This anticipates an "organization context" system that cuts across multiple verticals.
+
+---
+
+## 5. Vertical: Small Business — Direct SaaS
+
+### Context
+
+The owner of a small business doesn't know what an LLM is and doesn't want to. They need a landing page for their pizzeria, a flyer for the weekend special, a page for their event. For them, andy must be a tool as simple as Canva, but with the output they actually want: a working web page, not a template to fill in.
+
+### High-level functionality
+
+**Onboarding by industry**
+On first access, andy asks: what kind of business do you have? In three clicks (restaurant, shop, service, other) it configures a profile that steers all subsequent generations. The pizzeria gets output with a menu, hours, map, and atmosphere. The hairdresser gets output with services, booking, and a gallery. Industry is the most important pre-prompting layer for this vertical.
+
+**Generation from voice or photo prompts**
+Small businesses don't always find writing easy. Andy should accept input in different forms: a photo of a hand-written menu, a photo of the storefront, a voice message describing the day's special. Multimodal input decisively lowers the barrier to entry.
+
+**Publishing with a custom domain**
+The owner wants their page on "pizzeria-daluigi.it", not on an andy subdomain. Custom domain management, even just via redirect or CNAME, is a high perceived-value feature for this segment.
+
+**Automatically generated QR code**
+Every published page automatically generates a downloadable, print-ready QR code. The QR code is the physical-digital touchpoint that small businesses understand and use.
+
+**Fast content updates**
+The pizzeria changes its menu every week. Andy must allow fast updates to specific elements (menu, offers, hours) without regenerating everything. A guided editing mode for variable content is more useful than full regeneration.
+
+### Mid-level functionality
+
+- Notification when a published page is visited (minimal analytics)
+- Proactive suggestion: "It's Friday, want to update the weekend offers?"
+- Integration with Google Business Profile to automatically import hours and information
+- Seasonal mode: templates and tone change automatically based on the time of year
+- Free plan with a generation limit, paid plan with no limits and a custom domain
+- WhatsApp or chat support for users not comfortable with the web interface
+
+### Development implications
+
+Multimodal input (photo, voice) requires preprocessing before the LLM: OCR for images, speech-to-text for audio, then transformation into a structured prompt. The fast-update system requires the generated output to have a semantic structure that andy knows and can modify surgically, not just as raw text. The QR code is a relatively simple but high perceived-impact feature: it should be implemented early and made visible.
+
+---
+
+## 6. Vertical: Ad-Space Sellers
+
+### Context
+
+A local publisher, an ad agency, or a billboard network sells space. The content to show in that space — the landing page, the mini site, the digital poster — is today the client's problem. Andy lets the publisher offer the content as part of the advertising package, increasing the perceived value of the offer without proportionally increasing costs.
+
+### High-level functionality
+
+**Full white label**
+Andy disappears entirely. The interface, the domain, the communication belong to the seller. The end client doesn't know andy exists. White labeling isn't just cosmetic: it includes the ability to customize the flow, the available options, the offered formats.
+
+**Format packages**
+The seller defines what can be generated: only landing pages? only digital posters? only one-scroll mini sites? The user sees only the options included in their commercial package. Package configuration happens in the seller's panel, not the user's.
+
+**Publishing on the publisher's domain**
+Content generated by clients is published on a subdomain of the publisher (client1.publisher.com), not on an andy domain. This keeps traffic within the publisher's ecosystem and reinforces the value of the relationship.
+
+**Expiration management**
+An advertising package has a duration. The generated landing page should expire along with the campaign. Andy manages publication expiration: notifies the client in advance, offers renewal, archives the content on expiry.
+
+**Reporting for the seller**
+How many landing pages were generated? How many are active? How many visits did they receive? The seller needs this data to demonstrate the service's value to their clients and for renewals.
+
+### Mid-level functionality
+
+- Onboarding templates for the seller's client (not for the seller themselves)
+- Integration with the seller's CRM to automatically import client data into the output
+- Automatic email to the client with a link to their landing page and an attached QR code
+- Limit on post-generation edits per commercial plan
+- Optional watermark on the output (e.g. "made with [publisher name]")
+
+### Development implications
+
+This vertical requires a three-level hierarchy: andy as the platform, the seller as the operator, the end client as the user. White labeling requires customizing the interface at the theme and copy level, not just the logo. Expiration management requires a scheduling and notification system. Integration with external CRMs is a point of significant complexity but high value.
+
+---
+
+## 7. Vertical: Events & Trade Fairs — On-Site Kiosks
+
+### Context
+
+A physical booth at a trade fair is a hybrid object: it's a screen, but it's also an experience. People approach, interact, and take something away. Andy as a "content machine" at a fair generates experiential value, not just functional value: the visitor took part in creating something, rather than simply receiving promotional material.
+
+### High-level functionality
+
+**Kiosk mode**
+A stripped-down, touch-friendly interface, designed for screens in vertical or horizontal orientation, operated by people who don't know andy. Simple input, fast output, no technical detail. Kiosk mode disables everything not needed for the experience: account, settings, history.
 
 **Brand lock**
-Il brand dell'evento o dello sponsor è immutabile. Logo, colori, claim, font sono iniettati nel layer obbligatorio e non possono essere rimossi o modificati dall'utente. Il visitatore ha libertà creativa nel contenuto ma non nell'identità visiva. Il brand lock è una garanzia contrattuale che andy deve poter offrire.
+The event's or sponsor's brand is immutable. Logo, colors, tagline, font are injected into a mandatory layer and cannot be removed or modified by the user. The visitor has creative freedom over the content but not over the visual identity. Brand lock is a contractual guarantee andy must be able to offer.
 
-**Generazione rapida**
-In fiera il tempo di attesa è un vincolo critico. La generazione deve essere ottimizzata per velocità: modelli più piccoli e veloci, output semplificati, pre-generazione di elementi comuni. L'utente vede il risultato in 10-15 secondi, non in 60.
+**Fast generation**
+At a fair, waiting time is a critical constraint. Generation must be optimized for speed: smaller and faster models, simplified outputs, pre-generation of common elements. The user should see the result in 10-15 seconds, not 60.
 
-**Export immediato**
-Il visitatore vuole portare via il suo contenuto. QR code generato all'istante per scaricarlo sul proprio telefono, email diretta, o download immediato su chiavetta. Più opzioni, meno attriti.
+**Immediate export**
+The visitor wants to take their content with them. A QR code generated instantly to download it to their phone, direct email, or immediate download to a USB drive. More options, less friction.
 
-**Sessioni anonime**
-In fiera non si vuole registrare nessuno. Le sessioni sono anonime, senza account. I contenuti generati sono temporanei lato server o scaricati immediatamente. La privacy è una feature, non un vincolo.
+**Anonymous sessions**
+At a fair, nobody wants to register. Sessions are anonymous, without an account. Generated content is either temporary server-side or downloaded immediately. Privacy is a feature, not a constraint.
 
-### Funzionalità a medio livello
+### Mid-level functionality
 
-- Contatore di generazioni in tempo reale visibile sull'interfaccia (engagement gamification)
-- Galleria pubblica live: gli output generati durante l'evento appaiono su uno schermo separato
-- Moderazione automatica prima della pubblicazione in galleria
-- Report post-evento: quante generazioni, che formati, che temi più richiesti
-- Configurazione remota della postazione (cambio brand kit, aggiornamento tema) senza intervento fisico
-- Modalità demo pre-caricata per quando la connessione è instabile
+- Real-time generation counter visible on the interface (engagement gamification)
+- Live public gallery: outputs generated during the event appear on a separate screen
+- Automatic moderation before publication to the gallery
+- Post-event report: how many generations, which formats, which topics were most requested
+- Remote configuration of the kiosk (brand kit change, theme update) without physical intervention
+- Pre-loaded demo mode for when the connection is unstable
 
-### Implicazioni di sviluppo
+### Development implications
 
-La modalità kiosk è un entry point completamente diverso dall'applicazione standard, con requisiti di UX (touch, schermo grande, input semplificato) e di sistema (sessioni anonime, nessun account, generazione rapida) molto distanti dal caso d'uso normale. Il brand lock richiede che certi elementi del layer siano contrassegnati come non modificabili a livello di sistema, non solo di interfaccia. La galleria live richiede un canale real-time tra le generazioni e il display.
-
----
-
-## 8. Verticale: Gaming & Community
-
-### Contesto
-
-Andy può generare casual game HTML funzionanti. Questo è un caso d'uso che non ha equivalenti diretti nel mercato degli strumenti no-code: la generazione di esperienze interattive, non solo di contenuti passivi. La verticale gaming è ancora da esplorare ma ha un potenziale di differenziazione molto alto.
-
-### Funzionalità ad alto livello
-
-**Generi di gioco pre-configurati**
-La generazione di un gioco partendo da zero richiede un prompt molto ricco. Andy può offrire generi pre-configurati — runner, quiz, puzzle, memory, clicker — che definiscono le meccaniche di base e lasciano all'utente la personalizzazione di tema, personaggi e narrativa. Il genere è il layer di struttura, il prompt è il layer di contenuto.
-
-**Bilanciamento assistito**
-Un gioco funzionante ma impossibile o banale non è un buon gioco. Andy dovrebbe applicare automaticamente vincoli di bilanciamento basati sul genere: velocità di progressione, frequenza degli ostacoli, curva di difficoltà. Questi parametri non sono visibili all'utente ma sono parte del layer di generazione.
-
-**Asset brandizzati obbligatori**
-Per la verticale eventi e fiere, i personaggi, gli sfondi e gli elementi grafici del gioco possono essere pre-definiti dall'organizzatore. Il visitatore personalizza la storia o il nome del personaggio, ma gioca sempre con l'identità visiva dell'evento.
-
-**Leaderboard integrata**
-Un gioco senza competizione perde metà del suo valore. Andy dovrebbe poter generare output che includono una leaderboard, condivisa tra tutti i fruitori dello stesso gioco. La leaderboard è un servizio, non un file statico: richiede un backend minimo o un'integrazione con un servizio esterno.
-
-**Export per streaming e social**
-I content creator vogliono mostrare i propri giochi. Export in formato ottimizzato per OBS (overlay trasparente), screenshot automatico dello schermo di gioco, clip breve del gameplay per i social.
-
-### Funzionalità a medio livello
-
-- Editor di parametri di gioco: velocità, difficoltà, durata — senza toccare il codice
-- Anteprima rapida del gameplay prima dell'export
-- Modalità multiplayer locale (stesso schermo, due input) per contesti evento
-- Integrazione con piattaforme di gaming community (itch.io, Newgrounds) per pubblicazione diretta
-- Generazione di varianti: stesso gioco, tema diverso, per campagne stagionali
-
-### Implicazioni di sviluppo
-
-Il casual game è il tipo di output più complesso che andy può generare: richiede logica di gioco funzionante, non solo contenuto visivo. Il pre-prompting per i generi deve essere molto più strutturato e testato rispetto agli altri formati. Il bilanciamento assistito richiede una conoscenza del dominio gaming che deve essere codificata nel layer, non lasciata all'LLM. La leaderboard rompe il paradigma self-contained: è il primo caso in cui l'output ha bisogno di un servizio esterno per funzionare completamente.
+Kiosk mode is an entry point completely different from the standard application, with UX requirements (touch, large screen, simplified input) and system requirements (anonymous sessions, no account, fast generation) far removed from the normal use case. Brand lock requires certain layer elements to be flagged as non-modifiable at the system level, not just the interface level. The live gallery requires a real-time channel between generations and the display.
 
 ---
 
-## 9. Verticale: Developer & Open Source
+## 8. Vertical: Gaming & Community
 
-### Contesto
+### Context
 
-I developer sono i primi utenti di andy e i suoi primi contributori. Usano andy in modo diverso da tutti gli altri: lo integrano, lo forkano, lo estendono, lo rompono consapevolmente. Il loro valore non è nelle generazioni che producono ma nella direzione che danno al progetto.
+Andy can generate working HTML casual games. This is a use case with no direct equivalent in the no-code tool market: the generation of interactive experiences, not just passive content. The gaming vertical is still to be explored but has very high differentiation potential.
 
-### Funzionalità ad alto livello
+### High-level functionality
 
-**API-first come modalità di accesso principale**
-Ogni funzionalità di andy deve essere accessibile via API REST prima ancora che via interfaccia. Il developer non usa la UI, usa l'API. La UI è un client dell'API, non il contrario. Questa inversione di prospettiva ha implicazioni architetturali profonde.
+**Pre-configured game genres**
+Generating a game from scratch requires a very rich prompt. Andy can offer pre-configured genres — runner, quiz, puzzle, memory, clicker — that define the base mechanics and leave the user to customize theme, characters, and narrative. Genre is the structure layer, the prompt is the content layer.
 
-**Sistema di plugin per il layer di pre-prompting**
-Il developer vuole iniettare il proprio contesto nel sistema di generazione. Un sistema di plugin permette di aggiungere layer personalizzati senza modificare il core. Il plugin può essere un file di configurazione, uno script, o un endpoint esterno che andy chiama durante la fase di pre-prompting.
+**Assisted balancing**
+A game that works but is impossible or trivial isn't a good game. Andy should automatically apply balancing constraints based on genre: progression speed, obstacle frequency, difficulty curve. These parameters aren't visible to the user but are part of the generation layer.
 
-**Modalità debug del pre-prompting**
-Il developer vuole vedere esattamente cosa viene inviato all'LLM. Una modalità debug mostra il prompt completo, inclusi tutti i layer, prima e dopo l'ottimizzazione. Questo non è visibile all'utente normale ma è essenziale per chi sviluppa layer personalizzati.
+**Mandatory branded assets**
+For the events and fairs vertical, the game's characters, backgrounds, and graphic elements can be pre-defined by the organizer. The visitor customizes the story or the character's name, but always plays with the event's visual identity.
 
-**Webhook per eventi di generazione**
-Ogni generazione completata può notificare un endpoint esterno: output pronto, link di download, metadati. Il developer può integrare andy in pipeline CI/CD, sistemi di pubblicazione automatica, o flussi di content operation.
+**Integrated leaderboard**
+A game without competition loses half its value. Andy should be able to generate output that includes a leaderboard, shared among all players of the same game. The leaderboard is a service, not a static file: it requires a minimal backend or an integration with an external service.
 
-**Containerizzazione e deploy semplificato**
-Andy deve essere semplice da deployare in ambienti diversi: Docker, VPS, Raspberry Pi, server interno aziendale. La configurazione deve essere minima e documentata. Il developer che vuole un'istanza privata non deve combattere con l'infrastruttura.
+**Export for streaming and social**
+Content creators want to show off their games. Export in a format optimized for OBS (transparent overlay), automatic screenshot of the game screen, short gameplay clip for social media.
 
-### Funzionalità a medio livello
+### Mid-level functionality
 
-- CLI per generazione da terminale, senza UI
-- SDK in almeno un linguaggio comune (Python o JavaScript) per integrazioni
-- Documentazione API interattiva (OpenAPI/Swagger) generata automaticamente
-- Sistema di test dell'output: verifica automatica che il file generato sia valido HTML, JS, CSS
-- Changelog delle modifiche al sistema di pre-prompting tra versioni
-- Ambiente di staging separato per testare nuovi layer senza impattare la produzione
+- Game parameter editor: speed, difficulty, duration — without touching code
+- Quick gameplay preview before export
+- Local multiplayer mode (same screen, two inputs) for event contexts
+- Integration with gaming community platforms (itch.io, Newgrounds) for direct publishing
+- Variant generation: same game, different theme, for seasonal campaigns
 
-### Implicazioni di sviluppo
+### Development implications
 
-L'API-first richiede che l'intera logica applicativa sia disaccoppiata dall'interfaccia. Se oggi la UI e il backend sono accoppiati, questa è la direzione in cui separarli. Il sistema di plugin è la feature di sviluppo più complessa ma anche quella con il maggiore impatto sulla community: permette a chiunque di contribuire nuove verticali senza modificare il core. I webhook richiedono un sistema di gestione degli eventi asincroni. La CLI è relativamente semplice ma ha un alto valore simbolico per la community open source.
-
----
-
-## 10. Layer trasversali
-
-### 10.1 Il sistema di contesto organizzazione
-
-Trasversale a più verticali, la necessità di una memoria persistente dell'istanza emerge chiaramente. L'agenzia che non vuole riscrivere il brand del cliente, la pizzeria che non vuole reinserire il menu ogni volta, la scuola che vuole vincolare i prompt degli studenti: tutti hanno bisogno di un sistema che conosca "chi sono" e "come lavoro" senza che l'utente lo debba ridire ogni volta.
-
-Il contesto organizzazione è un layer di informazioni persistenti, gestito dall'amministratore dell'istanza, che viene automaticamente incluso in ogni generazione. Non è un template, è un insieme di fatti e vincoli che andy conosce sempre.
-
-### 10.2 Il sistema di moderazione
-
-Qualunque verticale che preveda output pubblici — la bacheca scolastica, la galleria dell'evento, la landing del cliente dell'agenzia — ha bisogno di un sistema di moderazione. La moderazione può essere:
-
-- Manuale: un amministratore approva ogni output prima della pubblicazione
-- Semi-automatica: un filtro automatico blocca contenuti problematici, il resto passa
-- Automatica: nessun intervento umano, solo filtri
-
-Il sistema di moderazione deve essere configurabile per verticale, non hardcoded. Ciò che è accettabile in un contesto di fiera non lo è in uno scolastico.
-
-### 10.3 Il sistema di analytics
-
-Andy non sa cosa succede dopo la pubblicazione. Quante persone vedono la landing generata? Per quanto tempo? Da dove arrivano? Questi dati sono preziosi per tutte le verticali, specialmente per l'agenzia e per il venditore di spazi. Un sistema di analytics minimale — contatore di visite, provenienza, tempo di sessione — integrato direttamente nell'output generato aggiungerebbe valore significativo senza complicare il modello self-contained.
-
-### 10.4 Il sistema di assets ricorrenti
-
-Logo, font, immagini di prodotto, foto dello staff: questi asset si ripetono in ogni generazione per lo stesso cliente. Un sistema di libreria assets associata al profilo o al tenant permette di:
-
-- Iniettare automaticamente gli asset rilevanti nel prompt di generazione
-- Includere gli asset fisici nell'output ZIP senza che l'utente li debba caricare ogni volta
-- Gestire i diritti di uso degli asset (quali sono disponibili per quali generazioni)
+The casual game is the most complex type of output andy can generate: it requires working game logic, not just visual content. Pre-prompting for genres must be far more structured and tested than for other formats. Assisted balancing requires gaming domain knowledge that must be encoded in the layer, not left to the LLM. The leaderboard breaks the self-contained paradigm: it's the first case where the output needs an external service to work fully.
 
 ---
 
-## 11. Roadmap per priorità
+## 9. Vertical: Developers & Open Source
 
-### Immediato — Fondamenta per tutte le verticali
+### Context
 
-- Sistema di layer di pre-prompting componibili e configurabili
-- Multi-tenancy base (separazione utenti e output per organizzazione)
-- Contesto organizzazione persistente
-- API REST completa con documentazione
+Developers are andy's first users and its first contributors. They use andy differently from everyone else: they integrate it, fork it, extend it, deliberately break it. Their value isn't in the generations they produce but in the direction they give the project.
 
-### Breve termine — Verticali P1
+### High-level functionality
 
-- Brand kit per cliente (per agenzia)
-- Onboarding per settore (per piccola impresa)
-- Profilo privacy-first con modelli locali obbligatori (per scuola)
-- QR code automatico su ogni output pubblicato
-- Export PDF e immagine da HTML
+**API-first as the primary access mode**
+Every andy feature must be accessible via REST API before it's accessible via the interface. The developer doesn't use the UI, they use the API. The UI is a client of the API, not the other way around. This inversion of perspective has deep architectural implications.
 
-### Medio termine — Verticali P2 e feature avanzate
+**Plugin system for the pre-prompting layer**
+The developer wants to inject their own context into the generation system. A plugin system allows adding custom layers without modifying the core. A plugin can be a configuration file, a script, or an external endpoint that andy calls during the pre-prompting phase.
 
-- White label completo (per venditore spazi)
-- Modalità kiosk touch-friendly (per eventi)
-- Modalità laboratorio con percorsi strutturati (per scuola)
-- Sistema di moderazione configurabile
-- Workflow di approvazione output
-- Webhook per eventi di generazione
+**Pre-prompting debug mode**
+The developer wants to see exactly what's sent to the LLM. A debug mode shows the full prompt, including all layers, before and after optimization. This isn't visible to the normal user but is essential for anyone developing custom layers.
 
-### Lungo termine — Verticali P3 e differenziatori
+**Webhooks for generation events**
+Every completed generation can notify an external endpoint: output ready, download link, metadata. The developer can integrate andy into CI/CD pipelines, automatic publishing systems, or content operation workflows.
 
-- Generi di gioco pre-configurati (per gaming)
-- Sistema di plugin per layer personalizzati (per developer)
-- Leaderboard come servizio per output gaming
-- Input multimodale: foto e voce (per piccola impresa)
-- Analytics integrato negli output pubblicati
-- CLI e SDK
+**Containerization and simplified deployment**
+Andy must be easy to deploy in different environments: Docker, VPS, Raspberry Pi, internal company server. Configuration must be minimal and documented. A developer who wants a private instance shouldn't have to fight the infrastructure.
+
+### Mid-level functionality
+
+- CLI for terminal generation, without a UI
+- SDK in at least one common language (Python or JavaScript) for integrations
+- Interactive API documentation (OpenAPI/Swagger) generated automatically
+- Output testing system: automatic verification that the generated file is valid HTML, JS, CSS
+- Changelog of pre-prompting system changes between versions
+- Separate staging environment for testing new layers without impacting production
+
+### Development implications
+
+API-first requires the entire application logic to be decoupled from the interface. If the UI and backend are coupled today, this is the direction to separate them. The plugin system is the most complex development feature but also the one with the greatest community impact: it lets anyone contribute new verticals without modifying the core. Webhooks require an asynchronous event management system. The CLI is relatively simple but has high symbolic value for the open source community.
 
 ---
 
-> *Questo documento è un punto di partenza, non una specifica. Le direzioni qui descritte sono orientamenti strategici: ogni funzionalità andrà validata con utenti reali prima di essere sviluppata. La priorità reale emerge dall'uso, non dalla pianificazione.*
+## 10. Cross-cutting layers
+
+### 10.1 The organization context system
+
+Cutting across multiple verticals, the need for persistent instance memory clearly emerges. The agency that doesn't want to rewrite the client's brand, the pizzeria that doesn't want to re-enter the menu every time, the school that wants to constrain students' prompts: all of them need a system that knows "who I am" and "how I work" without the user having to restate it every time.
+
+The organization context is a layer of persistent information, managed by the instance administrator, that is automatically included in every generation. It isn't a template — it's a set of facts and constraints andy always knows.
+
+### 10.2 The moderation system
+
+Any vertical that involves public output — the school board, the event gallery, the agency client's landing page — needs a moderation system. Moderation can be:
+
+- Manual: an administrator approves each output before publication
+- Semi-automatic: an automatic filter blocks problematic content, the rest goes through
+- Automatic: no human intervention, filters only
+
+The moderation system must be configurable per vertical, not hardcoded. What's acceptable in a trade fair context isn't in a school context.
+
+### 10.3 The analytics system
+
+Andy doesn't know what happens after publication. How many people see the generated landing page? For how long? Where do they come from? This data is valuable for all verticals, especially for the agency and the ad-space seller. A minimal analytics system — visit counter, referrer, session time — integrated directly into the generated output would add significant value without complicating the self-contained model.
+
+### 10.4 The recurring assets system
+
+Logo, fonts, product images, staff photos: these assets repeat in every generation for the same client. An asset library system tied to the profile or tenant allows:
+
+- Automatically injecting the relevant assets into the generation prompt
+- Including the physical assets in the ZIP output without the user having to upload them every time
+- Managing asset usage rights (which are available for which generations)
+
+---
+
+## 11. Roadmap by priority
+
+### Immediate — Foundations for all verticals
+
+- Composable, configurable pre-prompting layer system
+- Basic multi-tenancy (user and output separation per organization)
+- Persistent organization context
+- Complete, documented REST API
+
+### Short term — P1 verticals
+
+- Per-client brand kit (for agencies)
+- Onboarding by industry (for small businesses)
+- Privacy-first profile with mandatory local models (for schools)
+- Automatic QR code on every published output
+- PDF and image export from HTML
+
+### Medium term — P2 verticals and advanced features
+
+- Full white label (for ad-space sellers)
+- Touch-friendly kiosk mode (for events)
+- Lab mode with structured paths (for schools)
+- Configurable moderation system
+- Output approval workflow
+- Webhooks for generation events
+
+### Long term — P3 verticals and differentiators
+
+- Pre-configured game genres (for gaming)
+- Plugin system for custom layers (for developers)
+- Leaderboard as a service for gaming output
+- Multimodal input: photo and voice (for small businesses)
+- Analytics integrated into published outputs
+- CLI and SDK
+
+---
+
+> *This document is a starting point, not a spec. The directions described here are strategic orientations: every feature will need to be validated with real users before being developed. Real priority emerges from usage, not from planning.*

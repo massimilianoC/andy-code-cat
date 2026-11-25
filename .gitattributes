@@ -1,4 +1,4 @@
-# Force LF line endings for files that run or get parsed on Linux (droplet, containers),
+# Force LF line endings for files that run or get parsed on Linux (servers, containers),
 # regardless of core.autocrlf on the checkout machine. A CRLF shebang line silently breaks
 # script execution ("bash\r: not found") without any error at commit/push time.
 *.sh            text eol=lf

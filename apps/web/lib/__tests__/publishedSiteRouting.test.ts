@@ -38,9 +38,9 @@ describe("reserved root segments", () => {
 
 describe("decideWebRoute", () => {
     it("forwards /{slug}, /{slug}/ and /{slug}/file to the API verbatim", () => {
-        expect(decideWebRoute("/antares")).toEqual({ kind: "published-site", apiPath: "/antares" });
-        expect(decideWebRoute("/antares/")).toEqual({ kind: "published-site", apiPath: "/antares/" });
-        expect(decideWebRoute("/antares/style.css")).toEqual({ kind: "published-site", apiPath: "/antares/style.css" });
+        expect(decideWebRoute("/my-site")).toEqual({ kind: "published-site", apiPath: "/my-site" });
+        expect(decideWebRoute("/my-site/")).toEqual({ kind: "published-site", apiPath: "/my-site/" });
+        expect(decideWebRoute("/my-site/style.css")).toEqual({ kind: "published-site", apiPath: "/my-site/style.css" });
         expect(decideWebRoute("/bar-sport-runner/data/rows.json")).toEqual({ kind: "published-site", apiPath: "/bar-sport-runner/data/rows.json" });
     });
 
@@ -57,7 +57,7 @@ describe("decideWebRoute", () => {
     });
 
     it("does not treat non-slug shapes as sites", () => {
-        expect(decideWebRoute("/Antares").kind).toBe("app");      // uppercase
+        expect(decideWebRoute("/My-Site").kind).toBe("app");      // uppercase
         expect(decideWebRoute("/-bad").kind).toBe("app");         // leading hyphen
         expect(decideWebRoute("/a").kind).toBe("app");            // too short
     });

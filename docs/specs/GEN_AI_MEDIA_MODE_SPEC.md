@@ -87,7 +87,7 @@ This means:
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              USER PROMPT                                     │
-│   "Crea un podcast di 15 minuti sul futuro dell'AI in medicina"              │
+│   "Create a 15-minute podcast about the future of AI in medicine"            │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -572,11 +572,11 @@ Body:
     "format": "mp3",
     "bitrateKbps": 128,
     "transcript": [
-      { "start": 0.0, "end": 4.2, "text": "Benvenuti...", "speaker": "Speaker 1" }
+      { "start": 0.0, "end": 4.2, "text": "Welcome...", "speaker": "Speaker 1" }
     ],
     "chapters": [
-      { "start": 0, "title": "Introduzione" },
-      { "start": 120, "title": "Stato dell'arte" }
+      { "start": 0, "title": "Introduction" },
+      { "start": 120, "title": "State of the art" }
     ],
     "wordCount": 2150
   },

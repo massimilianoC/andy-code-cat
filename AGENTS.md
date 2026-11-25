@@ -9,7 +9,7 @@ Build and evolve a dockerized multi-service platform based on:
 - Node.js
 - Express API
 - Next.js web app
-- MongoDB and Redis services
+- MongoDB (and optional MinIO object storage)
 
 Architecture goals:
 
@@ -229,14 +229,16 @@ The project must run from one docker-compose.yml with:
 - web
 - api
 - mongodb
-- redis
 - workspace
+- minio (optional, compose profile `minio`)
 
 Mandatory networking rules:
 
 - internal service communication on compose network.
-- host mongo port mapped to non-default 27018 to avoid conflicts.
-- host redis port mapped to non-default 6380.
+- host mongo port mapped to non-default 27018 to avoid conflicts, bound to `127.0.0.1` only.
+- every host port except nginx's is bound to `127.0.0.1`. Docker bypasses host firewalls, so a
+  port published on `0.0.0.0` is reachable from the network whatever ufw says. MongoDB has no
+  authentication in these stacks: never publish it on a public interface.
 
 Runtime: Node.js base images must be a supported, patched release (>= 22.23.4, no EOL Node 20). See `docs/security/NODE22_RUNTIME_UPGRADE.md`.
 
@@ -255,13 +257,13 @@ This project has TWO compose files with DIFFERENT MongoDB storage strategies:
 Non-negotiable rules for agents:
 
 1. NEVER run `docker compose up` (dev file) to apply env changes when the running stack is deploy.
-2. To update env vars on the DEPLOY stack without touching MongoDB or Redis:
+2. To update env vars on the DEPLOY stack without touching MongoDB:
 
    ```
    docker compose -f docker-compose.deploy.yml up -d --no-deps api
    ```
 
-3. To update env vars on the DEV stack without touching MongoDB or Redis:
+3. To update env vars on the DEV stack without touching MongoDB:
 
    ```
    docker compose up -d --no-deps api
@@ -498,20 +500,22 @@ New deployments require a two-step bootstrap that agents must understand and res
 - Do NOT run this script in an existing deployment — it skips `.env.docker` generation if
   the file already exists but will rebuild and restart containers.
 
-### Step 2 — `/install` setup wizard
+### Step 2 — Create the first superadmin
 
 After `install.sh` completes, the system is in an **uninitialized** state: no superadmin exists.
 
-- Navigate to `http://localhost/install` (local) or `https://app.DOMAIN/install` (domain).
-- The wizard creates the first superadmin account, seeds `PlatformConfig`, and locks permanently.
-- Detection: `existsWithRole("superadmin")` — if a superadmin exists, the system is installed.
-- `POST /v1/install` is public and idempotent: returns 409 after first completion.
-- Full spec: `docs/specs/FIRST_INSTALL_SETUP_SPEC.md`
+- The operator registers an account at `/register`, then verifies and promotes it from the host:
+  `docker exec andy-code-cat-mongodb mongosh andy-code-cat --eval 'db.users.updateOne({ email: "<email>" }, { $set: { roles: ["superadmin"], emailVerified: true } })'`.
+  `install.sh` prints this command at the end.
+- No verification e-mail is sent: with `AUTH_BYPASS_EMAIL_VERIFICATION=false` (the install.sh
+  default) a later account can log in only after a superadmin marks it verified in `/admin/users`.
+- The guided `/install` wizard is specified but **not implemented yet**
+  (`docs/specs/FIRST_INSTALL_SETUP_SPEC.md`, status Planned). Do not point operators to it.
 
 ### What agents must NOT do
 
 - Do not create superadmin accounts via seed scripts on a production or deploy stack.
-  The wizard is the only supported path.
+  The register-and-promote path above, run by the operator, is the supported one.
 - Do not call `npm run seed` on a deploy stack without explicit operator instruction.
   `seed.ts` is for dev stacks only (creates a test user + project).
 - Do not modify `.env.docker` after generation by `install.sh` without operator confirmation.
@@ -607,4 +611,4 @@ After coding:
 2. If release/versioning rules were touched, update `RELEASE_VERSION`, README, CONTRIBUTING, and agent instructions consistently.
 3. Update documentation index and runbooks when needed.
 4. Report residual risks explicitly.
-5. Never restart MongoDB or Redis to propagate env changes — use `--no-deps` on the correct compose file.
+5. Never restart MongoDB to propagate env changes — use `--no-deps` on the correct compose file.

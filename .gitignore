@@ -5,14 +5,11 @@ dist/
 coverage/
 
 # ─── Environment files (NEVER commit live secrets) ───────────────────────────
+# Every .env file is local. Only the two committed templates are tracked.
 .env
-.env.local
-.env.*.local
-.env.docker
-.env.droplet
-.env.deploy
-# deploy-specific env (keep .env.example and .env.deploy.example in repo)
-.env.droplet.example
+.env.*
+!.env.example
+!.env.deploy.example
 
 # ─── Local data volumes ───────────────────────────────────────────────────────
 /data/
@@ -24,10 +21,13 @@ yarn-debug.log*
 yarn-error.log*
 
 # ─── Private infrastructure (server IPs, SSH keys, live deploy runbooks) ─────
-docker-compose.droplet.yml
+# Host-specific deploy material lives in .deploy/ (scripts, compose overrides,
+# runbooks). The other names are legacy locations kept ignored on purpose.
 docker-compose.override.yml
-scripts/deploy-to-droplet.sh
-scripts/seed-droplet.sh
+docker-compose.*.local.yml
+docker-compose.droplet.yml
+scripts/deploy-to-*.sh
+scripts/seed-*.sh
 nginx/sites-enabled/
 .deploy/
 
@@ -88,7 +88,7 @@ docs/brand/Gatto_Codifica_Video_Generato.mp4
 
 # ─── Private key material ─────────────────────────────────────────────────────
 # Belt to the guard's braces (scripts/public-repo-guard.mjs). This is a public
-# repository: a leaked deploy key is a root shell on the droplet.
+# repository: a leaked deploy key is a root shell on the server.
 id_rsa
 id_dsa
 id_ecdsa

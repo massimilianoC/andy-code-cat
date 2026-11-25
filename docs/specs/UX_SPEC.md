@@ -8,58 +8,58 @@
 ## Screen Map
 
 ```
-/                          Landing pubblica
+/                          Public landing page
 /login                     Login / Register
-/onboarding                Wizard primo accesso (GDPR, profilo)
-/dashboard                 Lista progetti utente
-/projects/new              Wizard creazione progetto (6 step)
-/projects/:id              Workspace progetto (generazione + preview)
-/projects/:id/publish      Wizard pubblicazione
-/projects/:id/settings     Impostazioni progetto (dominio, collaboratori)
-/profile                   Profilo utente, crediti, abbonamento
-/billing                   Acquisto crediti / piani
-/sites/:slug/_pf_auth      Pagina login custom per siti protetti
+/onboarding                First-access wizard (GDPR, profile)
+/dashboard                 User's project list
+/projects/new              Project creation wizard (6 steps)
+/projects/:id              Project workspace (generation + preview)
+/projects/:id/publish      Publish wizard
+/projects/:id/settings     Project settings (domain, collaborators)
+/profile                   User profile, credits, subscription
+/billing                   Buy credits / plans
+/sites/:slug/_pf_auth      Custom login page for protected sites
 ```
 
 ---
 
-## UX-01 — Registrazione e Onboarding
+## UX-01 — Registration and Onboarding
 
 ### Login `/login`
 
 - SSO Google / GitHub (OAuth2)
-- Email + password nativa con verifica magic link (valido 24h)
-- Primo accesso → `/onboarding`; accesso successivo → `/dashboard`
+- Native email + password with magic-link verification (valid 24h)
+- First access → `/onboarding`; subsequent access → `/dashboard`
 
 ### Onboarding `/onboarding`
 
-Una singola schermata, 3 blocchi:
+A single screen, 3 blocks:
 
-**Blocco A — Profilo (opzionale, saltabile)**
-
-```
-Come ti chiami? [Nome] [Cognome]
-Per cosa userai Andy Code Cat?
-  ○ Per me / la mia attività
-  ○ Per i miei clienti (agenzia/freelance)
-  ○ Per testare idee
-```
-
-**Blocco B — Consensi GDPR (obbligatorio)**
+**Block A — Profile (optional, skippable)**
 
 ```
-☑ Accetto i Termini di Servizio e la Privacy Policy
-☐ Acconsento a comunicazioni marketing (opzionale)
-☐ Acconsento all'uso dati per migliorare il servizio (opzionale)
+What's your name? [First name] [Last name]
+What will you use Andy Code Cat for?
+  ○ For myself / my own business
+  ○ For my clients (agency/freelance)
+  ○ To test ideas
 ```
 
-**Blocco C — Cookie banner inline**
+**Block B — GDPR consents (mandatory)**
 
 ```
-[Solo necessari]  [Accetta tutti]
+☑ I accept the Terms of Service and Privacy Policy
+☐ I consent to marketing communications (optional)
+☐ I consent to data use for service improvement (optional)
 ```
 
-CTA: "Inizia a creare →" → 50 crediti gratuiti aggiunti → `/dashboard`
+**Block C — Inline cookie banner**
+
+```
+[Necessary only]  [Accept all]
+```
+
+CTA: "Start creating →" → 50 free credits added → `/dashboard`
 
 ---
 
@@ -67,335 +67,335 @@ CTA: "Inizia a creare →" → 50 crediti gratuiti aggiunti → `/dashboard`
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  Andy Code Cat      [+ Nuovo progetto]        👤 Massi   │
+│  Andy Code Cat      [+ New project]           👤 Massi   │
 ├──────────────────────────────────────────────────────┤
 │                                                      │
 │  ┌──────────────┐ ┌──────────────┐ ┌─────────────┐  │
-│  │ 🟢 LIVE      │ │ ⚙️ Generando │ │      +      │  │
-│  │ SpeedRank    │ │ PayFlow      │ │   Nuovo     │  │
-│  │ ↗ Visita    │ │ ⏳ 2 min...  │ │  progetto   │  │
+│  │ 🟢 LIVE      │ │ ⚙️ Generating│ │      +      │  │
+│  │ SpeedRank    │ │ PayFlow      │ │   New       │  │
+│  │ ↗ Visit     │ │ ⏳ 2 min...  │ │  project    │  │
 │  └──────────────┘ └──────────────┘ └─────────────┘  │
 │                                                      │
-│  Crediti: 34 / 50   [Ricarica]                       │
+│  Credits: 34 / 50   [Top up]                          │
 └──────────────────────────────────────────────────────┘
 ```
 
-- Card stato: draft / generating / generated / live / error
-- Barra crediti persistente
-- Progetti in generazione: spinner animato, non richiedono attenzione
+- Status card: draft / generating / generated / live / error
+- Persistent credit bar
+- Projects in generation: animated spinner, no attention required
 
 ---
 
-## UX-03 — Wizard Creazione `/projects/new`
+## UX-03 — Creation Wizard `/projects/new`
 
-**Filosofia:** conversazionale. Step precedenti collassano mostrando il riassunto.
+**Philosophy:** conversational. Earlier steps collapse, showing a summary.
 
-### Step 1 — Input idea
+### Step 1 — Idea input
 
 ```
-  Descrivi la tua idea 💬
+  Describe your idea 💬
   ┌────────────────────────────────────────────┐
-  │ Es. "Landing page per la mia pizzeria..."  │
+  │ E.g. "Landing page for my pizzeria..."     │
   └────────────────────────────────────────────┘
-  min 20 char                      [Avanti →]
+  min 20 char                      [Next →]
 ```
 
-### Step 2 — Stile visivo
+### Step 2 — Visual style
 
-- 10 temi predefiniti con preview PNG (300×200)
-- Filtri: Minimal / Bold / Elegante / Playful / Dark / Corporate
-- Selezione opzionale ("Salta" disponibile)
+- 10 preset themes with PNG preview (300×200)
+- Filters: Minimal / Bold / Elegant / Playful / Dark / Corporate
+- Optional selection ("Skip" available)
 
-**Libreria temi MVP:**
+**MVP theme library:**
 
-| ID | Nome | Palette | Font |
+| ID | Name | Palette | Font |
 |---|---|---|---|
-| minimal-white | Alba | Bianco/Slate | Inter |
-| bold-dark | Midnight | Nero/Gold | Space Grotesk |
-| elegant-serif | Cartier | Crema/Bordeaux | Playfair Display |
-| playful-color | Confetti | Pastelli | Nunito |
-| dark-tech | Matrix | Nero/Verde neon | JetBrains Mono |
-| corporate-blue | Atlantic | Blu navy/Bianco | DM Sans |
-| warm-startup | Terracotta | Arancio/Sabbia | Plus Jakarta Sans |
-| clean-saas | Vercel | Bianco/Nero/Viola | Geist |
-| nature-green | Foresta | Verde/Beige | Lora |
-| luxury-gold | Aurum | Nero/Oro | Cormorant |
+| minimal-white | Alba | White/Slate | Inter |
+| bold-dark | Midnight | Black/Gold | Space Grotesk |
+| elegant-serif | Cartier | Cream/Bordeaux | Playfair Display |
+| playful-color | Confetti | Pastels | Nunito |
+| dark-tech | Matrix | Black/Neon green | JetBrains Mono |
+| corporate-blue | Atlantic | Navy/White | DM Sans |
+| warm-startup | Terracotta | Orange/Sand | Plus Jakarta Sans |
+| clean-saas | Vercel | White/Black/Purple | Geist |
+| nature-green | Foresta | Green/Beige | Lora |
+| luxury-gold | Aurum | Black/Gold | Cormorant |
 
-### Step 3 — Documento allegato
+### Step 3 — Attached document
 
-- Upload drag-and-drop: PDF, DOC, DOCX, TXT, MD
-- Max 10MB, 1 file per MVP
-- Opzionale ("Salta" disponibile)
+- Drag-and-drop upload: PDF, DOC, DOCX, TXT, MD
+- Max 10MB, 1 file for the MVP
+- Optional ("Skip" available)
 
-### Step 4 — Foto
+### Step 4 — Photos
 
-- Upload multiplo: max 6 immagini JPG/PNG/WebP, 5MB cad.
-- Thumbnail preview immediata
-- Nota GDPR sull'uso delle immagini
+- Multiple upload: max 6 images JPG/PNG/WebP, 5MB each
+- Immediate thumbnail preview
+- GDPR note on image usage
 
-### Step 5 — Brief generato (auto, ~2-3s di wait)
+### Step 5 — Generated brief (auto, ~2-3s wait)
 
-Il brief viene elaborato **in background durante gli step 1-4** con una chiamata LLM leggera (Haiku/Flash).
+The brief is processed **in the background during steps 1-4** with a lightweight LLM call (Haiku/Flash).
 
 ```
 ┌───────────────────────────────────────────────────┐
-│ ✨ Ho elaborato la tua idea                        │
+│ ✨ I've worked out your idea                       │
 │                                                   │
-│ 🍕 Landing page — Pizzeria Napoletana             │
+│ 🍕 Landing page — Neapolitan Pizzeria             │
 │                                                   │
-│ **Obiettivo:** Presentare la pizzeria, mostrare   │
-│ il menu e raccogliere prenotazioni.               │
+│ **Goal:** Present the pizzeria, show the menu     │
+│ and collect bookings.                             │
 │                                                   │
-│ **Sezioni:**                                      │
-│ • Hero con foto e claim principale                │
-│ • Menu (dal PDF allegato)                         │
-│ • Galleria foto                                   │
-│ • Form prenotazione                               │
-│ • Footer con mappa e contatti                     │
+│ **Sections:**                                     │
+│ • Hero with photo and main tagline                │
+│ • Menu (from the attached PDF)                    │
+│ • Photo gallery                                   │
+│ • Booking form                                    │
+│ • Footer with map and contacts                    │
 │                                                   │
-│ **Stile:** Bold Dark · **Lingua:** Italiano       │
+│ **Style:** Bold Dark · **Language:** Italian      │
 └───────────────────────────────────────────────────┘
 
-Vuoi correggere o affinare?
+Want to correct or refine it?
 ┌────────────────────────────────────────────────┐
-│ Es. "aggiungi sezione testimonials..."         │
+│ E.g. "add a testimonials section..."           │
 └────────────────────────────────────────────────┘
 
-Costo stimato: ~8 crediti   Disponibili: 34
+Estimated cost: ~8 credits   Available: 34
 
-        [← Modifica]   [🚀 Avvia generazione]
+        [← Edit]   [🚀 Start generation]
 ```
 
-- Se crediti insufficienti: bottone disabilitato + link ricarica
-- Stima crediti: `base(5) + pdf(2) + images(n×0.5) + loops(n×1.5)`
+- If credits are insufficient: button disabled + top-up link
+- Credit estimate: `base(5) + pdf(2) + images(n×0.5) + loops(n×1.5)`
 
 ---
 
-## UX-04 — Workspace Progetto `/projects/:id`
+## UX-04 — Project Workspace `/projects/:id`
 
-### Durante la generazione
+### During generation
 
 ```
-⚙️ Sto creando il tuo sito...
+⚙️ Building your site...
 
 ████████████████░░░░  65%
 
-✅ Brief elaborato
-✅ Struttura progetto creata
-✅ HTML e CSS generati
-⏳ Generazione immagini... (2/4)
-○  Verifica qualità automatica
-○  Ottimizzazione finale
+✅ Brief processed
+✅ Project structure created
+✅ HTML and CSS generated
+⏳ Generating images... (2/4)
+○  Automatic quality check
+○  Final optimization
 
-[Log dettagliato ▼]  (collassato di default)
+[Detailed log ▼]  (collapsed by default)
 
-Crediti consumati: 4/8 stimati
+Credits consumed: 4/8 estimated
 ```
 
-- Aggiornamento real-time via SSE
-- Log collassato per default, espandibile
-- L'utente può chiudere la tab e tornare: stato persistito
+- Real-time updates via SSE
+- Log collapsed by default, expandable
+- The user can close the tab and come back: state is persisted
 
-### Verifica automatica (post-generazione)
+### Automatic check (post-generation)
 
 ```
-✅ Sito generato
-✅ Immagini elaborate
-⏳ Verifica qualità... (iterazione 1/3 — configurabile)
-   → Analisi HTML con Playwright
-   → Verifica corrispondenza contenuti con LLM
-   → Correzione automatica se necessario
+✅ Site generated
+✅ Images processed
+⏳ Quality check... (iteration 1/3 — configurable)
+   → HTML analysis with Playwright
+   → Content-match verification with the LLM
+   → Automatic correction if needed
 ```
 
-Il numero di iterazioni massimo è configurabile per progetto (default: 3).
+The maximum number of iterations is configurable per project (default: 3).
 
-### Sito pronto
+### Site ready
 
 ```
 ┌────────────────────────────────────────────────────┐
-│ ✅ Il tuo sito è pronto!                           │
+│ ✅ Your site is ready!                             │
 │                                                    │
 │  ┌──────────────────────────────────────────────┐  │
 │  │                                              │  │
 │  │          [IFRAME PREVIEW]                   │  │
 │  │                                              │  │
 │  └──────────────────────────────────────────────┘  │
-│  [📱 Mobile]  [💻 Desktop]   [↗ Apri in nuova tab] │
+│  [📱 Mobile]  [💻 Desktop]   [↗ Open in new tab]   │
 │                                                    │
 │  ┌─────────────────┬──────────────────────────┐    │
-│  │ 💬 Modifica     │ 🌐 Pubblica online        │    │
+│  │ 💬 Edit          │ 🌐 Publish online         │    │
 │  └─────────────────┴──────────────────────────┘    │
 │                                                    │
-│  Crediti usati: 7   Rimanenti: 27                  │
+│  Credits used: 7   Remaining: 27                   │
 └────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## UX-05 — Modifica / Raffinamento
+## UX-05 — Editing / Refinement
 
-Panel laterale o modale:
+Side panel or modal:
 
 ```
-Cosa vuoi cambiare?
+What do you want to change?
 ┌──────────────────────────────────────────────────┐
-│ Es. "Cambia il colore in rosso, aggiungi prezzi" │
+│ E.g. "Change the color to red, add prices"       │
 └──────────────────────────────────────────────────┘
 
-Costo stimato: ~3 crediti
-Iterazioni manuali rimanenti: 2 (max: 3)
+Estimated cost: ~3 credits
+Manual iterations remaining: 2 (max: 3)
 
-              [Annulla]   [Applica modifica]
+              [Cancel]   [Apply change]
 ```
 
-Se iterazioni manuali esaurite:
-> "Hai raggiunto il limite di modifiche. Pubblica il sito e continua a editare i file direttamente, oppure avvia un nuovo progetto."
+If manual iterations are exhausted:
+> "You've reached the edit limit. Publish the site and keep editing the files directly, or start a new project."
 
 ---
 
-## UX-06 — Wizard Pubblicazione `/projects/:id/publish`
+## UX-06 — Publish Wizard `/projects/:id/publish`
 
-### Step 1 — Nome del sito
+### Step 1 — Site name
 
 ```
-Nome attuale (temporaneo, solo per te):
+Current name (temporary, visible only to you):
   velvet-phoenix-42.Andy Code Cat.io
 
-Scegli il tuo indirizzo:
+Choose your address:
 ┌──────────────────────────┐
 │ pizzeria-napoli          │.Andy Code Cat.io
 └──────────────────────────┘
-✅ Disponibile!
+✅ Available!
 
-Oppure usa un tuo dominio:
+Or use your own domain:
 ┌──────────────────────────┐
 │ www.pizzerianapoli.it    │
 └──────────────────────────┘
-ℹ️ Ti guideremo nella configurazione DNS.
+ℹ️ We'll guide you through DNS setup.
 ```
 
-- Nome temporaneo generato: `{aggettivo}-{animale}-{numero}` (es. `velvet-phoenix-42`)
-- Validazione real-time univocità (tutti i progetti di tutti gli utenti)
-- Solo lowercase, numeri, trattini; min 3, max 63 char
+- Generated temporary name: `{adjective}-{animal}-{number}` (e.g. `velvet-phoenix-42`)
+- Real-time uniqueness validation (across all projects, all users)
+- Lowercase, numbers, hyphens only; min 3, max 63 chars
 
-### Step 2 — Visibilità
+### Step 2 — Visibility
 
 ```
-○ 🌍 Pubblico
-   Chiunque con il link può vederlo. Indicizzato.
+○ 🌍 Public
+   Anyone with the link can view it. Indexed.
 
-● 🔒 Protetto da password
+● 🔒 Password-protected
    ┌────────────────────────────┐
-   │ Scegli una password        │
+   │ Choose a password           │
    └────────────────────────────┘
-   Pagina di accesso branded Andy Code Cat.
-   Cookie sessione 7 giorni per i visitatori.
+   Andy Code Cat-branded login page.
+   7-day session cookie for visitors.
 
-○ 👁 Privato (solo tu)
-   Visibile solo se loggato su Andy Code Cat.
-   Non indicizzato.
+○ 👁 Private (you only)
+   Visible only when logged in to Andy Code Cat.
+   Not indexed.
 ```
 
-### Step 3 — Pubblicazione in corso
+### Step 3 — Publishing in progress
 
 ```
-✅ File copiati in webroot
-✅ Nginx configurato
-✅ SSL Let's Encrypt attivato
-✅ Sito online!
+✅ Files copied to webroot
+✅ Nginx configured
+✅ Let's Encrypt SSL activated
+✅ Site online!
 
 🎉 https://pizzeria-napoli.Andy Code Cat.io
 
-[↗ Visita]   [📋 Copia link]   [Dashboard]
+[↗ Visit]   [📋 Copy link]   [Dashboard]
 
-📧 Recap inviato via email.
+📧 Recap sent by email.
 ```
 
-**Email di recap automatica:**
+**Automatic recap email:**
 
-- URL del sito pubblicato
-- Crediti usati / rimanenti
-- Link a: gestione progetto, export ZIP, guida DNS dominio custom
-- Allegato PDF: guida rapida personalizzata per il progetto
+- URL of the published site
+- Credits used / remaining
+- Links to: project management, ZIP export, custom domain DNS guide
+- PDF attachment: project-specific quick-start guide
 
 ---
 
-## UX-07 — Crediti Esauriti
+## UX-07 — Out of Credits
 
 ```
-⚠️ Crediti esauriti
+⚠️ Out of credits
 
-La generazione è in pausa. Il progetto è salvato.
+Generation is paused. The project is saved.
 
-Crediti rimanenti: 0
-Crediti necessari: ~3
+Credits remaining: 0
+Credits needed: ~3
 
-[20 crediti — €2,99]
-[100 crediti — €9,99]  ← Consigliato
-[Piano Pro — €19/mese — crediti illimitati]
+[20 credits — €2.99]
+[100 credits — €9.99]  ← Recommended
+[Pro plan — €19/month — unlimited credits]
 
-[Vedi cosa è stato generato finora]
+[See what's been generated so far]
 ```
 
-- Sessione salvata in MongoDB (`status: 'paused_credits'`)
-- File parziali preservati in git branch
-- Alla ricarica: generazione riprende dal punto di interruzione automaticamente
+- Session saved in MongoDB (`status: 'paused_credits'`)
+- Partial files preserved in a git branch
+- On top-up: generation automatically resumes from where it left off
 
 ---
 
-## UX-08 — Dominio Personalizzato
+## UX-08 — Custom Domain
 
-Da `/projects/:id/settings` → tab "Dominio":
+From `/projects/:id/settings` → "Domain" tab:
 
 ```
-Dominio attuale: pizzeria-napoli.Andy Code Cat.io
+Current domain: pizzeria-napoli.Andy Code Cat.io
 
-Dominio personalizzato:
+Custom domain:
 ┌─────────────────────────────┐
 │ www.pizzerianapoli.it       │
 └─────────────────────────────┘
 
-Configura il DNS del tuo dominio:
+Configure your domain's DNS:
 
-  Tipo    Nome    Valore
+  Type    Name    Value
   A       @       185.xxx.xxx.xxx
   A       www     185.xxx.xxx.xxx
 
-ℹ️ La propagazione DNS può richiedere 1-48 ore.
+ℹ️ DNS propagation can take 1-48 hours.
 
-[Verifica configurazione DNS]
-Status: ⏳ In attesa di propagazione
+[Verify DNS configuration]
+Status: ⏳ Waiting for propagation
 
-Quando il DNS sarà attivo, SSL verrà
-configurato automaticamente (Let's Encrypt).
+Once DNS is active, SSL will be
+configured automatically (Let's Encrypt).
 ```
 
 ---
 
-## UX-09 — Collaborazione
+## UX-09 — Collaboration
 
-Da `/projects/:id/settings` → tab "Condivisione":
+From `/projects/:id/settings` → "Sharing" tab:
 
 ```
-Invita collaboratori:
-┌───────────────────────────┐  [Invita]
-│ email@esempio.com         │
+Invite collaborators:
+┌───────────────────────────┐  [Invite]
+│ email@example.com         │
 └───────────────────────────┘
 
-Collaboratori:
-👤 marco@studio.it    [Può modificare ●]  [✕]
-👤 sara@cliente.com   [Solo lettura    ○]  [✕]
+Collaborators:
+👤 marco@studio.it    [Can edit ●]     [✕]
+👤 sara@cliente.com   [Read only ○]    [✕]
 
-Link preview condivisibile (senza login):
-[Abilita link pubblico]
+Shareable preview link (no login):
+[Enable public link]
 https://Andy Code Cat.io/preview/abc123xyz
 ```
 
 ---
 
-## UX-10 — Sito Protetto da Password
+## UX-10 — Password-Protected Site
 
-Pagina servita da Andy Code Cat prima di mostrare il sito:
+Page served by Andy Code Cat before showing the site:
 
 ```
 ┌─────────────────────────────────────┐
@@ -403,19 +403,19 @@ Pagina servita da Andy Code Cat prima di mostrare il sito:
 │              🔒                     │
 │   pizzeria-napoli.Andy Code Cat.io      │
 │                                     │
-│   Sito protetto da password         │
+│   Password-protected site           │
 │   ┌─────────────────────────────┐   │
-│   │ Inserisci la password       │   │
+│   │ Enter the password           │   │
 │   └─────────────────────────────┘   │
-│                  [Accedi]           │
+│                  [Sign in]          │
 │                                     │
 │   ──────────────────────────────   │
 │   Powered by Andy Code Cat              │
-│   [Crea il tuo sito gratis →]       │
+│   [Create your site for free →]     │
 │                                     │
 └─────────────────────────────────────┘
 ```
 
-- Gestita da nginx: `location = /_pf_auth` intercetta prima dei file statici
-- Cookie `pf_site_auth_{slug}` JWT, 7 giorni
-- Password hashata bcrypt in MongoDB
+- Handled by nginx: `location = /_pf_auth` intercepts before static files
+- Cookie `pf_site_auth_{slug}` JWT, 7 days
+- Password bcrypt-hashed in MongoDB

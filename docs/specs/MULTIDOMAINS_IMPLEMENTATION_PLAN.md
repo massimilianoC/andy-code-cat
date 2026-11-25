@@ -48,7 +48,7 @@ multi-domain test, configured outside version control (see §11.4 for the env-va
 | **Backward compatibility** | Existing domain becomes the seeded default `Domain` document. Zero data migration. |
 | **publishId independence** | The filesystem key (`/data/www/{slug}/`) is domain-agnostic. Domain change = DB field update + nginx reload only. |
 | **Separation of concerns** | `domains` collection owns DNS/SSL/nginx metadata. Users and deployments reference it by ID. |
-| **Config outside git** | DNS records and domain credentials live in `.env.droplet` (gitignored). The `domains` collection is seeded at first boot from these env vars. |
+| **Config outside git** | DNS records and domain credentials live in `.env.docker` (gitignored). The `domains` collection is seeded at first boot from these env vars. |
 | **Admin-owned lifecycle** | Only `superadmin` can create, toggle, or delete domains. |
 | **Audit trail** | All domain write operations persist `updatedByUserId` + timestamp. |
 
@@ -440,7 +440,7 @@ class NginxController {
 All `writeConf` + `reload` sequences run inside a **per-domain advisory lock** (implemented with a
 Redis `SET NX` key) to prevent concurrent writes on the same file.
 
-### 5.3 Volume change in docker-compose.droplet.yml
+### 5.3 Volume change in docker-compose.deploy.yml
 
 The static `./nginx/sites-enabled` mount (read-only) is kept; a new writable runtime directory is
 added for generated per-domain confs:
@@ -772,9 +772,9 @@ include /etc/nginx/conf.d/*.conf;
 This is separate from `include /etc/nginx/sites-enabled/*.conf;` which covers static confs
 (rate limit zones, `local.conf`). The split keeps generated files isolated from committed files.
 
-### 11.3 docker-compose.droplet.yml changes summary
+### 11.3 docker-compose.deploy.yml changes summary
 
-> `docker-compose.droplet.yml` is gitignored — changes are not published to the public repo.
+> Apply the same changes to any host-specific compose override you keep outside the repository.
 
 ```yaml
 api:
@@ -793,10 +793,10 @@ nginx:
 
 ### 11.4 Environment variables (non-committed)
 
-The following keys are added to `.env.droplet` (gitignored — never committed). The format below is
+The following keys are added to `.env.docker` (gitignored — never committed). The format below is
 a **template with dummy values** illustrating the expected structure.
 
-See `.env.droplet.example` for the committed template with placeholder values only.
+See `.env.deploy.example` for the committed template with placeholder values only.
 
 ```dotenv
 # Multi-domain: seed domains at first boot
@@ -849,14 +849,14 @@ Tasks:
 - [ ] Add `domainId` / `publishUrl` to Deployment model (nullable, no migration)
 - [ ] Write Nunjucks vhost template (`nginx-templates/vhost.conf.njk`)
 - [ ] Implement `NginxController.writeConf` + `testConf` + `reload` + `removeConf`
-- [ ] Change `docker-compose.droplet.yml`: add writable `data/nginx-sites` volume to nginx + api
+- [ ] Change `docker-compose.deploy.yml`: add writable `data/nginx-sites` volume to nginx + api
 - [ ] Update `nginx/nginx.conf` to include `conf.d/*.conf`
 - [ ] Write boot seed script that upserts `Domain` docs from `SEED_DOMAIN_*` env vars
 - [ ] Generate default domain `.conf` from template on first boot, verify nginx reloads cleanly
 - [ ] Add `/data/nginx-sites/` to `.gitignore`
-- [ ] Add `.env.droplet.example` entries for `SEED_DOMAIN_*` keys
+- [ ] Add `.env.deploy.example` entries for `SEED_DOMAIN_*` keys
 
-**Acceptance:** On `npm run droplet:up`, both old static conf and new generated conf coexist; nginx
+**Acceptance:** On `docker compose -f docker-compose.deploy.yml up -d`, both old static conf and new generated conf coexist; nginx
 serves the default domain's `app.*` subdomain correctly.
 
 ---
@@ -911,7 +911,7 @@ Tasks:
 ## 13. First-time Domain Setup (Example)
 
 This section describes the general steps to wire a new domain after R3.1 infrastructure is in
-place. **All production domain names, server IPs, and credentials belong in `.env.droplet`
+place. **All production domain names, server IPs, and credentials belong in `.env.docker`
 (gitignored) and in the private deploy runbook — not here.**
 
 ### 13.1 Pre-requisites on the server
@@ -945,9 +945,9 @@ certbot certonly \
   --email admin@yourdomain.com
 ```
 
-### 13.3 .env.droplet addition (template)
+### 13.3 .env.docker addition (template)
 
-Add the following block to `.env.droplet` with real values:
+Add the following block to `.env.docker` with real values:
 
 ```dotenv
 SEED_DOMAIN_N_APEX=yourdomain.com
@@ -988,8 +988,8 @@ in the code, tests, and local fixtures.
 
 | ID | apex | label | isDefault | Use in |
 |---|---|---|---|---|
-| `dom_primary` | `primary-domain.com` | Primary Web Builder | `true` | seed (replace with real default in .env.droplet) |
-| `dom_second` | `second-domain.com` | Second Domain | `false` | second-domain test (replace with real apex in .env.droplet) |
+| `dom_primary` | `primary-domain.com` | Primary Web Builder | `true` | seed (replace with real default in .env.docker) |
+| `dom_second` | `second-domain.com` | Second Domain | `false` | second-domain test (replace with real apex in .env.docker) |
 | `dom_acme` | `acme-builder.com` | Acme Web Builder | `false` | unit tests |
 | `dom_agency` | `partner-agency.dev` | Partner Agency | `false` | integration tests |
 | `dom_example` | `example-sites.io` | Example Sites | `false` | e2e fixtures |
@@ -1084,7 +1084,7 @@ directly into the API container.
 ### 15.5 Private key material
 
 The `ssl.dnsProviderKey` field stores only the **name** of the environment variable holding the
-DNS API key, not the key value itself. The actual key lives only in `.env.droplet` (gitignored) and
+DNS API key, not the key value itself. The actual key lives only in `.env.docker` (gitignored) and
 in the process environment. Never persist it to MongoDB.
 
 ---

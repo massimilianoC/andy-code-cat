@@ -2,7 +2,7 @@
 
 **Status:** implemented and in production. Covered end to end by
 `tests/e2e/didactic-knowledge.spec.ts` (real provider). The sections below are the original plan;
-where the code differs, the code wins — see `docs/handoff/SESSION_RESUME.md` for what changed
+where the code differs, the code wins. Notable changes since the plan:
 (selected-model inheritance, single cost path, output contract of 6–10 topics and 5 quizzes).
 **Branch target:** `develop` (originally `feat/didactic-mode`)
 **Milestone tag:** `R4-didactic-mode` (off-roadmap segment feature)
