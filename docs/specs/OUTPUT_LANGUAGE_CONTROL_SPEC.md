@@ -1,7 +1,7 @@
 # Output Language Control — Implementation Spec
 
-**Status:** Implemented (2026-07-02) — regression fix restoring Layer L end-to-end  
-**Version:** 1.1  
+**Status:** Implemented (2026-07-02) — regression fix restoring Layer L end-to-end
+**Version:** 1.1
 **Feature branch:** implemented on `feat/brand-reusable-context`
 
 > **Implementation note (v1.1).** The intake half (Vibe classify/prefill language inference,
@@ -22,69 +22,69 @@
 
 ---
 
-## 1. Obiettivo
+## 1. Goal
 
-Rendere la lingua dell'output generato dalla piattaforma un parametro di prima classe, determinato in modo coerente e parametrico rispetto a:
+Make the language of the platform's generated output a first-class parameter, determined consistently and parametrically from:
 
-- la lingua dell'interfaccia utente (UI language, `andy_lang` in localStorage)
-- la lingua inferita dall'intento/testo dell'utente nel flusso Vibe
-- una selezione esplicita dell'utente nel flusso Guided Mode narrativo
-- il testo libero dell'utente in Workspace
+- the user interface language (UI language, `andy_lang` in localStorage)
+- the language inferred from the user's intent/text in the Vibe flow
+- an explicit user selection in the narrative Guided Mode flow
+- the user's free text in Workspace
 
-Il risultato deve essere una direttiva di lingua chiara e non ambigua iniettata nel system prompt del motore generativo, con una catena di fallback deterministica che termina sempre su `"en"` (inglese).
-
----
-
-## 2. Principio di design
-
-> La lingua dell'output non deve mai essere lasciata all'interpretazione implicita del modello LLM. Deve essere un'istruzione esplicita, risoluta prima della composizione del system prompt, e coerente con ciò che l'utente si aspetta.
+The result must be a clear, unambiguous language directive injected into the generative engine's system prompt, with a deterministic fallback chain that always ends on `"en"` (English).
 
 ---
 
-## 3. Catena di risoluzione della lingua (per modalità)
+## 2. Design Principle
+
+> The output language must never be left to the LLM's implicit interpretation. It must be an explicit instruction, resolved before system prompt composition, and consistent with what the user expects.
+
+---
+
+## 3. Language Resolution Chain (by Mode)
 
 ### 3.1 Vibe Mode / Vibe Coding Mode
 
-| Priorità | Sorgente | Come |
+| Priority | Source | How |
 |----------|----------|------|
-| 1 (massima) | Lingua inferita dal prompt dell'utente | LLM in VibePrefill rileva la lingua dominante del testo libero |
-| 2 | `uiLanguage` inviato dal client | Campo aggiunto al `VibeClassifyRequest` / `VibePrefillRequest` |
-| 3 (fallback) | `"en"` | Default hardcoded |
+| 1 (highest) | Language inferred from the user's prompt | The LLM in VibePrefill detects the dominant language of the free text |
+| 2 | `uiLanguage` sent by the client | Field added to `VibeClassifyRequest` / `VibePrefillRequest` |
+| 3 (fallback) | `"en"` | Hardcoded default |
 
-**Logica:** Il motore Vibe lavora su testo libero. La lingua del testo è il segnale più forte: se l'utente scrive in italiano, il brief e l'output devono essere in italiano. Se il testo è ambiguo (es. solo nomi propri), si usa la lingua UI. Se nemmeno quella è disponibile, si usa inglese.
+**Logic:** The Vibe engine works on free text. The text's language is the strongest signal: if the user writes in Italian, the brief and output must be in Italian. If the text is ambiguous (e.g. only proper nouns), the UI language is used. If that is not available either, English is used.
 
-**Nota:** La lingua inferita viene restituita in `VibePrefillResponse.outputLanguage` così la UI può mostrare/confermare quale lingua è stata rilevata prima della generazione.
+**Note:** The inferred language is returned in `VibePrefillResponse.outputLanguage` so the UI can show/confirm which language was detected before generation.
 
-### 3.2 Guided Mode Mode (narrativo, form guidato)
+### 3.2 Guided Mode (narrative, guided form)
 
-| Priorità | Sorgente | Come |
+| Priority | Source | How |
 |----------|----------|------|
-| 1 (massima) | Selezione esplicita nel form | Campo `language` nel form zero effort, pre-compilato ma editabile |
-| 2 | `uiLanguage` inviato dal client | Pre-compilazione automatica del campo |
-| 3 (fallback) | `"en"` | Se UI language non è disponibile |
+| 1 (highest) | Explicit selection in the form | `language` field in the zero-effort form, pre-filled but editable |
+| 2 | `uiLanguage` sent by the client | Automatic pre-fill of the field |
+| 3 (fallback) | `"en"` | If the UI language is unavailable |
 
-**Logica:** Il form ha un selettore (o campo testo libero) di lingua precompilato con la lingua UI. L'utente può modificarlo. La lingua selezionata viene inclusa nel `LaunchZeroEffortProjectInput` e nel brief normalizzato.
+**Logic:** The form has a language selector (or free-text field) pre-filled with the UI language. The user can change it. The selected language is included in `LaunchZeroEffortProjectInput` and in the normalized brief.
 
-### 3.3 Workspace (prompt libero, senza orchestrazione Guided Mode)
+### 3.3 Workspace (free prompt, no Guided Mode orchestration)
 
-| Priorità | Sorgente | Come |
+| Priority | Source | How |
 |----------|----------|------|
-| 1 | Lingua specificata esplicitamente nel prompt dall'utente | L'utente scrive "in italiano" o "in English" nel testo |
-| 2 (fallback) | Default del system prompt: inglese | Layer A non inietta direttiva attiva — il modello genera in base al training default (EN) |
+| 1 | Language explicitly specified by the user in the prompt | The user writes "in Italian" or "in English" in the text |
+| 2 (fallback) | System prompt default: English | Layer A does not inject an active directive — the model generates based on the default training language (EN) |
 
-**Logica:** In Workspace non c'è orchestrazione Guided Mode. Non viene iniettato Layer L nel system prompt. Il comportamento è quello di default del modello (tendenzialmente inglese). Se l'utente vuole un'altra lingua, la specifica nel prompt libero. Nessuna auto-inferenza forzata.
+**Logic:** In Workspace there is no Guided Mode orchestration. Layer L is not injected into the system prompt. The behavior is the model's default (tends to be English). If the user wants another language, they specify it in the free prompt. No forced auto-inference.
 
 ---
 
-## 4. Nuova architettura: Layer L (Language Directive)
+## 4. New Architecture: Layer L (Language Directive)
 
-### 4.1 Definizione
+### 4.1 Definition
 
-Introdurre **Layer L** nel sistema di composizione del prompt:
+Introduce **Layer L** into the prompt composition system:
 
 ```
 Layer A — Base constraints
-Layer L — Language directive          ← NUOVO (inserito tra A e B)
+Layer L — Language directive          ← NEW (inserted between A and B)
 Layer B — Preset output format
 Layer T — Template resolution
 Layer C — Style context
@@ -97,7 +97,7 @@ Budget policy
 Request override
 ```
 
-### 4.2 Formato del Layer L
+### 4.2 Layer L Format
 
 ```
 ## LAYER L — OUTPUT LANGUAGE
@@ -109,18 +109,18 @@ This directive applies to all text in the generated artifact (HTML, CSS comments
 excluded). It overrides any other language implied by template names or style labels.
 ```
 
-Dove `{LANGUAGE_NAME}` è il nome leggibile (es. "Italian", "English", "Spanish") e `{BCP47_CODE}` è il codice BCP-47 (es. `it`, `en`, `es`).
+Where `{LANGUAGE_NAME}` is the human-readable name (e.g. "Italian", "English", "Spanish") and `{BCP47_CODE}` is the BCP-47 code (e.g. `it`, `en`, `es`).
 
-### 4.3 Quando Layer L viene iniettato
+### 4.3 When Layer L Is Injected
 
-| Modalità | Layer L iniettato? |
+| Mode | Layer L injected? |
 |----------|-------------------|
-| Vibe Mode | ✅ Sì — lingua risolta dal VibePrefill |
-| Guided Mode | ✅ Sì — lingua dal form / UI / fallback EN |
-| Workspace | ❌ No — l'utente controlla via prompt libero |
-| Optimize (ottimizzazione brief) | ❌ No — preserva la lingua del testo input (già gestito da regola esistente) |
+| Vibe Mode | ✅ Yes — language resolved by VibePrefill |
+| Guided Mode | ✅ Yes — language from the form / UI / EN fallback |
+| Workspace | ❌ No — the user controls it via free prompt |
+| Optimize (brief optimization) | ❌ No — preserves the input text's language (already handled by an existing rule) |
 
-### 4.4 Implementazione `buildLanguageLayer()`
+### 4.4 `buildLanguageLayer()` Implementation
 
 ```typescript
 // apps/api/src/application/llm/systemPromptLayers.ts
@@ -157,7 +157,7 @@ export function buildLanguageLayer(bcp47: string): string {
 
 ---
 
-## 5. Modifiche ai contratti (`packages/contracts/src/vibecore.ts`)
+## 5. Contract Changes (`packages/contracts/src/vibecore.ts`)
 
 ### 5.1 `VibeClassifyRequest`
 
@@ -223,11 +223,11 @@ export interface VibePrefillResponse {
 }
 ```
 
-### 5.5 `LaunchZeroEffortProjectInput` (da aggiungere o verificare in `pipeline.ts`)
+### 5.5 `LaunchZeroEffortProjectInput` (to be added or verified in `pipeline.ts`)
 
 ```typescript
 export interface LaunchZeroEffortProjectInput {
-    // ... campi esistenti ...
+    // ... existing fields ...
     /** Resolved BCP-47 output language. Defaults to "en". */
     outputLanguage?: string;
 }
@@ -235,27 +235,27 @@ export interface LaunchZeroEffortProjectInput {
 
 ---
 
-## 6. Modifiche backend
+## 6. Backend Changes
 
-### 6.1 `VibePrefill.ts` — inferenza lingua
+### 6.1 `VibePrefill.ts` — Language Inference
 
-Aggiungere logica di risoluzione lingua nel use-case:
+Add language-resolution logic in the use-case:
 
 ```typescript
 function resolveOutputLanguage(
     input: VibePrefillRequest,
     inferredFromPrompt: string | null,
 ): string {
-    // 1. Lingua inferita dal LLM dal testo del prompt (più forte)
+    // 1. Language inferred by the LLM from the prompt text (strongest)
     if (inferredFromPrompt && inferredFromPrompt.length >= 2) return inferredFromPrompt;
-    // 2. Lingua UI dal client
+    // 2. UI language from the client
     if (input.uiLanguage && input.uiLanguage.length >= 2) return input.uiLanguage.toLowerCase().split("-")[0];
     // 3. Fallback
     return "en";
 }
 ```
 
-Il system prompt di VibePrefill viene aggiornato per restituire il campo `outputLanguage` nel JSON:
+VibePrefill's system prompt is updated to return the `outputLanguage` field in the JSON:
 
 ```
 Required JSON shape:
@@ -273,11 +273,11 @@ Required JSON shape:
 }
 ```
 
-Se il LLM restituisce `null`, si usa il fallback `uiLanguage` → `"en"`.
+If the LLM returns `null`, the fallback `uiLanguage` → `"en"` is used.
 
-### 6.2 `VibePrefill.ts` — default draft in lingua risolta
+### 6.2 `VibePrefill.ts` — Default Draft in the Resolved Language
 
-Il `defaultDraft()` viene parametrizzato sulla lingua risolta:
+`defaultDraft()` is parameterized on the resolved language:
 
 ```typescript
 function defaultDraft(prompt: string, lang: string): ZeroEffortDraft {
@@ -296,34 +296,34 @@ function defaultDraft(prompt: string, lang: string): ZeroEffortDraft {
 }
 ```
 
-Per evitare di hardcodare tante lingue nel codice, i default generici in lingue diverse dall'italiano possono restare in inglese: l'LLM genererà comunque in `lang` grazie al Layer L nel system prompt di generazione.
+To avoid hardcoding many languages in the code, the generic defaults for languages other than Italian can stay in English: the LLM will still generate in `lang` thanks to Layer L in the generation system prompt.
 
-### 6.3 `LaunchZeroEffortProject.ts` — brief normalizzato language-neutral
+### 6.3 `LaunchZeroEffortProject.ts` — Language-neutral Normalized Brief
 
-Le intestazioni del brief normalizzato (`# BRIEF DI PROGETTO`, `## [IDENTITÀ]`, ecc.) sono testo strutturale interno non visibile all'utente. Possono restare in inglese o diventare language-neutral (es. `## [IDENTITY]`). Il punto critico è che il brief include una riga `Output language: {bcp47}` che viene letta dal Layer L:
+The normalized brief's headings (`# BRIEF DI PROGETTO`, `## [IDENTITÀ]`, etc.) are internal structural text not visible to the user. They can stay in English or become language-neutral (e.g. `## [IDENTITY]`). The critical point is that the brief includes an `Output language: {bcp47}` line that is read by Layer L:
 
 ```typescript
 function buildNormalizedBrief(input: NormalizedBriefInput): string {
-    // ... sezioni esistenti ...
+    // ... existing sections ...
     const header = `# PROJECT BRIEF — ${input.businessName}`;
-    // Aggiungere alla fine del brief:
+    // Add at the end of the brief:
     const langLine = `Output language: ${input.outputLanguage ?? "en"}`;
     // ...
 }
 ```
 
-**Nota:** Le intestazioni interne del brief (viste solo dal LLM, non dall'utente) vengono migrate da italiano a inglese per coerenza con il Layer L:
+**Note:** The brief's internal headings (seen only by the LLM, not by the user) are migrated from Italian to English for consistency with Layer L:
 - `## [IDENTITÀ]` → `## [IDENTITY]`
 - `## [OBIETTIVO]` → `## [GOAL]`
-- `## [AUDIENCE]` → `## [AUDIENCE]` (invariato)
+- `## [AUDIENCE]` → `## [AUDIENCE]` (unchanged)
 - `## [STILE]` → `## [STYLE]`
 - `## [CONTATTI]` → `## [CONTACTS]`
 
-### 6.4 `systemPromptComposer.ts` — aggiunta Layer L
+### 6.4 `systemPromptComposer.ts` — Adding Layer L
 
 ```typescript
 export function composeSystemPrompt(opts: {
-    // ... parametri esistenti ...
+    // ... existing parameters ...
     /** Resolved BCP-47 output language. If omitted, Layer L is not injected (Workspace). */
     outputLanguage?: string | null;
 }): string {
@@ -331,7 +331,7 @@ export function composeSystemPrompt(opts: {
         buildBaseConstraintsLayer(),
         opts.outputLanguage ? buildLanguageLayer(opts.outputLanguage) : "",   // Layer L
         opts.presetLayer ?? buildPresetLayer(opts.presetId),
-        // ... resto invariato ...
+        // ... rest unchanged ...
     ]
         .filter(Boolean)
         .join(LAYER_SEPARATOR)
@@ -339,22 +339,22 @@ export function composeSystemPrompt(opts: {
 }
 ```
 
-### 6.5 Punti di iniezione di `outputLanguage` nei use-case di generazione
+### 6.5 `outputLanguage` Injection Points in the Generation Use-cases
 
-I seguenti use-case devono ricevere `outputLanguage` e passarlo a `composeSystemPrompt`:
+The following use-cases must receive `outputLanguage` and pass it to `composeSystemPrompt`:
 
-| Use-case | Come arriva `outputLanguage` |
+| Use-case | How `outputLanguage` arrives |
 |---|---|
-| `LaunchZeroEffortProject` | Da `input.outputLanguage` (form) |
-| `VibeModeGenerate` | Da `VibePrefillResponse.outputLanguage` (già nel draft) |
-| `WorkspaceGenerate` | Non passato → Layer L omesso |
-| `RegenerateMediaByKey` | Non passato (media regen, lingua irrilevante) |
+| `LaunchZeroEffortProject` | From `input.outputLanguage` (form) |
+| `VibeModeGenerate` | From `VibePrefillResponse.outputLanguage` (already in the draft) |
+| `WorkspaceGenerate` | Not passed → Layer L omitted |
+| `RegenerateMediaByKey` | Not passed (media regen, language irrelevant) |
 
 ---
 
-## 7. Modifiche frontend
+## 7. Frontend Changes
 
-### 7.1 Invio `uiLanguage` con ogni richiesta Vibe
+### 7.1 Sending `uiLanguage` With Every Vibe Request
 
 In `apps/web/lib/api/vibecore.ts`:
 
@@ -376,22 +376,22 @@ export async function vibePrefill(req: VibePrefillRequest) {
 }
 ```
 
-### 7.2 Selettore lingua nel form Guided Mode
+### 7.2 Language Selector in the Guided Mode Form
 
-Nel componente form Guided Mode (narrativo):
+In the Guided Mode (narrative) form component:
 
 ```tsx
-// Stato locale
+// Local state
 const [outputLanguage, setOutputLanguage] = useState<string>(i18n.language ?? "en");
 
-// Quando arriva il draft da VibePrefill, aggiorna con la lingua inferita:
+// When the draft arrives from VibePrefill, update with the inferred language:
 useEffect(() => {
     if (prefillResponse?.outputLanguage) {
         setOutputLanguage(prefillResponse.outputLanguage);
     }
 }, [prefillResponse]);
 
-// UI: campo lingua con pre-compilazione e override manuale
+// UI: language field with pre-fill and manual override
 <LanguageField
     value={outputLanguage}
     onChange={setOutputLanguage}
@@ -400,15 +400,15 @@ useEffect(() => {
 />
 ```
 
-**Comportamento del campo lingua:**
-- Pre-compilato con `uiLanguage` (o lingua inferita dal VibePrefill)
-- Campo testo libero + lista suggerimenti (en, it, fr, de, es, pt...)
-- Non obbligatorio — se vuoto, fallback `"en"` lato server
-- Mostra un badge quando la lingua è stata auto-inferita dal prompt ("Detected: Italian")
+**Language field behavior:**
+- Pre-filled with `uiLanguage` (or the language inferred by VibePrefill)
+- Free-text field + suggestion list (en, it, fr, de, es, pt...)
+- Not mandatory — if empty, server-side fallback to `"en"`
+- Shows a badge when the language was auto-inferred from the prompt ("Detected: Italian")
 
-### 7.3 Nessuna modifica a Workspace UI
+### 7.3 No Change to the Workspace UI
 
-In Workspace il form non ha un selettore lingua. Un hint testuale statico informa l'utente:
+In Workspace, the form has no language selector. A static text hint informs the user:
 
 ```
 💡 Output language follows your prompt. Add "in Italian" or "en español" to set it explicitly.
@@ -416,9 +416,9 @@ In Workspace il form non ha un selettore lingua. Un hint testuale statico inform
 
 ---
 
-## 8. Traduzioni i18n necessarie
+## 8. Required i18n Translations
 
-Aggiungere a `apps/web/i18n/en.json` e `it.json`:
+Add to `apps/web/i18n/en.json` and `it.json`:
 
 ```json
 "zeroEffort": {
@@ -431,55 +431,55 @@ Aggiungere a `apps/web/i18n/en.json` e `it.json`:
 
 ---
 
-## 9. Strategia di non-regressione
+## 9. Non-regression Strategy
 
-### 9.1 Backward compatibility dei contratti
+### 9.1 Contract Backward Compatibility
 
-- `uiLanguage` è `optional` in tutti i nuovi contratti: i client esistenti che non lo inviano ricevono il fallback `"en"` → comportamento corrente preservato.
-- `outputLanguage` in `ZeroEffortDraft` è aggiunto come campo required ma con default `"en"` nel `defaultDraft()`.
-- `VibePrefillResponse.outputLanguage` è aggiunto come campo required ma i consumer esistenti che non lo leggono non sono impattati.
+- `uiLanguage` is `optional` in all new contracts: existing clients that do not send it get the `"en"` fallback → current behavior preserved.
+- `outputLanguage` in `ZeroEffortDraft` is added as a required field but with a `"en"` default in `defaultDraft()`.
+- `VibePrefillResponse.outputLanguage` is added as a required field, but existing consumers that don't read it are unaffected.
 
-### 9.2 Workspace invariato
+### 9.2 Workspace Unchanged
 
-Layer L non viene iniettato in Workspace. Nessun cambiamento comportamentale per quella modalità.
+Layer L is not injected in Workspace. No behavioral change for that mode.
 
-### 9.3 Optimize invariato
+### 9.3 Optimize Unchanged
 
-`optimizeUserPromptInstruction.ts` già contiene `"Write in the same language as the user's input."` — non viene toccato.
+`optimizeUserPromptInstruction.ts` already contains `"Write in the same language as the user's input."` — it is not touched.
 
-### 9.4 Test di regressione da aggiungere
+### 9.4 Regression Tests to Add
 
 | Test | File |
 |---|---|
-| VibePrefill restituisce `outputLanguage: "it"` se prompt in italiano | `VibePrefill.test.ts` |
-| VibePrefill restituisce `outputLanguage: "en"` per prompt ambiguo + uiLanguage="en" | `VibePrefill.test.ts` |
-| `buildLanguageLayer("it")` produce la direttiva corretta | `systemPromptLayers.test.ts` |
-| `composeSystemPrompt` con `outputLanguage="it"` include Layer L | `systemPromptComposer.test.ts` |
-| `composeSystemPrompt` senza `outputLanguage` non include Layer L | `systemPromptComposer.test.ts` |
-| LaunchZeroEffortProject propaga `outputLanguage` al brief | `LaunchZeroEffortProject.test.ts` |
+| VibePrefill returns `outputLanguage: "it"` for an Italian prompt | `VibePrefill.test.ts` |
+| VibePrefill returns `outputLanguage: "en"` for an ambiguous prompt + uiLanguage="en" | `VibePrefill.test.ts` |
+| `buildLanguageLayer("it")` produces the correct directive | `systemPromptLayers.test.ts` |
+| `composeSystemPrompt` with `outputLanguage="it"` includes Layer L | `systemPromptComposer.test.ts` |
+| `composeSystemPrompt` without `outputLanguage` does not include Layer L | `systemPromptComposer.test.ts` |
+| LaunchZeroEffortProject propagates `outputLanguage` to the brief | `LaunchZeroEffortProject.test.ts` |
 
 ---
 
-## 10. Riepilogo cambiamenti per file
+## 10. Change Summary by File
 
-| File | Tipo di modifica |
+| File | Type of change |
 |---|---|
-| `packages/contracts/src/vibecore.ts` | Aggiunta `uiLanguage`, `outputLanguage` ai contratti |
-| `apps/api/src/application/llm/systemPromptLayers.ts` | Aggiunta `buildLanguageLayer()` |
-| `apps/api/src/application/llm/systemPromptComposer.ts` | Layer L nel compose stack, param `outputLanguage?` |
-| `apps/api/src/application/use-cases/VibePrefill.ts` | Inferenza lingua + `resolveOutputLanguage()` + `defaultDraft` parametrico |
-| `apps/api/src/application/use-cases/LaunchZeroEffortProject.ts` | Brief headers EN-neutral, riga `Output language`, propagazione `outputLanguage` |
-| `apps/api/src/application/use-cases/VibeModeGenerate.ts` | Passa `outputLanguage` a `composeSystemPrompt` |
-| `apps/web/lib/api/vibecore.ts` | Aggiunta `uiLanguage` a ogni request |
-| `apps/web/components/` (form ZE) | Campo lingua pre-compilato con rilevamento automatico |
-| `apps/web/i18n/en.json` + `it.json` | Nuove chiavi `zeroEffort.outputLanguage*` |
+| `packages/contracts/src/vibecore.ts` | Adds `uiLanguage`, `outputLanguage` to the contracts |
+| `apps/api/src/application/llm/systemPromptLayers.ts` | Adds `buildLanguageLayer()` |
+| `apps/api/src/application/llm/systemPromptComposer.ts` | Layer L in the compose stack, `outputLanguage?` param |
+| `apps/api/src/application/use-cases/VibePrefill.ts` | Language inference + `resolveOutputLanguage()` + parametric `defaultDraft` |
+| `apps/api/src/application/use-cases/LaunchZeroEffortProject.ts` | EN-neutral brief headers, `Output language` line, `outputLanguage` propagation |
+| `apps/api/src/application/use-cases/VibeModeGenerate.ts` | Passes `outputLanguage` to `composeSystemPrompt` |
+| `apps/web/lib/api/vibecore.ts` | Adds `uiLanguage` to every request |
+| `apps/web/components/` (ZE form) | Language field pre-filled with automatic detection |
+| `apps/web/i18n/en.json` + `it.json` | New `zeroEffort.outputLanguage*` keys |
 
 ---
 
-## 11. Fuori scope (esplicito)
+## 11. Out of Scope (Explicit)
 
-- Traduzione dell'interfaccia utente (già gestita da i18next, non cambia)
-- Lingua dei template/presets (etichette in catalogo, gestione separata)
-- Lingua dei documenti caricati (già gestita da `DocumentBriefExtractor.contentLanguage`)
-- Auto-rilevamento lingua in Workspace (by design: è una modalità libera)
-- Multi-lingua all'interno dello stesso output (non supportato, un solo Language Layer per generazione)
+- Translation of the user interface (already handled by i18next, unchanged)
+- Language of templates/presets (catalog labels, handled separately)
+- Language of uploaded documents (already handled by `DocumentBriefExtractor.contentLanguage`)
+- Auto-detection of language in Workspace (by design: it is a free-form mode)
+- Multiple languages within the same output (not supported, one Language Layer per generation)

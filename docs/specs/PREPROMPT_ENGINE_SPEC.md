@@ -35,44 +35,44 @@ It produces three distinct outputs for each job:
 ```
 PrepromptEngine
 │
-├── InputProcessor           — normalizza input eterogenei
-│   ├── TextExtractor        — estrae testo da PDF
-│   ├── ImageDescriber       — descrive immagini via LLM vision
-│   └── AttachmentSanitizer  — valida tipo/dimensione allegati
+├── InputProcessor           — normalises heterogeneous input
+│   ├── TextExtractor        — extracts text from PDF
+│   ├── ImageDescriber       — describes images via LLM vision
+│   └── AttachmentSanitizer  — validates attachment type/size
 │
-├── ContextBuilder           — costruisce il contesto del job
-│   ├── ProjectContextLoader — carica dati progetto da DB
-│   ├── IterationContext     — carica manifest/summary iterazione prec.
-│   └── ThemeResolver        — risolve override tema se presenti
+├── ContextBuilder           — builds the job's context
+│   ├── ProjectContextLoader — loads project data from the DB
+│   ├── IterationContext     — loads the previous iteration's manifest/summary
+│   └── ThemeResolver        — resolves theme overrides if present
 │
-├── LayerComposer            — applica i layer del profilo in ordine
-│   ├── TemplateRenderer     — Nunjucks rendering variabili
-│   ├── ConditionEvaluator   — valuta condizioni JSONata sui layer
-│   └── LayerMerger          — concatena layer nel prompt finale
+├── LayerComposer            — applies the profile's layers in order
+│   ├── TemplateRenderer     — Nunjucks variable rendering
+│   ├── ConditionEvaluator   — evaluates JSONata conditions on layers
+│   └── LayerMerger          — concatenates layers into the final prompt
 │
-├── ClaudeMdGenerator        — genera il CLAUDE.md per la sessione
-│   └── SkillsInjector       — copia skill files nella working dir
+├── ClaudeMdGenerator        — generates the CLAUDE.md for the session
+│   └── SkillsInjector       — copies skill files into the working dir
 │
-└── OpenCodeConfigGenerator  — genera opencode.json dinamico
-    └── ProviderResolver     — risolve API key per il provider scelto
+└── OpenCodeConfigGenerator  — generates a dynamic opencode.json
+    └── ProviderResolver     — resolves the API key for the chosen provider
 ```
 
 ---
 
-## 3. Flusso di Esecuzione
+## 3. Execution Flow
 
 ```typescript
-// Interfaccia pubblica del servizio
+// Public interface of the service
 interface PrepromptEngine {
   process(input: PrepromptInput): Promise<PrepromptOutput>;
   previewResolution(input: PrepromptInput): Promise<PrepromptPreview>;
 }
 
 interface PrepromptInput {
-  job: Job;                          // job MongoDB con attachments
-  project: Project;                  // progetto con aiConfig
-  prepromptProfile: PrepromptProfile; // profilo selezionato
-  workspaceDir: string;              // path working directory del job
+  job: Job;                          // MongoDB job with attachments
+  project: Project;                  // project with aiConfig
+  prepromptProfile: PrepromptProfile; // selected profile
+  workspaceDir: string;              // job's working directory path
 }
 
 interface PrepromptOutput {
@@ -80,7 +80,7 @@ interface PrepromptOutput {
   resolvedClaudeMd: string;          // contenuto CLAUDE.md
   resolvedOpenCodeJson: object;      // oggetto config opencode
   imagesToProcess: string[];         // path immagini allegate per vision
-  debugInfo: {                       // per audit/logging
+  debugInfo: {                       // for audit/logging
     layersApplied: string[];
     variablesResolved: Record<string, string>;
     attachmentsSummary: string;
@@ -146,40 +146,40 @@ class InputProcessor {
 
 ### 3.2 Step 2 — Context Building
 
-Il ContextBuilder assembla un oggetto `TemplateContext` usato da Nunjucks:
+The ContextBuilder assembles a `TemplateContext` object used by Nunjucks:
 
 ```typescript
 interface TemplateContext {
   project: {
     name: string;
     slug: string;
-    type: string;            // landing_page | mini_site | ecc.
+    type: string;            // landing_page | mini_site | etc.
     description?: string;
-    lang: string;            // it | en | ecc.
+    lang: string;            // it | en | etc.
   };
   
   input: {
-    prompt: string;          // prompt raw dell'utente
+    prompt: string;          // raw user prompt
     attachments: {
       hasAttachments: boolean;
       pdfs: Array<{ filename: string; content: string; truncated: boolean }>;
       images: Array<{ filename: string; description: string }>;
-      summary: string;       // testo aggregato di tutti gli allegati
+      summary: string;       // aggregated text of all attachments
     };
   };
   
   deployment: {
-    domain: string;          // es. myclient.Andy Code Cat.io
+    domain: string;          // e.g. myclient.Andy Code Cat.io
     mode: string;            // subdomain | custom_domain | zip_export
     baseUrl: string;         // https://myclient.Andy Code Cat.io
   };
   
   iteration: {
-    number: number;          // 1 per prima gen, 2+ per refine
+    number: number;          // 1 for the first generation, 2+ for refine
     isFirstGeneration: boolean;
-    previousManifest?: object; // MANIFEST.json ultima iterazione
+    previousManifest?: object; // MANIFEST.json from the last iteration
     previousBuildNotes?: string;
-    changesRequested?: string; // solo per refine: descrizione modifiche
+    changesRequested?: string; // refine only: description of changes
   };
   
   theme: {
@@ -194,12 +194,12 @@ interface TemplateContext {
     jobId: string;
     timestamp: string;       // ISO datetime
     agentType: string;       // Andy Code Cat-builder | Andy Code Cat-refiner
-    outputDir: string;       // path assoluto della working dir
+    outputDir: string;       // absolute path of the working dir
   };
 }
 ```
 
-**Risoluzione contesto iterazione precedente:**
+**Resolving the previous iteration's context:**
 
 ```typescript
 async buildIterationContext(project: Project): Promise<IterationContext> {
@@ -213,7 +213,7 @@ async buildIterationContext(project: Project): Promise<IterationContext> {
     return { number: 1, isFirstGeneration: true };
   }
 
-  // Leggi MANIFEST.json dall'ultimo output
+  // Read MANIFEST.json from the last output
   const manifestPath = path.join(lastJob.output.outputDir, 'dist', 'MANIFEST.json');
   const manifest = await fs.readJSON(manifestPath).catch(() => null);
 
@@ -236,10 +236,10 @@ class LayerComposer {
     context: TemplateContext
   ): Promise<string> {
     
-    // 1. Ordina layer per order ASC
+    // 1. Sort layers by order ASC
     const sortedLayers = [...layers].sort((a, b) => a.order - b.order);
     
-    // 2. Filtra layer con condizioni false
+    // 2. Filter out layers whose condition is false
     const activeLayers = await Promise.all(
       sortedLayers.map(async layer => {
         if (!layer.condition) return layer;
@@ -251,7 +251,7 @@ class LayerComposer {
       })
     ).then(layers => layers.filter(Boolean));
 
-    // 3. Renderizza ogni layer con Nunjucks
+    // 3. Render each layer with Nunjucks
     const renderedLayers = await Promise.all(
       activeLayers.map(async layer => {
         const rendered = await this.templateRenderer.render(
@@ -266,7 +266,7 @@ class LayerComposer {
       })
     );
 
-    // 4. Concatena con separatori semantici
+    // 4. Concatenate with semantic separators
     return renderedLayers
       .map(layer => `## [${layer.type.toUpperCase()}] ${layer.name}\n\n${layer.content}`)
       .join('\n\n---\n\n');
@@ -274,10 +274,10 @@ class LayerComposer {
 }
 ```
 
-**Valutazione condizioni (JSONata):**
+**Condition evaluation (JSONata):**
 
 ```typescript
-// Esempio condizioni nei layer:
+// Example layer conditions:
 // "input.attachments.hasAttachments == true"
 // "iteration.number > 1"
 // "project.type == 'landing_page'"
@@ -292,8 +292,8 @@ class ConditionEvaluator {
       const result = await expression.evaluate(context);
       return Boolean(result);
     } catch (err) {
-      // Condizione malformata → layer incluso per default (fail-open)
-      logger.warn(`Condizione malformata nel layer: ${condition}`, err);
+      // Malformed condition → layer included by default (fail-open)
+      logger.warn(`Malformed condition in layer: ${condition}`, err);
       return true;
     }
   }
@@ -302,51 +302,51 @@ class ConditionEvaluator {
 
 ### 3.4 Step 4 — Template Rendering
 
-Nunjucks con custom filters:
+Nunjucks with custom filters:
 
 ```typescript
 const nunjucksEnv = nunjucks.configure({ autoescape: false });
 
-// Filter: tronca testo con ellipsis
+// Filter: truncate text with an ellipsis
 nunjucksEnv.addFilter('truncate', (str: string, length: number) =>
   str.length > length ? str.slice(0, length) + '...' : str
 );
 
-// Filter: converte oggetto in JSON formattato
+// Filter: convert an object to formatted JSON
 nunjucksEnv.addFilter('json', (obj: object) =>
   JSON.stringify(obj, null, 2)
 );
 
-// Filter: sanitizza per uso in prompt (rimuove caratteri problematici)
+// Filter: sanitize for use in a prompt (removes problematic characters)
 nunjucksEnv.addFilter('promptSafe', (str: string) =>
   str.replace(/[<>]/g, '').replace(/\n{3,}/g, '\n\n').trim()
 );
 
-// Filter: formatta lista come bullet points
+// Filter: format a list as bullet points
 nunjucksEnv.addFilter('bullets', (arr: string[]) =>
   arr.map(item => `- ${item}`).join('\n')
 );
 ```
 
-**Esempio template layer con tutti i filtri:**
+**Example layer template using all filters:**
 
 ```
 {% if input.attachments.hasAttachments %}
-## Contenuto allegati forniti dall'utente:
+## Attachments provided by the user:
 
 {% if input.attachments.pdfs.length > 0 %}
-### Documenti PDF:
+### PDF documents:
 {% for pdf in input.attachments.pdfs %}
 **{{ pdf.filename }}:**
 {{ pdf.content | truncate(5000) | promptSafe }}
 {% if pdf.truncated %}
-[... contenuto troncato per lunghezza ...]
+[... content truncated for length ...]
 {% endif %}
 {% endfor %}
 {% endif %}
 
 {% if input.attachments.images.length > 0 %}
-### Immagini fornite:
+### Images provided:
 {% for img in input.attachments.images %}
 **{{ img.filename }}:** {{ img.description | promptSafe }}
 {% endfor %}
@@ -357,53 +357,53 @@ nunjucksEnv.addFilter('bullets', (arr: string[]) =>
 
 ### 3.5 Step 5 — CLAUDE.md Generation
 
-Il CLAUDE.md viene generato dal template definito nel PrepromptProfile.  
-È il documento di "briefing completo" che OpenCode legge all'inizio della sessione.
+The CLAUDE.md is generated from the template defined in the PrepromptProfile.  
+It is the "full briefing" document that OpenCode reads at the start of the session.
 
 ```typescript
-// Template CLAUDE.md di default (sovrascrivibile per profilo)
+// Default CLAUDE.md template (overridable per profile)
 const DEFAULT_CLAUDE_MD_TEMPLATE = `
 # Andy Code Cat Project: {{ project.name }}
 
 ## Job Info
 - Job ID: {{ meta.jobId }}
-- Iterazione: {{ iteration.number }}
-- Agente: {{ meta.agentType }}
+- Iteration: {{ iteration.number }}
+- Agent: {{ meta.agentType }}
 - Timestamp: {{ meta.timestamp }}
 - Output directory: {{ meta.outputDir }}/dist/
 
-## Obiettivo
+## Objective
 {{ prompt_section }}
 
 ## Deployment Target
 - URL: {{ deployment.baseUrl }}
-- Dominio: {{ deployment.domain }}
-- Lingua sito: {{ project.lang }}
+- Domain: {{ deployment.domain }}
+- Site language: {{ project.lang }}
 
 {% if theme.hasOverride %}
-## Override Tema
-- Colore primario: {{ theme.primaryColor }}
+## Theme Override
+- Primary color: {{ theme.primaryColor }}
 - Font: {{ theme.fontFamily }}
 - Mood: {{ theme.mood }}
 {% endif %}
 
 {% if iteration.number > 1 %}
-## Contesto Iterazione Precedente
-Build notes precedente: {{ iteration.previousBuildNotes }}
-Immagini placeholder già definite:
+## Previous Iteration Context
+Previous build notes: {{ iteration.previousBuildNotes }}
+Placeholder images already defined:
 {% for img in iteration.previousManifest.imagePlaceholders %}
 - {{ img.file }}: {{ img.description }}
 {% endfor %}
 
-{% if iteration.changesRequested %}
+## Changes Requested in This Iteration
 ## Modifiche Richieste in Questa Iterazione
 {{ iteration.changesRequested }}
 {% endif %}
 {% endif %}
 
-## Regole Operative
-Leggi e rispetta AGENTS.md per tutte le policy tecniche.
-Crea dist/MANIFEST.json al termine. Non chiedere conferme.
+## Operating Rules
+Read and follow AGENTS.md for all technical policies.
+Create dist/MANIFEST.json at the end. Do not ask for confirmation.
 `;
 ```
 
@@ -429,7 +429,7 @@ function generateOpenCodeConfig(
       }
     },
     
-    // Override da progetto (es. temperature, max_tokens)
+    // Override from the project (e.g. temperature, max_tokens)
     ...project.aiConfig.openCodeConfigOverride,
     
     "agents": {
@@ -457,15 +457,15 @@ function resolveProviderNpm(provider: string): string {
 
 ---
 
-## 4. Profili Preprompt — Struttura Completa
+## 4. Preprompt Profiles — Full Structure
 
-### 4.1 Profilo di Default: `landing-page-standard`
+### 4.1 Default Profile: `landing-page-standard`
 
 ```json
 {
   "_id": "...",
   "name": "Landing Page — Standard",
-  "description": "Profilo generico per landing page B2C/B2B. Produce siti moderni, professionali, ottimizzati per conversioni.",
+  "description": "Generic profile for B2C/B2B landing pages. Produces modern, professional, conversion-optimised sites.",
   "version": "1.0.0",
   "scope": {
     "type": "agent_type",
@@ -474,59 +474,59 @@ function resolveProviderNpm(provider: string): string {
   "layers": [
     {
       "order": 1,
-      "name": "Identità Agente",
+      "name": "Agent Identity",
       "type": "system",
       "isOptional": false,
       "condition": null,
-      "content": "Sei Andy Code Cat Builder, un agente specializzato nella creazione di landing page web ad alta conversione. Produci sempre codice HTML/CSS/JS completo, funzionante e pronto per la pubblicazione. Il tuo output va nella cartella dist/. Non chiedere mai conferme."
+      "content": "You are Andy Code Cat Builder, an agent specialised in creating high-conversion landing pages. Always produce complete, working, publish-ready HTML/CSS/JS code. Your output goes into the dist/ folder. Never ask for confirmation."
     },
     {
       "order": 2,
-      "name": "Contesto Progetto",
+      "name": "Project Context",
       "type": "context",
       "isOptional": false,
       "condition": null,
-      "content": "Progetto: {{ project.name }} ({{ project.type }})\nDominio di pubblicazione: {{ deployment.domain }}\nLingua: {{ project.lang }}\nIterazione: {{ iteration.number }}"
+      "content": "Project: {{ project.name }} ({{ project.type }})\nPublish domain: {{ deployment.domain }}\nLanguage: {{ project.lang }}\nIteration: {{ iteration.number }}"
     },
     {
       "order": 3,
-      "name": "Contenuto Allegati",
+      "name": "Attachment Content",
       "type": "context",
       "isOptional": true,
       "condition": "input.attachments.hasAttachments == true",
-      "content": "## Materiale fornito dall'utente:\n{% for pdf in input.attachments.pdfs %}\n### {{ pdf.filename }}\n{{ pdf.content | truncate(8000) | promptSafe }}\n{% endfor %}\n{% for img in input.attachments.images %}\n### Immagine: {{ img.filename }}\n{{ img.description | promptSafe }}\n{% endfor %}"
+      "content": "## Material provided by the user:\n{% for pdf in input.attachments.pdfs %}\n### {{ pdf.filename }}\n{{ pdf.content | truncate(8000) | promptSafe }}\n{% endfor %}\n{% for img in input.attachments.images %}\n### Image: {{ img.filename }}\n{{ img.description | promptSafe }}\n{% endfor %}"
     },
     {
       "order": 4,
-      "name": "Override Tema",
+      "name": "Theme Override",
       "type": "context",
       "isOptional": true,
       "condition": "theme.hasOverride == true",
-      "content": "## Stile visivo richiesto:\n- Colore primario: {{ theme.primaryColor }}\n- Font: {{ theme.fontFamily }}\n- Mood: {{ theme.mood }}\nRifletti queste scelte nelle CSS Custom Properties."
+      "content": "## Requested visual style:\n- Primary color: {{ theme.primaryColor }}\n- Font: {{ theme.fontFamily }}\n- Mood: {{ theme.mood }}\nReflect these choices in the CSS Custom Properties."
     },
     {
       "order": 5,
-      "name": "Richiesta Utente",
+      "name": "User Request",
       "type": "context",
       "isOptional": false,
       "condition": null,
-      "content": "## Richiesta:\n{{ input.prompt | promptSafe }}"
+      "content": "## Request:\n{{ input.prompt | promptSafe }}"
     },
     {
       "order": 6,
-      "name": "Vincoli Tecnici",
+      "name": "Technical Constraints",
       "type": "constraint",
       "isOptional": false,
       "condition": null,
-      "content": "## Vincoli ASSOLUTI:\n1. Output solo in dist/ (struttura: index.html, css/style.css, js/main.js, images/)\n2. Nessun framework JS (React, Vue, ecc.) — HTML/CSS/JS vanilla\n3. Nessun CDN tranne Google Fonts\n4. Mobile-first responsive\n5. Ogni immagine mancante → placeholder con pattern IMAGE_PLACEHOLDER\n6. CSS Custom Properties obbligatorie per il tema\n7. HTML semantico con meta SEO completi"
+      "content": "## ABSOLUTE constraints:\n1. Output only in dist/ (structure: index.html, css/style.css, js/main.js, images/)\n2. No JS framework (React, Vue, etc.) — vanilla HTML/CSS/JS\n3. No CDN except Google Fonts\n4. Mobile-first responsive\n5. Every missing image → placeholder with the IMAGE_PLACEHOLDER pattern\n6. CSS Custom Properties are mandatory for theming\n7. Semantic HTML with complete SEO meta tags"
     },
     {
       "order": 7,
-      "name": "Formato Output",
+      "name": "Output Format",
       "type": "format",
       "isOptional": false,
       "condition": null,
-      "content": "## Output richiesto:\nAl termine della generazione, DEVI creare dist/MANIFEST.json con struttura definita in AGENTS.md. Questo è OBBLIGATORIO. Il sistema usa questo file per post-processing."
+      "content": "## Required output:\nAt the end of generation, you MUST create dist/MANIFEST.json with the structure defined in AGENTS.md. This is MANDATORY. The system uses this file for post-processing."
     }
   ],
   "openCodeConfig": {
@@ -544,9 +544,9 @@ function resolveProviderNpm(provider: string): string {
 }
 ```
 
-### 4.2 Profilo: `mini-site-portfolio`
+### 4.2 Profile: `mini-site-portfolio`
 
-Variante del profilo standard con layer aggiuntivi per portfolio multi-pagina:
+Variant of the standard profile with additional layers for a multi-page portfolio:
 
 ```json
 {
@@ -554,23 +554,23 @@ Variante del profilo standard con layer aggiuntivi per portfolio multi-pagina:
   "version": "1.0.0",
   "scope": { "type": "agent_type", "agentType": "portfolio" },
   "layers": [
-    "... (layer 1-4 identici al profilo standard) ...",
+    "... (layers 1-4 identical to the standard profile) ...",
     {
       "order": 5,
-      "name": "Struttura Multi-Page",
+      "name": "Multi-Page Structure",
       "type": "constraint",
       "isOptional": false,
       "condition": null,
-      "content": "Genera un mini-sito di 3 pagine:\n1. index.html — Home/About\n2. work.html — Portfolio/Progetti\n3. contact.html — Contatti\n\nNavigation: menu sticky con link a tutte e 3 le pagine.\nOgni pagina deve essere stand-alone (include header e footer)."
+      "content": "Generate a 3-page mini-site:\n1. index.html — Home/About\n2. work.html — Portfolio/Projects\n3. contact.html — Contact\n\nNavigation: sticky menu linking to all 3 pages.\nEach page must be stand-alone (include header and footer)."
     }
-    "... (layer 6-7 identici al profilo standard) ..."
+    "... (layers 6-7 identical to the standard profile) ..."
   ]
 }
 ```
 
-### 4.3 Profilo: `refine-standard`
+### 4.3 Profile: `refine-standard`
 
-Profilo specifico per iterazioni di raffinamento:
+Profile specific to refinement iterations:
 
 ```json
 {
@@ -580,28 +580,28 @@ Profilo specifico per iterazioni di raffinamento:
   "layers": [
     {
       "order": 1,
-      "name": "Identità Agente Refiner",
+      "name": "Refiner Agent Identity",
       "type": "system",
-      "content": "Sei Andy Code Cat Refiner. Stai modificando un sito web già esistente. Leggi i file in dist/ prima di modificare. Applica SOLO le modifiche richieste. Non stravolgere il design esistente."
+      "content": "You are Andy Code Cat Refiner. You are modifying an existing website. Read the files in dist/ before making changes. Apply ONLY the requested changes. Do not overhaul the existing design."
     },
     {
       "order": 2,
-      "name": "Contesto Iterazione",
+      "name": "Iteration Context",
       "type": "context",
       "condition": "iteration.number > 1",
-      "content": "Sito esistente — iterazione {{ iteration.number - 1 }}:\nBuild notes: {{ iteration.previousBuildNotes }}\n\nFile già presenti in dist/ — leggili prima di modificare."
+      "content": "Existing site — iteration {{ iteration.number - 1 }}:\nBuild notes: {{ iteration.previousBuildNotes }}\n\nFiles already present in dist/ — read them before making changes."
     },
     {
       "order": 3,
-      "name": "Modifica Richiesta",
+      "name": "Requested Change",
       "type": "context",
-      "content": "## Modifica da applicare:\n{{ input.prompt | promptSafe }}"
+      "content": "## Change to apply:\n{{ input.prompt | promptSafe }}"
     },
     {
       "order": 4,
-      "name": "Vincoli Refine",
+      "name": "Refine Constraints",
       "type": "constraint",
-      "content": "VINCOLI:\n1. Mantieni lo stile visivo esistente\n2. Non toccare file non menzionati nella richiesta (a meno che strettamente necessario)\n3. Aggiorna MANIFEST.json con le modifiche\n4. Non chiedere conferme"
+      "content": "CONSTRAINTS:\n1. Keep the existing visual style\n2. Do not touch files not mentioned in the request (unless strictly necessary)\n3. Update MANIFEST.json with the changes\n4. Do not ask for confirmation"
     }
   ]
 }
@@ -609,29 +609,29 @@ Profilo specifico per iterazioni di raffinamento:
 
 ---
 
-## 5. Versioning Profili
+## 5. Profile Versioning
 
-### 5.1 Regole Bump Versione
+### 5.1 Version Bump Rules
 
-| Tipo modifica | Bump | Esempio |
+| Change type | Bump | Example |
 |---|---|---|
-| Aggiunta layer opzionale | patch | 1.0.0 → 1.0.1 |
-| Modifica testo layer esistente | patch | 1.0.1 → 1.0.2 |
-| Aggiunta layer obbligatorio | minor | 1.0.2 → 1.1.0 |
-| Rimozione layer | minor | 1.1.0 → 1.2.0 |
-| Cambio struttura output attesa | major | 1.2.0 → 2.0.0 |
-| Cambio openCodeConfig.agentProfile | major | 2.0.0 → 3.0.0 |
+| Add optional layer | patch | 1.0.0 → 1.0.1 |
+| Edit existing layer text | patch | 1.0.1 → 1.0.2 |
+| Add mandatory layer | minor | 1.0.2 → 1.1.0 |
+| Remove layer | minor | 1.1.0 → 1.2.0 |
+| Change expected output structure | major | 1.2.0 → 2.0.0 |
+| Change openCodeConfig.agentProfile | major | 2.0.0 → 3.0.0 |
 
-### 5.2 Storage Versioni
+### 5.2 Version Storage
 
-Ogni PUT su un profilo **non sovrascrive** — crea un nuovo documento con:
+Every PUT on a profile **does not overwrite** — it creates a new document with:
 
-- Stessa `_id` logica (tracked via campo `profileGroupId`)
-- `version` incrementata secondo regole bump
+- The same logical `_id` (tracked via the `profileGroupId` field)
+- `version` incremented per the bump rules
 - `supersedes: previousDocId`
-- `isActive: true` (la versione precedente passa a `isActive: false`)
+- `isActive: true` (the previous version becomes `isActive: false`)
 
-I progetti referenziano sia `prepromptProfileId` (versione specifica) che `prepromptProfileGroupId` (per "aggiorna sempre all'ultima versione").
+Projects reference both `prepromptProfileId` (a specific version) and `prepromptProfileGroupId` (to "always update to the latest version").
 
 ### 5.3 API Versioning
 
@@ -645,35 +645,35 @@ GET /api/v1/preprompt-profiles/:groupId/history
 
 POST /api/v1/projects/:slug/use-profile-version
 Body: { profileId: "specific-version-id" }
-→ Il progetto userà sempre quella versione specifica, ignorando aggiornamenti futuri
+→ The project will always use that specific version, ignoring future updates
 ```
 
 ---
 
-## 6. Preview e Debug
+## 6. Preview and Debug
 
-### 6.1 Endpoint Preview
+### 6.1 Preview Endpoint
 
 ```
 POST /api/v1/preprompt-profiles/:id/test
 Body: {
-  samplePrompt: "Landing page per una startup fintech chiamata PayFlow",
+  samplePrompt: "Landing page for a fintech startup called PayFlow",
   projectContext: {
     name: "PayFlow",
     type: "landing_page",
     lang: "it",
     deployment: { domain: "payflow.Andy Code Cat.io" }
   },
-  attachments: []  // opzionale: allegati di test
+  attachments: []  // optional: test attachments
 }
 
 Response: {
-  resolvedPrompt: "## [SYSTEM] Identità Agente\n\nSei Andy Code Cat Builder...",
+  resolvedPrompt: "## [SYSTEM] Agent Identity\n\nYou are Andy Code Cat Builder...",
   resolvedClaudeMd: "# Andy Code Cat Project: PayFlow\n...",
   resolvedOpenCodeJson: { ... },
   layersApplied: [
-    { name: "Identità Agente", type: "system", included: true },
-    { name: "Contenuto Allegati", type: "context", included: false, reason: "condizione falsa: hasAttachments == false" }
+    { name: "Agent Identity", type: "system", included: true },
+    { name: "Attachment Content", type: "context", included: false, reason: "condition false: hasAttachments == false" }
   ],
   estimatedTokens: 1250,
   warnings: []
@@ -682,7 +682,7 @@ Response: {
 
 ### 6.2 Debug Logging
 
-Ogni job salva in MongoDB il `debugInfo` della risoluzione:
+Every job stores the resolution's `debugInfo` in MongoDB:
 
 ```typescript
 job.input.resolvedPrompt = output.resolvedPrompt;  // full text
@@ -698,17 +698,17 @@ job.input.debugInfo = {
 
 ---
 
-## 7. Gestione Errori
+## 7. Error Handling
 
-| Errore | Comportamento |
+| Error | Behaviour |
 |---|---|
-| Template Nunjucks malformato | Log errore, usa layer senza rendering variabili (fail-safe) |
-| PDF non leggibile | Salta allegato, aggiunge warning al debugInfo |
-| Immagine non leggibile da vision | Usa filename come descrizione fallback |
-| Condizione JSONata invalida | Layer incluso per default (fail-open), warning loggato |
-| Profile non trovato | Fallback al profilo default del sistema (`landing-page-standard`) |
-| Template CLAUDE.md non trovato | Usa DEFAULT_CLAUDE_MD_TEMPLATE hardcoded |
-| resolvedPrompt > 100.000 char | Tronca allegati PDF, mantiene prompt utente integro |
+| Malformed Nunjucks template | Log the error, use the layer without variable rendering (fail-safe) |
+| Unreadable PDF | Skip the attachment, add a warning to debugInfo |
+| Image unreadable by vision | Use the filename as a fallback description |
+| Invalid JSONata condition | Layer included by default (fail-open), warning logged |
+| Profile not found | Fall back to the system default profile (`landing-page-standard`) |
+| CLAUDE.md template not found | Use the hardcoded DEFAULT_CLAUDE_MD_TEMPLATE |
+| resolvedPrompt > 100,000 chars | Truncate PDF attachments, keep the user prompt intact |
 
 ---
 
@@ -718,12 +718,12 @@ job.input.debugInfo = {
 
 ```typescript
 describe('LayerComposer', () => {
-  test('applica layer in ordine corretto', async () => { ... });
-  test('salta layer con condizione falsa', async () => { ... });
-  test('include layer con condizione vera', async () => { ... });
-  test('include layer optional con condizione non valutabile', async () => { ... });
-  test('renderizza variabili Nunjucks correttamente', async () => { ... });
-  test('gestisce template malformato senza crash', async () => { ... });
+  test('applies layers in the correct order', async () => { ... });
+  test('skips a layer whose condition is false', async () => { ... });
+  test('includes a layer whose condition is true', async () => { ... });
+  test('includes an optional layer whose condition cannot be evaluated', async () => { ... });
+  test('renders Nunjucks variables correctly', async () => { ... });
+  test('handles a malformed template without crashing', async () => { ... });
 });
 ```
 
@@ -731,12 +731,12 @@ describe('LayerComposer', () => {
 
 ```typescript
 describe('PrepromptEngine', () => {
-  test('produce resolvedPrompt non vuoto per input minimo', async () => { ... });
-  test('include contenuto PDF estratto nel prompt', async () => { ... });
-  test('genera CLAUDE.md con variabili risolte', async () => { ... });
-  test('genera opencode.json con provider corretto', async () => { ... });
-  test('fallback a profilo default se ID non trovato', async () => { ... });
-  test('tronca PDF oltre 50.000 char con nota', async () => { ... });
+  test('produces a non-empty resolvedPrompt for minimal input', async () => { ... });
+  test('includes extracted PDF content in the prompt', async () => { ... });
+  test('generates CLAUDE.md with resolved variables', async () => { ... });
+  test('generates opencode.json with the correct provider', async () => { ... });
+  test('falls back to the default profile if the ID is not found', async () => { ... });
+  test('truncates PDFs beyond 50,000 chars with a note', async () => { ... });
 });
 ```
 
@@ -746,7 +746,7 @@ describe('PrepromptEngine', () => {
 // Test via API
 POST /preprompt-profiles/{landingPageProfileId}/test
 Body: { samplePrompt: "Sito per pizzeria napoletana", projectContext: {...} }
-→ resolvedPrompt contiene "pizzeria" ✓
-→ layersApplied.length === 7 ✓ (tutti i layer del profilo standard)
+→ resolvedPrompt contains "pizzeria" ✓
+→ layersApplied.length === 7 ✓ (all layers of the standard profile)
 → estimatedTokens < 4000 ✓
 ```
