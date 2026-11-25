@@ -14,6 +14,7 @@ import type { ZeroEffortFormProposalRepository } from "../../domain/repositories
 import type { DidacticArtifactKnowledgeRepository } from "../../domain/repositories/DidacticArtifactKnowledgeRepository";
 import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAssetRepository";
 import type { SiteDeploymentRepository } from "../../domain/repositories/SiteDeploymentRepository";
+import type { LeaderboardRepository } from "../../domain/repositories/LeaderboardRepository";
 import type { IFileStorage } from "../../infra/storage/IFileStorage";
 
 export interface DeletedProjectCounts {
@@ -31,6 +32,7 @@ export interface DeletedProjectCounts {
     didacticArtifactKnowledge: number;
     projectAssets: number;
     siteDeployments: number;
+    leaderboardEntries: number;
 }
 
 /**
@@ -97,6 +99,7 @@ export class DeleteProject {
         private readonly projectAssetRepo?: ProjectAssetRepository,
         private readonly siteDeploymentRepo?: SiteDeploymentRepository,
         private readonly fileStorage?: IFileStorage,
+        private readonly leaderboardRepo?: LeaderboardRepository,
     ) { }
 
     async execute(projectId: string, userId: string): Promise<DeletedProjectCounts> {
@@ -160,6 +163,7 @@ export class DeleteProject {
             didacticArtifactKnowledge,
             projectAssets,
             siteDeployments,
+            leaderboardEntries,
         ] = await Promise.all([
             this.promptExecutionLogRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
             this.costTransactionRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
@@ -175,6 +179,7 @@ export class DeleteProject {
             this.didacticArtifactKnowledgeRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
             this.projectAssetRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
             this.siteDeploymentRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
+            this.leaderboardRepo?.deleteAllForProject(userId, projectId).catch(() => 0) ?? 0,
         ]);
 
         await this.projectRepo.deleteById(projectId, userId);
@@ -194,6 +199,7 @@ export class DeleteProject {
             didacticArtifactKnowledge,
             projectAssets,
             siteDeployments,
+            leaderboardEntries,
         };
     }
 }

@@ -16,6 +16,7 @@ import type { ZeroEffortFormProposalRepository } from "../../../domain/repositor
 import type { DidacticArtifactKnowledgeRepository } from "../../../domain/repositories/DidacticArtifactKnowledgeRepository";
 import type { ProjectAssetRepository } from "../../../domain/repositories/ProjectAssetRepository";
 import type { SiteDeploymentRepository } from "../../../domain/repositories/SiteDeploymentRepository";
+import type { LeaderboardRepository } from "../../../domain/repositories/LeaderboardRepository";
 import type { ProjectAsset } from "../../../domain/entities/ProjectAsset";
 import type { SiteDeployment } from "../../../domain/entities/SiteDeployment";
 import type { Project } from "../../../domain/entities/Project";
@@ -172,6 +173,7 @@ describe("DeleteProject", () => {
             didacticArtifactKnowledge: 0,
             projectAssets: 0,
             siteDeployments: 0,
+            leaderboardEntries: 0,
         });
     });
 
@@ -202,6 +204,7 @@ describe("DeleteProject", () => {
         } as unknown as SiteDeploymentRepository;
 
         const storage = fileStorage();
+        const leaderboard = { deleteAllForProject: vi.fn(async () => 4) } as unknown as LeaderboardRepository;
 
         const deleteProject = new DeleteProject(
             repo,
@@ -221,9 +224,11 @@ describe("DeleteProject", () => {
             projectAssetRepository,
             siteDeploymentRepository,
             storage,
+            leaderboard,
         );
 
         const result = await deleteProject.execute(PROJECT_ID, USER_ID);
+        expect(leaderboard.deleteAllForProject).toHaveBeenCalledWith(USER_ID, PROJECT_ID);
 
         // Every deleteByProject call is ownership-scoped exactly like the pre-existing five.
         expect(journal.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
@@ -262,6 +267,7 @@ describe("DeleteProject", () => {
             didacticArtifactKnowledge: 1,
             projectAssets: 2,
             siteDeployments: 1,
+            leaderboardEntries: 4,
         });
     });
 
