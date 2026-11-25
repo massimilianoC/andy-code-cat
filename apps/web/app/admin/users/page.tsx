@@ -114,6 +114,14 @@ export default function AdminUsersPage() {
         void fetchUsers();
     }, [page, search, roleFilter, blockedFilter, router]);
 
+    // "View owner in Users" on /admin/projects links here with ?highlight=<userId>: open that
+    // user's detail directly instead of leaving the superadmin to search for them.
+    useEffect(() => {
+        const highlighted = new URLSearchParams(window.location.search).get("highlight")?.trim();
+        if (highlighted && /^[A-Za-z0-9_-]{1,64}$/.test(highlighted)) void loadUserDetail(highlighted);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     async function loadUserDetail(userId: string) {
         const token = getToken();
         if (!token) { router.replace("/login"); return; }
