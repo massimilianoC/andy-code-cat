@@ -279,6 +279,27 @@ function withPresetMeta(preset: ProjectPreset): ProjectPreset {
 
 // ─── Catalog ─────────────────────────────────────────────────────────────────
 
+/**
+ * Shared playability contract of every game preset (docs/specs/ARCADE_MODE_MVP.md §4). The Arcade
+ * shell maps gamepads to exactly these keys and stores the score the game reports, so the
+ * generated game never touches the Gamepad API or the network. Appended to each game module.
+ */
+export const ARCADE_PLAYABILITY_MODULE = `
+ARCADE PLAYABILITY (platform contract, applies to every game):
+CONTROLS
+- Keyboard first, no mouse required. Movement: BOTH WASD and the arrow keys. Primary action: Space. Secondary action: Shift (also K). Start and confirm: Enter. Pause: P (also Escape).
+- Read input with keydown/keyup listeners on window, using event.code with event.key as fallback, into a set of pressed keys that the game loop polls. Call event.preventDefault() for the keys you use so the page never scrolls.
+- The platform maps USB gamepads and arcade sticks onto exactly these keys: never use the Gamepad API yourself and never bind core actions to other keys.
+- Show a controls legend on the start screen and on the pause screen, for example "WASD / arrows move · SPACE jump · ENTER start · P pause", large enough to read from a sofa.
+STRUCTURE
+- Start screen, play, pause, game over, and an instant restart with Enter or Space.
+- Progression: at least 3 levels or waves of rising difficulty; the HUD shows score and level.
+- Fit a 16:9 screen without scrolling; HUD text at least 24px.
+SCORE
+- At game over call exactly once: if (window.AndyArcade) window.AndyArcade.submitScore(finalScore), with finalScore an integer >= 0. The platform keeps the leaderboard and asks the player's name: do not build a remote leaderboard, a name prompt or any network call. A local best score in localStorage, wrapped in try/catch, is fine.
+ORIGINALITY
+- When the request cites an existing game, borrow its mechanics only: invent the title, the characters, the art and the level design. Never reproduce names, characters, logos or sprites of existing games.`;
+
 const RAW_PRESET_CATALOG: ProjectPreset[] = [
 
     // ── NEUTRAL ──
@@ -937,7 +958,8 @@ REGOLE DI DESIGN:
 - Preferisci meccaniche semplici ma finite a sistemi ambiziosi incompleti.
 - Lo stato del gioco resta locale alla pagina; nessun backend richiesto.
 - I controlli devono essere spiegati nel gioco e funzionare almeno con tastiera; aggiungi touch se naturale.
-- Se usi canvas o engine, rispetta le regole globali di container del prompt base.`,
+- Se usi canvas o engine, rispetta le regole globali di container del prompt base.
+${ARCADE_PLAYABILITY_MODULE}`,
         },
         defaultTags: {
             visualTags: ["visual:futuristic"],
@@ -994,7 +1016,8 @@ STRUTTURA OBBLIGATORIA:
 CRITERIO DI RIUSCITA:
 - Il giocatore deve capire il loop entro 5 secondi.
 - La difficolta cresce in modo percepibile ma non casuale.
-- L'esperienza deve essere fluida, reattiva e giocabile senza asset pesanti.`,
+- L'esperienza deve essere fluida, reattiva e giocabile senza asset pesanti.
+${ARCADE_PLAYABILITY_MODULE}`,
         },
         defaultTags: {
             visualTags: ["visual:bold"],
@@ -1045,7 +1068,8 @@ STRUTTURA OBBLIGATORIA:
 CRITERIO DI RIUSCITA:
 - La parte ludica deve rinforzare l'obiettivo didattico, non decorarlo.
 - Ogni scelta deve avere conseguenze comprensibili.
-- Evita punteggi senza spiegazione: il feedback e il vero valore del serious game.`,
+- Evita punteggi senza spiegazione: il feedback e il vero valore del serious game.
+${ARCADE_PLAYABILITY_MODULE}`,
         },
         defaultTags: {
             toneTags: ["tone:friendly-casual", "tone:technical-precise"],
@@ -1099,7 +1123,8 @@ REGOLE:
 - Usa geometrie semplici, luci leggibili e pochi asset per stabilita.
 - Mantieni frame e interazioni fluidi anche su dispositivi medi.
 - Se usi un engine 3D, rispetta le regole globali di container e dimensionamento.
-- Aggiungi fallback testuale visibile per descrivere l'esperienza se il rendering non parte.`,
+- Aggiungi fallback testuale visibile per descrivere l'esperienza se il rendering non parte.
+${ARCADE_PLAYABILITY_MODULE}`,
         },
         defaultTags: {
             visualTags: ["visual:futuristic"],
