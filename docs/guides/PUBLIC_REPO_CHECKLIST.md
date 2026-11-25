@@ -6,7 +6,7 @@ Use this checklist before pushing to the public GitHub remote.
 
 ## 1) Secrets and Sensitive Data
 
-- Ensure no live secrets are committed (`.env.docker`, `.env.droplet`, `.env.deploy`).
+- Ensure no live secrets are committed (`.env.docker`, `.env.deploy`, any other non-example `.env.*`).
 - Ensure only template files are tracked (`.env.example`, `.env.deploy.example`).
 - Search for accidental key leaks in changed files before pushing.
 - Private key material is now enforced, not just requested: `scripts/public-repo-guard.mjs` fails on
@@ -14,8 +14,8 @@ Use this checklist before pushing to the public GitHub remote.
   `.ssh/`) **and** on any tracked text file under 16 KB containing a `BEGIN … PRIVATE KEY` block —
   because the dangerous case is the one that does not look like a key. `.gitignore` covers the same
   names as a second line of defence.
-- The droplet deploy key lives at `~/.ssh/vps_admin` and is referenced by `~/.ssh/config`. It never
-  belongs in the repository, in a backup folder inside the repository, or in a scratch file.
+- Server deploy keys live in `~/.ssh/` and are referenced by `~/.ssh/config`. They never belong in
+  the repository, in a backup folder inside the repository, or in a scratch file.
 
 ---
 
@@ -23,13 +23,12 @@ Use this checklist before pushing to the public GitHub remote.
 
 These must stay local (gitignored) and must never be pushed:
 
-- `docker-compose.droplet.yml`
+- host-specific compose overrides (`docker-compose.override.yml`, legacy `docker-compose.droplet.yml`)
 - `.deploy/`
 - `nginx/sites-enabled/*.conf` **except** `nginx/sites-enabled/local.conf` — that file is
-  load-bearing: it is mounted read-only by `docker-compose.yml`, `docker-compose.deploy.yml`, and
-  `docker-compose.droplet.yml`, and it contains nothing sensitive (`server_name localhost` and
+  load-bearing: it is mounted read-only by `docker-compose.yml` and `docker-compose.deploy.yml`, and it contains nothing sensitive (`server_name localhost` and
   Docker's internal DNS resolver only). Do not delete it and do not gitignore it. The rule is
-  about droplet/production vhost configs (real domains, real upstreams), not the tracked local
+  about production vhost configs (real domains, real upstreams), not the tracked local
   default.
 - `docs/deploy/`
 - `docs/review/`
@@ -91,45 +90,25 @@ Then push only sanitized commits to the public remote.
 
 ---
 
-## 6) Known Debt — Pre-Existing Italian Documents (2026-09-09)
+## 6) Language — Resolved Debt (2026-11-25)
 
-29 of 227 tracked `.md` files were found to be substantially Italian. Three of them — the guides
-a contributor is most likely to open — were translated in full as part of this pass:
-`docs/guides/LLM_JSON_PARSING_GUIDELINES.md`, `docs/guides/OPENROUTER_INTEGRATION_GUIDE.md`, and
-`docs/guides/MULTIPROVIDER_LLM_BEST_PRACTICES.md`.
+The 2026-09-09 audit found 29 tracked `.md` files written substantially in Italian. Three guides
+were translated then. On 2026-11-25, 25 of the remaining 26 were replaced by the translations
+prepared on `chore/public-repo-hygiene`; the last one, `docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md`,
+was already English apart from one phrase, fixed the same day. No tracked document is predominantly
+Italian any more, and the guard (check 4) keeps it that way for new documents.
 
-The remaining 26 are deliberately deferred rather than translated in the same change, to keep
-that change reviewable. `npm run guard:public-repo` does not flag any of them — the guard only
-fails on a **newly added** Italian document, so this list is debt, not a violation. Translate them
-opportunistically or in a dedicated pass; do not let the list grow.
+---
 
-**Branch `chore/public-repo-hygiene` (unmerged) already contains full translations for 25 of the
-26 files below — recover and rebase that work rather than re-translating from scratch.** Only
-`docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md` is not covered there.
+## 7) Operator Denylist (private terms)
 
-- [ ] `docs/archive/specs/EXTERNAL_API_KEYS_PLATFORM_SPEC.deprecated.md`
-- [ ] `docs/archive/specs/IMAGE_PICKER_SPEC.deprecated.md`
-- [ ] `docs/archive/vision/TARGET-VISION_2026-05-14.md`
-- [ ] `docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md`
-- [ ] `docs/specs/DASHBOARD_LOVABLE_CHAT_SPEC.md`
-- [ ] `docs/specs/DB_PLATFORM_SPEC.md`
-- [ ] `docs/specs/EXPORT_AND_PUBLISH_SPEC.md`
-- [ ] `docs/specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md`
-- [ ] `docs/specs/GEN_AI_MEDIA_MODE_SPEC.md`
-- [ ] `docs/specs/IMAGE_FETCH_PERSISTENCE_REFACTOR_PROPOSAL.md`
-- [ ] `docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md`
-- [ ] `docs/specs/ONBOARDING_AND_STYLE_PROFILING_SPEC.md`
-- [ ] `docs/specs/OUTPUT_LANGUAGE_CONTROL_SPEC.md`
-- [ ] `docs/specs/PREPROMPT_ENGINE_SPEC.md`
-- [ ] `docs/specs/PRESET_TYPED_SPECS.md`
-- [ ] `docs/specs/PROMPT_OPTIMIZER_SPEC.md`
-- [ ] `docs/specs/PROVIDER_SPEC.md`
-- [ ] `docs/specs/RAG_CHATBOT_SPEC.md`
-- [ ] `docs/specs/SPEC.md`
-- [ ] `docs/specs/SSOT_PROMPTING_AND_MODEL_ROUTING_IMPLEMENTATION_PROGRAM_2026-08-18.md`
-- [ ] `docs/specs/UX_REVIEW_AND_PUBLISH_SPEC.md`
-- [ ] `docs/specs/UX_SPEC.md`
-- [ ] `docs/specs/VIBE_TO_GODMODE_MODEL_SSOT_REGRESSION_ANALYSIS_2026-08-18.md`
-- [ ] `docs/specs/WORKFLOWS.md`
-- [ ] `docs/specs/WYSIWYG_EDIT_MODE_SPEC.md`
-- [ ] `docs/specs/ZERO_EFFORT_MEDIA_ASYNC_EVOLUTION_SPEC.md`
+Real domain names, host aliases, server paths and LAN addresses are private, so the list of them
+cannot live in the public tree. Keep it in `.deploy/public-repo-denylist.txt` (gitignored), one
+literal term per line. When the file exists, `npm run guard:public-repo` fails on any tracked file
+containing one of the terms and reports only the file and the count, never the term. CI does not
+have the file; enable the local hook (`git config core.hooksPath scripts/hooks`) so it runs before
+every commit on the operator's machine.
+
+Git history is public too. Removing a term from the current tree does not remove it from earlier
+commits; that needs a history rewrite, which this repository's Gitflow rules forbid on shared
+branches.

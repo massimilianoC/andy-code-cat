@@ -9,7 +9,9 @@
  *   2. a real `.env*` file (anything but `*.example`) is tracked or staged;
  *   3. a private-infrastructure path from checklist §2 is tracked or staged — with the one
  *      documented exception, `nginx/sites-enabled/local.conf`;
- *   4. a newly added `.md` file is predominantly Italian.
+ *   4. a newly added `.md` file is predominantly Italian;
+ *   5. a tracked file contains a term from the operator's private, gitignored denylist
+ *      (`.deploy/public-repo-denylist.txt`), when that file exists.
  *
  * Check 4 is diff-based on purpose: 26 pre-existing documents are known, recorded debt (see
  * checklist §6) and must not fail every future run. The guard only looks at what a change adds,
@@ -62,8 +64,8 @@ function isForbiddenEnvFile(file) {
 
 // ─── 3) Private infrastructure (checklist §2) ─────────────────────────────────
 // nginx/sites-enabled/local.conf is the one documented exception: it is mounted read-only by
-// docker-compose.yml, docker-compose.deploy.yml and docker-compose.droplet.yml, and it contains
-// nothing sensitive. The rule targets droplet/production vhost configs, not that tracked default.
+// docker-compose.yml and docker-compose.deploy.yml, and it contains
+// nothing sensitive. The rule targets production vhost configs, not that tracked default.
 
 const privateInfraRules = [
     { pattern: /^docker-compose\.droplet\.yml$/, reason: 'private infrastructure (checklist §2)' },
@@ -71,7 +73,7 @@ const privateInfraRules = [
     {
         pattern: /^nginx\/sites-enabled\/.*\.conf$/,
         exceptions: [/^nginx\/sites-enabled\/local\.conf$/],
-        reason: 'droplet/production nginx vhost config (checklist §2) — only local.conf may be tracked',
+        reason: 'production nginx vhost config (checklist §2) — only local.conf may be tracked',
     },
     { pattern: /^docs\/deploy\//, reason: 'private infrastructure (checklist §2)' },
     { pattern: /^docs\/review\//, reason: 'private infrastructure (checklist §2)' },
@@ -180,14 +182,14 @@ function checkPrivateInfra(files) {
  *
  * The checklist has always said "search for accidental key leaks in changed files before pushing"
  * (§1), and nothing verified it. A repository this size gets a stray `.pem` copied into it sooner
- * or later, and this one is public: a leaked deploy key is a root shell on the droplet.
+ * or later, and this one is public: a leaked deploy key is a root shell on the server.
  *
  * Content is checked as well as the name, because the damaging case is the one that does not look
  * like a key — `notes.txt`, `backup`, `config.bak` — and a PEM header is unambiguous.
  */
 const privateKeyNameRules = [
     { pattern: /(^|\/)id_(rsa|dsa|ecdsa|ed25519)$/, reason: "SSH private key" },
-    { pattern: /(^|\/)vps_admin$/, reason: "droplet deploy private key — belongs in ~/.ssh, never in the repo" },
+    { pattern: /(^|\/)vps_admin$/, reason: "server deploy private key — belongs in ~/.ssh, never in the repo" },
     { pattern: /\.(pem|p12|pfx)$/i, reason: "private key or certificate bundle" },
     { pattern: /(^|\/)\.ssh\//, reason: "ssh directory — private to the machine" },
 ];
@@ -240,6 +242,50 @@ function checkLanguage() {
     return failures;
 }
 
+// ─── 5) Operator denylist — private terms that must never reach the public tree ──
+// The terms themselves are private (real domains, host aliases, server paths, LAN addresses), so
+// they live in a gitignored file, one per line, `#` for comments. Matching is case-insensitive and
+// literal. Without the file this check is a no-op, so contributors are not affected.
+// CI cannot see the file: it protects the operator's own commits and pushes, via the local hook.
+
+const DENYLIST_FILE = '.deploy/public-repo-denylist.txt';
+
+function readDenylist() {
+    let text;
+    try {
+        text = readFileSync(DENYLIST_FILE, 'utf8');
+    } catch {
+        return [];
+    }
+    return lines(text).filter((line) => !line.startsWith('#')).map((term) => term.toLowerCase());
+}
+
+function checkDenylist(files) {
+    const terms = readDenylist();
+    if (!terms.length) return [];
+    const failures = [];
+    for (const file of files) {
+        if (file === 'package-lock.json') continue;
+        let stat;
+        try {
+            stat = statSync(file);
+        } catch {
+            continue;
+        }
+        if (!stat.isFile() || stat.size > 2 * 1024 * 1024) continue;
+        let text;
+        try {
+            text = readFileSync(file, 'utf8').toLowerCase();
+        } catch {
+            continue;
+        }
+        const hits = terms.filter((term) => file.toLowerCase().includes(term) || text.includes(term));
+        // Report the count only: echoing the term would print the private value into CI logs.
+        if (hits.length) failures.push(`${file} — ${hits.length} term(s) from ${DENYLIST_FILE}`);
+    }
+    return failures;
+}
+
 // ─── Report ────────────────────────────────────────────────────────────────────
 
 const files = trackedOrStagedFiles();
@@ -248,6 +294,7 @@ const envFiles = checkEnvFiles(files);
 const privateInfra = checkPrivateInfra(files);
 const privateKeys = checkPrivateKeys(files);
 const language = checkLanguage();
+const denylisted = checkDenylist(files);
 
 const sections = [
     ['Tracked junk paths', junk],
@@ -255,6 +302,7 @@ const sections = [
     ['Tracked private-infrastructure paths', privateInfra],
     ['Tracked private key material', privateKeys],
     ['Newly added documents that are not in English', language],
+    ['Tracked files containing operator-private terms', denylisted],
 ];
 
 let failureCount = 0;
