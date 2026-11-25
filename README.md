@@ -216,8 +216,10 @@ A change reaches `main` only through Gitflow, and only with all of these green:
 | `npm run release:version:validate` | `RELEASE_VERSION` format (`YYYY.MM.DD.N`) |
 | `npm run guard:public-repo` | No secrets, private keys, private infrastructure details or stray files in the public tree |
 
-End-to-end specs in [`tests/e2e/`](tests/e2e/) run against a live stack and call real providers,
-so they spend real money.
+Every pull request into `develop` or `main` runs the first four in CI
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) and the public-repo guard in its own
+workflow. End-to-end specs in [`tests/e2e/`](tests/e2e/) run against a live stack and call real
+providers, so they spend real money and are not part of CI.
 
 ---
 
