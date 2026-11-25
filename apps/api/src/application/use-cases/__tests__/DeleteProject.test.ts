@@ -16,7 +16,8 @@ import type { ZeroEffortFormProposalRepository } from "../../../domain/repositor
 import type { DidacticArtifactKnowledgeRepository } from "../../../domain/repositories/DidacticArtifactKnowledgeRepository";
 import type { ProjectAssetRepository } from "../../../domain/repositories/ProjectAssetRepository";
 import type { SiteDeploymentRepository } from "../../../domain/repositories/SiteDeploymentRepository";
-import type { LeaderboardRepository } from "../../../domain/repositories/LeaderboardRepository";
+import { ProjectDataRegistry } from "../../projectData/ProjectDataRegistry";
+import type { ProjectDataCapability } from "../../../domain/projectData/ProjectDataCapability";
 import type { ProjectAsset } from "../../../domain/entities/ProjectAsset";
 import type { SiteDeployment } from "../../../domain/entities/SiteDeployment";
 import type { Project } from "../../../domain/entities/Project";
@@ -24,6 +25,18 @@ import type { IFileStorage } from "../../../infra/storage/IFileStorage";
 
 const PROJECT_ID = "p1";
 const USER_ID = "u1";
+
+function capability(id: string, removed: number, clear = vi.fn(async () => removed)) {
+    return {
+        id,
+        label: id,
+        groups: vi.fn(async () => []),
+        list: vi.fn(async () => ({ items: [], total: 0 })),
+        exportRecords: vi.fn(async () => []),
+        deleteRecord: vi.fn(async () => false),
+        clear,
+    } satisfies ProjectDataCapability;
+}
 
 function project(): Project {
     return {
@@ -173,7 +186,7 @@ describe("DeleteProject", () => {
             didacticArtifactKnowledge: 0,
             projectAssets: 0,
             siteDeployments: 0,
-            leaderboardEntries: 0,
+            projectData: {},
         });
     });
 
@@ -204,7 +217,9 @@ describe("DeleteProject", () => {
         } as unknown as SiteDeploymentRepository;
 
         const storage = fileStorage();
-        const leaderboard = { deleteAllForProject: vi.fn(async () => 4) } as unknown as LeaderboardRepository;
+        const leaderboard = capability("leaderboard", 4);
+        const forms = capability("forms", 1);
+        const registry = new ProjectDataRegistry([leaderboard, forms]);
 
         const deleteProject = new DeleteProject(
             repo,
@@ -224,11 +239,13 @@ describe("DeleteProject", () => {
             projectAssetRepository,
             siteDeploymentRepository,
             storage,
-            leaderboard,
+            registry,
         );
 
         const result = await deleteProject.execute(PROJECT_ID, USER_ID);
-        expect(leaderboard.deleteAllForProject).toHaveBeenCalledWith(USER_ID, PROJECT_ID);
+        // Every registered capability is purged, with the whole project scope and no group.
+        expect(leaderboard.clear).toHaveBeenCalledWith({ ownerUserId: USER_ID, projectId: PROJECT_ID });
+        expect(forms.clear).toHaveBeenCalledWith({ ownerUserId: USER_ID, projectId: PROJECT_ID });
 
         // Every deleteByProject call is ownership-scoped exactly like the pre-existing five.
         expect(journal.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
@@ -267,7 +284,7 @@ describe("DeleteProject", () => {
             didacticArtifactKnowledge: 1,
             projectAssets: 2,
             siteDeployments: 1,
-            leaderboardEntries: 4,
+            projectData: { leaderboard: 4, forms: 1 },
         });
     });
 
@@ -341,6 +358,28 @@ describe("DeleteProject", () => {
         expect(result.journalRows).toBe(0);
         expect(result.costTransactions).toBe(2);
         expect(repo.deleteById).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
+    });
+
+    it("still deletes the project when the project data purge throws, and logs it", async () => {
+        const repo = projectRepo();
+        const failing = capability("leaderboard", 0, vi.fn(async () => { throw new Error("mongo down"); }));
+        const error = vi.spyOn(console, "error").mockImplementation(() => { });
+
+        const deleteProject = new DeleteProject(
+            repo,
+            moodboardRepo(),
+            undefined, undefined, undefined, undefined, undefined,
+            undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+            undefined, undefined, undefined,
+            new ProjectDataRegistry([failing]),
+        );
+
+        const result = await deleteProject.execute(PROJECT_ID, USER_ID);
+
+        expect(result.projectData).toEqual({});
+        expect(repo.deleteById).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
+        expect(error).toHaveBeenCalledWith(expect.stringContaining("project data purge failed"), expect.objectContaining({ projectId: PROJECT_ID }));
+        error.mockRestore();
     });
 
     it("still deletes the project when asset or deployment file cleanup throws", async () => {

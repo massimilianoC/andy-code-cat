@@ -1,4 +1,13 @@
-import type { LeaderboardEntry, LeaderboardScope } from "../entities/LeaderboardEntry";
+import type { LeaderboardBoardSummary, LeaderboardEntry, LeaderboardProjectScope, LeaderboardScope } from "../entities/LeaderboardEntry";
+
+export interface LeaderboardEntryListQuery {
+    /** One board, or every board of the project when undefined. */
+    boardId?: string;
+    /** Plain text, matched case-insensitively as a substring of the player name. Never a pattern. */
+    playerContains?: string;
+    skip: number;
+    limit: number;
+}
 
 export interface LeaderboardRepository {
     create(scope: LeaderboardScope, entry: { player: string; score: number }): Promise<LeaderboardEntry>;
@@ -9,6 +18,14 @@ export interface LeaderboardRepository {
     deleteById(scope: LeaderboardScope, entryId: string): Promise<boolean>;
     /** Keeps the best `keep` entries of a board and deletes the rest. Returns how many were removed. */
     prune(scope: LeaderboardScope, keep: number): Promise<number>;
-    /** Every board of a project, for project deletion. Still scoped to the owner. */
-    deleteAllForProject(ownerUserId: string, projectId: string): Promise<number>;
+
+    // ── Owner data panel (docs/specs/PROJECT_DATA_PANEL.md) ─────────────────────────────────────
+    /** Every board of the project that holds at least one entry. */
+    boards(scope: LeaderboardProjectScope): Promise<LeaderboardBoardSummary[]>;
+    /** Newest first, with the total matching the same filter. */
+    listNewest(scope: LeaderboardProjectScope, query: LeaderboardEntryListQuery): Promise<{ items: LeaderboardEntry[]; total: number }>;
+    /** One entry of the project, whichever board it is on. */
+    deleteInProject(scope: LeaderboardProjectScope, entryId: string): Promise<boolean>;
+    /** One board, or every board of the project when boardId is undefined. Returns entries removed. */
+    clear(scope: LeaderboardProjectScope, boardId?: string): Promise<number>;
 }

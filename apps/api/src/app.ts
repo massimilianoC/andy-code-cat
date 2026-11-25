@@ -28,6 +28,7 @@ import { createVibecoreRoutes } from "./presentation/http/routes/vibecoreRoutes"
 import { createNotificationRoutes } from "./presentation/http/routes/notificationRoutes";
 import { createBackgroundRunRoutes } from "./presentation/http/routes/backgroundRunRoutes";
 import { createLeaderboardRoutes } from "./presentation/http/routes/leaderboardRoutes";
+import { createProjectDataRoutes } from "./presentation/http/routes/projectDataRoutes";
 import { createDatasetRoutes } from "./presentation/http/routes/datasetRoutes";
 import { createDidacticRoutes } from "./presentation/http/routes/didacticRoutes";
 import { createFormServiceRoutes } from "./presentation/http/routes/formServiceRoutes";
@@ -98,6 +99,7 @@ export function createApp() {
     app.use("/v1", createNotificationRoutes());
     app.use("/v1", createBackgroundRunRoutes());
     app.use("/v1", createLeaderboardRoutes());
+    app.use("/v1", createProjectDataRoutes());
     app.use("/v1", createDidacticRoutes());
     app.use("/v1", createDatasetRoutes());
 
