@@ -70,16 +70,16 @@ describe("published sites and user files — security regressions", () => {
         const base = { snapshotId: "s", filesDeployed: ["index.html"], createdAt: now, updatedAt: now, status: "live" };
         await db.collection<Record<string, unknown> & { _id: string }>("site_deployments").insertMany([
             { _id: "orph", ...base, projectId: "p4", userId: new ObjectId().toHexString(), publishId: "ab12ab12", customSlug: "orfano", url: "/p/ab12ab12" },
-            { _id: "live", ...base, projectId: "p1", userId: ownerId, publishId: "aa11bb22", customSlug: "antares", url: "/p/aa11bb22" },
+            { _id: "live", ...base, projectId: "p1", userId: ownerId, publishId: "aa11bb22", customSlug: "my-site", url: "/p/aa11bb22" },
             { _id: "susp", ...base, projectId: "p2", userId: ownerId, publishId: "cc33dd44", customSlug: "sospesa", url: "/p/cc33dd44", isAdminBlocked: true },
             { _id: "ownb", ...base, projectId: "p3", userId: blockedOwnerId, publishId: "ee55ff66", customSlug: "bloccato", url: "/p/ee55ff66" },
         ]);
-        writeSite("aa11bb22", "Antares live");
+        writeSite("aa11bb22", "My site live");
         writeSite("cc33dd44", "Suspended");
         writeSite("ee55ff66", "Owner blocked");
         writeSite("ab12ab12", "Orphan owner");
         // Slug copies (subdomain mode) and an orphan directory: never reachable through /p/.
-        writeSite("antares", "Antares slug copy");
+        writeSite("my-site", "My site slug copy");
         writeSite("sospesa", "Suspended slug copy");
         writeSite("orphan01", "Orphan");
 
@@ -157,7 +157,7 @@ describe("published sites and user files — security regressions", () => {
         it("lets MongoDB refuse a second live deployment with the same slug (409), but not a failed one", async () => {
             const { MongoSiteDeploymentRepository } = await import("../../../../infra/repositories/MongoSiteDeploymentRepository");
             const repo = new MongoSiteDeploymentRepository();
-            const input = { publishId: "abab1212", customSlug: "antares", projectId: "px", userId: ownerId, snapshotId: "s", url: "/p/abab1212", filesDeployed: [] };
+            const input = { publishId: "abab1212", customSlug: "my-site", projectId: "px", userId: ownerId, snapshotId: "s", url: "/p/abab1212", filesDeployed: [] };
             await expect(repo.create(input)).rejects.toMatchObject({ statusCode: 409 });
 
             const { getDb } = await import("../../../../infra/db/mongo");
@@ -167,13 +167,13 @@ describe("published sites and user files — security regressions", () => {
             })).resolves.toBeTruthy();
 
             const free = await repo.create({ ...input, publishId: "efef5656", customSlug: "libero" });
-            await expect(repo.updateCustomSlug(free.id, "antares")).rejects.toMatchObject({ statusCode: 409 });
+            await expect(repo.updateCustomSlug(free.id, "my-site")).rejects.toMatchObject({ statusCode: 409 });
         });
     });
 
     describe("3. only live deployments, with suspension, on every address", () => {
         it("does not serve a slug copy or an orphan directory through /p/", async () => {
-            expect((await request(app).get("/p/antares/")).status).toBe(404);
+            expect((await request(app).get("/p/my-site/")).status).toBe(404);
             expect((await request(app).get("/p/sospesa/")).status).toBe(404);
             expect((await request(app).get("/p/orphan01/")).status).toBe(404);
         });
@@ -181,10 +181,10 @@ describe("published sites and user files — security regressions", () => {
         it("still serves the live site at /p/{publishId}/ and /{slug}/", async () => {
             const byId = await request(app).get("/p/aa11bb22/");
             expect(byId.status).toBe(200);
-            expect(byId.text).toContain("Antares live");
-            const bySlug = await request(app).get("/antares/");
+            expect(byId.text).toContain("My site live");
+            const bySlug = await request(app).get("/my-site/");
             expect(bySlug.status).toBe(200);
-            expect(bySlug.text).toContain("Antares live"); // the publishId directory, not the slug copy
+            expect(bySlug.text).toContain("My site live"); // the publishId directory, not the slug copy
         });
 
         it("keeps serving a live site whose owner account no longer exists (not a suspension)", async () => {
@@ -207,11 +207,11 @@ describe("published sites and user files — security regressions", () => {
             await repo.upsert({ publicSites: { urlMode: "path", publicDomain: "", sitesOrigin: "https://sites.example.test:8443" } });
             try {
                 // A host that is neither the app (CORS_ORIGIN) nor the sites host — e.g. one missing from CORS_ORIGIN.
-                const other = await request(app).get("/antares/style.css").set("X-Forwarded-Host", "forgotten-app-alias.example.test");
+                const other = await request(app).get("/my-site/style.css").set("X-Forwarded-Host", "forgotten-app-alias.example.test");
                 expect(other.status).toBe(301);
-                expect(other.headers.location).toBe("https://sites.example.test:8443/antares/style.css");
+                expect(other.headers.location).toBe("https://sites.example.test:8443/my-site/style.css");
 
-                const served = await request(app).get("/antares/").set("X-Forwarded-Host", "sites.example.test");
+                const served = await request(app).get("/my-site/").set("X-Forwarded-Host", "sites.example.test");
                 expect(served.status).toBe(200);
             } finally {
                 await repo.upsert({ publicSites: { urlMode: "path", publicDomain: "", sitesOrigin: "" } });

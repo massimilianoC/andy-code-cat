@@ -11,16 +11,16 @@ set -euo pipefail
 #   scripts/deploy-safe-db-port.sh \
 #     --source-db <source-db-name> \
 #     --target-db <target-db-name> \
-#     --project-dir /opt/docker/projects/<project-dir> \
-#     --compose-file docker-compose.droplet.yml \
+#     --project-dir /path/to/andy-code-cat \
+#     --compose-file docker-compose.deploy.yml \
 #     --mongo-container <mongo-container-name>
 
 SOURCE_DB=""
 TARGET_DB=""
 PROJECT_DIR=""
-COMPOSE_FILE="docker-compose.droplet.yml"
+COMPOSE_FILE="docker-compose.deploy.yml"
 MONGO_CONTAINER="mongodb"
-ENV_FILE=".env.droplet"
+ENV_FILE=".env.docker"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

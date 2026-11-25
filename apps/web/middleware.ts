@@ -3,7 +3,7 @@ import { decideWebRoute } from "./lib/publishedSiteRouting";
 
 /**
  * Internal address of the API as seen from the web server. "api" is the service name in every
- * compose stack (dev, deploy, office, droplet); override it only for a non-compose dev setup.
+ * compose stack (dev and deploy); override it only for a non-compose dev setup.
  */
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://api:4000";
 

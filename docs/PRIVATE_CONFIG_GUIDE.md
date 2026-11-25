@@ -21,9 +21,9 @@ This document is for the repository owner. It explains what stays local and how 
 
 | Category | Files |
 |---|---|
-| Live env files | `.env.docker`, `.env.droplet`, `.env.deploy` |
-| Private deploy scripts | `scripts/deploy-to-droplet.sh`, `scripts/seed-droplet.sh` |
-| Private compose file | `docker-compose.droplet.yml` |
+| Live env files | `.env.docker`, `.env.deploy`, any other non-example `.env.*` |
+| Private deploy scripts and runbooks | `.deploy/` (host names, server paths, SSH aliases) |
+| Host-specific compose overrides | `docker-compose.override.yml`, or files under `.deploy/` |
 | Production nginx vhost | `nginx/sites-enabled/<project>.conf` |
 | Billing data | `docs/cost-providers/bills_*.csv` |
 | Internal reviews | `docs/review/` |
@@ -71,7 +71,7 @@ Before every `git push public main`, mentally check:
 3. No API keys in any file
 4. No billing CSVs
 5. No `docs/deploy/` contents (they have production IPs)
-6. No `docker-compose.droplet.yml`
+6. Nothing from `.deploy/` and no host-specific compose override
 
 The `.gitignore` already covers all of these — as long as you never `git add -f` a gitignored file.
 
@@ -149,7 +149,7 @@ Do not include live secrets in these files; reference local secret managers inst
 
 ## Local Backup Strategy (Recommended)
 
-Your private configs (`.env.docker`, `.env.droplet`, `docs/deploy/`, etc.) are **gitignored** and will only exist on your machine. Back them up:
+Your private configs (`.env.docker`, `.deploy/`, `docs/deploy/`, etc.) are **gitignored** and will only exist on your machine. Back them up:
 
 ### Option 1: Private GitHub repo
 
@@ -159,7 +159,7 @@ Create a private repo (e.g. `andy-code-cat-private`) and add it as the `private`
 
 ```bash
 # Create encrypted backup of private files
-tar czf - .env.docker .env.droplet docs/deploy/ docs/_archive/ docs/review/ scripts/deploy-to-droplet.sh scripts/seed-droplet.sh nginx/sites-enabled/ | gpg --symmetric > private-backup-$(date +%Y%m%d).tar.gz.gpg
+tar czf - .env.docker .deploy/ docs/deploy/ docs/_archive/ docs/review/ nginx/sites-enabled/ | gpg --symmetric > private-backup-$(date +%Y%m%d).tar.gz.gpg
 ```
 
 Store in a safe location (external drive, Bitwarden Send, etc.).
@@ -180,7 +180,7 @@ cd andy-code-cat
 
 # Restore your private env files from your secure backup
 cp ~/Backup/andy-code-cat/.env.docker .env.docker
-cp ~/Backup/andy-code-cat/.env.droplet .env.droplet
+cp -R ~/Backup/andy-code-cat/.deploy .deploy
 # etc.
 ```
 
@@ -202,11 +202,11 @@ git push private main
 git push public main
 ```
 
-If you have private branches (e.g., `ops/droplet-config`):
+If you have private branches (e.g., `ops/server-config`):
 
 ```bash
 # Push private branch to private remote only
-git push private ops/droplet-config
+git push private ops/server-config
 
 # Never push private branches to public remote
 ```

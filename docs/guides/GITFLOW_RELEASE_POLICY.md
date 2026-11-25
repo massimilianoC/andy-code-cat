@@ -121,13 +121,13 @@ you haven't just fetched.
 ### Private, deploy-critical files
 
 Some files are deliberately excluded from this (public) repo's git history — see
-`.deploy/deploy/PRIVATE_CONFIG_GUIDE.md` for the full list and rationale (live server IPs, real
-domain layout). This includes `nginx/sites-enabled/*.conf`, `docker-compose.droplet.yml`,
-`.env.droplet`, `scripts/deploy-to-droplet.sh`, and `scripts/seed-droplet.sh`.
+[`docs/PRIVATE_CONFIG_GUIDE.md`](../PRIVATE_CONFIG_GUIDE.md) for the full list and rationale (live
+server IPs, real domain layout). This includes production `nginx/sites-enabled/*.conf` vhosts,
+host-specific compose overrides, live `.env*` files, and anything under `.deploy/`.
 
 Being gitignored does **not** mean these files are exempt from version control — it means they
 must go through the **private** remote described in `PRIVATE_CONFIG_GUIDE.md`, not `origin`. A
-live edit made directly on the droplet (or locally, then deployed) with no corresponding commit
+live edit made directly on a server (or locally, then deployed) with no corresponding commit
 anywhere is a silent regression waiting to happen: the next full deploy that rsyncs from a clean
 checkout of this repo will overwrite the live fix with the old, un-fixed version, with no diff to
 review and no way to tell afterwards that it happened.

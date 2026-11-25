@@ -10,7 +10,7 @@ Every live site answers at both, on the API origin and on the web origin:
 | Address | Example | Notes |
 |---|---|---|
 | `/p/{publishId}/` | `/p/6d81b896/` | Permanent. Stored on the deployment (`url`), survives slug changes. |
-| `/{slug}/` | `/antares/` | When the site has a custom slug. Resolved to the live deployment's publishId. |
+| `/{slug}/` | `/my-site/` | When the site has a custom slug. Resolved to the live deployment's publishId. |
 
 Both go through the same serving code (`publishRoutes.ts`: `sendSiteIndex` / `sendSiteFile`): same
 suspension rules (admin-blocked site, blocked owner → 403), same CSP, same caching. A request without
@@ -40,8 +40,8 @@ by a logged-in superadmin could act as them. Therefore:
   (`decideSiteRequest` in `publicSiteAddress.ts`);
 - the web middleware forwards the browser's host to the API (`x-forwarded-host`) so the API can tell.
 
-A single-host installation (app and API on one origin, e.g. office-01) therefore needs a **sites
-origin**: a second hostname for the same stack, e.g. `https://siti.camillucci.com:8443`. On a split
+A single-host installation (app and API on one origin) therefore needs a **sites
+origin**: a second hostname for the same stack, e.g. `https://sites.example.com`. On a split
 deployment (`app.` and `api.` hosts) the API host already is a separate origin.
 
 ### Rules added by the 2026-11-23 security review (release 2026.11.23.4)

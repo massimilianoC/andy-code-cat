@@ -30,7 +30,7 @@ let mongod: MongoMemoryServer;
 let app: Express;
 let superadminToken = "";
 
-const LIVE = { publishId: "ab12cd34", slug: "antares" };
+const LIVE = { publishId: "ab12cd34", slug: "my-site" };
 const BLOCKED = { publishId: "ef56gh78", slug: "sospeso" };
 
 function writeSite(publishId: string, title: string) {
@@ -70,7 +70,7 @@ describe("published site by slug — /{slug}/", () => {
             { _id: "d1", ...base, publishId: LIVE.publishId, customSlug: LIVE.slug, status: "live", url: `/p/${LIVE.publishId}` },
             { _id: "d2", ...base, projectId: "p2", publishId: BLOCKED.publishId, customSlug: BLOCKED.slug, status: "live", url: `/p/${BLOCKED.publishId}`, isAdminBlocked: true },
         ]);
-        writeSite(LIVE.publishId, "Antares live");
+        writeSite(LIVE.publishId, "My site live");
         writeSite(BLOCKED.publishId, "Blocked");
     });
 
@@ -91,7 +91,7 @@ describe("published site by slug — /{slug}/", () => {
     it("serves index.html at /{slug}/ with the published-page CSP and no-cache", async () => {
         const res = await request(app).get(`/${LIVE.slug}/`);
         expect(res.status).toBe(200);
-        expect(res.text).toContain("Antares live");
+        expect(res.text).toContain("My site live");
         expect(res.headers["content-type"]).toContain("text/html");
         expect(res.headers["cache-control"]).toBe("no-cache");
         expect(res.headers["content-security-policy"]).toContain("script-src 'self' https:");
@@ -113,7 +113,7 @@ describe("published site by slug — /{slug}/", () => {
     it("keeps answering the stored /p/{publishId}/ address", async () => {
         const res = await request(app).get(`/p/${LIVE.publishId}/`);
         expect(res.status).toBe(200);
-        expect(res.text).toContain("Antares live");
+        expect(res.text).toContain("My site live");
     });
 
     it("applies the same suspension rule on both addresses", async () => {
@@ -138,7 +138,7 @@ describe("published site by slug — /{slug}/", () => {
         // A reserved segment is not looked up as a slug: it falls through to the default 404.
         const login = await request(app).get("/login/");
         expect(login.status).toBe(404);
-        expect(login.text).not.toContain("Antares");
+        expect(login.text).not.toContain("My site");
 
         const v1 = await request(app).get("/v1/does-not-exist");
         expect(v1.status).not.toBe(200);
@@ -158,7 +158,7 @@ describe("published site by slug — /{slug}/", () => {
         expect(initial.body.publicSites).toEqual({ urlMode: "path", publicDomain: "", sitesOrigin: "" });
 
         const rejected = await request(app).patch("/v1/admin/config").set(auth)
-            .send({ publicSites: { urlMode: "subdomain", publicDomain: "andy.camillucci.com:8443" } });
+            .send({ publicSites: { urlMode: "subdomain", publicDomain: "app.example.test:8443" } });
         expect(rejected.status).toBe(400);
 
         const saved = await request(app).patch("/v1/admin/config").set(auth)
@@ -196,7 +196,7 @@ describe("published site by slug — /{slug}/", () => {
         // On the sites host itself it is served.
         const served = await request(app).get(`/${LIVE.slug}/`).set("X-Forwarded-Host", "sites.example.test");
         expect(served.status).toBe(200);
-        expect(served.text).toContain("Antares live");
+        expect(served.text).toContain("My site live");
 
         await request(app).patch("/v1/admin/config").set(auth).send({ publicSites: { urlMode: "path", publicDomain: "" } });
     });

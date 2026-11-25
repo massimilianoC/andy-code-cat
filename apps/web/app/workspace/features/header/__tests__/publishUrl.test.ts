@@ -26,8 +26,8 @@ describe("workspace public deployment URL", () => {
     it("uses the browser host when local compose is opened from the LAN", () => {
         expect(resolvePublicDeploymentUrl(deployment, {
             apiBaseUrl: "http://localhost:4000",
-            browserUrl: "http://192.168.1.25:8081/workspace/project-1",
-        })).toBe("http://192.168.1.25/p/f74d7bf6/");
+            browserUrl: "http://192.0.2.25:8081/workspace/project-1",
+        })).toBe("http://192.0.2.25/p/f74d7bf6/");
     });
 
     it("uses the configured API origin outside local compose", () => {
@@ -40,12 +40,12 @@ describe("workspace public deployment URL", () => {
     it("resolves a path-mode slug address against the API origin", () => {
         expect(resolvePublicDeploymentUrl({
             ...deployment,
-            customSlug: "antares",
-            publicUrl: "/antares/",
+            customSlug: "my-site",
+            publicUrl: "/my-site/",
         }, {
-            apiBaseUrl: "https://andy.camillucci.com:8443",
-            browserUrl: "https://andy.camillucci.com:8443/workspace/project-1",
-        })).toBe("https://andy.camillucci.com:8443/antares/");
+            apiBaseUrl: "https://app.example.test:8443",
+            browserUrl: "https://app.example.test:8443/workspace/project-1",
+        })).toBe("https://app.example.test:8443/my-site/");
     });
 
     it("uses an absolute subdomain-mode address as it is", () => {

@@ -167,7 +167,7 @@
 - Click `Sync presets → Mongo`
 - Expected: the preset seed is persisted and editable from the superadmin UI
 - Alternative CLI reseed: `npm run seed:presets`
-- Docker/Droplet reseed procedure: [`docs/runbooks/PRESET_RESEED.md`](PRESET_RESEED.md)
+- Docker and remote-server reseed procedure: [`docs/runbooks/PRESET_RESEED.md`](PRESET_RESEED.md)
 - Expected after current seed: `freerunner` and `data-dashboard` are present in admin but hidden from the standard dashboard picker (`isActive=false`)
 - Expected after current seed: preset default feature tags use the valid `feat:*` prefix
 - Change category, short hint, sort order, or recommended model for one preset and save

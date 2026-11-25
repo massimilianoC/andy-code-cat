@@ -24,7 +24,7 @@ describe("buildOptimizeUserPromptRequest", () => {
         it("injects the full project context so the optimizer can enrich a bare brief", () => {
             const { systemPrompt, userPrompt } = buildOptimizeUserPromptRequest({
                 rawPrompt: "a pitch deck about my certifications",
-                projectName: "Massimiliano Camillucci",
+                projectName: "Jane Doe",
                 projectType: "Presentation / Pitch",
                 moodboard,
                 layerDContext: "Extracted from CV.pdf: 12 years of experience.",
@@ -49,7 +49,7 @@ describe("buildOptimizeUserPromptRequest", () => {
         const followUp = () =>
             buildOptimizeUserPromptRequest({
                 rawPrompt: "vedo solo immagini non vedo testo, vorrei anche testo sintetico con buon contrasto",
-                projectName: "Massimiliano Camillucci",
+                projectName: "Jane Doe",
                 projectType: "Presentation / Pitch",
                 moodboard,
                 layerDContext: "Extracted from CV.pdf: 12 years of experience.",
