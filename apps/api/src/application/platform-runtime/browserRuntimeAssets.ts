@@ -184,3 +184,136 @@ export const PF_FORMS_MAILTO_V1 = String.raw`;(() => {
     },
   });
 })();`;
+
+/**
+ * Capture adapter: posts the declared fields, as JSON, to the same-origin submit path the platform
+ * wrote into the runtime config at publish time (`/p/{publishId}/_pf/forms/{formId}/submit`).
+ * Preview and ZIP have no backend and no submit URL: the form then says so and sends nothing —
+ * it never pretends to have saved. Events carry ids and outcomes, never submitted values.
+ */
+export const PF_FORMS_CAPTURE_V1 = String.raw`;(() => {
+  const runtime = window.PageForgeRuntime;
+  if (!runtime) return;
+  const italian = String(document.documentElement.lang || "it").toLowerCase().indexOf("it") === 0;
+  const MESSAGES = italian ? {
+    unavailable: "Questo modulo salva i dati solo sul sito pubblicato. In anteprima e nell'export ZIP l'invio non è attivo: nessun dato è stato inviato.",
+    sending: "Invio in corso…",
+    success: "Grazie, il modulo è stato inviato.",
+    invalid: "Alcuni campi non sono validi. Controlla i campi evidenziati e riprova.",
+    rateLimited: "Troppi invii in poco tempo. Attendi qualche minuto e riprova.",
+    failed: "Invio non riuscito: i dati non sono stati salvati. Riprova più tardi.",
+  } : {
+    unavailable: "This form saves data only on the published site. In preview and in the ZIP export sending is disabled: nothing was sent.",
+    sending: "Sending…",
+    success: "Thank you, the form has been sent.",
+    invalid: "Some fields are not valid. Check the highlighted fields and try again.",
+    rateLimited: "Too many submissions in a short time. Wait a few minutes and try again.",
+    failed: "Sending failed: your data was not saved. Please try again later.",
+  };
+  const setState = (form, state) => { form.setAttribute("data-pf-state", state); };
+  const setBusy = (form, busy) => {
+    form.setAttribute("aria-busy", busy ? "true" : "false");
+    form.querySelectorAll("button[type='submit']").forEach((button) => { button.disabled = busy; });
+  };
+  const clearInvalid = (form) => {
+    form.querySelectorAll("[aria-invalid='true']").forEach((node) => node.removeAttribute("aria-invalid"));
+  };
+  const markInvalid = (form, issues) => {
+    let first = null;
+    (Array.isArray(issues) ? issues : []).forEach((issue) => {
+      if (!issue || typeof issue.field !== "string" || !/^[a-z0-9-]+$/.test(issue.field)) return;
+      form.querySelectorAll("[name='" + issue.field + "']").forEach((node) => {
+        node.setAttribute("aria-invalid", "true");
+        if (!first && !node.closest("[hidden]")) first = node;
+      });
+    });
+    if (first && typeof first.focus === "function") first.focus();
+  };
+  // Without a submit URL (preview, ZIP) the notice is shown up front, not only after a click.
+  runtime.registerModule({
+    id: "forms-capture",
+    mount(core) {
+      const formsConfig = core.getConfig().forms;
+      if (!formsConfig || formsConfig.mode !== "capture" || formsConfig.submitUrls) return;
+      document.querySelectorAll("form[data-pf-form-runtime='service-manifest-v1']").forEach((form) => {
+        setState(form, "unavailable");
+        const status = form.querySelector(".pf-form__status");
+        if (status) status.textContent = MESSAGES.unavailable;
+      });
+    },
+  });
+  runtime.registerAdapter("capture", {
+    async deliver(context) {
+      const form = context.form;
+      const definition = context.definition;
+      const emit = (status, extra) => context.emit("pf:form-capture", Object.assign({ formId: definition.id, mode: "capture", status: status }, extra || {}), false);
+      try {
+        const urls = context.settings.submitUrls;
+        const url = urls && typeof urls === "object" ? urls[definition.id] : undefined;
+        if (typeof url !== "string" || url.indexOf("/p/") !== 0) {
+          setState(form, "unavailable");
+          context.showStatus(MESSAGES.unavailable);
+          emit("unavailable");
+          return;
+        }
+        if (form.getAttribute("aria-busy") === "true") return;
+        clearInvalid(form);
+        const fields = {};
+        definition.fields.forEach((field) => {
+          if (field.type === "checkbox") {
+            fields[field.id] = context.values.has(field.id);
+            return;
+          }
+          const raw = context.values.get(field.id);
+          if (typeof raw === "string" && raw.trim() !== "") fields[field.id] = raw;
+        });
+        const body = { fields: fields };
+        const honeypot = context.values.get("pf_hp");
+        if (typeof honeypot === "string" && honeypot !== "") body.hp = honeypot;
+
+        setBusy(form, true);
+        setState(form, "sending");
+        context.showStatus(MESSAGES.sending);
+        let response = null;
+        try {
+          response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify(body),
+            credentials: "omit",
+            cache: "no-store",
+            redirect: "error",
+          });
+        } catch (_) {
+          response = null;
+        }
+        setBusy(form, false);
+
+        if (response && (response.status === 201 || response.status === 202)) {
+          form.reset();
+          setState(form, "success");
+          context.showStatus(definition.successMessage || MESSAGES.success);
+          emit("stored");
+          return;
+        }
+        setState(form, "error");
+        if (response && response.status === 400) {
+          let payload = null;
+          try { payload = await response.json(); } catch (_) { payload = null; }
+          markInvalid(form, payload && payload.issues);
+          context.showStatus(MESSAGES.invalid);
+        } else if (response && response.status === 429) {
+          context.showStatus(MESSAGES.rateLimited);
+        } else {
+          context.showStatus(MESSAGES.failed);
+        }
+        emit("failed", { httpStatus: response ? response.status : 0 });
+      } catch (_) {
+        setBusy(form, false);
+        setState(form, "error");
+        context.showStatus(MESSAGES.failed);
+        emit("failed", { httpStatus: 0 });
+      }
+    },
+  });
+})();`;

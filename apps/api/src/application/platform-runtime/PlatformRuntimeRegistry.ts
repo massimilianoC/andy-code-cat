@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { RuntimeAssetV1, RuntimePlanV1 } from "@andy-code-cat/contracts";
-import { PF_FORMS_MAILTO_V1, PF_FORMS_UI_V1, PF_RUNTIME_CORE_V1 } from "./browserRuntimeAssets";
+import type { RuntimeAssetV1, RuntimeCapabilityV1, RuntimePlanV1 } from "@andy-code-cat/contracts";
+import { PF_FORMS_CAPTURE_V1, PF_FORMS_MAILTO_V1, PF_FORMS_UI_V1, PF_RUNTIME_CORE_V1 } from "./browserRuntimeAssets";
 
 export interface PlatformRuntimeModule {
     id: string;
@@ -20,6 +20,7 @@ const MODULES: readonly PlatformRuntimeModule[] = [
     { id: "runtime-core", version: "v1", fileName: "pf-runtime-core.v1.js", dependencies: [], content: PF_RUNTIME_CORE_V1 },
     { id: "forms-ui", version: "v1", fileName: "pf-forms-ui.v1.js", dependencies: ["runtime-core"], content: PF_FORMS_UI_V1 },
     { id: "forms-mailto", version: "v1", fileName: "pf-forms-mailto.v1.js", dependencies: ["runtime-core", "forms-ui"], content: PF_FORMS_MAILTO_V1 },
+    { id: "forms-capture", version: "v1", fileName: "pf-forms-capture.v1.js", dependencies: ["runtime-core", "forms-ui"], content: PF_FORMS_CAPTURE_V1 },
 ] as const;
 
 const MODULE_BY_ID = new Map(MODULES.map((module) => [module.id, module]));
@@ -77,6 +78,8 @@ function externalTag(asset: RuntimeAssetV1): string {
 
 export function buildPlatformRuntimePackage(input: {
     moduleIds: readonly string[];
+    /** Capabilities the plan declares, e.g. forms in mailto or capture mode. */
+    capabilities: readonly RuntimeCapabilityV1[];
     publicConfig: Record<string, unknown>;
     delivery: "inline-preview" | "external-files";
 }): PlatformRuntimePackage {
@@ -113,7 +116,7 @@ export function buildPlatformRuntimePackage(input: {
     return {
         plan: {
             version: "runtime-plan-v1",
-            capabilities: [{ id: "forms", mode: "mailto", manifestVersion: "service-manifest-v1" }],
+            capabilities: input.capabilities.map((capability) => ({ ...capability })),
             assets,
         },
         files,

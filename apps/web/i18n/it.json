@@ -559,12 +559,18 @@
     "presetActive": "Preset attivo — brief e tag pre-compilati.",
     "forms": {
       "title": "Form operativi",
-      "subtitle": "Consegna e privacy configurate per progetto",
+      "open": "Form",
       "enabled": "Attivo",
       "disabled": "Disattivo",
       "enable": "Attiva",
       "disable": "Disattiva",
       "explanation": "La LLM definisce solo la struttura del form. Destinatario e privacy restano configurazione privata del progetto e vengono applicati deterministicamente in anteprima, pubblicazione ed export.",
+      "mode": "Consegna",
+      "modeCapture": "Salva gli invii",
+      "modeMailto": "Apri l'app email del visitatore",
+      "captureExplanation": "Gli invii sul sito pubblicato vengono validati e salvati per te; puoi consultarli, esportarli o eliminarli nel pannello dati del progetto. In anteprima e nell'export ZIP il form non invia nulla e lo segnala.",
+      "mailtoExplanation": "Il form apre nell'app email del visitatore una email precompilata per il destinatario. La piattaforma non salva nulla.",
+      "republishHint": "Le modifiche arrivano al sito pubblicato alla prossima pubblicazione.",
       "recipient": "Email destinatario",
       "controller": "Titolare del trattamento",
       "privacyContact": "Email contatto privacy",
@@ -574,7 +580,8 @@
       "saving": "Salvataggio…",
       "saved": "Configurazione del servizio form salvata.",
       "loadError": "Impossibile caricare la configurazione del servizio form.",
-      "saveError": "Impossibile salvare la configurazione del servizio form."
+      "saveError": "Impossibile salvare la configurazione del servizio form.",
+      "close": "Chiudi"
     },
     "media": {
       "title": "Media di progetto",

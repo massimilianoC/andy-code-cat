@@ -1,3 +1,4 @@
+import { FORM_HONEYPOT_FIELD } from "@andy-code-cat/contracts";
 import type { FormDefinitionV1, FormFieldV1, ProjectFormSettingsInput, ServiceManifestV1 } from "@andy-code-cat/contracts";
 import {
     buildPlatformRuntimePackage,
@@ -8,9 +9,13 @@ import type {
     FormRuntimeAdapter,
     FormRuntimeArtifacts,
     FormRuntimeCompileResult,
+    FormRuntimeContext,
     FormRuntimeMarkupResult,
     PlatformRuntimeDelivery,
 } from "./FormRuntimeAdapter";
+
+type MailtoFormSettings = Extract<ProjectFormSettingsInput, { mode: "mailto" }>;
+type CaptureFormSettings = Extract<ProjectFormSettingsInput, { mode: "capture" }>;
 export type { FormRuntimeArtifacts, FormRuntimeCompileResult } from "./FormRuntimeAdapter";
 
 const RUNTIME_MARKER = "data-pf-form-runtime=\"service-manifest-v1\"";
@@ -108,16 +113,39 @@ function renderForm(form: FormDefinitionV1, settings: ProjectFormSettingsInput):
   ${form.description ? `<p class='pf-form__intro'>${escapeHtml(form.description)}</p>` : ""}
   ${form.steps.length > 1 ? `<p class='pf-form__progress' aria-live='polite'>Passaggio <span data-pf-step-current>1</span> di ${form.steps.length}</p>` : ""}
   ${steps}
+  ${settings.mode === "capture" ? HONEYPOT_MARKUP : ""}
   <p class='pf-form__privacy'>I dati saranno trattati da ${escapeHtml(settings.privacyNotice.controllerName)} secondo la <a href='${escapeHtml(settings.privacyNotice.url)}' target='_blank' rel='noopener noreferrer'>privacy policy</a>.</p>
   <p class='pf-form__status' aria-live='polite' role='status'></p>
 </form>`;
 }
 
+/**
+ * Capture only: an input people do not see or reach (off-screen, aria-hidden, no tab stop) and
+ * bots tend to fill. The server answers a filled honeypot with 202 and stores nothing.
+ * The hiding style is inline as well as in RUNTIME_CSS: an artifact whose stylesheet already
+ * carries an older copy of the form CSS does not get RUNTIME_CSS appended again.
+ */
+const HONEYPOT_MARKUP = `<div class='pf-form__hp' aria-hidden='true' style='position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden'><label>Website<input type='text' name='${FORM_HONEYPOT_FIELD}' tabindex='-1' autocomplete='off' value=''></label></div>`;
+
 const RUNTIME_CSS = `
-.pf-form{display:grid;gap:1rem;max-width:42rem}.pf-form__step{display:grid;gap:1rem;border:0;padding:0;margin:0}.pf-form__step[hidden]{display:none}.pf-form__field{display:grid;gap:.4rem}.pf-form__label,.pf-form legend{font-weight:600}.pf-form input,.pf-form select,.pf-form textarea{width:100%;box-sizing:border-box}.pf-form__choice{display:flex;gap:.5rem;align-items:flex-start}.pf-form__choice input{width:auto;margin-top:.25rem}.pf-form__description,.pf-form__privacy,.pf-form__status,.pf-form__progress{margin:0;color:inherit;opacity:.8}.pf-form__actions{display:flex;gap:.75rem}.pf-form__actions button{cursor:pointer}.pf-form__manual-copy{display:grid;gap:.5rem}.pf-form__manual-copy textarea{width:100%;box-sizing:border-box}
+.pf-form{display:grid;gap:1rem;max-width:42rem}.pf-form__step{display:grid;gap:1rem;border:0;padding:0;margin:0}.pf-form__step[hidden]{display:none}.pf-form__field{display:grid;gap:.4rem}.pf-form__label,.pf-form legend{font-weight:600}.pf-form input,.pf-form select,.pf-form textarea{width:100%;box-sizing:border-box}.pf-form__choice{display:flex;gap:.5rem;align-items:flex-start}.pf-form__choice input{width:auto;margin-top:.25rem}.pf-form__description,.pf-form__privacy,.pf-form__status,.pf-form__progress{margin:0;color:inherit;opacity:.8}.pf-form__actions{display:flex;gap:.75rem}.pf-form__actions button{cursor:pointer}.pf-form__manual-copy{display:grid;gap:.5rem}.pf-form__manual-copy textarea{width:100%;box-sizing:border-box}.pf-form__hp{position:absolute!important;left:-10000px!important;top:auto;width:1px;height:1px;overflow:hidden}.pf-form [aria-invalid='true']{outline:2px solid currentColor;outline-offset:2px}.pf-form[aria-busy='true']{opacity:.7}
 `;
 
-function buildPublicConfig(manifest: ServiceManifestV1, settings: ProjectFormSettingsInput): Record<string, unknown> {
+function publicDefinitions(manifest: ServiceManifestV1) {
+    return manifest.forms.map((form) => ({
+        id: form.id,
+        title: form.title,
+        successMessage: form.successMessage,
+        fields: form.steps.flatMap((step) => step.fields).map((field) => ({
+            id: field.id,
+            label: field.label,
+            type: field.type,
+            required: field.required,
+        })),
+    }));
+}
+
+function buildMailtoPublicConfig(manifest: ServiceManifestV1, settings: MailtoFormSettings): Record<string, unknown> {
     return {
         version: "platform-runtime-config-v1",
         forms: {
@@ -125,32 +153,49 @@ function buildPublicConfig(manifest: ServiceManifestV1, settings: ProjectFormSet
             mode: "mailto",
             recipientEmail: settings.recipientEmail,
             mailtoMaxUriChars: 1800,
-            definitions: manifest.forms.map((form) => ({
-                id: form.id,
-                title: form.title,
-                successMessage: form.successMessage,
-                fields: form.steps.flatMap((step) => step.fields).map((field) => ({
-                    id: field.id,
-                    label: field.label,
-                    type: field.type,
-                    required: field.required,
-                })),
-            })),
+            definitions: publicDefinitions(manifest),
+        },
+    };
+}
+
+/** Same-origin submit path of a published form (FORMS_CAPTURE.md). */
+export function formCaptureSubmitPath(publishId: string, formId: string): string {
+    return `/p/${publishId}/_pf/forms/${formId}/submit`;
+}
+
+/**
+ * Capture config: no recipient, nothing secret. `submitUrls` exists only for a published site;
+ * without it (preview, ZIP) the runtime says the form saves only on the published site.
+ */
+function buildCapturePublicConfig(manifest: ServiceManifestV1, context: FormRuntimeContext): Record<string, unknown> {
+    const publishId = context.publishId;
+    return {
+        version: "platform-runtime-config-v1",
+        forms: {
+            enabled: true,
+            mode: "capture",
+            submitUrls: publishId
+                ? Object.fromEntries(manifest.forms.map((form) => [form.id, formCaptureSubmitPath(publishId, form.id)]))
+                : null,
+            definitions: publicDefinitions(manifest),
         },
     };
 }
 
 /**
- * Deterministically replaces declared slots with a portable mailto form.
- * It has no network behaviour and is deliberately independent from Express,
- * MongoDB, and React so the same result can be used by preview, publish and ZIP.
+ * Deterministically replaces declared slots with platform-rendered forms. It has no network
+ * behaviour and is deliberately independent from Express, MongoDB, and React so the same result
+ * can be used by preview, publish and ZIP. The delivery mode only chooses the browser module and
+ * its public config.
  */
-function compileMailtoMarkup(
+function compileFormMarkup(
     artifacts: FormRuntimeArtifacts,
     manifest: ServiceManifestV1 | undefined,
-    settings: ProjectFormSettingsInput | undefined,
+    settings: ProjectFormSettingsInput,
+    runtimeModuleId: string,
+    buildPublicConfig: (manifest: ServiceManifestV1) => Record<string, unknown>,
 ): FormRuntimeMarkupResult {
-    if (!manifest || !settings?.enabled) {
+    if (!manifest || !settings.enabled) {
         return {
             artifacts: { ...artifacts },
             compiledFormIds: [],
@@ -162,8 +207,8 @@ function compileMailtoMarkup(
         return {
             artifacts: { ...artifacts },
             compiledFormIds: manifest.forms.map((form) => form.id),
-            runtimeModuleIds: ["forms-mailto"],
-            publicConfig: buildPublicConfig(manifest, settings),
+            runtimeModuleIds: [runtimeModuleId],
+            publicConfig: buildPublicConfig(manifest),
         };
     }
 
@@ -176,7 +221,7 @@ function compileMailtoMarkup(
             throw Object.assign(new Error(`Form slot missing for service manifest form '${form.id}'`), { statusCode: 422 });
         }
         if (slots.length > 1) {
-            throw Object.assign(new Error(`Form '${form.id}' has multiple slots; form instances are not supported in mailto v1`), { statusCode: 422 });
+            throw Object.assign(new Error(`Form '${form.id}' has multiple slots; form instances are not supported in v1`), { statusCode: 422 });
         }
         html = html.replace(new RegExp(slotSource, "i"), renderForm(form, settings));
         compiledFormIds.push(form.id);
@@ -192,41 +237,60 @@ function compileMailtoMarkup(
             js: artifacts.js,
         },
         compiledFormIds,
-        runtimeModuleIds: ["forms-mailto"],
-        publicConfig: buildPublicConfig(manifest, settings),
+        runtimeModuleIds: [runtimeModuleId],
+        publicConfig: buildPublicConfig(manifest),
     };
 }
 
-export const mailtoFormRuntimeAdapter: FormRuntimeAdapter<ProjectFormSettingsInput> = {
+export const mailtoFormRuntimeAdapter: FormRuntimeAdapter<MailtoFormSettings> = {
     mode: "mailto",
-    compileMarkup: (artifacts, manifest, settings) => compileMailtoMarkup(artifacts, manifest, settings),
+    compileMarkup: (artifacts, manifest, settings) =>
+        compileFormMarkup(artifacts, manifest, settings, "forms-mailto", (resolved) => buildMailtoPublicConfig(resolved, settings)),
 };
 
-const FORM_RUNTIME_ADAPTERS: readonly FormRuntimeAdapter[] = [mailtoFormRuntimeAdapter];
+export const captureFormRuntimeAdapter: FormRuntimeAdapter<CaptureFormSettings> = {
+    mode: "capture",
+    compileMarkup: (artifacts, manifest, settings, context) =>
+        compileFormMarkup(artifacts, manifest, settings, "forms-capture", (resolved) => buildCapturePublicConfig(resolved, context)),
+};
+
+/** The registered adapters: settings.mode selects exactly one; there is no fallback. */
+function compileMarkupForSettings(
+    artifacts: FormRuntimeArtifacts,
+    manifest: ServiceManifestV1 | undefined,
+    settings: ProjectFormSettingsInput,
+    context: FormRuntimeContext,
+): FormRuntimeMarkupResult {
+    switch (settings.mode) {
+        case "mailto": return mailtoFormRuntimeAdapter.compileMarkup(artifacts, manifest, settings, context);
+        case "capture": return captureFormRuntimeAdapter.compileMarkup(artifacts, manifest, settings, context);
+        default: {
+            const mode = (settings as { mode?: unknown }).mode;
+            throw Object.assign(new Error(`Unsupported form runtime mode '${String(mode)}'`), { statusCode: 422 });
+        }
+    }
+}
 
 /** Selects an explicitly registered platform adapter from owner settings. */
 export function compileConfiguredForms(
     artifacts: FormRuntimeArtifacts,
     manifest: ServiceManifestV1 | undefined,
     settings: ProjectFormSettingsInput | undefined,
-    options: { delivery?: PlatformRuntimeDelivery } = {},
+    options: { delivery?: PlatformRuntimeDelivery; publishId?: string } = {},
 ): FormRuntimeCompileResult {
     if (!settings) return { artifacts: { ...artifacts }, compiledFormIds: [], runtimeFiles: {} };
-    const adapter = FORM_RUNTIME_ADAPTERS.find((candidate) => candidate.mode === settings.mode);
-    if (!adapter) {
-        throw Object.assign(new Error(`Unsupported form runtime mode '${settings.mode}'`), { statusCode: 422 });
-    }
     const cleanArtifacts = {
         ...artifacts,
         html: stripPlatformRuntimeTags(artifacts.html),
         js: stripLegacyConcatenatedMailtoRuntime(artifacts.js),
     };
-    const markup = adapter.compileMarkup(cleanArtifacts, manifest, settings);
+    const markup = compileMarkupForSettings(cleanArtifacts, manifest, settings, { publishId: options.publishId });
     if (markup.runtimeModuleIds.length === 0) {
         return { artifacts: markup.artifacts, compiledFormIds: markup.compiledFormIds, runtimeFiles: {} };
     }
     const runtime = buildPlatformRuntimePackage({
         moduleIds: markup.runtimeModuleIds,
+        capabilities: [{ id: "forms", mode: settings.mode, manifestVersion: "service-manifest-v1" }],
         publicConfig: markup.publicConfig,
         delivery: options.delivery ?? "inline-preview",
     });
@@ -245,7 +309,7 @@ export function compileMailtoForms(
     artifacts: FormRuntimeArtifacts,
     manifest: ServiceManifestV1 | undefined,
     settings: ProjectFormSettingsInput | undefined,
-    options: { delivery?: PlatformRuntimeDelivery } = {},
+    options: { delivery?: PlatformRuntimeDelivery; publishId?: string } = {},
 ): FormRuntimeCompileResult {
     return compileConfiguredForms(artifacts, manifest, settings, options);
 }
