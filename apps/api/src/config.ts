@@ -53,7 +53,7 @@ const envSchema = z.object({
      */
     LLM_FOCUS_HISTORY_MODE: z.enum(["full", "user_only", "none"]).default("none"),
     LLM_MAX_COMPLETION_TOKENS: z.coerce.number().int().positive().default(167000),
-    LMSTUDIO_BASE_URL: z.string().url().default("http://192.168.1.78:1234/v1"),
+    LMSTUDIO_BASE_URL: z.string().url().default("http://localhost:1234/v1"),
     SILICONFLOW_BASE_URL: z.string().url().default("https://api.siliconflow.com/v1"),
     SILICONFLOW_API_KEY: z.string().optional(),
     SILICONFLOW_IMAGE_MODEL: z.string().default(DEFAULT_SILICONFLOW_IMAGE_MODEL),
@@ -131,6 +131,42 @@ const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
     console.error("Invalid environment configuration", parsed.error.format());
     process.exit(1);
+}
+
+/**
+ * Insecure defaults that are convenient in development and dangerous in production. They are
+ * reported loudly at boot instead of failing it, so an existing deployment that relies on one
+ * keeps running while its operator fixes the env file. install.sh never produces any of them.
+ */
+export function insecureProductionSettings(data: {
+    NODE_ENV: string;
+    CORS_ORIGIN: string;
+    EXPORT_JWT_SECRET: string;
+    STORAGE_ADAPTER: string;
+    MINIO_ACCESS_KEY?: string;
+    MINIO_SECRET_KEY?: string;
+}): string[] {
+    if (data.NODE_ENV !== "production") return [];
+    const warnings: string[] = [];
+    if (data.CORS_ORIGIN.split(",").some((origin) => origin.trim() === "*")) {
+        warnings.push(
+            "CORS_ORIGIN contains \"*\": the app hosts cannot be identified, so published sites may run on the app's origin. Set CORS_ORIGIN to the web app URL(s).",
+        );
+    }
+    if (data.EXPORT_JWT_SECRET === "change-me-export-secret-32chars!!") {
+        warnings.push("EXPORT_JWT_SECRET uses the public default: export download links can be forged. Set a random value (openssl rand -hex 32).");
+    }
+    if (
+        data.STORAGE_ADAPTER === "minio" &&
+        ((data.MINIO_ACCESS_KEY?.trim() || "minioadmin") === "minioadmin" || (data.MINIO_SECRET_KEY?.trim() || "minioadmin") === "minioadmin")
+    ) {
+        warnings.push("MinIO uses the public minioadmin credentials. Set MINIO_ACCESS_KEY and MINIO_SECRET_KEY.");
+    }
+    return warnings;
+}
+
+for (const warning of insecureProductionSettings(parsed.data)) {
+    console.error(`[config] INSECURE PRODUCTION SETTING — ${warning}`);
 }
 
 export const env = {
