@@ -110,6 +110,20 @@ else
     JWT_ACCESS_SECRET=$(openssl rand -hex 32)
     JWT_REFRESH_SECRET=$(openssl rand -hex 32)
     EXPORT_SECRET=$(openssl rand -hex 32)
+    # MinIO is optional (compose profile "minio"); generate real credentials anyway so that
+    # enabling it later never starts with the public minioadmin/minioadmin default.
+    MINIO_ACCESS_KEY="andy-$(openssl rand -hex 6)"
+    MINIO_SECRET_KEY=$(openssl rand -hex 24)
+
+    # Default provider follows the key that was actually provided. Document enrichment runs on
+    # SiliconFlow models; without a SiliconFlow key it falls back to parsing only.
+    if [[ -n "$SILICONFLOW_API_KEY" ]]; then
+        LLM_DEFAULT_PROVIDER="siliconflow"
+        ENRICHMENT_LLM="true"
+    else
+        LLM_DEFAULT_PROVIDER="openrouter"
+        ENRICHMENT_LLM="false"
+    fi
 
     if [[ "$MODE" == "local" ]]; then
         NEXT_PUBLIC_API_URL="http://localhost"
@@ -134,7 +148,6 @@ AUTH_BYPASS_EMAIL_VERIFICATION=false
 # ── Database (Docker-internal — do not change) ───────────────────────────────
 MONGODB_URI=mongodb://mongodb:27017/andy-code-cat
 MONGODB_DB_NAME=andy-code-cat
-REDIS_URL=redis://redis:6379
 
 # ── Ports ─────────────────────────────────────────────────────────────────────
 API_PORT=4000
@@ -148,7 +161,7 @@ NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 # ── LLM ───────────────────────────────────────────────────────────────────────
 LLM_CATALOG_SOURCE=env
 LLM_AUTO_SEED_ON_STARTUP=true
-LLM_DEFAULT_PROVIDER=siliconflow
+LLM_DEFAULT_PROVIDER=${LLM_DEFAULT_PROVIDER}
 LLM_CONTEXT_MAX_CHARS=64000
 LLM_ARTIFACT_CONTEXT_MAX_CHARS=16000
 LLM_MAX_HISTORY_MESSAGES=12
@@ -173,8 +186,10 @@ COST_POLICY_USD_TO_EUR_RATE=0.92
 COST_POLICY_PROVIDER_MARKUP_FACTOR=1.1
 
 # ── Storage ───────────────────────────────────────────────────────────────────
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
+# local = files under ./data (default). minio = start the "minio" compose profile first.
+STORAGE_ADAPTER=local
+MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
 MINIO_ENDPOINT=${MINIO_ENDPOINT}
 EXPORT_JWT_SECRET=${EXPORT_SECRET}
 EXPORT_DOWNLOAD_TTL=3600
@@ -183,10 +198,10 @@ UPLOAD_MAX_SIZE_BYTES=20971520
 # ── Document Context Layer (DCL) enrichment ───────────────────────────────────
 ENRICHMENT_ENABLED=true
 ENRICHMENT_DOCUMENT_PARSING=true
-ENRICHMENT_DOCUMENT_LLM_PASS=true
+ENRICHMENT_DOCUMENT_LLM_PASS=${ENRICHMENT_LLM}
 ENRICHMENT_TEXT_PROVIDER=siliconflow
 ENRICHMENT_TEXT_MODEL=Qwen/Qwen2.5-72B-Instruct
-ENRICHMENT_IMAGE_ANALYSIS=true
+ENRICHMENT_IMAGE_ANALYSIS=${ENRICHMENT_LLM}
 ENRICHMENT_VISION_PROVIDER=siliconflow
 ENRICHMENT_VISION_MODEL=Qwen/Qwen2.5-VL-72B-Instruct
 ENRICHMENT_INJECT_LAYER_D=true
@@ -428,28 +443,25 @@ fi
 hr
 echo ""
 if [[ "$MODE" == "local" ]]; then
-    echo -e "${GREEN}${BOLD}  Installation complete!${RESET}"
-    echo ""
-    echo -e "  Open the setup wizard:   ${BOLD}http://localhost/install${RESET}"
-    echo ""
-    echo "  The wizard will guide you through:"
-    echo "    1. Creating your superadmin account"
-    echo "    2. Configuring the platform"
-    echo ""
-    echo "  After setup, the app is at:  http://localhost"
+    APP_URL="http://localhost"
 else
-    echo -e "${GREEN}${BOLD}  Installation complete!${RESET}"
-    echo ""
-    echo -e "  Open the setup wizard:   ${BOLD}https://app.${DOMAIN}/install${RESET}"
-    echo ""
-    echo "  The wizard will guide you through:"
-    echo "    1. Creating your superadmin account"
-    echo "    2. Configuring the platform"
-    echo ""
-    echo "  After setup:"
-    echo "    App:  https://app.${DOMAIN}"
-    echo "    API:  https://api.${DOMAIN}"
+    APP_URL="https://app.${DOMAIN}"
 fi
+echo -e "${GREEN}${BOLD}  Installation complete!${RESET}"
+echo ""
+echo -e "  App:  ${BOLD}${APP_URL}${RESET}"
+if [[ "$MODE" == "domain" ]]; then
+    echo "  API:  https://api.${DOMAIN}"
+fi
+echo ""
+echo "  Create the first superadmin:"
+echo "    1. Register an account at ${APP_URL}/register"
+echo "    2. Verify and promote it (replace the e-mail address):"
+echo "       docker exec andy-code-cat-mongodb mongosh andy-code-cat --quiet --eval \\"
+echo "         'db.users.updateOne({ email: \"you@example.com\" }, { \$set: { roles: [\"superadmin\"], emailVerified: true } })'"
+echo "    3. Log in at ${APP_URL}/login and open ${APP_URL}/admin"
+echo "  Accounts registered later can log in once a superadmin marks them verified in /admin/users"
+echo "  (no verification e-mail is sent). Close self-registration in /admin/config if you prefer."
 echo ""
 echo "  Useful commands:"
 echo "    Logs:          docker compose ${COMPOSE_FILES} logs -f api"
