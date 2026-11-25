@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Link2, Trash2, FileText, Globe, Bookmark } from "lucide-react";
+import { Upload, Link2, Trash2, FileText, Globe, Bookmark, Database } from "lucide-react";
 import {
     getProjectMoodboard,
     updateProjectMoodboard,
@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { BrandAssetsManager } from "@/components/brand/BrandAssetsManager";
 import { ProjectFormSettingsPanel } from "@/components/forms/ProjectFormSettingsPanel";
+import ProjectDataDialog from "@/components/projectData/ProjectDataDialog";
 
 // ── Tag category → moodboard field mapping ────────────────────────────────────
 
@@ -327,6 +328,7 @@ export default function ProjectConfigPopup({
     const [urlLabel, setUrlLabel] = useState("");
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
+    const [dataOpen, setDataOpen] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -735,6 +737,13 @@ export default function ProjectConfigPopup({
                     )}
 
                     <DialogFooter className="px-6 py-4 border-t border-border shrink-0">
+                        {/* Left side: project tools that open their own modal. */}
+                        <div className="flex gap-2 sm:mr-auto">
+                            <Button variant="outline" className="gap-1.5" onClick={() => setDataOpen(true)}>
+                                <Database className="w-4 h-4" aria-hidden="true" />
+                                {t("config.openData")}
+                            </Button>
+                        </div>
                         <Button variant="ghost" onClick={onClose} disabled={saving}>
                             {t("config.cancel")}
                         </Button>
@@ -744,6 +753,7 @@ export default function ProjectConfigPopup({
                     </DialogFooter>
                 </div>
             </DialogContent>
+            <ProjectDataDialog projectId={projectId} open={open && dataOpen} onClose={() => setDataOpen(false)} />
         </Dialog>
     );
 }
