@@ -19,6 +19,7 @@ import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositori
 import { MongoDidacticArtifactKnowledgeRepository } from "../../../infra/repositories/MongoDidacticArtifactKnowledgeRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
+import { MongoLeaderboardRepository } from "../../../infra/repositories/MongoLeaderboardRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { GetZeroEffortRecoveryStatus } from "../../../application/use-cases/GetZeroEffortRecoveryStatus";
 import { DiscardPendingProject } from "../../../application/use-cases/DiscardPendingProject";
@@ -81,6 +82,7 @@ export function createRecoveryRoutes(): Router {
             new MongoProjectAssetRepository(),
             new MongoSiteDeploymentRepository(),
             getFileStorage(),
+            new MongoLeaderboardRepository(),
         ),
     );
 

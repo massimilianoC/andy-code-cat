@@ -10,6 +10,14 @@ database.
 
 ---
 
+## 2026.11.25.5 — Hotfix
+
+- Deleting a project now also deletes its leaderboard scores. In 2026.11.25.4 they were left
+  behind in `leaderboard_scores`. Scores already orphaned by a deletion on 2026.11.25.4 can be
+  removed with `db.leaderboard_scores.deleteMany({ projectId: { $nin: <ids of existing projects> } })`.
+
+---
+
 ## 2026.11.25.4 — Andy Arcade (MVP)
 
 ### Features

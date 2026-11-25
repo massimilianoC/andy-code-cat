@@ -76,6 +76,12 @@ export class MongoLeaderboardRepository implements LeaderboardRepository {
         return result.deletedCount === 1;
     }
 
+    async deleteAllForProject(ownerUserId: string, projectId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ ownerUserId, projectId });
+        return result.deletedCount;
+    }
+
     async prune(scope: LeaderboardScope, keep: number): Promise<number> {
         const col = await this.col();
         const cutoff = await col.find(scopeFilter(scope)).sort({ score: -1, createdAt: 1 }).skip(keep).project({ _id: 1 }).toArray();
