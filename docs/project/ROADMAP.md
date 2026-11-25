@@ -337,7 +337,10 @@ Targeted robustness pass on existing implementations (no new features):
 
 ### Async Project Orchestration & Resumable Generation
 
-**Status: ⏸ Deferred for a future cycle.**
+**Status: partly delivered.** The Vibe flow runs in the background since releases
+2026.11.24.2–2026.11.24.4 (worker service, MongoDB queue, progress in the notification manager, run
+limits): see [BACKGROUND_RUNS.md](../specs/BACKGROUND_RUNS.md). Still open for the workspace's own
+generations:
 
 - [ ] Project-level background job orchestration for long-running prompt/artifact generation
 - [ ] Dashboard project-card running state (spinner/badge)
@@ -347,6 +350,29 @@ Targeted robustness pass on existing implementations (no new features):
 **Why deferred now**
 
 - High UX value, but also high regression risk around concurrency, snapshot ordering, cancel/resume semantics, and state consistency between workspace, dashboard, and persisted jobs.
+
+### Nice to have — ideas from retired branches (2026-11-25)
+
+Branches that sat unmerged for months were reviewed against `develop` on 2026-11-25. What was still
+valid and tested was ported; what follows was not worth porting as written, but the idea stands.
+
+- [ ] **User model preference as a selection tier.** `UserPreferences.preferredProvider/preferredModel`
+  is stored (`PUT /v1/users/me/preferences`) but nothing reads it. Wire it between an explicit
+  per-call choice and the per-task platform default, once a settings UI lets users set it — and
+  decide how it applies to background runs. (From `fix/model-selection-ssot-consolidation`.)
+- [ ] **Live URL in the superadmin projects table.** Show each project's public site address in the
+  list, not only in the side panel, using `resolvePublicSiteAddress`. (From
+  `copilot/link-full-slug-url-superadmin`, written for the old `subdomainUrl` model.)
+- [ ] **Lighter dashboard background.** The VibeCore background animates 16 blurred orbs: fewer
+  orbs, pausing when off-screen (`IntersectionObserver`) and honouring `prefers-reduced-motion`
+  would cut GPU load on low-end devices. (From `copilot/fix-dashboard-performance-issues`.)
+- [ ] **Icon clear button inside the workspace chat input**, next to the existing text "Clear"
+  action. Cosmetic. (From `copilot/add-clear-in-chat-input`.)
+
+Retired without a note, because develop already does it another way: the active-version
+precondition of `fix/preview-snapshot-concurrency-guard` (covered by AL-041 stale-base refusal on
+every write path, WYSIWYG included), the Redis removals, the translation branch, and two old release
+branches whose commits are all on `develop`.
 
 ---
 
