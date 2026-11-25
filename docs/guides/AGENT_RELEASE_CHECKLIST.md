@@ -7,9 +7,9 @@ Use this checklist when an agent prepares a feature branch, release branch, hotf
 Run `git fetch origin --prune` before making or reporting any claim about what is merged,
 released, or deployed. A stale local `main`/`develop` ref produces confidently wrong conclusions
 (see `docs/guides/GITFLOW_RELEASE_POLICY.md` §"Preventing Commit Regressions"). If a file under
-`nginx/sites-enabled/`, `docker-compose.droplet.yml`, `.env.droplet`, or `scripts/*-droplet.sh`
-is being touched, read that same section before editing it — those files are intentionally
-gitignored from `origin` and need the private remote, not a normal PR.
+`nginx/sites-enabled/` (other than `local.conf`), `.deploy/`, or any other host-specific deploy
+file is being touched, read that same section before editing it — those files are intentionally
+gitignored from `origin` and belong to the operator's private configuration, not a normal PR.
 
 ## 1. Confirm Scope
 
@@ -130,20 +130,19 @@ deploy operation** — it is not optional and must not be deferred:
   other preset content change (prompt modules, templates) is NOT covered and will keep serving
   stale prompts until reseed.
 
-Production (droplet):
+On every deployed stack, after the new API image is running:
 
 ```bash
-npm run droplet:deploy
-npm run droplet:seed -- --only-presets
+docker exec andy-code-cat-api node apps/api/dist/scripts/seed-presets.js
 ```
 
-Local deploy stack: see `docs/runbooks/PRESET_RESEED.md` for the per-stack commands and
+See `docs/runbooks/PRESET_RESEED.md` for the per-stack commands and
 verification steps (including the `viewportModel` check).
 
 ### Published-site address setting — binding once, for deployments that used `PUBLIC_DOMAIN`
 
 The release that introduced `PlatformConfig.publicSites` removed the `PUBLIC_DOMAIN` environment
-variable. A deployment that had it set (subdomain links, e.g. the droplet) shows path addresses
+variable. A deployment that had it set (subdomain links) shows path addresses
 until the setting is saved — sites keep being served either way. In the same deploy operation:
 
 ```bash

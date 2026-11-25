@@ -130,22 +130,19 @@ file already exists, but will still rebuild and restart containers.
 
 Full guide: `docs/guides/LOCAL_DOCKER_START.md`
 
-### After install — complete the setup wizard
+### After install — create the first superadmin
 
 After `install.sh` completes, the platform is uninitialized (no superadmin account exists).
+The operator registers an account at `/register`, then verifies and promotes it with the
+`mongosh` command that `install.sh` prints at the end (`roles: ["superadmin"], emailVerified: true`).
 
-- **Local:** navigate to `http://localhost/install`
-- **Domain:** navigate to `https://app.DOMAIN/install`
-
-The wizard creates the first superadmin, seeds `PlatformConfig`, and locks permanently.
-The system is considered installed when `existsWithRole("superadmin")` returns true.
-
-Full spec: `docs/specs/FIRST_INSTALL_SETUP_SPEC.md`
+The guided `/install` wizard is specified in `docs/specs/FIRST_INSTALL_SETUP_SPEC.md` but is not
+implemented yet — do not send operators to it.
 
 ### What Claude agents must NOT do
 
 - Do not create superadmin accounts via seed scripts on a production or deploy stack.
-  The `/install` wizard is the only supported path.
+  The operator's register-and-promote step is the supported path.
 - Do not call `npm run seed` on a deploy stack without explicit operator instruction.
   `seed.ts` is for dev stacks only (creates a test user + project).
 - Do not modify `.env.docker` after generation by `install.sh` without operator confirmation.

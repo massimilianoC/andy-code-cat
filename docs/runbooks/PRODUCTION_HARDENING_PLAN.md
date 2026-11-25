@@ -98,7 +98,7 @@ This plan is intentionally **non-invasive**:
 
 ## Nginx / Deploy Best Practices
 
-These are recommended for the droplet or production reverse proxy setup.
+These are recommended for any production reverse proxy setup.
 
 ### Reverse proxy rules
 
@@ -119,8 +119,9 @@ Use conservative but realistic upstream timeouts for chat/stream endpoints:
 - deploy frontend and API together when route contracts changed
 - validate the correct public origin is present in `CORS_ORIGIN`
 - after env changes, restart only the target service with `--no-deps`
-- when droplet SSH is flaky or load is high, use the one-service-at-a-time
-  [Droplet manual deploy runbook](DROPLET_MANUAL_DEPLOY.md) instead of the full deploy script
+- when the server is under load or SSH is unreliable, update one service at a time
+  (`docker compose -f docker-compose.deploy.yml up -d --no-deps <service>`) and verify each
+  before moving on
 
 ### Verification checklist
 

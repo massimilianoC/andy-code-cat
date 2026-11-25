@@ -5,7 +5,7 @@ name: andy-code-cat
 
 services:
   workspace:
-    image: node:20-alpine
+    image: node:22.23.5-alpine
     container_name: andy-code-cat-workspace
     working_dir: /workspace
     command: ["sh", "-c", "tail -f /dev/null"]
@@ -18,27 +18,20 @@ services:
     image: mongo:7
     container_name: andy-code-cat-mongodb
     restart: unless-stopped
+    # Loopback only — MongoDB has no authentication in this stack.
     ports:
-      - "27018:27017"
+      - "127.0.0.1:27018:27017"
     volumes:
       - ./data/mongodb:/data/db
     command: ["--bind_ip_all"]
     networks:
       - andy-code-cat-net
 
-  redis:
-    image: redis:7-alpine
-    container_name: andy-code-cat-redis
-    restart: unless-stopped
-    ports:
-      - "6380:6379"
-    volumes:
-      - ./data/redis:/data
-    networks:
-      - andy-code-cat-net
-
+  # Optional object storage, only with: docker compose --profile minio up -d
+  # (the API uses STORAGE_ADAPTER=local unless told otherwise).
   minio:
     image: minio/minio:latest
+    profiles: ["minio"]
     container_name: andy-code-cat-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -46,8 +39,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - ./data/minio:/data
     networks:
@@ -64,15 +57,12 @@ services:
       - .env.docker
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/andy-code-cat
-      - REDIS_URL=redis://redis:6379
       - NODE_ENV=development
     depends_on:
       - workspace
       - mongodb
-      - redis
-      - minio
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     volumes:
       - ./apps/api:/workspace/apps/api
       - ./packages:/workspace/packages
@@ -128,7 +118,7 @@ services:
       - workspace
       - api
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - ./apps/web:/workspace/apps/web
       - ./packages:/workspace/packages
@@ -146,7 +136,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       # Local HTTP-only config — no SSL certs needed.
-      # Production SSL config lives in nginx/sites-enabled/<project>.conf (droplet only).
+      # Production SSL config lives in nginx/sites-enabled/<project>.conf (production hosts only, not tracked in git).
       - ./nginx/sites-enabled/local.conf:/etc/nginx/sites-enabled/local.conf:ro
       - ./data/www:/var/www/andy-code-cat:ro
     depends_on:

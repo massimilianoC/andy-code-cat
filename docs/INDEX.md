@@ -25,6 +25,7 @@ Read in this order before making changes:
 | [docs/project/PRODUCT_VISION.md](project/PRODUCT_VISION.md) | Current product vision: interactive artifact platform, VibeCore/Workspace/Didactic modes, Layer S direction, deferred BaaS boundary |
 | [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Current development-state summary: `R1` delivered, `R2`/`R3` active, live cross-cutting tracks |
 | [docs/project/ROADMAP.md](project/ROADMAP.md) | Project roadmap and release direction |
+| [docs/releases/RELEASE_NOTES.md](releases/RELEASE_NOTES.md) | Release notes, newest first, with upgrade notes per release |
 | [docs/project/KNOWN_ISSUES.md](project/KNOWN_ISSUES.md) | Cross-cutting defects and small gaps found in real use, queued for the next review/refactor/fix pass |
 | [docs/SSOT_STATUS.md](SSOT_STATUS.md) | **Start here for model routing, prompt composition and artifact versioning:** the single consolidated status of the SSOT programme — what is actually live in code, what is genuinely still open, and which older documents it retires |
 | [docs/specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md](specs/PROMPT_EXECUTION_SSOT_REFACTOR_ANALYSIS_2026-08-18.md) | ⚠️ Superseded by [SSOT_STATUS.md](SSOT_STATUS.md) — historical diagnosis of the prompt-execution traceability gap, since remediated |
@@ -52,7 +53,6 @@ Read in this order before making changes:
 
 | Document | Description |
 | --- | --- |
-| [docs/handoff/SESSION_RESUME.md](handoff/SESSION_RESUME.md) | **Restore point — read first when picking up cold.** Current branch state, findings not to re-derive, what is verified live and what is not |
 | [docs/agents/CODE_AGENT_INDEX.md](agents/CODE_AGENT_INDEX.md) | Primary entry point for coding agents |
 | [docs/agents/LLM_PROVIDER_HANDOFF_RECAP.md](agents/LLM_PROVIDER_HANDOFF_RECAP.md) | LLM provider and chat-preview implementation notes |
 | [docs/agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md](agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md) | Layer ownership map and collision-prevention rules for parallel agents |
@@ -65,11 +65,9 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [docs/runbooks/TESTABLE_STEPS.md](runbooks/TESTABLE_STEPS.md) | Baseline checks plus current active validation tracks, including local publish persistence, Tailwind artifact-repair, and nginx-recreation checks |
-| [docs/runbooks/PRESET_RESEED.md](runbooks/PRESET_RESEED.md) | Local, deploy-stack, and Droplet procedure for reseeding project template models from the static preset catalog |
+| [docs/runbooks/PRESET_RESEED.md](runbooks/PRESET_RESEED.md) | Local, deploy-stack, and remote-server procedure for reseeding project template models from the static preset catalog |
 | [docs/runbooks/CDN_COMPATIBILITY.md](runbooks/CDN_COMPATIBILITY.md) | Verified CDN whitelist and compatibility notes for generated interactive, game, 3D, and VR artifacts |
 | [docs/runbooks/PRODUCTION_HARDENING_PLAN.md](runbooks/PRODUCTION_HARDENING_PLAN.md) | Production hardening and deployment safety guidance |
-| [docs/runbooks/DROPLET_MANUAL_DEPLOY.md](runbooks/DROPLET_MANUAL_DEPLOY.md) | Manual one-service-at-a-time droplet deploy procedure for flaky SSH/high-load incidents: sync safely, deploy API, deploy web, restart nginx, and verify public health |
-| [docs/runbooks/SSL_CERT_RENEWAL.md](runbooks/SSL_CERT_RENEWAL.md) | How TLS certs auto-renew on the droplet (webroot + DNS-01, systemd certbot.timer, global deploy-hook), health checks, and the 2026-07-09 CRLF-cron incident |
 | [docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md](runbooks/BETA_LAUNCH_HARDENING_PLAN.md) | Beta-readiness checklist |
 | [install.sh](../install.sh) | Self-configuring one-file installer — local and domain modes, auto SSL via certbot |
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker workflow for dev and deploy-like stacks |

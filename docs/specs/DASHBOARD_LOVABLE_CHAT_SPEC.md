@@ -175,10 +175,10 @@ Use `framer-motion` for React-side animations (already in the stack). Keep CSS-o
 │   ┌──────────────────────────────────────┐   │
 │   │  [Textarea — min 3 rows, auto-grow]  │   │  ← glass card
 │   │                                      │   │
-│   │  [📎 Allega]          [Crea con AI →]│   │
+│   │  [📎 Attach]          [Create with AI →]│   │
 │   └──────────────────────────────────────┘   │
 │                                              │
-│   ──── scorri per i tuoi progetti ↓ ────    │  ← 90–95dvh
+│   ──── scroll for your projects ↓ ────    │  ← 90–95dvh
 └──────────────────────────────────────────────┘
    ↕ 15–20% peek of dashboard below
 ```
@@ -399,11 +399,11 @@ type EntryPhase =
 
 const PHASE_LABELS: Record<EntryPhase, string> = {
   idle:          "",
-  optimizing:    "Ottimizzazione del prompt…",
-  classifying:   "Analisi della richiesta…",
-  policy_check:  "Verifica limiti di progetto…",
-  creating:      "Creazione del workspace…",
-  redirecting:   "Apertura…",
+  optimizing:    "Optimizing prompt…",
+  classifying:   "Analyzing request…",
+  policy_check:  "Checking project limits…",
+  creating:      "Creating workspace…",
+  redirecting:   "Opening…",
 };
 ```
 
@@ -418,7 +418,7 @@ VibeCoreEntry section occupies ~80dvh
   ├── User types prompt + optionally drags/attaches files
   │     └── Drag-over: card border pulses, dashed ring
   │
-  ├── User presses Enter or clicks "Crea con AI →"
+  ├── User presses Enter or clicks "Create with AI →"
   │     │
   │     ├── phase → "optimizing"  (Layer Ω)
   │     ├── phase → "classifying" (Layer Φ)
@@ -557,7 +557,7 @@ interface ModeSelectorProps {
 }
 
 const MODE_CONFIG: Record<Mode, { label: string; color: string; description: string }> = {
-  easy:   { label: "EASY",   color: "#8b5cf6", description: "Un prompt, tutto il resto lo fa l'AI" },
+  easy:   { label: "EASY",   color: "#8b5cf6", description: "One prompt, the AI does the rest" },
   medium: { label: "MEDIUM", color: "#3b82f6", description: "Guida guidata passo passo"            },
   hard:   { label: "HARD",   color: "#10b981", description: "Controllo completo"                    },
 };
@@ -943,9 +943,9 @@ When Layer Φ classifies a prompt, it queries **three** catalogs in priority ord
 The catalog passed to the classifier LLM includes all three sources, formatted as:
 
 ```
-[SYSTEM PRESET] landing_page — "Landing page professionale, single scroll, hero + CTA"
-[SYSTEM TEMPLATE] portfolio_creativo — "Portfolio per studi creativi con griglia masonry"
-[MY TEMPLATE] mio_studio_legale — "Sito per studio legale: tono formale, struttura A3 + modulo contatto"
+[SYSTEM PRESET] landing_page — "Professional landing page, single scroll, hero + CTA"
+[SYSTEM TEMPLATE] portfolio_creativo — "Portfolio for creative studios with masonry grid"
+[MY TEMPLATE] mio_studio_legale — "Website for a law firm: formal tone, A3 structure + contact form"
 ```
 
 The `templateId` returned can reference any of the three sources. The `source` field in
@@ -1009,7 +1009,7 @@ Layer T injected if templateResolution ≠ null
 
 **User visibility**: In MEDIUM mode, if a template was matched, a non-blocking banner in the
 Guided Mode launch screen shows:
-> "Ho identificato il tipo di progetto: *Portfolio creativo*. Puoi modificarlo prima di procedere."
+> "I identified the project type: *Creative portfolio*. You can change it before proceeding."
 
 With a link to change the template. This is informational only — the user is not blocked.
 
@@ -1041,12 +1041,12 @@ Normal chat flow continues
 ```
 
 The project is updated silently. If the user later visits `ProjectConfigPopup`, the
-auto-detected preset is visible (and editable). A subtle label marks it: "*(rilevato automaticamente)*".
+auto-detected preset is visible (and editable). A subtle label marks it: "*(auto-detected)*".
 
 ### 16.4 Integration — VibeCore Mode (EASY)
 
 Already documented in §6. Layer Φ runs pre-submit, before project creation. The flow is
-explicit: user sees the "Analisi della richiesta…" phase label.
+explicit: user sees the "Analyzing request…" phase label.
 
 ### 16.5 Mode Comparison Summary
 
@@ -1095,16 +1095,16 @@ Job completes (status: "completed")
 Workspace UI receives SSE event "template_draft_ready"
   │
   └── Show bottom-right toast (non-blocking):
-        "Ho imparato il tuo stile per questo tipo di progetto.
-         Vuoi salvarlo come template riutilizzabile?"
-         [Salva]  [Non ora]
+        "I learned your style for this type of project.
+         Want to save it as a reusable template?"
+         [Save]  [Not now]
                │
-        [Salva] → PATCH /v1/user-templates/:id/activate
+        [Save] → PATCH /v1/user-templates/:id/activate
                     UserTemplate.status = "active"
                     UserTemplate.expiresAt = null
-                    Toast: "Template salvato! Disponibile nei tuoi progetti futuri."
+                    Toast: "Template saved! Available in your future projects."
                │
-        [Non ora] → UserTemplate stays "draft", expires in 30d
+        [Not now] → UserTemplate stays "draft", expires in 30d
 ```
 
 ### 17.3 Auto-generated Template Name
@@ -1154,19 +1154,19 @@ New section in the user dashboard, below the existing project grid:
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
-│  I tuoi template                              [+ Nuovo]  │
+│  Your templates                               [+ New]    │
 │                                                          │
 │  ┌──────────────────────────┐  ┌──────────────────────┐ │
-│  │ 📄 Portfolio creativo     │  │ 📋 Modulo contatti   │ │
-│  │ Usato 3 volte             │  │ Bozza · scade 12/6   │ │
-│  │ [Usa]  [Modifica] [···]  │  │ [Salva]  [Elimina]  │ │
+│  │ 📄 Creative portfolio     │  │ 📋 Contact form      │ │
+│  │ Used 3 times              │  │ Draft · expires 12/6 │ │
+│  │ [Use]  [Edit] [···]      │  │ [Save]  [Delete]    │ │
 │  └──────────────────────────┘  └──────────────────────┘ │
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **Bozza** state shows expiry date and a "Salva" CTA
-- **Attivo** state shows usage count and "Usa" (pre-selects in next VibeCore input)
-- "Usa" pre-fills the dashboard chat with `userTemplateId` as a hidden param — Layer Φ
+- **Draft** state shows expiry date and a "Save" CTA
+- **Active** state shows usage count and "Use" (pre-selects in next VibeCore input)
+- "Use" pre-fills the dashboard chat with `userTemplateId` as a hidden param — Layer Φ
   skips classification and goes directly to Layer T injection
 
 ---

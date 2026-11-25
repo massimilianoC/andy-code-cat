@@ -202,7 +202,7 @@ that do not respond to language changes. They are used in:
 **Step 1 — Add keys to i18n files**
 
 Aggiungere il seguente blocco a `apps/web/i18n/it.json`, in coda al JSON esistente
-(prima della chiusura `}`):
+(before the closing `}`):
 
 ```json
 "workspace": {

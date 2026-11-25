@@ -4,7 +4,7 @@ This runbook updates the Mongo-backed project template registry from the static 
 
 > **MANDATORY:** whenever a deploy includes changes to `ProjectPreset.ts`, the reseed is a
 > binding part of that deploy — run it in the same operation, on every environment
-> (local deploy stack AND droplet). The Mongo catalog wins over the static one: skipping the
+> (local deploy stack AND every remote server). The Mongo catalog wins over the static one: skipping the
 > reseed keeps serving stale prompt modules. For `viewportModel` only, a code fallback
 > (`withStaticViewportFallback`, PP-018) protects the deploy→reseed window — nothing else is
 > protected.
@@ -35,7 +35,7 @@ Do not mix these stacks:
 
 - `docker-compose.yml` uses the dev bind mount `./data/mongodb`.
 - `docker-compose.deploy.yml` uses the named volume `andy-code-cat_mongodb_data`.
-- Droplet uses its own remote compose file and remote MongoDB volume.
+- A remote server runs its own copy of the deploy stack, with its own MongoDB volume.
 
 ## Local Host Reseed
 
@@ -82,33 +82,20 @@ docker exec andy-code-cat-api node apps/api/dist/scripts/seed-presets.js
 
 The `--no-deps` flag is required when restarting `api`; it avoids recreating MongoDB, Redis or MinIO.
 
-## Droplet Reseed
+## Remote Server Reseed
 
-Deploy the new API image first so `dist/scripts/seed-presets.js` exists in the remote container.
-
-```bash
-npm run droplet:deploy
-```
-
-Then reseed only the template model registry:
+Deploy the new API image first so `dist/scripts/seed-presets.js` exists in the running container,
+then run the reseed inside the API container on that server:
 
 ```bash
-npm run droplet:seed -- --only-presets
+ssh <your-server> 'docker ps --format "{{.Names}}"'
+ssh <your-server> 'cd /path/to/andy-code-cat && docker compose -f docker-compose.deploy.yml --env-file .env.docker ps -q api'
+ssh <your-server> 'docker exec <api-container-name> node apps/api/dist/scripts/seed-presets.js'
 ```
 
-To reseed presets together with the regular idempotent user/project seed:
-
-```bash
-npm run droplet:seed -- --presets
-```
-
-To run the remote command manually:
-
-```bash
-ssh docker-2 'docker ps --format "{{.Names}}"'
-ssh docker-2 'cd /opt/docker/projects/pageforge && docker compose -f docker-compose.droplet.yml --env-file .env.droplet ps -q api'
-ssh docker-2 'docker exec <api-container-name> node apps/api/dist/scripts/seed-presets.js'
-```
+Replace `<your-server>`, the project path and the container name with the values of your own
+installation. Do not run the general `seed` script on a production stack: it creates a test user
+and project and is meant for development stacks only.
 
 ## Verification
 

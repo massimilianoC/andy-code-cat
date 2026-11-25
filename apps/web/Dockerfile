@@ -16,7 +16,7 @@ CMD ["npm", "run", "dev"]
 FROM base AS build
 COPY . .
 # NEXT_PUBLIC_* vars must be available at build time to be baked into the JS bundle.
-# Pass via docker-compose.droplet.yml build.args → --env-file .env.droplet
+# Pass via the compose file build.args (docker-compose.deploy.yml reads them from .env.docker)
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # Same RELEASE_VERSION the API bakes in — NEXT_PUBLIC_ so the header can render it in the

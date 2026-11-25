@@ -1,82 +1,82 @@
-# Andy Code Cat — Onboarding, Style Profiling e Layer 0 Preprompting
+# Andy Code Cat — Onboarding, Style Profiling and Layer 0 Preprompting
 
-> **Revisione:** 2026-04-07 (aggiornamento: 2026-07-22 — Appendice A benchmark)  
-> **Fonte:** Addendum Vision REV-01, analisi codebase, best practice design token / moodboard industry, benchmark Duolingo/Slack/Figma/Headspace, articolo JustInMind onboarding UX  
-> **Scopo:** Definire architettura completa per: registrazione/onboarding utente con profilazione, moodboard progetto con stile guidato, Layer 0 di preprompting semantico-stilistico, schema MongoDB con double sandbox.
+> **Revision:** 2026-04-07 (updated: 2026-07-22 — Appendix A benchmark)  
+> **Source:** Vision Addendum REV-01, codebase analysis, design token / moodboard industry best practices, Duolingo/Slack/Figma/Headspace benchmarks, JustInMind onboarding UX article  
+> **Purpose:** Define the complete architecture for: user registration/onboarding with profiling, project moodboard with guided style, semantic-stylistic Layer 0 preprompting, MongoDB schema with double sandbox.
 
 ---
 
-## 0. Contesto e Motivazione
+## 0. Context and Motivation
 
-### 0.1 Problema
+### 0.1 Problem
 
-Attualmente:
+Currently:
 
-- La **registrazione** raccoglie solo email, password, firstName, lastName — nessuna profilazione.
-- La **creazione progetto** è una semplice text input con nome — nessuna guida stilistica.
-- Il **preprompt** è un template Nunjucks monolitico (`prePromptTemplate`) — non conosce chi è l'utente, quale stile preferisce, qual è il dominio di business.
-- L'LLM riceve il prompt utente "nudo", senza contesto semantico-stilistico strutturato.
+- **Registration** only collects email, password, firstName, lastName — no profiling.
+- **Project creation** is a simple text input with a name — no stylistic guidance.
+- The **preprompt** is a monolithic Nunjucks template (`prePromptTemplate`) — it doesn't know who the user is, which style they prefer, or what their business domain is.
+- The LLM receives the "naked" user prompt, with no structured semantic-stylistic context.
 
-### 0.2 Obiettivo
+### 0.2 Objective
 
-Implementare un **Layer 0 di preprompting** che:
+Implement a **Layer 0 preprompting** layer that:
 
-1. Raccoglie il **profilo stilistico dell'utente** all'onboarding (chi sei, cosa fai, che stile ti piace).
-2. Raccoglie il **profilo stilistico del progetto** alla creazione (moodboard, palette, inspirazioni, audience).
-3. Costruisce un **preprompt semantico-stilistico strutturato** che arricchisce il prompt utente prima di passarlo al Layer 1 (Chat Preview) o Layer 2 (OpenCode Pipeline).
-4. Implementa un **meccanismo di fallback/override**: profilo progetto > profilo utente > defaults piattaforma.
+1. Collects the **user's stylistic profile** at onboarding (who you are, what you do, what style you like).
+2. Collects the **project's stylistic profile** at creation time (moodboard, palette, inspirations, audience).
+3. Builds a **structured semantic-stylistic preprompt** that enriches the user prompt before passing it to Layer 1 (Chat Preview) or Layer 2 (OpenCode Pipeline).
+4. Implements a **fallback/override mechanism**: project profile > user profile > platform defaults.
 
-### 0.3 Principi Guida
+### 0.3 Guiding Principles
 
-| ID | Principio | Impatto |
+| ID | Principle | Impact |
 |---|---|---|
-| `P-ONB-1` | **Progressive disclosure** — onboarding non bloccante, completabile in più sessioni | L'utente non è mai forzato; può saltare tutto e tornare dopo |
-| `P-ONB-2` | **Deterministic tags + free text** — nuvole di tag curate + campo libero | Bilancia struttura (per preprompt) e libertà (per espressione) |
-| `P-ONB-3` | **Fallback cascade** — project → user → platform defaults | Il preprompt è sempre completo anche se l'utente non ha compilato nulla |
-| `P-ONB-4` | **Immutabilità snapshot** — ogni versione del profilo è un record auditabile | Tracciabilità delle scelte e rollback possibile |
-| `P-ONB-5` | **Token economy** — il profilo si compila in tag, non in testi lunghi | La traduzione in preprompt è efficiente (pochi token, massimo contesto) |
+| `P-ONB-1` | **Progressive disclosure** — non-blocking onboarding, completable across multiple sessions | The user is never forced; they can skip everything and come back later |
+| `P-ONB-2` | **Deterministic tags + free text** — curated tag clouds + free field | Balances structure (for the preprompt) and freedom (for expression) |
+| `P-ONB-3` | **Fallback cascade** — project → user → platform defaults | The preprompt is always complete even if the user filled in nothing |
+| `P-ONB-4` | **Snapshot immutability** — every profile version is an auditable record | Traceability of choices and possible rollback |
+| `P-ONB-5` | **Token economy** — the profile compiles into tags, not long text | Translation into the preprompt is efficient (few tokens, maximum context) |
 
 ---
 
-## 1. Tassonomia Tag — StyleTag System
+## 1. Tag Taxonomy — StyleTag System
 
-### 1.1 Struttura del Tag
+### 1.1 Tag Structure
 
-Ogni tag è un'unità atomica di profilazione:
+Each tag is an atomic unit of profiling:
 
 ```typescript
 interface StyleTag {
-  id: string;             // slug univoco: "palette:warm-sunset"
-  category: TagCategory;  // categoria tassonomica
-  label: string;          // etichetta display multilingua
-  labelIt: string;        // label italiano
-  labelEn: string;        // label inglese
-  icon?: string;          // emoji o icon id
-  hexPreview?: string;    // anteprima colore (per palette tags)
-  imagePreview?: string;  // URL anteprima (per style/mood tags)
-  weight: number;         // peso nel preprompt (1-10, default 5)
-  incompatibleWith?: string[];  // tag mutuamente esclusivi
+  id: string;             // unique slug: "palette:warm-sunset"
+  category: TagCategory;  // taxonomic category
+  label: string;          // multilingual display label
+  labelIt: string;        // Italian label
+  labelEn: string;        // English label
+  icon?: string;          // emoji or icon id
+  hexPreview?: string;    // color preview (for palette tags)
+  imagePreview?: string;  // preview URL (for style/mood tags)
+  weight: number;         // weight in the preprompt (1-10, default 5)
+  incompatibleWith?: string[];  // mutually exclusive tags
 }
 ```
 
-### 1.2 Categorie Tassonomiche
+### 1.2 Taxonomic Categories
 
-| ID | Categoria | Descrizione | Esempi Tag |
+| ID | Category | Description | Example Tags |
 |---|---|---|---|
-| `TC-IDENTITY` | **Identità / Chi sei** | Tipo di attività, settore, dimensione | `freelancer`, `agency`, `startup`, `enterprise`, `non-profit`, `hobbyist` |
-| `TC-SECTOR` | **Settore / Ambito** | Dominio di business | `food-beverage`, `tech-saas`, `fashion`, `health-wellness`, `education`, `real-estate`, `creative-arts`, `finance`, `travel`, `sport` |
-| `TC-AUDIENCE` | **Audience / Target** | Chi è il pubblico | `b2b`, `b2c`, `b2g`, `young-adults`, `professionals`, `families`, `luxury-clients`, `local-community` |
-| `TC-VISUAL` | **Stile Visivo** | Mood e approccio estetico | `minimal`, `bold`, `elegant`, `playful`, `dark`, `corporate`, `vintage`, `futuristic`, `organic`, `brutalist`, `glassmorphism` |
-| `TC-PALETTE` | **Palette Colori** | Gruppo cromatico preferito | `warm-sunset`, `ocean-blue`, `earth-tones`, `neon-vivid`, `monochrome-dark`, `pastel-soft`, `forest-green`, `royal-gold`, `coral-blush`, `ice-silver` |
-| `TC-TYPO` | **Tipografia** | Stile tipografico preferito | `sans-serif-clean`, `serif-editorial`, `mono-tech`, `handwritten-casual`, `display-bold`, `mixed-contrast` |
-| `TC-LAYOUT` | **Layout / Pattern** | Organizzazione spaziale preferita | `hero-first`, `card-grid`, `single-column`, `asymmetric`, `full-bleed-images`, `whitespace-heavy`, `dense-info` |
-| `TC-TONE` | **Tono comunicativo** | Come parla il brand | `formal-professional`, `friendly-casual`, `authoritative-expert`, `playful-irreverent`, `inspirational`, `technical-precise` |
-| `TC-REFERENCE` | **Riferimento ispirativo** | Punti di riferimento noti | `apple-like`, `stripe-like`, `notion-like`, `airbnb-like`, `dieter-rams`, `swiss-design`, `japanese-minimal` |
-| `TC-FEATURE` | **Feature richieste** | Componenti desiderati | `contact-form`, `pricing-table`, `testimonials`, `image-gallery`, `video-hero`, `social-feed`, `newsletter-signup`, `faq-accordion` |
+| `TC-IDENTITY` | **Identity / Who you are** | Type of activity, sector, size | `freelancer`, `agency`, `startup`, `enterprise`, `non-profit`, `hobbyist` |
+| `TC-SECTOR` | **Sector / Domain** | Business domain | `food-beverage`, `tech-saas`, `fashion`, `health-wellness`, `education`, `real-estate`, `creative-arts`, `finance`, `travel`, `sport` |
+| `TC-AUDIENCE` | **Audience / Target** | Who the audience is | `b2b`, `b2c`, `b2g`, `young-adults`, `professionals`, `families`, `luxury-clients`, `local-community` |
+| `TC-VISUAL` | **Visual Style** | Mood and aesthetic approach | `minimal`, `bold`, `elegant`, `playful`, `dark`, `corporate`, `vintage`, `futuristic`, `organic`, `brutalist`, `glassmorphism` |
+| `TC-PALETTE` | **Color Palette** | Preferred color group | `warm-sunset`, `ocean-blue`, `earth-tones`, `neon-vivid`, `monochrome-dark`, `pastel-soft`, `forest-green`, `royal-gold`, `coral-blush`, `ice-silver` |
+| `TC-TYPO` | **Typography** | Preferred typographic style | `sans-serif-clean`, `serif-editorial`, `mono-tech`, `handwritten-casual`, `display-bold`, `mixed-contrast` |
+| `TC-LAYOUT` | **Layout / Pattern** | Preferred spatial organization | `hero-first`, `card-grid`, `single-column`, `asymmetric`, `full-bleed-images`, `whitespace-heavy`, `dense-info` |
+| `TC-TONE` | **Communication tone** | How the brand speaks | `formal-professional`, `friendly-casual`, `authoritative-expert`, `playful-irreverent`, `inspirational`, `technical-precise` |
+| `TC-REFERENCE` | **Inspiration reference** | Known reference points | `apple-like`, `stripe-like`, `notion-like`, `airbnb-like`, `dieter-rams`, `swiss-design`, `japanese-minimal` |
+| `TC-FEATURE` | **Requested features** | Desired components | `contact-form`, `pricing-table`, `testimonials`, `image-gallery`, `video-hero`, `social-feed`, `newsletter-signup`, `faq-accordion` |
 
-### 1.3 Palette Predefinite (Tag Composti)
+### 1.3 Predefined Palettes (Composite Tags)
 
-Ogni tag `TC-PALETTE` mappa a una palette concreta di design tokens:
+Each `TC-PALETTE` tag maps to a concrete palette of design tokens:
 
 ```typescript
 interface PaletteDefinition {
@@ -91,28 +91,28 @@ interface PaletteDefinition {
   success: string;          // "#81B29A"
   error: string;            // "#E63946"
   gradientDirection?: string;  // "135deg"
-  gradientStops?: string[];   // per sfondi gradient
+  gradientStops?: string[];   // for gradient backgrounds
 }
 ```
 
-**10 Palette predefinite:**
+**10 predefined palettes:**
 
-| ID | Nome | Primary | Secondary | Mood |
+| ID | Name | Primary | Secondary | Mood |
 |---|---|---|---|---|
-| `warm-sunset` | Tramonto Caldo | `#E07A5F` | `#3D405B` | Accogliente, italiano, food |
-| `ocean-blue` | Oceano Profondo | `#0077B6` | `#023E8A` | Professionale, tech, trust |
-| `earth-tones` | Terra e Natura | `#606C38` | `#283618` | Organico, eco, salute |
-| `neon-vivid` | Neon Vivace | `#7209B7` | `#F72585` | Giovane, startup, gaming |
-| `monochrome-dark` | Monocromo Scuro | `#212529` | `#495057` | Elegante, tech, minimal dark |
-| `pastel-soft` | Pastello Morbido | `#FFB5A7` | `#FCD5CE` | Femminile, lifestyle, wedding |
-| `forest-green` | Verde Foresta | `#2D6A4F` | `#40916C` | Natura, outdoor, wellness |
-| `royal-gold` | Oro Regale | `#C9A227` | `#1B1B2F` | Lusso, premium, gioielli |
-| `coral-blush` | Corallo | `#FF6B6B` | `#EE5A24` | Energia, sport, food |
-| `ice-silver` | Ghiaccio Argento | `#A8DADC` | `#457B9D` | Pulito, medico, SaaS |
+| `warm-sunset` | Warm Sunset | `#E07A5F` | `#3D405B` | Welcoming, Italian, food |
+| `ocean-blue` | Deep Ocean | `#0077B6` | `#023E8A` | Professional, tech, trust |
+| `earth-tones` | Earth and Nature | `#606C38` | `#283618` | Organic, eco, health |
+| `neon-vivid` | Vivid Neon | `#7209B7` | `#F72585` | Young, startup, gaming |
+| `monochrome-dark` | Dark Monochrome | `#212529` | `#495057` | Elegant, tech, minimal dark |
+| `pastel-soft` | Soft Pastel | `#FFB5A7` | `#FCD5CE` | Feminine, lifestyle, wedding |
+| `forest-green` | Forest Green | `#2D6A4F` | `#40916C` | Nature, outdoor, wellness |
+| `royal-gold` | Royal Gold | `#C9A227` | `#1B1B2F` | Luxury, premium, jewelry |
+| `coral-blush` | Coral | `#FF6B6B` | `#EE5A24` | Energy, sport, food |
+| `ice-silver` | Ice Silver | `#A8DADC` | `#457B9D` | Clean, medical, SaaS |
 
-### 1.4 Riferimenti Stilistici Visivi
+### 1.4 Visual Style References
 
-Ogni tag `TC-VISUAL` include un'immagine di riferimento (hero card 300×200) servita come asset statico dalla piattaforma:
+Each `TC-VISUAL` tag includes a reference image (300×200 hero card) served as a static asset from the platform:
 
 ```
 /public/style-references/
@@ -131,107 +131,107 @@ Ogni tag `TC-VISUAL` include un'immagine di riferimento (hero card 300×200) ser
 
 ---
 
-## 2. Onboarding Utente — Profile Wizard
+## 2. User Onboarding — Profile Wizard
 
-### 2.1 Architettura del Flusso
+### 2.1 Flow Architecture
 
-L'onboarding è **non-bloccante** e **progressivo**:
+Onboarding is **non-blocking** and **progressive**:
 
 ```
                     ┌────────────────────────────┐
                     │    POST /auth/register      │
-                    │ (email, password, nome)      │
+                    │ (email, password, name)      │
                     └────────────┬───────────────┘
                                  │
                                  ▼
                     ┌────────────────────────────┐
                     │  Redirect → /onboarding     │
-                    │  (...oppure /dashboard se    │
-                    │   l'utente clicca "Skip")    │
+                    │  (...or /dashboard if        │
+                    │   the user clicks "Skip")    │
                     └────────────┬───────────────┘
                                  │
                     ┌────────────▼───────────────┐
-                    │  STEP 1: Chi Sei?            │
-                    │  • Tag cloud TC-IDENTITY     │
-                    │  • Tag cloud TC-SECTOR       │
-                    │  • Campo libero "Descrivi    │
-                    │    la tua attività" (opt)     │
-                    │  [Avanti] [Salta tutto →]     │
+                    │  STEP 1: Who Are You?        │
+                    │  • TC-IDENTITY tag cloud     │
+                    │  • TC-SECTOR tag cloud       │
+                    │  • Free field "Describe      │
+                    │    your business" (opt)       │
+                    │  [Next] [Skip all →]          │
                     └────────────┬───────────────┘
                                  │
                     ┌────────────▼───────────────┐
-                    │  STEP 2: Il Tuo Stile        │
+                    │  STEP 2: Your Style          │
                     │  • Visual style cards         │
-                    │    (TC-VISUAL clickabili)     │
+                    │    (clickable TC-VISUAL)      │
                     │  • Palette selector           │
-                    │    (TC-PALETTE con preview)   │
+                    │    (TC-PALETTE with preview)  │
                     │  • Typography preference      │
                     │    (TC-TYPO samples)          │
-                    │  [Avanti] [Indietro] [Salta] │
+                    │  [Next] [Back] [Skip]         │
                     └────────────┬───────────────┘
                                  │
                     ┌────────────▼───────────────┐
-                    │  STEP 3: Ispirazioni         │
-                    │  • Link URL (max 5, opz)     │
-                    │  • Upload immagini (max 6)    │
-                    │  • Tag TC-REFERENCE           │
-                    │  • Tag TC-TONE                │
-                    │  [Completa] [Indietro]         │
+                    │  STEP 3: Inspirations        │
+                    │  • URL links (max 5, opt)     │
+                    │  • Image upload (max 6)       │
+                    │  • TC-REFERENCE tags          │
+                    │  • TC-TONE tags               │
+                    │  [Complete] [Back]             │
                     └────────────┬───────────────┘
                                  │
                     ┌────────────▼───────────────┐
-                    │  Onboarding completo!        │
+                    │  Onboarding complete!        │
                     │  → Redirect /dashboard       │
-                    │  → Badge "Profilo completato" │
+                    │  → "Profile completed" badge  │
                     └────────────────────────────┘
 ```
 
-### 2.2 Regole UX Onboarding
+### 2.2 Onboarding UX Rules
 
-| Regola | Dettaglio |
+| Rule | Detail |
 |---|---|
-| **Skipabile** | Ogni step ha "Salta" o "Salta tutto". L'utente va in dashboard con profilo vuoto (fallback a defaults piattaforma). |
-| **Riprendibile** | Lo stato dell'onboarding è persistito. Se l'utente chiude il browser e torna, riprende dallo step in cui era. |
-| **Modificabile** | Pagina `/settings/profile` permette di riaprire e modificare ogni sezione del profilo in qualsiasi momento. |
-| **Multi-select** | I tag sono multi-selezione (l'utente può scegliere più stili, più settori, più palette). Il sistema li pesa e media. |
-| **Max tag per categoria** | Massimo 5 tag per categoria (evita profili rumorosi). |
-| **Badge completamento** | 0-30% = "Base", 31-70% = "Intermedio", 71-100% = "Completo". Visibile in dashboard. |
+| **Skippable** | Every step has "Skip" or "Skip all". The user goes to the dashboard with an empty profile (fallback to platform defaults). |
+| **Resumable** | The onboarding state is persisted. If the user closes the browser and comes back, they resume from the step they were on. |
+| **Editable** | The `/settings/profile` page allows reopening and editing any section of the profile at any time. |
+| **Multi-select** | Tags are multi-select (the user can choose multiple styles, sectors, palettes). The system weighs and averages them. |
+| **Max tags per category** | Maximum 5 tags per category (avoids noisy profiles). |
+| **Completion badge** | 0-30% = "Basic", 31-70% = "Intermediate", 71-100% = "Complete". Visible on the dashboard. |
 
-### 2.3 Profilo Utente Risultante
+### 2.3 Resulting User Profile
 
 ```typescript
 interface UserStyleProfile {
   userId: string;
-  version: number;                    // autoincrement ad ogni modifica
-  completionScore: number;            // 0-100 calcolato
+  version: number;                    // autoincrements on every change
+  completionScore: number;            // 0-100, calculated
   
   onboardingState: {
     status: 'not_started' | 'in_progress' | 'completed' | 'skipped';
-    currentStep: number;              // 0-2 (per ripresa)
+    currentStep: number;              // 0-2 (for resuming)
     startedAt?: Date;
     completedAt?: Date;
   };
   
-  // STEP 1 — Identità
+  // STEP 1 — Identity
   identity: {
-    tags: string[];                   // max 5, es. ["identity:freelancer", "sector:tech-saas"]
+    tags: string[];                   // max 5, e.g. ["identity:freelancer", "sector:tech-saas"]
     freeDescription?: string;         // max 500 chars
   };
   
-  // STEP 2 — Stile
+  // STEP 2 — Style
   style: {
-    visualTags: string[];             // max 5, es. ["visual:minimal", "visual:dark"]
-    paletteTags: string[];            // max 3, es. ["palette:ocean-blue"]
-    typographyTags: string[];         // max 2, es. ["typo:sans-serif-clean"]
-    layoutTags: string[];             // max 3, es. ["layout:hero-first", "layout:whitespace-heavy"]
+    visualTags: string[];             // max 5, e.g. ["visual:minimal", "visual:dark"]
+    paletteTags: string[];            // max 3, e.g. ["palette:ocean-blue"]
+    typographyTags: string[];         // max 2, e.g. ["typo:sans-serif-clean"]
+    layoutTags: string[];             // max 3, e.g. ["layout:hero-first", "layout:whitespace-heavy"]
   };
   
-  // STEP 3 — Ispirazioni
+  // STEP 3 — Inspirations
   inspirations: {
-    referenceTags: string[];          // max 5, es. ["reference:stripe-like"]
-    toneTags: string[];               // max 3, es. ["tone:friendly-casual"]
-    referenceUrls: string[];          // max 5 URL validati
-    referenceImageIds: string[];      // ID di asset uploadati (max 6)
+    referenceTags: string[];          // max 5, e.g. ["reference:stripe-like"]
+    toneTags: string[];               // max 3, e.g. ["tone:friendly-casual"]
+    referenceUrls: string[];          // max 5 validated URLs
+    referenceImageIds: string[];      // IDs of uploaded assets (max 6)
   };
   
   createdAt: Date;
@@ -241,80 +241,80 @@ interface UserStyleProfile {
 
 ---
 
-## 3. Moodboard Progetto — Project Style Config
+## 3. Project Moodboard — Project Style Config
 
-### 3.1 Flusso Creazione Progetto
+### 3.1 Project Creation Flow
 
-Il flusso attuale (input nome → crea) viene esteso con un wizard opzionale:
+The current flow (name input → create) is extended with an optional wizard:
 
 ```
                     ┌────────────────────────────┐
-                    │  Dashboard: [+ Nuovo]        │
+                    │  Dashboard: [+ New]          │
                     └────────────┬───────────────┘
                                  │
                     ┌────────────▼───────────────┐
-                    │  STEP 1: Nome e Tipo         │
-                    │  • Nome progetto (required)   │
-                    │  • Tipo: landing_page |       │
+                    │  STEP 1: Name and Type       │
+                    │  • Project name (required)    │
+                    │  • Type: landing_page |       │
                     │    mini_site | portfolio |    │
                     │    ecommerce                 │
-                    │  • Lingua: IT | EN            │
+                    │  • Language: IT | EN          │
                     │  • Prompt idea (textarea,     │
-                    │    min 20 chars, opzionale    │
-                    │    se completato in workspace) │
-                    │  [Avanti] [Crea veloce →]    │
+                    │    min 20 chars, optional     │
+                    │    if completed in workspace)  │
+                    │  [Next] [Quick create →]     │
                     └────────────┬───────────────┘
                                  │
                     ┌────────────▼───────────────┐
-                    │  STEP 2: Moodboard Visivo    │
-                    │  • Eredita da profilo utente │
-                    │    (pre-check dei tag user)   │
+                    │  STEP 2: Visual Moodboard    │
+                    │  • Inherit from user profile │
+                    │    (pre-checked user tags)    │
                     │  • Visual style cards          │
-                    │    (override o conferma)       │
+                    │    (override or confirm)       │
                     │  • Palette picker              │
                     │    (inherit / override)        │
-                    │  • Color customizer inline     │
-                    │    (hex input per override)    │
+                    │  • Inline color customizer     │
+                    │    (hex input for override)    │
                     │  • Typography preview           │
-                    │  [Avanti] [Indietro] [Salta]    │
+                    │  [Next] [Back] [Skip]           │
                     └────────────┬───────────────┘
                                  │
                     ┌────────────▼───────────────┐
-                    │  STEP 3: Contenuto e Refs     │
-                    │  • Tag TC-FEATURE cliccabili  │
-                    │  • Upload immagini (max 6)     │
-                    │  • URL di riferimento (max 5)  │
-                    │  • Upload documenti (PDF, etc) │
-                    │  • Tag TC-AUDIENCE              │
-                    │  • Nota libera progetto         │
-                    │  [Crea Progetto]                │
+                    │  STEP 3: Content and Refs    │
+                    │  • Clickable TC-FEATURE tags │
+                    │  • Image upload (max 6)        │
+                    │  • Reference URLs (max 5)      │
+                    │  • Document upload (PDF, etc) │
+                    │  • TC-AUDIENCE tags             │
+                    │  • Free project note            │
+                    │  [Create Project]               │
                     └────────────┬───────────────┘
                                  │
                     ┌────────────▼───────────────┐
                     │  → Redirect /workspace/[id]  │
-                    │  → Layer 0 preprompt pronto   │
+                    │  → Layer 0 preprompt ready    │
                     └────────────────────────────┘
 ```
 
 ### 3.2 Fast-Create vs. Wizard
 
-| Percorso | Azione | Risultato |
+| Path | Action | Result |
 |---|---|---|
-| **Fast-create** | Utente inserisce solo nome progetto e clicca "Crea veloce" | Progetto creato con moodboard ereditato interamente da profilo utente. Se profilo vuoto → defaults piattaforma. |
-| **Wizard completo** | Utente completa tutti e 3 gli step | Progetto con moodboard specifico che fa override su profilo utente. |
-| **Wizard parziale** | Utente completa step 1, salta step 2 e 3 | Override solo sui campi definiti nello step 1; fallback su profilo utente per il resto. |
+| **Fast-create** | The user enters only the project name and clicks "Quick create" | Project created with a moodboard fully inherited from the user profile. If the profile is empty → platform defaults. |
+| **Full wizard** | The user completes all 3 steps | Project with a specific moodboard that overrides the user profile. |
+| **Partial wizard** | The user completes step 1, skips steps 2 and 3 | Override only on the fields defined in step 1; falls back to the user profile for the rest. |
 
-### 3.3 Moodboard Progetto Risultante
+### 3.3 Resulting Project Moodboard
 
 ```typescript
 interface ProjectMoodboard {
   projectId: string;
   version: number;
   
-  // Override espliciti (se null → fallback a UserStyleProfile)
-  visualTags?: string[];             // override stile visivo
-  paletteTags?: string[];            // override palette
-  paletteCustomOverrides?: {         // override colore per colore
+  // Explicit overrides (if null → fallback to UserStyleProfile)
+  visualTags?: string[];             // visual style override
+  paletteTags?: string[];            // palette override
+  paletteCustomOverrides?: {         // per-color override
     primary?: string;                // hex
     secondary?: string;
     accent?: string;
@@ -324,18 +324,18 @@ interface ProjectMoodboard {
   typographyTags?: string[];
   layoutTags?: string[];
   toneTags?: string[];
-  featureTags?: string[];            // componenti desiderati
+  featureTags?: string[];            // desired components
   audienceTags?: string[];
   
-  // Contenuti
-  referenceUrls?: string[];          // URL di ispirazione
-  referenceImageIds?: string[];      // asset uploadati come moodboard
-  attachmentIds?: string[];          // PDF/doc allegati
-  freeNotes?: string;                // nota libera (max 1000 chars)
+  // Content
+  referenceUrls?: string[];          // inspiration URLs
+  referenceImageIds?: string[];      // assets uploaded as moodboard
+  attachmentIds?: string[];          // attached PDFs/docs
+  freeNotes?: string;                // free note (max 1000 chars)
   
-  // Metadata resoluzione
-  inheritedFromUser: boolean;        // true se creato via fast-create
-  overriddenFields: string[];        // campi esplicitamente definiti dall'utente
+  // Resolution metadata
+  inheritedFromUser: boolean;        // true if created via fast-create
+  overriddenFields: string[];        // fields explicitly defined by the user
   
   createdAt: Date;
   updatedAt: Date;
@@ -344,9 +344,9 @@ interface ProjectMoodboard {
 
 ---
 
-## 4. Layer 0 — Preprompt Semantico-Stilistico
+## 4. Layer 0 — Semantic-Stylistic Preprompt
 
-### 4.1 Posizione Architetturale
+### 4.1 Architectural Position
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -356,29 +356,30 @@ interface ProjectMoodboard {
 │  │ LAYER 0 — Semantic Style Enrichment           │    │
 │  │                                                │    │
 │  │  Input:                                        │    │
-│  │    • raw user prompt (linguaggio naturale)     │    │
+│  │    • raw user prompt (natural language)        │    │
 │  │    • UserStyleProfile (resolved)               │    │
-│  │    • ProjectMoodboard (resolved, con fallback) │    │
+│  │    • ProjectMoodboard (resolved, with fallback)│    │
 │  │    • TagTaxonomy (lookup)                      │    │
 │  │                                                │    │
-│  │  Processo:                                     │    │
+│  │  Process:                                      │    │
 │  │    1. Tag Resolution (merge user+project)      │    │
 │  │    2. Palette Resolution (concrete colors)     │    │
 │  │    3. Style Context Assembly (structured)      │    │
 │  │    4. Preprompt Template Rendering             │    │
 │  │                                                │    │
 │  │  Output:                                       │    │
-│  │    • enrichedSystemPrompt (stile+contesto)     │    │
+│  │    • enrichedSystemPrompt (style+context)      │    │
 │  │    • resolvedDesignTokens (JSON)               │    │
-│  │    • styleDirectives (istruzioni per LLM)      │    │
+│  │    • styleDirectives (instructions for the LLM)│    │
 │  └──────────────────┬───────────────────────────┘    │
 │                      │                                │
 │  ┌──────────────────▼───────────────────────────┐    │
 │  │ LAYER 1 — Chat Preview (existing)              │    │
-│  │  • enrichedSystemPrompt iniettato nel system   │    │
-│  │    message prima del prePromptTemplate tecnico │    │
-│  │  • resolvedDesignTokens disponibili come       │    │
-│  │    variabile Nunjucks nel template             │    │
+│  │  • enrichedSystemPrompt injected into the      │    │
+│  │    system message before the technical         │    │
+│  │    prePromptTemplate                            │    │
+│  │  • resolvedDesignTokens available as a         │    │
+│  │    Nunjucks variable in the template           │    │
 │  └──────────────────┬───────────────────────────┘    │
 │                      │                                │
 │  ┌──────────────────▼───────────────────────────┐    │
@@ -390,20 +391,20 @@ interface ProjectMoodboard {
 └─────────────────────────────────────────────────────┘
 ```
 
-### 4.2 Componente: StyleProfileResolver
+### 4.2 Component: StyleProfileResolver
 
-Il **cuore** del Layer 0 è il resolver che merge profilo utente + moodboard progetto:
+The **core** of Layer 0 is the resolver that merges the user profile with the project moodboard:
 
 ```typescript
 interface ResolvedStyleProfile {
-  // Identità (solo da user, non overridabile da progetto)
+  // Identity (user only, not overridable by the project)
   identity: {
     type: string;           // "freelancer" | "agency" | ...
     sector: string[];       // ["tech-saas", "education"]
     description?: string;   // free text
   };
   
-  // Stile visivo (merge con override progetto)
+  // Visual style (merged with project override)
   visual: {
     mood: string[];         // ["minimal", "dark"]
     palette: ResolvedPalette;
@@ -411,25 +412,25 @@ interface ResolvedStyleProfile {
     layout: string[];       // ["hero-first", "whitespace-heavy"]
   };
   
-  // Comunicazione (merge con override progetto)
+  // Communication (merged with project override)
   communication: {
     tone: string[];         // ["friendly-casual"]
     audience: string[];     // ["b2c", "young-adults"]
     language: string;       // "it" | "en"
   };
   
-  // Riferimenti (solo progetto se presenti, altrimenti user)
+  // References (project only if present, otherwise user)
   references: {
     styleRefs: string[];    // ["stripe-like"]
-    urls: string[];         // URL validati
-    imageDescriptions: string[];  // descrizioni LLM delle immagini reference
-    attachmentSummaries: string[]; // estratti PDF
+    urls: string[];         // validated URLs
+    imageDescriptions: string[];  // LLM descriptions of the reference images
+    attachmentSummaries: string[]; // PDF excerpts
   };
   
-  // Componenti desiderati (solo progetto)
+  // Desired components (project only)
   features: string[];       // ["contact-form", "testimonials", "pricing-table"]
   
-  // Metadata risoluzione
+  // Resolution metadata
   resolution: {
     source: 'project_only' | 'user_only' | 'merged' | 'platform_defaults';
     overriddenByProject: string[];
@@ -451,16 +452,16 @@ interface ResolvedPalette {
 }
 ```
 
-### 4.3 Logica di Risoluzione Fallback
+### 4.3 Fallback Resolution Logic
 
 ```
-Per ogni campo stilistico:
+For each stylistic field:
 
-  1. Se ProjectMoodboard ha un valore → usa quello (override)
-  2. Se ProjectMoodboard è null o il campo non è definito:
-     a. Se UserStyleProfile ha un valore → usa quello (fallback)
-     b. Se UserStyleProfile è null o il campo non è definito:
-        → usa PLATFORM_DEFAULTS (fallback finale)
+  1. If ProjectMoodboard has a value → use it (override)
+  2. If ProjectMoodboard is null or the field is not defined:
+     a. If UserStyleProfile has a value → use it (fallback)
+     b. If UserStyleProfile is null or the field is not defined:
+        → use PLATFORM_DEFAULTS (final fallback)
 
 PLATFORM_DEFAULTS:
   visual.mood = ["modern"]
@@ -471,43 +472,43 @@ PLATFORM_DEFAULTS:
   communication.audience = ["b2c"]
 ```
 
-### 4.4 Componente: Layer0PromptBuilder
+### 4.4 Component: Layer0PromptBuilder
 
-Trasforma il `ResolvedStyleProfile` in un addendum di sistema strutturato:
+Transforms the `ResolvedStyleProfile` into a structured system addendum:
 
 ```typescript
 class Layer0PromptBuilder {
   /**
-   * Genera il system prompt addendum stilistico da iniettare
-   * PRIMA del prePromptTemplate tecnico del Layer 1/2.
-   * Output: ~200-400 token (ultra-compatto per token economy).
+   * Generates the stylistic system prompt addendum to inject
+   * BEFORE the Layer 1/2 technical prePromptTemplate.
+   * Output: ~200-400 tokens (ultra-compact for token economy).
    */
   build(resolved: ResolvedStyleProfile, projectType: string): Layer0Output;
 }
 
 interface Layer0Output {
   /** 
-   * Blocco di testo strutturato da inserire nel system prompt.
-   * Formato compatto per token economy.
+   * Structured text block to insert into the system prompt.
+   * Compact format for token economy.
    */
   systemPromptAddendum: string;
   
   /**
-   * Design tokens risolti, disponibili come variabili 
-   * per il template Nunjucks del prePromptTemplate tecnico.
+   * Resolved design tokens, available as variables 
+   * for the technical prePromptTemplate's Nunjucks template.
    */
   designTokens: Record<string, string>;
   
   /**
-   * Direttive stilistiche chiave per injection rapida.
+   * Key stylistic directives for fast injection.
    */
   styleDirectives: string[];
 }
 ```
 
-### 4.5 Formato Output systemPromptAddendum
+### 4.5 systemPromptAddendum Output Format
 
-Il formato è progettato per massimizzare il rapporto informazione/token:
+The format is designed to maximize the information/token ratio:
 
 ```
 ## Client Context
@@ -532,28 +533,28 @@ Il formato è progettato per massimizzare il rapporto informazione/token:
 - Contact form with validation
 ```
 
-**Budget token stimato: 150-350 token** (vs. 4000-6000 per full generation prompt).
+**Estimated token budget: 150-350 tokens** (vs. 4000-6000 for a full generation prompt).
 
-### 4.6 Integrazione con Layer 1 (Chat Preview)
+### 4.6 Integration with Layer 1 (Chat Preview)
 
-La pipeline di iniezione nel sistema esistente:
+The injection pipeline into the existing system:
 
 ```typescript
 // In buildMessagesWithHistory() — apps/api/src/infra/llm/
-// PRIMA del sistema corrente:
+// BEFORE the current system:
 
 const layer0Output = layer0PromptBuilder.build(
   resolvedProfile,
   project.type
 );
 
-// Il system prompt diventa:
+// The system prompt becomes:
 const systemPrompt = [
-  layer0Output.systemPromptAddendum,  // Layer 0: stile e contesto
-  renderedPrePromptTemplate,          // Layer 1: template tecnico
+  layer0Output.systemPromptAddendum,  // Layer 0: style and context
+  renderedPrePromptTemplate,          // Layer 1: technical template
 ].join('\n\n---\n\n');
 
-// I design tokens sono iniettati nel template Nunjucks context:
+// The design tokens are injected into the Nunjucks template context:
 const templateContext = {
   ...existingContext,
   designTokens: layer0Output.designTokens,
@@ -561,9 +562,9 @@ const templateContext = {
 };
 ```
 
-### 4.7 Integrazione con Layer 2 (OpenCode Pipeline)
+### 4.7 Integration with Layer 2 (OpenCode Pipeline)
 
-Nel flusso PrepromptEngine (spec PREPROMPT_ENGINE_SPEC.md):
+In the PrepromptEngine flow (spec PREPROMPT_ENGINE_SPEC.md):
 
 ```
 ContextBuilder.buildContext()
@@ -574,7 +575,7 @@ ContextBuilder.buildContext()
             → Layer0Output
 
 ThemeResolver.resolveTheme()
-  └── Legge Layer0Output.designTokens anziché solo project.wizard.themeOverride
+  └── Reads Layer0Output.designTokens instead of only project.wizard.themeOverride
 ```
 
 ---
@@ -584,8 +585,8 @@ ThemeResolver.resolveTheme()
 ### 5.1 Collection: `style_tags` (Platform Static Data)
 
 ```typescript
-// Catalogo tag globale della piattaforma, readonly per utenti.
-// Seed script gestisce popolazione e aggiornamento.
+// Global platform tag catalog, read-only for users.
+// The seed script handles population and updates.
 {
   _id: ObjectId,
   tagId: string,                     // "visual:minimal" — unique index
@@ -594,11 +595,11 @@ ThemeResolver.resolveTheme()
     it: string,                      // "Minimale"
     en: string                       // "Minimal"
   },
-  icon: string | null,               // "✨" o null
-  hexPreview: string | null,         // "#0077B6" (solo per palette)
+  icon: string | null,               // "✨" or null
+  hexPreview: string | null,         // "#0077B6" (palette only)
   imagePreview: string | null,       // "/style-references/minimal.jpg"
   weight: number,                    // 1-10, default 5
-  paletteDefinition: {               // solo per TC-PALETTE tags
+  paletteDefinition: {               // TC-PALETTE tags only
     primary: string,
     secondary: string,
     accent: string,
@@ -607,8 +608,8 @@ ThemeResolver.resolveTheme()
     text: string,
     textMuted: string
   } | null,
-  incompatibleWith: string[],        // tagId[] mutuamente esclusivi
-  sortOrder: number,                 // ordinamento display
+  incompatibleWith: string[],        // mutually exclusive tagId[]
+  sortOrder: number,                 // display ordering
   isActive: boolean,                 // soft-disable
   createdAt: Date,
   updatedAt: Date
@@ -623,13 +624,13 @@ ThemeResolver.resolveTheme()
 ### 5.2 Collection: `user_style_profiles`
 
 ```typescript
-// Un documento per utente. Versioning via campo version.
-// Double sandbox: accesso solo tramite userId = jwt.sub
+// One document per user. Versioned via the version field.
+// Double sandbox: access only via userId = jwt.sub
 {
   _id: ObjectId,
   userId: ObjectId,                  // index, ref → users._id
-  version: number,                   // autoincrement ad ogni PUT
-  completionScore: number,           // 0-100, calcolato server-side
+  version: number,                   // autoincrements on every PUT
+  completionScore: number,           // 0-100, calculated server-side
   
   onboarding: {
     status: string,                  // "not_started" | "in_progress" | "completed" | "skipped"
@@ -654,7 +655,7 @@ ThemeResolver.resolveTheme()
     referenceTags: string[],         // max 5 tagId
     toneTags: string[],              // max 3 tagId
     referenceUrls: string[],         // max 5, validated URLs
-    referenceImageIds: string[]      // max 6, ref → project_assets._id (su spazio utente)
+    referenceImageIds: string[]      // max 6, ref → project_assets._id (in the user's own space)
   },
   
   createdAt: Date,
@@ -668,33 +669,33 @@ ThemeResolver.resolveTheme()
 ### 5.3 Collection: `user_style_profile_history`
 
 ```typescript
-// Snapshot immutabile di ogni versione del profilo.
-// Per audit trail e rollback.
+// Immutable snapshot of every profile version.
+// For audit trail and rollback.
 {
   _id: ObjectId,
   userId: ObjectId,
   version: number,
-  snapshot: { /* copia completa del documento user_style_profiles */ },
+  snapshot: { /* full copy of the user_style_profiles document */ },
   changedFields: string[],           // ["style.visualTags", "inspirations.referenceUrls"]
   changedAt: Date
 }
 
 // Indexes:
 // { userId: 1, version: -1 }
-// TTL: 365 giorni (opzionale, configurabile)
+// TTL: 365 days (optional, configurable)
 ```
 
 ### 5.4 Collection: `project_moodboards`
 
 ```typescript
-// Un documento per progetto. Double sandbox: ownerUserId check.
+// One document per project. Double sandbox: ownerUserId check.
 {
   _id: ObjectId,
   projectId: ObjectId,               // index, ref → projects._id
-  ownerUserId: ObjectId,             // ref → users._id, per sandbox
+  ownerUserId: ObjectId,             // ref → users._id, for sandboxing
   version: number,
   
-  // Override stilistici (null = ereditato da profilo utente)
+  // Stylistic overrides (null = inherited from the user profile)
   visualTags: string[] | null,
   paletteTags: string[] | null,
   paletteCustomOverrides: {
@@ -710,13 +711,13 @@ ThemeResolver.resolveTheme()
   featureTags: string[] | null,
   audienceTags: string[] | null,
   
-  // Contenuti moodboard
+  // Moodboard content
   referenceUrls: string[] | null,    // max 5
   referenceImageIds: string[] | null, // max 6
   attachmentIds: string[] | null,     // max 10
   freeNotes: string | null,          // max 1000 chars
   
-  // Metadata risoluzione
+  // Resolution metadata
   inheritedFromUser: boolean,
   overriddenFields: string[],
   
@@ -729,25 +730,25 @@ ThemeResolver.resolveTheme()
 // { ownerUserId: 1 }
 ```
 
-### 5.5 Estensione Collection `users` (campo aggiuntivo)
+### 5.5 Extension to the `users` Collection (additional field)
 
 ```typescript
-// Aggiungere al documento users esistente:
+// Add to the existing users document:
 {
-  // ... campi esistenti ...
+  // ... existing fields ...
   
   styleProfileId: ObjectId | null,    // ref → user_style_profiles._id
   onboardingStatus: string            // "not_started" | "in_progress" | "completed" | "skipped"
-                                      // denormalizzato per query rapida da dashboard
+                                      // denormalized for fast dashboard queries
 }
 ```
 
-### 5.6 Estensione Collection `projects` (campo aggiuntivo)
+### 5.6 Extension to the `projects` Collection (additional field)
 
 ```typescript
-// Aggiungere al documento projects esistente:
+// Add to the existing projects document:
 {
-  // ... campi esistenti ...
+  // ... existing fields ...
   
   moodboardId: ObjectId | null,       // ref → project_moodboards._id
   projectType: string,                // "landing_page" | "mini_site" | "portfolio" | "ecommerce"
@@ -765,8 +766,8 @@ ThemeResolver.resolveTheme()
 GET /v1/style-tags
   Query: ?category=TC-VISUAL&lang=it
   Response: { tags: StyleTag[] }
-  Auth: JWT required (utente autenticato)
-  Note: nessun sandbox, dati piattaforma condivisi
+  Auth: JWT required (authenticated user)
+  Note: no sandbox, shared platform data
 
 GET /v1/style-tags/palettes
   Response: { palettes: PaletteDefinition[] }
@@ -781,16 +782,16 @@ GET /v1/profile/style
   Auth: JWT required (userId = jwt.sub)
 
 PUT /v1/profile/style
-  Body: Partial<UserStyleProfile>  (schema Zod validato)
+  Body: Partial<UserStyleProfile>  (Zod-validated schema)
   Response: { profile: UserStyleProfile, version: number }
   Auth: JWT required
-  Note: incrementa version, salva snapshot in history
+  Note: increments version, saves a snapshot in history
   
 PUT /v1/profile/style/step/:stepNumber
-  Body: { tags: string[], freeText?: string, ... } (specifico per step)
+  Body: { tags: string[], freeText?: string, ... } (step-specific)
   Response: { profile: UserStyleProfile, currentStep: number }
   Auth: JWT required
-  Note: salva lo step specifico dell'onboarding senza richiedere l'intero profilo
+  Note: saves the specific onboarding step without requiring the full profile
 
 PUT /v1/profile/onboarding/skip
   Response: { profile: UserStyleProfile, status: "skipped" }
@@ -808,34 +809,34 @@ GET /v1/profile/style/history
 GET /v1/projects/:projectId/moodboard
   Response: { moodboard: ProjectMoodboard, resolvedProfile: ResolvedStyleProfile }
   Auth: JWT + sandboxMiddleware (ownerUserId check)
-  Note: il response include ANCHE il profilo risolto con fallback
+  Note: the response ALSO includes the resolved profile with fallback
 
 PUT /v1/projects/:projectId/moodboard
-  Body: Partial<ProjectMoodboard>  (schema Zod validato)
+  Body: Partial<ProjectMoodboard>  (Zod-validated schema)
   Response: { moodboard: ProjectMoodboard, resolvedProfile: ResolvedStyleProfile }
   Auth: JWT + sandboxMiddleware
 
 DELETE /v1/projects/:projectId/moodboard
   Response: { message: "Moodboard removed, falling back to user profile" }
   Auth: JWT + sandboxMiddleware
-  Note: il progetto torna a ereditare tutto dal profilo utente
+  Note: the project goes back to inheriting everything from the user profile
 ```
 
-### 6.4 Resolved Profile (Read-only, per debug e preview)
+### 6.4 Resolved Profile (Read-only, for debugging and preview)
 
 ```
 GET /v1/projects/:projectId/resolved-style
   Response: { resolved: ResolvedStyleProfile, layer0Preview: string }
   Auth: JWT + sandboxMiddleware
-  Note: mostra il profilo risolto finale E un'anteprima del systemPromptAddendum
-        che verrebbe generato. Utile per debug e per il workspace.
+  Note: shows the final resolved profile AND a preview of the systemPromptAddendum
+        that would be generated. Useful for debugging and for the workspace.
 ```
 
 ---
 
-## 7. Domain Entities e Clean Architecture
+## 7. Domain Entities and Clean Architecture
 
-### 7.1 Nuove Entity (domain/entities/)
+### 7.1 New Entities (domain/entities/)
 
 ```
 apps/api/src/domain/entities/
@@ -845,7 +846,7 @@ apps/api/src/domain/entities/
   ResolvedStyleProfile.ts      ← ResolvedStyleProfile, ResolvedPalette, Resolution metadata
 ```
 
-### 7.2 Nuove Repository Interfaces (domain/repositories/)
+### 7.2 New Repository Interfaces (domain/repositories/)
 
 ```
 apps/api/src/domain/repositories/
@@ -854,23 +855,23 @@ apps/api/src/domain/repositories/
   ProjectMoodboardRepository.ts ← findByProjectId(), upsert(), delete()
 ```
 
-### 7.3 Nuovi Use Cases (application/use-cases/)
+### 7.3 New Use Cases (application/use-cases/)
 
 ```
 apps/api/src/application/use-cases/
-  GetStyleTags.ts              ← lista tag per categoria
-  GetUserStyleProfile.ts       ← profilo utente con score
-  UpdateUserStyleProfile.ts    ← aggiorna profilo (incrementa version, salva history)
-  UpdateOnboardingStep.ts      ← salva singolo step onboarding
-  SkipOnboarding.ts            ← salta onboarding
-  GetProjectMoodboard.ts       ← moodboard con profilo risolto
-  UpdateProjectMoodboard.ts    ← aggiorna moodboard
-  DeleteProjectMoodboard.ts    ← rimuovi moodboard
+  GetStyleTags.ts              ← list tags by category
+  GetUserStyleProfile.ts       ← user profile with score
+  UpdateUserStyleProfile.ts    ← update profile (increments version, saves history)
+  UpdateOnboardingStep.ts      ← save a single onboarding step
+  SkipOnboarding.ts            ← skip onboarding
+  GetProjectMoodboard.ts       ← moodboard with resolved profile
+  UpdateProjectMoodboard.ts    ← update moodboard
+  DeleteProjectMoodboard.ts    ← remove moodboard
   ResolveStyleProfile.ts       ← merge user+project+defaults → ResolvedStyleProfile
   BuildLayer0Prompt.ts         ← ResolvedStyleProfile → Layer0Output
 ```
 
-### 7.4 Nuove Infra Implementations (infra/)
+### 7.4 New Infra Implementations (infra/)
 
 ```
 apps/api/src/infra/db/
@@ -879,12 +880,12 @@ apps/api/src/infra/db/
   MongoProjectMoodboardRepository.ts
 
 apps/api/src/infra/style/
-  StyleProfileResolver.ts      ← logica merge con fallback cascade
-  Layer0PromptBuilder.ts       ← template rendering per system prompt addendum
-  PlatformDefaults.ts          ← costanti con default piattaforma
+  StyleProfileResolver.ts      ← merge logic with fallback cascade
+  Layer0PromptBuilder.ts       ← template rendering for the system prompt addendum
+  PlatformDefaults.ts          ← constants with platform defaults
 ```
 
-### 7.5 Nuove Routes (presentation/http/routes/)
+### 7.5 New Routes (presentation/http/routes/)
 
 ```
 apps/api/src/presentation/http/routes/
@@ -893,357 +894,357 @@ apps/api/src/presentation/http/routes/
   moodboardRoutes.ts           ← GET/PUT/DELETE /projects/:id/moodboard, GET /projects/:id/resolved-style
 ```
 
-### 7.6 Nuovi Contracts (packages/contracts/src/)
+### 7.6 New Contracts (packages/contracts/src/)
 
 ```
 packages/contracts/src/
   styleTags.ts                 ← TagCategory enum, StyleTag schema, PaletteDefinition schema
-  userStyleProfile.ts          ← profilo utente schema, step-by-step validation
+  userStyleProfile.ts          ← user profile schema, step-by-step validation
   projectMoodboard.ts          ← moodboard schema, paletteCustomOverrides schema
   resolvedStyle.ts             ← resolved profile schema (output only)
 ```
 
 ---
 
-## 8. Seed Script Estensione
+## 8. Seed Script Extension
 
 ### 8.1 seed-style-tags.ts
 
 ```typescript
-// Popola style_tags collection con il catalogo tassonomico completo.
-// Idempotente: upsert su tagId.
-// Eseguito a startup se flag STYLE_TAGS_AUTO_SEED=true (default: true).
+// Populates the style_tags collection with the complete taxonomic catalog.
+// Idempotent: upsert on tagId.
+// Runs at startup if STYLE_TAGS_AUTO_SEED=true (default: true).
 
-// Contenuto: tutte le 10 categorie × ~8-12 tag ciascuna = ~100 tag totali.
-// Include le 10 palette predefinite con PaletteDefinition completa.
+// Content: all 10 categories × ~8-12 tags each = ~100 tags total.
+// Includes the 10 predefined palettes with a complete PaletteDefinition.
 ```
 
-### 8.2 Estensione seed.ts
+### 8.2 seed.ts Extension
 
 ```typescript
-// Aggiunge al seed utente default:
-// - UserStyleProfile con onboarding status "completed"
-// - Tag esempio: identity:freelancer, sector:tech-saas, visual:minimal, palette:ocean-blue
-// - Progetto default: ProjectMoodboard ereditato da profilo utente
+// Adds to the default seed user:
+// - UserStyleProfile with onboarding status "completed"
+// - Example tags: identity:freelancer, sector:tech-saas, visual:minimal, palette:ocean-blue
+// - Default project: ProjectMoodboard inherited from the user profile
 ```
 
 ---
 
-## 9. Frontend — Nuove Pagine e Componenti
+## 9. Frontend — New Pages and Components
 
-### 9.1 Nuove Pagine
+### 9.1 New Pages
 
 ```
 apps/web/app/
   onboarding/
-    page.tsx                   ← Wizard 3 step con progress bar
+    page.tsx                   ← 3-step wizard with progress bar
   settings/
     profile/
-      page.tsx                 ← Modifica profilo stile (riapre wizard)
+      page.tsx                 ← Edit style profile (reopens the wizard)
 
 apps/web/app/dashboard/
   new-project/
-    page.tsx                   ← Wizard creazione progetto 3 step
+    page.tsx                   ← 3-step project creation wizard
 ```
 
-### 9.2 Nuovi Componenti
+### 9.2 New Components
 
 ```
 apps/web/components/
   onboarding/
-    TagCloud.tsx               ← Nuvola tag cliccabili (multi-select, max N)
-    PaletteSelector.tsx        ← Palette cards con preview colore live
-    TypographyPreview.tsx      ← Font samples con testo di esempio
-    VisualStyleCard.tsx        ← Card con immagine + nome stile (selezionabile)
-    OnboardingProgress.tsx     ← Barra di progresso step 1/2/3
-    OnboardingStepWrapper.tsx  ← Container con Avanti/Indietro/Salta/Salta tutto
+    TagCloud.tsx               ← Clickable tag cloud (multi-select, max N)
+    PaletteSelector.tsx        ← Palette cards with live color preview
+    TypographyPreview.tsx      ← Font samples with example text
+    VisualStyleCard.tsx        ← Card with image + style name (selectable)
+    OnboardingProgress.tsx     ← Step 1/2/3 progress bar
+    OnboardingStepWrapper.tsx  ← Container with Next/Back/Skip/Skip all
   
   moodboard/
-    MoodboardEditor.tsx        ← Editor moodboard per progetto
-    ColorCustomizer.tsx        ← Input hex per override colori singoli
-    FeatureTagSelector.tsx     ← Selettore feature desiderate
-    ReferenceUrlInput.tsx      ← Input multiplo URL con preview
-    MoodboardPreview.tsx       ← Anteprima visiva del moodboard risolto
+    MoodboardEditor.tsx        ← Moodboard editor for the project
+    ColorCustomizer.tsx        ← Hex input for single color overrides
+    FeatureTagSelector.tsx     ← Selector for desired features
+    ReferenceUrlInput.tsx      ← Multi-URL input with preview
+    MoodboardPreview.tsx       ← Visual preview of the resolved moodboard
   
   shared/
-    ProfileCompletionBadge.tsx ← Badge "Base/Intermedio/Completo"
-    StylePreviewCard.tsx       ← Mini-preview del profilo stile risolto
+    ProfileCompletionBadge.tsx ← "Basic/Intermediate/Complete" badge
+    StylePreviewCard.tsx       ← Mini-preview of the resolved style profile
 ```
 
-### 9.3 Estensione Dashboard
+### 9.3 Dashboard Extension
 
-Il dashboard attuale viene esteso con:
+The current dashboard is extended with:
 
-- **Profilo completamento badge** nell'header (cliccabile → `/settings/profile`)
-- **Preview stile utente** nel sidebar (mini-card con palette e mood)
-- **Bottone "+ Nuovo Progetto"** che apre il wizard (non più inline input)
-- **Card progetto** arricchita con mini-preview della palette progetto
+- **Profile completion badge** in the header (clickable → `/settings/profile`)
+- **User style preview** in the sidebar (mini-card with palette and mood)
+- **"+ New Project" button** that opens the wizard (no longer an inline input)
+- **Project card** enriched with a mini-preview of the project palette
 
-### 9.4 Estensione Workspace
+### 9.4 Workspace Extension
 
-Il workspace riceve:
+The workspace receives:
 
-- **Tab "Style"** nel pannello destro: mostra il profilo risolto, i design tokens, e permette modifica rapida del moodboard senza uscire dal workspace.
-- **Layer 0 status indicator**: mostra se il profilo è stato iniettato nel preprompt corrente.
+- A **"Style" tab** in the right-hand panel: shows the resolved profile, the design tokens, and allows quick editing of the moodboard without leaving the workspace.
+- A **Layer 0 status indicator**: shows whether the profile has been injected into the current preprompt.
 
 ---
 
-## 10. Configurazione Ambiente
+## 10. Environment Configuration
 
-### 10.1 Nuove Env Variables
+### 10.1 New Env Variables
 
 ```env
 # Style profiling
-STYLE_TAGS_AUTO_SEED=true              # Seed tag al bootstrap
-STYLE_TAGS_SEED_LANG=it,en             # Lingue seed
+STYLE_TAGS_AUTO_SEED=true              # Seed tags at bootstrap
+STYLE_TAGS_SEED_LANG=it,en             # Seed languages
 
 # Layer 0
-LAYER0_ENABLED=true                    # Attiva Layer 0 preprompting
-LAYER0_MAX_ADDENDUM_TOKENS=400         # Budget token per addendum stilistico
-LAYER0_REFERENCE_IMAGE_DESCRIBE=true   # Usa LLM vision per descrivere immagini reference
+LAYER0_ENABLED=true                    # Enable Layer 0 preprompting
+LAYER0_MAX_ADDENDUM_TOKENS=400         # Token budget for the stylistic addendum
+LAYER0_REFERENCE_IMAGE_DESCRIBE=true   # Use LLM vision to describe reference images
 ```
 
 ---
 
-## 11. Piano di Implementazione Incrementale
+## 11. Incremental Implementation Plan
 
-### Fase 1 — Foundation (Priorità ALTA)
+### Phase 1 — Foundation (HIGH Priority)
 
-| Task | Componente | Dipendenze |
+| Task | Component | Dependencies |
 |---|---|---|
-| F1.1 | Entity `StyleTag`, `UserStyleProfile`, `ProjectMoodboard`, `ResolvedStyleProfile` | Nessuna |
-| F1.2 | Contracts Zod per tutti gli schema | F1.1 |
-| F1.3 | `style_tags` collection + seed script `seed-style-tags.ts` | F1.1 |
+| F1.1 | `StyleTag`, `UserStyleProfile`, `ProjectMoodboard`, `ResolvedStyleProfile` entities | None |
+| F1.2 | Zod contracts for all schemas | F1.1 |
+| F1.3 | `style_tags` collection + `seed-style-tags.ts` seed script | F1.1 |
 | F1.4 | `MongoStyleTagRepository` + `GetStyleTags` use case + route | F1.3 |
-| F1.5 | `MongoUserStyleProfileRepository` + use cases CRUD | F1.1 |
-| F1.6 | `MongoProjectMoodboardRepository` + use cases CRUD | F1.1 |
+| F1.5 | `MongoUserStyleProfileRepository` + CRUD use cases | F1.1 |
+| F1.6 | `MongoProjectMoodboardRepository` + CRUD use cases | F1.1 |
 
-### Fase 2 — Onboarding UX
+### Phase 2 — Onboarding UX
 
-| Task | Componente | Dipendenze |
+| Task | Component | Dependencies |
 |---|---|---|
-| F2.1 | Componenti shared: `TagCloud`, `PaletteSelector`, `VisualStyleCard` | F1.3 |
-| F2.2 | Pagina `/onboarding` con wizard 3 step | F2.1 + F1.5 |
-| F2.3 | Integrazione post-register: redirect a `/onboarding` | F2.2 |
-| F2.4 | Pagina `/settings/profile` per modifica profilo | F2.1 + F1.5 |
-| F2.5 | `ProfileCompletionBadge` in dashboard | F1.5 |
+| F2.1 | Shared components: `TagCloud`, `PaletteSelector`, `VisualStyleCard` | F1.3 |
+| F2.2 | `/onboarding` page with 3-step wizard | F2.1 + F1.5 |
+| F2.3 | Post-register integration: redirect to `/onboarding` | F2.2 |
+| F2.4 | `/settings/profile` page for editing the profile | F2.1 + F1.5 |
+| F2.5 | `ProfileCompletionBadge` in the dashboard | F1.5 |
 
-### Fase 3 — Project Moodboard
+### Phase 3 — Project Moodboard
 
-| Task | Componente | Dipendenze |
+| Task | Component | Dependencies |
 |---|---|---|
-| F3.1 | Wizard creazione progetto 3 step (`/dashboard/new-project`) | F2.1 + F1.6 |
-| F3.2 | `MoodboardEditor` con inherit/override UX | F2.1 + F1.6 |
-| F3.3 | Fast-create path (nome + inherit da profilo) | F1.6 |
-| F3.4 | Tab "Style" nel workspace | F3.2 |
+| F3.1 | 3-step project creation wizard (`/dashboard/new-project`) | F2.1 + F1.6 |
+| F3.2 | `MoodboardEditor` with inherit/override UX | F2.1 + F1.6 |
+| F3.3 | Fast-create path (name + inherit from profile) | F1.6 |
+| F3.4 | "Style" tab in the workspace | F3.2 |
 
-### Fase 4 — Layer 0 Engine
+### Phase 4 — Layer 0 Engine
 
-| Task | Componente | Dipendenze |
+| Task | Component | Dependencies |
 |---|---|---|
-| F4.1 | `StyleProfileResolver` (merge con fallback cascade) | F1.5 + F1.6 |
+| F4.1 | `StyleProfileResolver` (merge with fallback cascade) | F1.5 + F1.6 |
 | F4.2 | `Layer0PromptBuilder` (template → system prompt addendum) | F4.1 |
-| F4.3 | `PlatformDefaults` costanti | Nessuna |
-| F4.4 | Integrazione in `buildMessagesWithHistory()` (Layer 1) | F4.2 |
-| F4.5 | Integrazione in `ContextBuilder` (Layer 2, quando implementato) | F4.2 |
-| F4.6 | Route `GET /projects/:id/resolved-style` per debug | F4.1 + F4.2 |
+| F4.3 | `PlatformDefaults` constants | None |
+| F4.4 | Integration in `buildMessagesWithHistory()` (Layer 1) | F4.2 |
+| F4.5 | Integration in `ContextBuilder` (Layer 2, once implemented) | F4.2 |
+| F4.6 | `GET /projects/:id/resolved-style` debug route | F4.1 + F4.2 |
 
 ---
 
-## 12. Rischi e Mitigazioni
+## 12. Risks and Mitigations
 
-| Rischio | Probabilità | Impatto | Mitigazione |
+| Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
-| Profilo troppo vincolante → output LLM stereotipato | Media | Alto | I tag sono suggerimenti (weight-based), non vincoli assoluti. Il prompt addendum usa linguaggio "prefer" non "must". |
-| Troppi tag → rumore nel preprompt | Bassa | Medio | Max 5 tag per categoria; peso ponderato; solo i top-3 per peso entrano nel prompt addendum. |
-| Token economy: addendum troppo lungo | Bassa | Alto | Budget hard limit `LAYER0_MAX_ADDENDUM_TOKENS=400`; formato ultra-compatto bullet-point. |
-| UX onboarding troppo lungo → drop rate | Media | Alto | Skip sempre disponibile; 3 step soli; ogni step < 30 secondi; visual-first (click, non typing). |
-| Palette predefinite troppo limitate | Bassa | Basso | `paletteCustomOverrides` permette override colore per colore; nuove palette aggiunte via seed senza deploy. |
-| Migrazione dati: utenti esistenti senza profilo | Bassa | Basso | Fallback cascade garantisce funzionamento anche con profilo vuoto (0 tags). Nessuna breaking change. |
+| Profile too constraining → stereotyped LLM output | Medium | High | Tags are suggestions (weight-based), not absolute constraints. The prompt addendum uses "prefer" language, not "must". |
+| Too many tags → noise in the preprompt | Low | Medium | Max 5 tags per category; weighted; only the top 3 by weight enter the prompt addendum. |
+| Token economy: addendum too long | Low | High | Hard budget limit `LAYER0_MAX_ADDENDUM_TOKENS=400`; ultra-compact bullet-point format. |
+| Onboarding UX too long → drop rate | Medium | High | Skip always available; only 3 steps; each step < 30 seconds; visual-first (click, not typing). |
+| Predefined palettes too limited | Low | Low | `paletteCustomOverrides` allows per-color overrides; new palettes added via seed without a deploy. |
+| Data migration: existing users without a profile | Low | Low | Fallback cascade guarantees operation even with an empty profile (0 tags). No breaking change. |
 
 ---
 
-## 13. Impatto su Documenti Esistenti
+## 13. Impact on Existing Documents
 
-| Documento | Modifica richiesta |
+| Document | Required change |
 |---|---|
-| `docs/INDEX.md` | Aggiungere link a questa spec |
-| `docs/agents/CODE_AGENT_INDEX.md` | Aggiungere entities/routes/use-cases nella sezione "Da costruire" |
-| `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` | Aggiungere sezione Layer 0 |
-| `docs/runbooks/TESTABLE_STEPS.md` | Aggiungere step testabili per onboarding e moodboard |
-| `DB_PLATFORM_SPEC.md` | Aggiungere 3 nuove collection + estensioni users/projects |
-| `PREPROMPT_ENGINE_SPEC.md` | Aggiungere integrazione Layer 0 in ContextBuilder |
-| `UX_SPEC.md` | Riscrivere wizard da 3-step a wizard onboarding + moodboard progetto |
-| `docs/vision/IMPLEMENTATION_CROSSMAP.md` | Aggiungere nuovi Req ID per `R-ONB-*` e `R-STY-*` |
+| `docs/INDEX.md` | Add a link to this spec |
+| `docs/agents/CODE_AGENT_INDEX.md` | Add entities/routes/use-cases to the "To be built" section |
+| `docs/architecture/BOOTSTRAP_ARCHITECTURE.md` | Add a Layer 0 section |
+| `docs/runbooks/TESTABLE_STEPS.md` | Add testable steps for onboarding and moodboard |
+| `DB_PLATFORM_SPEC.md` | Add 3 new collections + extensions to users/projects |
+| `PREPROMPT_ENGINE_SPEC.md` | Add Layer 0 integration in ContextBuilder |
+| `UX_SPEC.md` | Rewrite the wizard from a 3-step wizard to an onboarding + project moodboard wizard |
+| `docs/vision/IMPLEMENTATION_CROSSMAP.md` | Add new Req IDs for `R-ONB-*` and `R-STY-*` |
 
 ---
 
-## 14. Requisiti Tracciabili (per IMPLEMENTATION_CROSSMAP)
+## 14. Traceable Requirements (for IMPLEMENTATION_CROSSMAP)
 
-| Req ID | Requisito | Stato iniziale |
+| Req ID | Requirement | Initial status |
 |---|---|---|
-| `R-ONB-1` | Wizard onboarding utente 3 step con profilazione tag | 📐 Spec definita |
-| `R-ONB-2` | Onboarding skipabile e riprendibile | 📐 Spec definita |
-| `R-ONB-3` | Pagina settings/profile per modifica profilo | 📐 Spec definita |
-| `R-ONB-4` | Badge completamento profilo in dashboard | 📐 Spec definita |
-| `R-STY-1` | Catalogo tag stilistici globale (10 categorie, ~100 tag) | 📐 Spec definita |
-| `R-STY-2` | 10 palette colori predefinite con design tokens | 📐 Spec definita |
-| `R-STY-3` | Riferimenti visivi per stili (immagini hero card) | 📐 Spec definita |
-| `R-MBD-1` | Wizard creazione progetto con moodboard 3 step | 📐 Spec definita |
-| `R-MBD-2` | Fast-create con inherit da profilo utente | 📐 Spec definita |
-| `R-MBD-3` | Override/fallback cascade (progetto → utente → piattaforma) | 📐 Spec definita |
-| `R-MBD-4` | Tab "Style" nel workspace per modifica rapida | 📐 Spec definita |
-| `R-L0-1` | StyleProfileResolver con merge e fallback | 📐 Spec definita |
-| `R-L0-2` | Layer0PromptBuilder con budget token 400 | 📐 Spec definita |
-| `R-L0-3` | Integrazione Layer 0 → Layer 1 (Chat Preview) | 📐 Spec definita |
-| `R-L0-4` | Integrazione Layer 0 → Layer 2 (OpenCode Pipeline) | 📐 Spec definita |
-| `R-L0-5` | Route debug /resolved-style per preview | 📐 Spec definita |
+| `R-ONB-1` | 3-step user onboarding wizard with tag profiling | 📐 Spec defined |
+| `R-ONB-2` | Skippable and resumable onboarding | 📐 Spec defined |
+| `R-ONB-3` | settings/profile page for editing the profile | 📐 Spec defined |
+| `R-ONB-4` | Profile completion badge in the dashboard | 📐 Spec defined |
+| `R-STY-1` | Global stylistic tag catalog (10 categories, ~100 tags) | 📐 Spec defined |
+| `R-STY-2` | 10 predefined color palettes with design tokens | 📐 Spec defined |
+| `R-STY-3` | Visual references for styles (hero card images) | 📐 Spec defined |
+| `R-MBD-1` | Project creation wizard with a 3-step moodboard | 📐 Spec defined |
+| `R-MBD-2` | Fast-create with inherit from the user profile | 📐 Spec defined |
+| `R-MBD-3` | Override/fallback cascade (project → user → platform) | 📐 Spec defined |
+| `R-MBD-4` | "Style" tab in the workspace for quick editing | 📐 Spec defined |
+| `R-L0-1` | StyleProfileResolver with merge and fallback | 📐 Spec defined |
+| `R-L0-2` | Layer0PromptBuilder with a 400 token budget | 📐 Spec defined |
+| `R-L0-3` | Layer 0 → Layer 1 integration (Chat Preview) | 📐 Spec defined |
+| `R-L0-4` | Layer 0 → Layer 2 integration (OpenCode Pipeline) | 📐 Spec defined |
+| `R-L0-5` | /resolved-style debug route for preview | 📐 Spec defined |
 
 ---
 
-## Appendice A — Industry Best Practices & Benchmark di Riferimento
+## Appendix A — Industry Best Practices & Reference Benchmarks
 
-> **Fonte:** Analisi diretta di Duolingo, Slack, Figma, Headspace + articolo JustInMind "User onboarding: best practices and 20 good examples" + UX Collective  
-> **Scopo:** Documentare pattern UX di onboarding consolidati nel settore e mappare l'applicabilità diretta alle scelte architetturali di questa spec.
+> **Source:** Direct analysis of Duolingo, Slack, Figma, Headspace + the JustInMind article "User onboarding: best practices and 20 good examples" + UX Collective  
+> **Purpose:** Document onboarding UX patterns established in the industry and map their direct applicability to this spec's architectural choices.
 
-### A.1 Principi Universali di Onboarding (da JustInMind)
+### A.1 Universal Onboarding Principles (from JustInMind)
 
-L'articolo JustInMind identifica 11 best practice e 5 errori da evitare. La tabella mappa ogni principio alla nostra spec:
+The JustInMind article identifies 11 best practices and 5 mistakes to avoid. The table maps each principle to our spec:
 
-| # | Best Practice JustInMind | Pattern | Applicazione Andy Code Cat | Sezione Spec |
+| # | JustInMind Best Practice | Pattern | Andy Code Cat Application | Spec Section |
 |---|---|---|---|---|
-| BP-1 | **Understand the user journey** — mappare il percorso dall'apertura al momento "aha" | User Journey Map | Il wizard 3-step mappa: identità → stile → ispirazioni. L'"aha moment" è la preview del profilo risolto. | §2 |
-| BP-2 | **Define key milestones** — azioni chiave che portano al valore del prodotto | Milestone-driven | Milestones: (1) primo tag selezionato, (2) palette scelta, (3) profilo completato → badge. `completionScore` traccia il progresso. | §2.3, §5.2 |
-| BP-3 | **Balance education and exploration** — guidare ma lasciare esplorare | Guided freedom | Wizard guidato ma ogni step è skipabile (P-ONB-1). Tag cliccabili = esplorazione, non form rigidi. | §2.2 |
-| BP-4 | **Minimize friction** — meno passaggi possibili | Friction reduction | 3 step soli, ogni step < 30 sec, visual-first (click non typing). Fast-create bypassa il wizard. | §2.2, §3.2 |
-| BP-5 | **Personalize and contextualize** — adattare il flusso al tipo di utente | Contextual flow | Step 1 (Chi Sei) determina quali tag vengono evidenziati nello Step 2 (Stile). Profiling progressivo. | §2.1 |
-| BP-6 | **Focus on quick wins** — dare risultati immediati | Quick wins | Dopo Step 2, preview live della palette scelta. Feedback visivo istantaneo. | §2.1 |
-| BP-7 | **Simplify the process** — essenziale, niente di superfluo | Minimalism | Max 5 tag per categoria. Nessun campo obbligatorio. Due soli percorsi (wizard o fast-create). | §1.1, §3.2 |
-| BP-8 | **Use engaging visuals** — animazioni e immagini per spiegare senza testo | Visual-first | Card con immagine hero per ogni stile visivo (§1.4). Palette con anteprima colore live. | §1.4, §9.2 |
-| BP-9 | **Make it interactive** — l'utente agisce, non legge | Learn by doing | TagCloud multi-select, PaletteSelector con click, VisualStyleCard selezionabili. Zero tutorial testuali. | §9.2 |
-| BP-10 | **Provide consistent communication** — supporto continuo post-onboarding | Ongoing nudges | ProfileCompletionBadge nel dashboard. Possibilità di riaprire wizard da Settings. Layer 0 status nel workspace. | §9.3, §9.4 |
-| BP-11 | **Use progress indicators** — mostrare dove si è nel flusso | Progress bar | `OnboardingProgress` component (step 1/2/3). `completionScore` 0-100. | §9.2 |
+| BP-1 | **Understand the user journey** — map the path from opening to the "aha" moment | User Journey Map | The 3-step wizard maps: identity → style → inspirations. The "aha moment" is the preview of the resolved profile. | §2 |
+| BP-2 | **Define key milestones** — key actions that lead to product value | Milestone-driven | Milestones: (1) first tag selected, (2) palette chosen, (3) profile completed → badge. `completionScore` tracks progress. | §2.3, §5.2 |
+| BP-3 | **Balance education and exploration** — guide but leave room to explore | Guided freedom | Guided wizard but every step is skippable (P-ONB-1). Clickable tags = exploration, not rigid forms. | §2.2 |
+| BP-4 | **Minimize friction** — as few steps as possible | Friction reduction | Only 3 steps, each step < 30 sec, visual-first (click, not typing). Fast-create bypasses the wizard. | §2.2, §3.2 |
+| BP-5 | **Personalize and contextualize** — adapt the flow to the type of user | Contextual flow | Step 1 (Who You Are) determines which tags are highlighted in Step 2 (Style). Progressive profiling. | §2.1 |
+| BP-6 | **Focus on quick wins** — deliver immediate results | Quick wins | After Step 2, a live preview of the chosen palette. Instant visual feedback. | §2.1 |
+| BP-7 | **Simplify the process** — essential only, nothing superfluous | Minimalism | Max 5 tags per category. No mandatory field. Only two paths (wizard or fast-create). | §1.1, §3.2 |
+| BP-8 | **Use engaging visuals** — animations and images to explain without text | Visual-first | Card with a hero image for each visual style (§1.4). Palette with a live color preview. | §1.4, §9.2 |
+| BP-9 | **Make it interactive** — the user acts, doesn't read | Learn by doing | Multi-select TagCloud, click-based PaletteSelector, selectable VisualStyleCard. Zero text tutorials. | §9.2 |
+| BP-10 | **Provide consistent communication** — ongoing support after onboarding | Ongoing nudges | ProfileCompletionBadge in the dashboard. Ability to reopen the wizard from Settings. Layer 0 status in the workspace. | §9.3, §9.4 |
+| BP-11 | **Use progress indicators** — show where you are in the flow | Progress bar | `OnboardingProgress` component (step 1/2/3). `completionScore` 0-100. | §9.2 |
 
-### A.2 Errori da Evitare (da JustInMind)
+### A.2 Mistakes to Avoid (from JustInMind)
 
-| Anti-pattern | Descrizione | Come Andy Code Cat lo evita |
+| Anti-pattern | Description | How Andy Code Cat avoids it |
 |---|---|---|
-| **Information overload** | Troppi feature presentati subito | Solo 3 step, ognuno con un focus singolo. Nessuna spiegazione tecnica nel wizard. |
-| **Ignorare feedback utente** | Flusso fisso senza iterazione | `user_style_profile_history` registra ogni versione. Profilo sempre modificabile da Settings. |
-| **Mancanza di personalizzazione** | Onboarding generico per tutti | Step 1 (identità) personalizza le opzioni degli step successivi. Profiling contextuale. |
-| **Flussi troppo complessi** | Troppi step, navigazione confusa | 3 step lineari, barra progresso visibile, "Salta tutto" sempre accessibile. |
-| **Nessun follow-up** | Utente abbandonato dopo l'onboarding | Badge completamento persistente, tab Style nel workspace, Layer 0 sempre attivo. |
+| **Information overload** | Too many features presented at once | Only 3 steps, each with a single focus. No technical explanation in the wizard. |
+| **Ignoring user feedback** | Fixed flow with no iteration | `user_style_profile_history` records every version. The profile is always editable from Settings. |
+| **Lack of personalization** | Generic onboarding for everyone | Step 1 (identity) personalizes the options in subsequent steps. Contextual profiling. |
+| **Overly complex flows** | Too many steps, confusing navigation | 3 linear steps, visible progress bar, "Skip all" always accessible. |
+| **No follow-up** | User abandoned after onboarding | Persistent completion badge, Style tab in the workspace, Layer 0 always active. |
 
 ### A.3 Benchmark: Duolingo
 
-**Contesto:** App di language learning. 500M+ download. Riferimento per gamification e conversione immediata.
+**Context:** Language-learning app. 500M+ downloads. Reference for gamification and immediate conversion.
 
-| Pattern Duolingo | Dettaglio | Applicazione Andy Code Cat |
+| Duolingo Pattern | Detail | Andy Code Cat Application |
 |---|---|---|
-| **Interazione immediata** | L'utente sceglie lingua e obiettivo nella landing page — entra nel core in <10 click | Il wizard chiede "Chi sei?" e "Che stile ti piace?" in 2 step — la profilazione è già il prodotto, non un ostacolo pre-prodotto. |
-| **Mascotte (Duo)** | Personaggio guida riconoscibile, tono amichevole, riduce ansia | Andy Code Cat può introdurre un companion visivo nel wizard (es. icona/avatar assistente). Microcopy conversazionale nei placeholder. |
-| **Goal commitment** | Chiede all'utente di scegliere un obiettivo (commitment bias psicologico) | Lo Step 1 chiede "cosa vuoi costruire?" — il tipo di sito diventa un commitment psicologico che guida tutto il percorso. |
-| **Livello di partenza** | Placement test opzionale per esperti OR start from basics | Fast-create (esperto → nessun wizard) vs. wizard completo (nuovo utente). Due percorsi paralleli. |
-| **Gamification leggera** | Punti, streaks, badge di progresso | `completionScore` 0-100 con badge (Base/Intermedio/Completo). Non aggressivo, ma presente. |
-| **Tooltip contestuali leggeri** | Tooltip appaiono solo dove serve, senza tutorial forzato | VisualStyleCard con hover-preview. Nessun dialog modale bloccante. |
+| **Immediate interaction** | The user picks a language and a goal right on the landing page — enters the core in <10 clicks | The wizard asks "Who are you?" and "What style do you like?" in 2 steps — profiling IS the product, not a pre-product obstacle. |
+| **Mascot (Duo)** | Recognizable guide character, friendly tone, reduces anxiety | Andy Code Cat can introduce a visual companion in the wizard (e.g. an assistant icon/avatar). Conversational microcopy in placeholders. |
+| **Goal commitment** | Asks the user to choose a goal (psychological commitment bias) | Step 1 asks "what do you want to build?" — the site type becomes a psychological commitment that drives the whole path. |
+| **Starting level** | Optional placement test for experts OR start from basics | Fast-create (expert → no wizard) vs. full wizard (new user). Two parallel paths. |
+| **Light gamification** | Points, streaks, progress badges | `completionScore` 0-100 with badges (Basic/Intermediate/Complete). Not aggressive, but present. |
+| **Light contextual tooltips** | Tooltips appear only where needed, without a forced tutorial | VisualStyleCard with hover-preview. No blocking modal dialog. |
 
-**Pattern chiave adottato:** _"Parla la lingua dell'utente"_ — il wizard usa terminologia visiva (click su immagini) non tecnica. L'utente non deve sapere cosa sia una "palette hex" per scegliere i colori.
+**Key pattern adopted:** _"Speak the user's language"_ — the wizard uses visual terminology (clicking images) rather than technical terms. The user doesn't need to know what a "hex palette" is to choose colors.
 
 ### A.4 Benchmark: Slack
 
-**Contesto:** Piattaforma di team messaging. 700M+ messaggi/giorno. Riferimento per setup guidato e riduzione ansia.
+**Context:** Team messaging platform. 700M+ messages/day. Reference for guided setup and anxiety reduction.
 
-| Pattern Slack | Dettaglio | Applicazione Andy Code Cat |
+| Slack Pattern | Detail | Andy Code Cat Application |
 |---|---|---|
-| **"The First Meeting"** | L'onboarding è strutturato come un primo incontro: presentazione → esigenze → setup | Il wizard simula un dialogo: Step 1 "Chi sei?" → Step 2 "Il tuo stile" → Step 3 "Le tue ispirazioni". Flusso conversazionale. |
-| **Identità del workspace** | Chiede nome workspace, invita membri, stabilisce il contesto | Nello Step 1 l'utente stabilisce la propria identità professionale. Nel moodboard progetto stabilisce l'identità del sito. |
-| **Chatbot onboarding** | Slackbot guida interattivamente con domande e risposte | Pattern conversazionale nel wizard: placeholder type-ahead, suggerimenti contestuali, micro-feedback dopo ogni selezione. |
-| **Zero distrazioni** | Nessun email verification, nessuna notifica, nessun setup password fino a dopo l'onboarding | L'email verification è già bypassabile (`SKIP_EMAIL_VERIFY=true`). Il wizard è post-register, non intra-register. |
-| **Progressive disclosure** | Popup feature solo sulle funzionalità chiave, il resto lasciato ad esplorazione autonoma | Solo 3 categorie nel wizard (identità/stile/ispirazioni). Le 10 categorie tag complete sono nel settings post-onboarding. |
-| **Microcopy esplicativa** | Ogni campo ha una spiegazione contestuale che dà contesto allo sforzo richiesto | Ogni step può includere subtitle esplicativo: "Questo ci aiuta a personalizzare le proposte di design per i tuoi progetti". |
+| **"The First Meeting"** | Onboarding is structured like a first meeting: introduction → needs → setup | The wizard simulates a dialogue: Step 1 "Who are you?" → Step 2 "Your style" → Step 3 "Your inspirations". Conversational flow. |
+| **Workspace identity** | Asks for the workspace name, invites members, establishes context | In Step 1 the user establishes their own professional identity. In the project moodboard they establish the site's identity. |
+| **Onboarding chatbot** | The Slackbot guides interactively with questions and answers | Conversational pattern in the wizard: type-ahead placeholders, contextual suggestions, micro-feedback after each selection. |
+| **Zero distractions** | No email verification, no notifications, no password setup until after onboarding | Email verification is already skippable (`SKIP_EMAIL_VERIFY=true`). The wizard is post-register, not intra-register. |
+| **Progressive disclosure** | Feature popups only on key functionality, the rest left to independent exploration | Only 3 categories in the wizard (identity/style/inspirations). The full 10 tag categories live in post-onboarding settings. |
+| **Explanatory microcopy** | Every field has a contextual explanation that gives context to the effort required | Every step can include an explanatory subtitle: "This helps us tailor design suggestions for your projects". |
 
-**Pattern chiave adottato:** _"Riduci l'ansia del primo incontro"_ — non chiedere troppo subito, stabilire fiducia prima di chiedere dati. Il wizard Andy Code Cat non chiede mai informazioni obbligatorie.
+**Key pattern adopted:** _"Reduce first-meeting anxiety"_ — don't ask for too much too soon, build trust before asking for data. The Andy Code Cat wizard never asks for mandatory information.
 
 ### A.5 Benchmark: Figma
 
-**Contesto:** Tool di design collaborativo. Usato da Duolingo, Slack, Netflix etc. Riferimento per "learn by doing".
+**Context:** Collaborative design tool. Used by Duolingo, Slack, Netflix, etc. Reference for "learn by doing".
 
-| Pattern Figma | Dettaglio | Applicazione Andy Code Cat |
+| Figma Pattern | Detail | Andy Code Cat Application |
 |---|---|---|
-| **Tooltip contestuali** | Tooltip appaiono solo quando l'utente interagisce con un elemento, non in sequenza forzata | Nel workspace, i tooltip per Layer 0 appaiono solo quando l'utente apre la tab Style. Mai interruzioni push. |
-| **Progetti esempio** | Template pronti che mostrano il potenziale del tool senza partire da zero | Seed crea almeno un progetto demo con moodboard precompilato. L'utente vede subito come appare un progetto "completo". |
-| **Learn by doing, not reading** | L'interfaccia invita ad agire, non a leggere documentazione | TagCloud e PaletteSelector sono componenti di azione (click per selezionare). Nessun testo istruttivo lungo. |
-| **Template come starting point** | Figma offre template per website, app, presentation come punto di partenza | I 10 template di palette predefinite (ocean-blue, warm-sunset, etc.) sono il punto di partenza visivo. L'utente "sceglie" prima di "creare". |
-| **Collaborative context** | Real-time cursors, commenti — mostra che non sei solo | Il Layer 0 status nel workspace mostra che l'AI "conosce" il tuo stile — non sei solo a costruire. |
-| **Design systems come base** | Libraries condivise garantiscono coerenza | Il catalogo `style_tags` è la design system condivisa di Andy Code Cat: tag consistenti tra utenti, progetti e AI. |
+| **Contextual tooltips** | Tooltips appear only when the user interacts with an element, not in a forced sequence | In the workspace, Layer 0 tooltips appear only when the user opens the Style tab. Never push interruptions. |
+| **Example projects** | Ready-made templates that show the tool's potential without starting from scratch | The seed creates at least one demo project with a pre-filled moodboard. The user immediately sees what a "complete" project looks like. |
+| **Learn by doing, not reading** | The interface invites action, not documentation reading | TagCloud and PaletteSelector are action components (click to select). No long instructional text. |
+| **Templates as a starting point** | Figma offers templates for websites, apps, presentations as a starting point | The 10 predefined palette templates (ocean-blue, warm-sunset, etc.) are the visual starting point. The user "chooses" before "creating". |
+| **Collaborative context** | Real-time cursors, comments — shows you're not alone | The Layer 0 status in the workspace shows that the AI "knows" your style — you're not building alone. |
+| **Design systems as a foundation** | Shared libraries guarantee consistency | The `style_tags` catalog is Andy Code Cat's shared design system: consistent tags across users, projects, and the AI. |
 
-**Pattern chiave adottato:** _"Non chiedere di leggere, chiedi di fare"_ — ogni step del wizard è un'azione visiva (seleziona, clicca, trascina) non un form da compilare.
+**Key pattern adopted:** _"Don't ask people to read, ask them to do"_ — every wizard step is a visual action (select, click, drag), not a form to fill in.
 
 ### A.6 Benchmark: Headspace
 
-**Contesto:** App di meditazione e wellness mentale. 70M+ download. Riferimento per tono emotivo e mood come UX.
+**Context:** Meditation and mental wellness app. 70M+ downloads. Reference for emotional tone and mood as UX.
 
-| Pattern Headspace | Dettaglio | Applicazione Andy Code Cat |
+| Headspace Pattern | Detail | Andy Code Cat Application |
 |---|---|---|
-| **Tono emotivo** | "Take a deep breath" come prima interazione — il tono dell'app è l'esperienza | Il wizard può aprirsi con un messaggio di benvenuto caldo: "Raccontaci di te — ci aiuterà a creare qualcosa che ti rappresenta". |
-| **Animazioni calming** | Transizioni fluide, colori rilassanti, nessuna fretta | Transizioni smooth tra step del wizard. Palette preview con fade-in. Nessun timer o urgenza. |
-| **"Mood" come input UX** | Prima domanda: "What kind of headspace are you looking for?" — il mood è l'entry point | La categoria `TC-VISUAL` (minimal, bold, playful, dark, etc.) è esattamente il "mood" del progetto. Il mood guida tutto il resto. |
-| **Goal selection iniziale** | L'utente sceglie tra: stress, sleep, anxiety, focus — personalizzazione immediata | Step 1 chiede tipo (freelancer, agency, brand) e settore — personalizzazione immediata del percorso. |
-| **AI companion (Ebb)** | Chatbot empatico che dà raccomandazioni personalizzate in base al mood | Andy Code Cat può offrire suggerimenti tag basati sull'identità dichiarata nello Step 1 → "Basandoci sul tuo profilo, ti suggeriamo...". |
-| **Contenuto come terapia** | L'onboarding non è un ostacolo, è già parte dell'esperienza benefica | Il wizard di Andy Code Cat non è "setup burocratico" — è il primo atto creativo. L'utente sta già costruendo il suo progetto. |
+| **Emotional tone** | "Take a deep breath" as the first interaction — the app's tone IS the experience | The wizard can open with a warm welcome message: "Tell us about yourself — it'll help us create something that represents you". |
+| **Calming animations** | Smooth transitions, relaxing colors, no rush | Smooth transitions between wizard steps. Palette preview with fade-in. No timer or urgency. |
+| **"Mood" as UX input** | First question: "What kind of headspace are you looking for?" — the mood IS the entry point | The `TC-VISUAL` category (minimal, bold, playful, dark, etc.) is exactly the project's "mood". The mood drives everything else. |
+| **Initial goal selection** | The user chooses between: stress, sleep, anxiety, focus — immediate personalization | Step 1 asks for type (freelancer, agency, brand) and sector — immediate personalization of the path. |
+| **AI companion (Ebb)** | Empathetic chatbot that gives personalized recommendations based on mood | Andy Code Cat can offer tag suggestions based on the identity declared in Step 1 → "Based on your profile, we suggest...". |
+| **Content as therapy** | Onboarding is not an obstacle, it's already part of the beneficial experience | The Andy Code Cat wizard is not "bureaucratic setup" — it's the first creative act. The user is already building their project. |
 
-**Pattern chiave adottato:** _"Il mood è UX"_ — lo stato emotivo/estetico dell'utente non è un dato da raccogliere ma un'esperienza da vivere. Il wizard deve far sentire l'utente già dentro al processo creativo.
+**Key pattern adopted:** _"Mood is UX"_ — the user's emotional/aesthetic state is not data to collect but an experience to live. The wizard must make the user feel already inside the creative process.
 
-### A.7 Sintesi: Pattern Trasversali Adottati
+### A.7 Synthesis: Cross-Cutting Patterns Adopted
 
-Dalla convergenza dei 4 benchmark + le best practice JustInMind emerge il modello operativo Andy Code Cat:
+From the convergence of the 4 benchmarks + the JustInMind best practices, the Andy Code Cat operating model emerges:
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│           MODELLO ONBOARDING Andy Code Cat — 6 PATTERN CHIAVE         │
+│            Andy Code Cat ONBOARDING MODEL — 6 KEY PATTERNS           │
 │                                                                    │
-│  ┌─ P1. AZIONE PRIMA DI ISTRUZIONE (Figma, Duolingo)             │
-│  │   → Click/select, mai leggere. Wizard = interfaccia d'azione. │
+│  ┌─ P1. ACTION BEFORE INSTRUCTION (Figma, Duolingo)               │
+│  │   → Click/select, never read. The wizard = an action interface.│
 │  │                                                                 │
-│  ├─ P2. CONVERSAZIONE NON INTERROGATORIO (Slack, Headspace)       │
-│  │   → Tono amichevole. "Raccontaci" non "Compila". Microcopy.   │
+│  ├─ P2. CONVERSATION, NOT INTERROGATION (Slack, Headspace)         │
+│  │   → Friendly tone. "Tell us" not "Fill in". Microcopy.        │
 │  │                                                                 │
-│  ├─ P3. MOOD COME ENTRY POINT (Headspace, Duolingo)               │
-│  │   → Lo stile/mood è la prima domanda. Il mood guida tutto.    │
+│  ├─ P3. MOOD AS ENTRY POINT (Headspace, Duolingo)                 │
+│  │   → Style/mood is the first question. The mood drives all.   │
 │  │                                                                 │
-│  ├─ P4. QUICK WIN VISIVO (Duolingo, Figma)                       │
-│  │   → Preview live palette/stile dopo ogni selezione.            │
+│  ├─ P4. VISUAL QUICK WIN (Duolingo, Figma)                       │
+│  │   → Live palette/style preview after every selection.          │
 │  │                                                                 │
-│  ├─ P5. DOPPIO PERCORSO ESPERTO/NOVIZIO (Duolingo, Figma)         │
-│  │   → Fast-create (skip) per chi sa cosa vuole. Wizard per chi  │
-│  │     vuole essere guidato.                                       │
+│  ├─ P5. DUAL EXPERT/NOVICE PATH (Duolingo, Figma)                 │
+│  │   → Fast-create (skip) for those who know what they want.    │
+│  │     Wizard for those who want guidance.                       │
 │  │                                                                 │
-│  └─ P6. ONBOARDING = PRIMO ATTO CREATIVO (Headspace, tutti)      │
-│      → L'onboarding non è setup, è il primo passo del progetto.  │
-│      → L'utente sta già "costruendo" durante il wizard.           │
+│  └─ P6. ONBOARDING = FIRST CREATIVE ACT (Headspace, all)         │
+│      → Onboarding isn't setup, it's the project's first step.    │
+│      → The user is already "building" during the wizard.          │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-### A.8 Metriche di Validazione
+### A.8 Validation Metrics
 
-Per verificare l'efficacia dell'onboarding basato su questi pattern, monitorare:
+To verify the effectiveness of onboarding based on these patterns, monitor:
 
-| Metrica | Target | Fonte benchmark |
+| Metric | Target | Benchmark source |
 |---|---|---|
-| **Wizard completion rate** | ≥ 60% degli utenti che iniziano completano tutti e 3 gli step | Duolingo: >70% completa il primo lesson entro 10 click |
-| **Time-to-first-project** | < 5 minuti da registrazione a primo progetto creato | Slack: workspace attivo in <3 min, Figma: primo file in <2 min |
-| **Profile completion score** | Media ≥ 40/100 entro prima settimana | Headspace: 65% sceglie almeno un goal al primo accesso |
-| **Bounce rate wizard** | < 25% abbandono tra Step 1 e Step 3 | Industria: 23% drop rate medio per wizard 3-step |
-| **Return-to-edit rate** | ≥ 15% utenti modificano profilo entro 30 giorni | Figma: alta iterazione su template dopo setup iniziale |
-| **Fast-create vs. wizard** | 30-40% fast-create, 60-70% wizard | Equilibrio tra utenti esperti e novizi |
+| **Wizard completion rate** | ≥ 60% of users who start complete all 3 steps | Duolingo: >70% complete the first lesson within 10 clicks |
+| **Time-to-first-project** | < 5 minutes from registration to first project created | Slack: active workspace in <3 min, Figma: first file in <2 min |
+| **Profile completion score** | Average ≥ 40/100 within the first week | Headspace: 65% choose at least one goal on first access |
+| **Wizard bounce rate** | < 25% drop-off between Step 1 and Step 3 | Industry: 23% average drop rate for 3-step wizards |
+| **Return-to-edit rate** | ≥ 15% of users edit their profile within 30 days | Figma: high iteration on templates after initial setup |
+| **Fast-create vs. wizard** | 30-40% fast-create, 60-70% wizard | Balance between expert and novice users |
 
-### A.9 Riferimenti
+### A.9 References
 
-| Ref | Tipo | URL / Descrizione |
+| Ref | Type | URL / Description |
 |---|---|---|
-| REF-JM-1 | Articolo guida | JustInMind "User onboarding: best practices and 20 good examples" — 11 best practice, 5 anti-pattern, 20 case study (Duolingo, Slack, Canva, Evernote, etc.) |
-| REF-DUO-1 | Analisi diretta | Duolingo — Mascotte Duo, goal commitment, placement test opzionale, gamification leggera, < 10 click al core |
-| REF-SLK-1 | Analisi diretta | Slack — Chatbot onboarding, zero distrazioni, microcopy esplicativa, progressive disclosure, "first meeting" paradigm |
-| REF-FIG-1 | Analisi diretta | Figma — Tooltip contestuali, template come starting point, learn by doing, design systems condivise |
-| REF-HS-1 | Analisi diretta | Headspace — Tono emotivo, animazioni calming, "mood as UX", AI companion (Ebb), goal selection iniziale |
-| REF-UXC-1 | Fonte terza | UX Collective — Pattern convergenti: interazione immediata, profiling non intrusivo, emotional design |
+| REF-JM-1 | Guide article | JustInMind "User onboarding: best practices and 20 good examples" — 11 best practices, 5 anti-patterns, 20 case studies (Duolingo, Slack, Canva, Evernote, etc.) |
+| REF-DUO-1 | Direct analysis | Duolingo — Duo mascot, goal commitment, optional placement test, light gamification, < 10 clicks to the core |
+| REF-SLK-1 | Direct analysis | Slack — Onboarding chatbot, zero distractions, explanatory microcopy, progressive disclosure, "first meeting" paradigm |
+| REF-FIG-1 | Direct analysis | Figma — Contextual tooltips, templates as a starting point, learn by doing, shared design systems |
+| REF-HS-1 | Direct analysis | Headspace — Emotional tone, calming animations, "mood as UX", AI companion (Ebb), initial goal selection |
+| REF-UXC-1 | Third-party source | UX Collective — Convergent patterns: immediate interaction, non-intrusive profiling, emotional design |

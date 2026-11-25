@@ -1,126 +1,126 @@
-# Zero Effort — Evoluzione Media, Feedback Visivo e Generazione Asincrona
+# Zero Effort — Media Evolution, Visual Feedback and Asynchronous Generation
 
-> Status: proposta operativa  
-> Data: 2026-04-22  
-> Scope: modalità Zero Effort + generalizzazione media management cross-modale + async job con notifiche + auto-publish preview e deeplink landing  
-> Audience: maintainer, agenti di implementazione, operatori
-
----
-
-## 1. Contesto e motivazione
-
-La modalità Zero Effort esiste già con un wizard a 3 step, ottimizzazione del prompt e generazione SSE.
-Tuttavia presenta quattro criticità strutturali:
-
-1. **Nessun feedback visivo durante la generazione**: il flusso SSE è attivo ma l'UI non mostra lo stream di thinking/risposta come fa la workspace. L'ottimizzazione del prompt non ha nemmeno il contatore token.
-
-2. **Nessun caricamento di media**: a differenza della workspace (GodMode) non è possibile caricare immagini, loghi o materiali visivi nel progetto prima della generazione. Questo impoverisce il prompt e impedisce al sistema di sapere dove posizionare immagini reali.
-
-3. **Nessuna gestione asincrona**: la generazione è sincrona (SSE con timeout 20 min). Se l'utente chiude la tab, il lavoro è perso. Non esiste un meccanismo "torna più tardi" né notifiche via mail o Telegram.
-
-4. **Nessuna pubblicazione automatica del risultato**: quando la generazione termina, il sito non è immediatamente accessibile via link pubblico. L'utente deve aprire manualmente la workspace e attivare la pubblicazione. Questo rompe il loop zero-effort: generare → link condivisibile → iterare.
-
-Questo documento analizza ogni gap, stabilisce la fattibilità, definisce le onde di implementazione e propone l'architettura unificata.
+> Status: operational proposal  
+> Date: 2026-04-22  
+> Scope: Zero Effort mode + cross-mode media management generalisation + async jobs with notifications + auto-publish preview and deeplink landing  
+> Audience: maintainers, implementation agents, operators
 
 ---
 
-## 2. Analisi dello stato attuale
+## 1. Context and motivation
 
-### 2.1 Cosa esiste già (punti di forza)
+Zero Effort mode already exists, with a 3-step wizard, prompt optimisation and SSE generation.
+It has, however, four structural weaknesses:
 
-| Componente | Stato |
+1. **No visual feedback during generation**: the SSE flow is active but the UI does not show the thinking/answer stream the way the workspace does. Prompt optimisation does not even have a token counter.
+
+2. **No media upload**: unlike the workspace (GodMode), there is no way to upload images, logos or visual material into the project before generation. This impoverishes the prompt and stops the system from knowing where to place real images.
+
+3. **No asynchronous handling**: generation is synchronous (SSE with a 20-minute timeout). If the user closes the tab, the work is lost. There is no "come back later" mechanism and no notifications by email or Telegram.
+
+4. **No automatic publication of the result**: when generation finishes, the site is not immediately reachable through a public link. The user has to open the workspace manually and enable publication. That breaks the zero-effort loop: generate → shareable link → iterate.
+
+This document analyses each gap, establishes what is feasible, defines the implementation waves and proposes the unified architecture.
+
+---
+
+## 2. Current-state analysis
+
+### 2.1 What already exists (strengths)
+
+| Component | Status |
 |---|---|
-| SSE streaming in zero-effort (`streamLlmChatPreview`) | Attivo — `genStreamTokens` già aggiornato in stato |
-| Variante streaming dell'ottimizzazione (`/llm/optimize-prompt/stream`) | Endpoint backend già implementato |
-| Upload asset (`POST /v1/projects/:projectId/assets`) | Completo con quota, MIME check, storage adapter |
-| Entity `ProjectAsset` con `styleRole`, `descriptionText`, `useInProject` | Presente — campo `descriptionText` già libero |
-| `systemPromptComposer` con layer A–E | Estendibile senza breaking change |
-| `ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md` | Piano già scritto — Layer F è già pensato |
-| Adapter storage locale + MinIO | Pronto |
-| Frontend notification system (`useNotifications`) | React context già globale |
-| MongoDB come unico datastore | Coerente — nessun Redis richiesto |
+| SSE streaming in zero-effort (`streamLlmChatPreview`) | Active — `genStreamTokens` already tracked in state |
+| Streaming variant of optimisation (`/llm/optimize-prompt/stream`) | Backend endpoint already implemented |
+| Asset upload (`POST /v1/projects/:projectId/assets`) | Complete, with quota, MIME check and storage adapter |
+| `ProjectAsset` entity with `styleRole`, `descriptionText`, `useInProject` | Present — the `descriptionText` field is already free-form |
+| `systemPromptComposer` with layers A–E | Extensible without breaking changes |
+| `ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md` | Plan already written — Layer F is already envisaged |
+| Local storage adapter + MinIO | Ready |
+| Frontend notification system (`useNotifications`) | React context already global |
+| MongoDB as the only datastore | Consistent — no Redis required |
 
-### 2.2 Cosa manca (gap)
+### 2.2 What is missing (gaps)
 
-| Gap | Impatto |
+| Gap | Impact |
 |---|---|
-| UI zero-effort non mostra thinking/answer stream | Esperienza povera durante la generazione |
-| Ottimizzazione senza streaming e senza contatore token | Attesa opaca |
-| Nessuno step di caricamento media nel wizard | Prompt privo di riferimenti visivi reali |
-| `ProjectAsset` manca di campo `usageHint` semantico | Non si può indicare "logo → header/footer" |
-| Nessun URL pubblico per gli asset | Non iniettabile nel prompt LLM come riferimento |
-| Nessun Layer F (media context block) nel system prompt | Il LLM non sa che esistono le immagini |
-| Nessun job DB-backed per tracciare la generazione | Nessun "torna più tardi" |
-| Nessun email sender (Nodemailer o equivalente) | Notifica al completamento impossibile |
-| Nessun Telegram bot | Notifica alternativa assente |
-| Nessuna pubblicazione automatica al termine della generazione | Il sito generato non è subito condivisibile — l'utente deve entrare in workspace e pubblicare manualmente |
-| Nessuna pagina di atterraggio deeplink | Il link inviato via email porta direttamente al workspace, non a una preview pulita con scelta guidata |
+| The zero-effort UI does not show the thinking/answer stream | Poor experience during generation |
+| Optimisation without streaming and without a token counter | Opaque wait |
+| No media upload step in the wizard | Prompt with no real visual references |
+| `ProjectAsset` has no semantic `usageHint` field | No way to say "logo → header/footer" |
+| No public URL for assets | Not injectable into the LLM prompt as a reference |
+| No Layer F (media context block) in the system prompt | The LLM does not know the images exist |
+| No DB-backed job to track generation | No "come back later" |
+| No email sender (Nodemailer or equivalent) | Completion notification impossible |
+| No Telegram bot | Alternative notification missing |
+| No automatic publication when generation ends | The generated site is not shareable straight away — the user has to enter the workspace and publish by hand |
+| No deeplink landing page | The link sent by email goes straight to the workspace, not to a clean preview with guided choices |
 
 ---
 
-## 3. Cosa è fattibile e cosa no
+## 3. What is feasible and what is not
 
-### Fattibile con impatto basso–medio
+### Feasible with low–medium impact
+
+| Feature | Notes |
+|---|---|
+| Visual streaming in zero-effort | Frontend only — reuse components already present in the workspace |
+| Optimisation with streaming + token counter | `/llm/optimize-prompt/stream` already exists; the UI wiring is missing |
+| Step 4 drag-and-drop upload | New frontend + reuse of the existing upload endpoint |
+| `usageHint` field on `ProjectAsset` | Additive addition to the entity + Mongo — no destructive migration |
+| Layer F in the system prompt | Additive — an empty layer has no effect |
+| Signed public URLs for assets | New endpoint with a short-lived signed JWT — safe |
+| Cross-mode generalisation of media context | Layer F added once in `composeSystemPrompt` |
+| MongoDB-backed job tracking (async job) | Simple new collection — no dependency on Redis or Bull |
+| Frontend polling + "come back later" | Simple pattern — polling on `/v1/jobs/:jobId` |
+| Email via Nodemailer + SMTP config | Simple dependency, configurable via env |
+| Auto-publish on completion (UUID path) | Reuses `PublishProject`, already spec'd in `UX_REVIEW_AND_PUBLISH_SPEC.md` — adds `source` and `ttlDays` |
+| Deeplink page `/preview/[publishId]` | New public Next.js route, no new backend dependency |
+
+### Feasible with medium-high impact (Wave 4+)
 
 | Feature | Note |
 |---|---|
-| Streaming visivo in zero-effort | Solo frontend — riuso component già presenti in workspace |
-| Ottimizzazione con streaming + token counter | Già esiste `/llm/optimize-prompt/stream`, manca il wiring UI |
-| Step 4 drag-and-drop upload | Frontend nuovo + riuso endpoint upload già esistente |
-| Campo `usageHint` su `ProjectAsset` | Aggiunta additive a entity + Mongo — nessuna migrazione distruttiva |
-| Layer F nel system prompt | Additive — layer vuoto = nessun effetto |
-| URL pubblici firmati per asset | Nuovo endpoint con signed token JWT breve durata — sicuro |
-| Generalizzazione media context su tutte le modalità | Layer F aggiunto una volta in `composeSystemPrompt` |
-| MongoDB-backed job tracking (async job) | Nuova collection semplice — nessuna dipendenza da Redis o Bull |
-| Frontend polling + "torna più tardi" | Pattern semplice — polling su `/v1/jobs/:jobId` |
-| Email via Nodemailer + SMTP config | Dipendenza semplice, configurabile via env |
-| Auto-publish al completamento (path UUID) | Riusa `PublishProject` già spec'd in `UX_REVIEW_AND_PUBLISH_SPEC.md` — aggiunta di `source` e `ttlDays` |
-| Pagina deeplink `/preview/[publishId]` | Nuova route Next.js pubblica, nessuna dipendenza backend nuova |
+| Telegram bot | Requires `node-telegram-bot-api` + a bot token + webhook or polling — separable |
+| Per-user notification preferences | Additional `UserNotificationPrefs` schema |
+| Separate model selection for async runs | Could use a slower, cheaper model overnight |
 
-### Fattibile con impatto medio-alto (Wave 4+)
+### Not feasible, or not recommended now
 
-| Feature | Note |
+| Feature | Rationale |
 |---|---|
-| Telegram bot | Richiede `node-telegram-bot-api` + bot token + webhook o polling — separabile |
-| Preferenze notifiche per utente | Schema `UserNotificationPrefs` aggiuntivo |
-| Selezione modello async separata | Potrebbe usare modello più lento/economico di notte |
-
-### Non fattibile o non raccomandato ora
-
-| Feature | Motivazione |
-|---|---|
-| URL permanentemente pubblici per gli asset | Conflitto con doppio sandbox e isolamento tenant — usare signed token |
-| Base64 inline di immagini nel prompt | Token cost esplosivo per immagini ad alta risoluzione |
-| Queue esterna (BullMQ/Redis) | Eccessiva complessità infrastrutturale — MongoDB job è sufficiente per MVP |
-| WebSocket bidirezionale per job status | SSE esistente è sufficiente; aggiungere WS richiederebbe upgrade infrastruttura |
+| Permanently public URLs for assets | Conflicts with the double sandbox and tenant isolation — use a signed token |
+| Inline base64 images in the prompt | Explosive token cost for high-resolution images |
+| External queue (BullMQ/Redis) | Excessive infrastructure complexity — a MongoDB job is enough for the MVP |
+| Bidirectional WebSocket for job status | The existing SSE is sufficient; adding WS would mean an infrastructure upgrade |
 
 ---
 
-## 4. Architettura proposta
+## 4. Proposed architecture
 
-### 4.1 Campo `usageHint` su `ProjectAsset`
+### 4.1 `usageHint` field on `ProjectAsset`
 
-Aggiunta additive all'entity esistente:
+Additive addition to the existing entity:
 
 ```typescript
 // apps/api/src/domain/entities/ProjectAsset.ts
 usageHint?: string;
-// Es: "logo del brand — inserire in header e footer"
-// Es: "foto hero principale — sezione above the fold"
-// Es: "immagine prodotto — galleria e card prodotto"
+// e.g. "brand logo — place in header and footer"
+// e.g. "main hero photo — above-the-fold section"
+// e.g. "product image — gallery and product card"
 ```
 
-Il campo è libero ma il sistema ne suggerisce il valore all'upload tramite auto-classify (già presente con `MEDIA_AUTO_CLASSIFY_UPLOADS`) o tramite input utente esplicito.
+The field is free-form, but the system suggests a value at upload time through auto-classification (already available behind `MEDIA_AUTO_CLASSIFY_UPLOADS`) or through explicit user input.
 
-### 4.2 URL pubblici con firma JWT (breve durata)
+### 4.2 Public URLs with a JWT signature (short-lived)
 
-Nuovo endpoint:
+New endpoint:
 
 ```
 GET /v1/projects/:projectId/assets/:assetId/signed-url
 ```
 
-Restituisce:
+Returns:
 
 ```json
 {
@@ -129,27 +129,27 @@ Restituisce:
 }
 ```
 
-Il token JWT è firmato con `ASSET_SIGNING_SECRET` (env), dura 2 ore (configurabile), include `{ assetId, projectId, userId }`.
+The JWT is signed with `ASSET_SIGNING_SECRET` (env), lasts 2 hours (configurable) and carries `{ assetId, projectId, userId }`.
 
-Endpoint pubblico (no auth header):
+Public endpoint (no auth header):
 
 ```
 GET /public/assets/:assetId?token=<jwt>
 ```
 
-Verifica il JWT, serve il file. Nessuna autenticazione Bearer richiesta — token è l'autenticazione.
+It verifies the JWT and serves the file. No Bearer authentication required — the token is the authentication.
 
-Sicurezza: token è monouso per IP? No per MVP. Scadenza breve è la guardrail principale.
+Security: is the token single-use per IP? Not for the MVP. The short expiry is the main guardrail.
 
-### 4.3 Layer F — Media Context Block nel system prompt
+### 4.3 Layer F — Media Context Block in the system prompt
 
-Nuovo layer additive in `composeSystemPrompt`:
+New additive layer in `composeSystemPrompt`:
 
 ```typescript
 // apps/api/src/application/llm/systemPromptComposer.ts
 export function composeSystemPrompt(opts: {
-  // ... esistente
-  mediaContextBlock?: string; // NUOVO Layer F
+  // ... existing
+  mediaContextBlock?: string; // NEW Layer F
 }): string {
   return [
     buildBaseConstraintsLayer(),
@@ -157,7 +157,7 @@ export function composeSystemPrompt(opts: {
     opts.styleBlock ?? "",
     opts.prePromptTemplate ?? "",
     opts.governanceSystemPrompt ?? "",
-    opts.mediaContextBlock ?? "",  // inserito dopo governance, prima di budget
+    opts.mediaContextBlock ?? "",  // inserted after governance, before budget
     opts.outputBudgetPolicy ?? "",
     opts.requestSystemPrompt ?? "",
   ]
@@ -167,7 +167,7 @@ export function composeSystemPrompt(opts: {
 }
 ```
 
-Il block viene costruito da:
+The block is built by:
 
 ```typescript
 // apps/api/src/application/llm/mediaContextBuilder.ts
@@ -180,22 +180,22 @@ export function buildMediaContextBlock(assets: ProjectAsset[], baseUrl: string):
   );
   
   return [
-    "## Media e risorse visive del progetto",
+    "## Project media and visual assets",
     "",
-    "I seguenti asset sono disponibili e devono essere integrati nel sito generato usando i rispettivi URL:",
+    "The following assets are available and must be integrated into the generated site using their respective URLs:",
     "",
     ...lines,
     "",
-    "Usa gli URL sopra come `src` di tag `<img>`, `<video>`, background CSS, ecc. Non inventare placeholder generici se un asset reale è disponibile.",
+    "Use the URLs above as the `src` of `<img>` and `<video>` tags, as CSS backgrounds, and so on. Do not invent generic placeholders when a real asset is available.",
   ].join("\n");
 }
 ```
 
-Questo layer viene risolto in `llmRoutes.ts` (`resolveContext()`) caricando gli asset del progetto prima di comporre il system prompt. Impatta tutti i call LLM — zero-effort, workspace, ottimizzazione.
+This layer is resolved in `llmRoutes.ts` (`resolveContext()`) by loading the project's assets before composing the system prompt. It affects every LLM call — zero-effort, workspace, optimisation.
 
-### 4.4 Async Job — MongoDB Collection
+### 4.4 Async Job — MongoDB collection
 
-Nuova collection `async_jobs`:
+New `async_jobs` collection:
 
 ```typescript
 interface AsyncJob {
@@ -217,45 +217,45 @@ interface AsyncJob {
 }
 ```
 
-Endpoint:
+Endpoints:
 
 ```
-POST /v1/projects/:projectId/jobs          → crea job, ritorna { jobId }
-GET  /v1/projects/:projectId/jobs/:jobId   → polling status
+POST /v1/projects/:projectId/jobs          → creates the job, returns { jobId }
+GET  /v1/projects/:projectId/jobs/:jobId   → status polling
 ```
 
-Il job viene aggiornato dal worker (il `setTimeout` attuale evolve in una funzione con `updateJobStatus(jobId, patch)`).
+The job is updated by the worker (today's `setTimeout` evolves into a function calling `updateJobStatus(jobId, patch)`).
 
-### 4.5 Auto-publish al completamento — "Zero Effort Preview"
+### 4.5 Auto-publish on completion — "Zero Effort Preview"
 
-Al termine della generazione (snapshot creato in MongoDB), il backend esegue automaticamente la pubblicazione al path UUID già definito in `UX_REVIEW_AND_PUBLISH_SPEC.md` (`/p/{publishId}`).
+When generation ends (snapshot created in MongoDB), the backend automatically publishes to the UUID path already defined in `UX_REVIEW_AND_PUBLISH_SPEC.md` (`/p/{publishId}`).
 
-#### Estensione dell'entity `SiteDeployment`
+#### Extending the `SiteDeployment` entity
 
 ```typescript
-// campo aggiuntivo additive
+// additive extra field
 source: "user_initiated" | "zero_effort_auto";
-ttlDays?: number;          // null = permanente, 7 = auto-preview TTL
-expiresAt?: Date;          // calcolato da createdAt + ttlDays
+ttlDays?: number;          // null = permanent, 7 = auto-preview TTL
+expiresAt?: Date;          // computed from createdAt + ttlDays
 ```
 
-Il deployment di tipo `zero_effort_auto` ha un TTL di 7 giorni (configurabile via `ZERO_EFFORT_PREVIEW_TTL_DAYS`). Alla scadenza il cleanup lo rimuove come gli altri temporanei.
+A `zero_effort_auto` deployment has a 7-day TTL (configurable via `ZERO_EFFORT_PREVIEW_TTL_DAYS`). On expiry the cleanup removes it like any other temporary deployment.
 
-#### Estensione dell'entity `AsyncJob`
+#### Extending the `AsyncJob` entity
 
 ```typescript
-resultPublishUrl?: string;    // es. "https://app.example.com/p/a1b2c3d4"
-resultPublishId?: string;     // es. "a1b2c3d4" — per costruire il deeplink
-resultDeploymentId?: string;  // ref a SiteDeployment
+resultPublishUrl?: string;    // e.g. "https://app.example.com/p/a1b2c3d4"
+resultPublishId?: string;     // e.g. "a1b2c3d4" — used to build the deeplink
+resultDeploymentId?: string;  // ref to SiteDeployment
 ```
 
-#### Sequenza backend al completamento
+#### Backend sequence on completion
 
 ```
-[GenerazioneCompletata]
-  → creaSnapshot() → snapshotId
+[GenerationCompleted]
+  → createSnapshot() → snapshotId
   → PublishProject.execute({
-        projectId, userId, snapshotId,
+        type: "random",         // UUID path — no nginx needed
         type: "random",         // path UUID — no nginx necessario
         source: "zero_effort_auto",
         ttlDays: 7
@@ -270,15 +270,15 @@ resultDeploymentId?: string;  // ref a SiteDeployment
   → EmailNotifier.send({ to: userEmail, previewUrl: resultPublishUrl, ... })
 ```
 
-#### Comportamento se la pubblicazione fallisce
+#### Behaviour if publication fails
 
-La pubblicazione è best-effort: se fallisce, il job viene comunque segnato `done` con `resultPublishUrl: null`. L'email invia il link diretto alla workspace invece del preview. Il fallimento è loggato in `ExecutionLogger` ma non blocca la notifica.
+Publication is best-effort: if it fails, the job is still marked `done` with `resultPublishUrl: null`. The email then carries the direct workspace link instead of the preview. The failure is logged in `ExecutionLogger` but does not block the notification.
 
 ---
 
-### 4.6 Pagina deeplink — `/preview/[publishId]`
+### 4.6 Deeplink page — `/preview/[publishId]`
 
-Nuova route Next.js pubblica (no auth richiesta per visualizzare):
+New public Next.js route (no auth required to view):
 
 ```
 apps/web/app/preview/[publishId]/page.tsx
@@ -288,192 +288,192 @@ apps/web/app/preview/[publishId]/page.tsx
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  🐱 Andy Code Cat                          [Accedi / Registrati] │
+│  🐱 Andy Code Cat                           [Sign in / Sign up]  │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  Il sito di [Nome Brand] è pronto                                │
-│  Generato automaticamente con Zero Effort · Anteprima valida 7g  │
+│  The site for [Brand Name] is ready                              │
+│  Generated automatically with Zero Effort · Preview valid 7 days │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │                                                            │  │
-│  │              IFRAME — sito generato                        │  │
-│  │              (viewport desktop, interattivo)               │  │
+│  │              IFRAME — generated site                       │  │
+│  │              (desktop viewport, interactive)               │  │
 │  │                                                            │  │
 │  │                                                            │  │
 │  └────────────────────────────────────────────────────────────┘  │
 │                                                                  │
-│  Cosa vuoi fare?                                                  │
+│  What do you want to do?                                         │
 │                                                                  │
-│  [ Modifica in GodMode ]    [ Pubblica con il tuo dominio ]      │
+│  [ Edit in GodMode ]        [ Publish on your own domain ]       │
 │                                                                  │
-│  Condividi anteprima: [https://app.../p/a1b2c3d4]  [Copia link] │
+│  Share preview: [https://app.../p/a1b2c3d4]      [Copy link]     │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-#### Comportamento CTA
+#### CTA behaviour
 
-| Azione | Utente autenticato | Utente non autenticato |
+| Action | Authenticated user | Unauthenticated user |
 |---|---|---|
-| "Modifica in GodMode" | Redirect a `/workspace/{projectId}?conv={convId}` | Redirect a `/login?next=/preview/{publishId}` |
-| "Pubblica con il tuo dominio" | Apre modal publish (subdomain o custom domain) | Redirect a `/login?next=/preview/{publishId}` |
-| Iframe preview | Sempre visibile — nessuna auth | Sempre visibile — nessuna auth |
-| Link "Copia link" | Sempre disponibile | Sempre disponibile |
+| "Edit in GodMode" | Redirect to `/workspace/{projectId}?conv={convId}` | Redirect to `/login?next=/preview/{publishId}` |
+| "Publish on your own domain" | Opens the publish modal (subdomain or custom domain) | Redirect to `/login?next=/preview/{publishId}` |
+| Iframe preview | Always visible — no auth | Always visible — no auth |
+| "Copy link" | Always available | Always available |
 
-Dopo il login, il `?next=` ripristina la pagina preview con le CTA ora cliccabili.
+After login, `?next=` restores the preview page with the CTAs now clickable.
 
-#### Dati caricati dalla preview page
+#### Data loaded by the preview page
 
 ```typescript
 // SSR: GET /v1/public/previews/:publishId
-// Endpoint pubblico (no auth) che ritorna:
+// Public endpoint (no auth) returning:
 {
   projectName: string;
   brandName: string;
   generatedAt: string;
   expiresAt: string;
-  previewUrl: string;           // URL per l'iframe = /p/{publishId}
-  projectId: string;            // per costruire link workspace (auth-gated)
-  conversationId: string;       // per deep-link al conversation corretto
+  previewUrl: string;           // URL for the iframe = /p/{publishId}
+  projectId: string;            // used to build the workspace link (auth-gated)
+  conversationId: string;       // used to deep-link to the right conversation
   isExpired: boolean;
 }
 ```
 
-Se `isExpired: true`, la pagina mostra un messaggio "Anteprima scaduta" con CTA per accedere alla workspace.
+If `isExpired: true`, the page shows a "Preview expired" message with a CTA to open the workspace.
 
-#### Nota su GodMode e futuro tutorial
+#### Note on GodMode and a future tutorial
 
-Quando l'utente arriva in GodMode da questa pagina preview (via `?from=zero_effort_preview`), in futuro potrà essere mostrato un tutorial layer UI/UX contestuale ("Benvenuto in GodMode — ecco come modificare il sito"). Questo è un concern separato da implementare come layer React in workspace, senza modifiche architetturali al backend.
+When the user reaches GodMode from this preview page (via `?from=zero_effort_preview`), a contextual UI/UX tutorial layer could be shown in future ("Welcome to GodMode — here is how to edit the site"). That is a separate concern, to be built as a React layer in the workspace, with no architectural change to the backend.
 
 ---
 
-### 4.7 Notifiche email con preview URL
+### 4.7 Email notifications carrying the preview URL
 
 ```typescript
 // apps/api/src/infra/notifications/EmailNotifier.ts
-// Usa Nodemailer con trasporto SMTP configurabile via env:
+// Uses Nodemailer with an SMTP transport configurable via env:
 // SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
 ```
 
-Template email MVP (testo + HTML semplice):
+MVP email template (plain text + simple HTML):
 
 ```
-Oggetto: Il tuo sito "[Nome Brand]" è pronto su Andy Code Cat
+Subject: Your site "[Brand Name]" is ready on Andy Code Cat
 
-Il sito è stato generato con successo.
+The site has been generated successfully.
 
-Visualizza l'anteprima:
-→ {previewUrl}      ← link /p/{publishId} direttamente visibile senza login
+View the preview:
+→ {previewUrl}      ← /p/{publishId} link, visible directly without logging in
 
-L'anteprima sarà disponibile per 7 giorni.
+The preview will stay available for 7 days.
 
-Dalla pagina di anteprima puoi:
-• Modificare il sito in GodMode
-• Pubblicarlo con un tuo dominio o link personalizzato
+From the preview page you can:
+• Edit the site in GodMode
+• Publish it on your own domain or a custom link
 
-Team Andy Code Cat
+The Andy Code Cat team
 ```
 
-Il link `{previewUrl}` punta a `https://app.example.com/preview/{publishId}` (la landing page deeplink), non all'iframe direttamente. Questo garantisce che l'utente veda le CTA e non solo l'iframe nudo.
+The `{previewUrl}` link points at `https://app.example.com/preview/{publishId}` (the deeplink landing page), not at the iframe directly. That guarantees the user sees the CTAs rather than a bare iframe.
 
 ---
 
-## 5. Wizard Zero Effort — Nuovo Step 4 (Media Visivi)
+## 5. Zero Effort wizard — new Step 4 (visual media)
 
-### Posizione nel flusso
+### Position in the flow
 
 ```
-Step 1: Identità (brand, tipo sito, obiettivo)
-Step 2: Target & Dati (audience, contatti)
-Step 3: Stile visivo (attributi, tone, CTA)
-Step 4: Media (NUOVO — carica immagini, assegna utilizzo)   ← INSERITO QUI
-Step 5: Generazione (era Step 4 — brief, ottimizzazione, stream)
+Step 1: Identity (brand, site type, goal)
+Step 2: Target & data (audience, contacts)
+Step 3: Visual style (attributes, tone, CTA)
+Step 4: Media (NEW — upload images, assign usage)           ← INSERTED HERE
+Step 5: Generation (was Step 4 — brief, optimisation, stream)
 ```
 
-### UX Step 4
+### Step 4 UX
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Aggiungi elementi visivi al tuo progetto                   │
+│  Add visual elements to your project                        │
 │                                                             │
-│  Carica logo, foto hero, immagini prodotto o qualsiasi      │
-│  materiale visivo. Il sistema li inserirà automaticamente   │
-│  nel sito generato.                                         │
+│  Upload a logo, a hero photo, product images or any other   │
+│  visual material. The system places them automatically in   │
+│  the generated site.                                        │
 │                                                             │
 │  ┌───────────────────────────────────────────┐              │
-│  │  Trascina qui i file o clicca per caricare │              │
-│  │  PNG, JPG, SVG, WebP — max 20 MB ciascuno  │              │
+│  │  Drop files here, or click to upload      │              │
+│  │  PNG, JPG, SVG, WebP — max 20 MB each     │              │
 │  └───────────────────────────────────────────┘              │
 │                                                             │
 │  ┌────────────────────────────────────────────────────────┐ │
-│  │ [thumbnail]  logo-brand.svg           ×               │ │
-│  │              Descrivi l'utilizzo:                      │ │
-│  │              [Logo del brand _____________________ ]   │ │
-│  │              Suggerimento: header, footer               │ │
+│  │ [thumbnail]  logo-brand.svg                          × │ │
+│  │              Describe its use:                         │ │
+│  │              [Brand logo              ]                │ │
+│  │              Suggestion: header, footer                │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                             │
 │  ┌────────────────────────────────────────────────────────┐ │
-│  │ [thumbnail]  hero-photo.jpg           ×               │ │
-│  │              Descrivi l'utilizzo:                      │ │
-│  │              [Foto principale hero _______________ ]   │ │
-│  │              Suggerimento: sezione hero, above the fold │ │
+│  │ [thumbnail]  hero-photo.jpg                          × │ │
+│  │              Describe its use:                         │ │
+│  │              [Main hero photo         ]                │ │
+│  │              Suggestion: hero section, above the fold  │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                             │
-│  [Salta questo step]          [Avanti →]                    │
+│  [Skip this step]          [Next →]                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Logica di auto-suggerimento per `usageHint`
+### Auto-suggestion logic for `usageHint`
 
-Al termine dell'upload, il frontend propone un hint precompilato basato sul nome file e MIME:
+Once the upload finishes, the frontend proposes a pre-filled hint based on the file name and MIME type:
 
-| Regola (nome file) | Hint suggerito |
+| Rule (file name) | Suggested hint |
 |---|---|
-| contiene "logo" | Logo del brand — header e footer |
-| contiene "hero" / "banner" / "cover" | Immagine principale — sezione hero |
-| contiene "prodotto" / "product" / "item" | Immagine prodotto |
-| contiene "bg" / "background" | Sfondo / background decorativo |
-| SVG generico | Icona o elemento decorativo |
-| default | Elemento visivo del progetto |
+| contains "logo" | Brand logo — header and footer |
+| contains "hero" / "banner" / "cover" | Main image — hero section |
+| contains "prodotto" / "product" / "item" | Product image |
+| contains "bg" / "background" | Decorative background |
+| generic SVG | Icon or decorative element |
+| default | Project visual element |
 
-L'utente può modificare liberamente il testo suggerito.
+The user can freely edit the suggested text.
 
-### Flusso dati Step 4
+### Step 4 data flow
 
-1. Utente carica file → `POST /v1/projects/:projectId/assets` → asset salvato
-2. Utente inserisce hint → `PATCH /v1/projects/:projectId/assets/:assetId` con `{ usageHint, useInProject: true }`
-3. Alla generazione, `buildMediaContextBlock()` legge gli asset con `usageHint && useInProject`
-4. Per ogni asset viene generato e incluso il signed URL (valido per la durata della sessione di generazione + buffer)
+1. User uploads a file → `POST /v1/projects/:projectId/assets` → asset saved
+2. User enters a hint → `PATCH /v1/projects/:projectId/assets/:assetId` with `{ usageHint, useInProject: true }`
+3. At generation time, `buildMediaContextBlock()` reads the assets that have `usageHint && useInProject`
+4. For each asset a signed URL is generated and included (valid for the duration of the generation session + buffer)
 
 ---
 
-## 6. Feedback visivo streaming in Zero Effort
+## 6. Streaming visual feedback in Zero Effort
 
-### Problema attuale
+### Current problem
 
-Il componente `page.tsx` in `/launch/[projectId]` chiama `streamLlmChatPreview()` e aggiorna `genStreamTokens`, ma non mostra il contenuto dello stream testuale (thinking + answer) durante la fase `generating`.
+The `page.tsx` component under `/launch/[projectId]` calls `streamLlmChatPreview()` and updates `genStreamTokens`, but does not display the text stream (thinking + answer) during the `generating` phase.
 
 ### Fix — Wave 1
 
-Aggiungere nell'area "review/generating" la stessa UI di streaming già presente in workspace:
+Add, in the "review/generating" area, the same streaming UI already present in the workspace:
 
 ```tsx
-// Nuovi state nella phase "generating"
+// New state for the "generating" phase
 const [thinkingText, setThinkingText] = useState("");
 const [draftAnswer, setDraftAnswer] = useState("");
 
-// Nel callback SSE già esistente, aggiungere:
+// In the existing SSE callback, add:
 case "thinking": setThinkingText(prev => prev + event.delta); break;
 case "answer":   setDraftAnswer(prev => prev + event.delta); break;
 ```
 
-UI da aggiungere:
+UI to add:
 
 ```tsx
 {genPhase === "generating" && (
   <div className="space-y-3">
     {thinkingText && (
       <div className="rounded-md border border-border/50 bg-muted/30 p-3">
-        <p className="text-xs font-medium text-muted-foreground mb-1">Ragionamento in corso…</p>
+        <p className="text-xs font-medium text-muted-foreground mb-1">Reasoning in progress…</p>
         <p className="text-xs text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap">
           {thinkingText}
         </p>
@@ -481,297 +481,297 @@ UI da aggiungere:
     )}
     {draftAnswer && (
       <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
-        <p className="text-xs font-medium text-primary mb-1">Generazione HTML…</p>
+        <p className="text-xs font-medium text-primary mb-1">Generating HTML…</p>
         <p className="text-xs font-mono leading-relaxed whitespace-pre-wrap text-foreground/80">
           {draftAnswer.slice(-800)}
         </p>
       </div>
     )}
     <p className="text-xs text-muted-foreground text-right">
-      {genStreamTokens} token generati
+      {genStreamTokens} tokens generated
     </p>
   </div>
 )}
 ```
 
-### Fix — Ottimizzazione con streaming
+### Fix — optimisation with streaming
 
-Sostituire la chiamata `optimizePrompt()` con `streamOptimizePrompt()` (endpoint `/llm/optimize-prompt/stream` già esistente) per mostrare il testo ottimizzato in arrivo con contatore token.
+Replace the `optimizePrompt()` call with `streamOptimizePrompt()` (the `/llm/optimize-prompt/stream` endpoint already exists) so the optimised text appears as it arrives, with a token counter.
 
 ---
 
-## 7. Gestione asincrona — "Torna più tardi"
+## 7. Asynchronous handling — "come back later"
 
-### Flusso proposto
+### Proposed flow
 
 ```
-Utente clicca "Genera"
+User clicks "Generate"
   → Frontend: POST /v1/projects/:projectId/jobs { type: "zero_effort_generation", ... }
-  → Backend: crea AsyncJob con status "queued", ritorna { jobId }
-  → Backend: avvia generazione in background (setTimeout 50ms pattern ma con DB tracking)
-  → Frontend: mostra banner "Generazione avviata"
+  → Backend: creates an AsyncJob with status "queued", returns { jobId }
+  → Backend: starts generation in the background (today's setTimeout 50ms pattern, but with DB tracking)
+  → Frontend: shows a "Generation started" banner
 
-Utente può:
-  A) Rimanere sulla pagina → SSE stream normale (esperienze invariata)
-  B) Chiudere la tab → job continua in background
+The user can:
+  A) Stay on the page → normal SSE stream (experience unchanged)
+  B) Close the tab → the job continues in the background
 
-Se utente chiude la tab e torna:
-  → Frontend: GET /v1/projects/:projectId/jobs/:jobId (polling ogni 5s)
-  → Quando status = "done": mostra link "Apri in GodMode"
+If the user closes the tab and comes back:
+  → Frontend: GET /v1/projects/:projectId/jobs/:jobId (polling every 5s)
+  → When status = "done": show the "Open in GodMode" link
 
-Al completamento del job (backend):
+When the job completes (backend):
   → updateJobStatus("done", { resultConversationId, resultSnapshotId })
-  → Se notificationChannels include "email": EmailNotifier.send(...)
-  → Se notificationChannels include "telegram": TelegramNotifier.send(...)
+  → If notificationChannels includes "email": EmailNotifier.send(...)
+  → If notificationChannels includes "telegram": TelegramNotifier.send(...)
 ```
 
-### UX "Torna più tardi"
+### "Come back later" UX
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Generazione avviata                                        │
+│  Generation started                                         │
 │                                                             │
-│  Il tuo sito è in fase di generazione. Puoi:               │
-│  • Restare qui e seguire il progresso in tempo reale        │
-│  • Chiudere questa finestra e tornare più tardi             │
+│  Your site is being generated. You can:                     │
+│  • Stay here and follow the progress in real time           │
+│  • Close this window and come back later                    │
 │                                                             │
-│  Ti notificheremo quando è pronto.                          │
+│  We will let you know when it is ready.                     │
 │                                                             │
-│  Notifica via:  [✓] Email (user@example.com)                │
-│                 [ ] Telegram (configura →)                  │
+│  Notify me via:  [✓] Email (user@example.com)               │
+│                  [ ] Telegram (configure →)                 │
 │                                                             │
-│  [Chiudi e torna più tardi]   [Segui in diretta]            │
+│  [Close and come back later]   [Follow live]                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Persistenza del risultato generato
+### Persistence of the generated result
 
-Attualmente la generazione produce `conversationId` e `snapshotId` che vengono già salvati in MongoDB. Il job record li salva come `resultConversationId` e `resultSnapshotId`. L'utente può riaprire la workspace in qualsiasi momento anche dopo la chiusura del browser.
+Generation already produces a `conversationId` and a `snapshotId`, both already saved in MongoDB. The job record stores them as `resultConversationId` and `resultSnapshotId`. The user can reopen the workspace at any time, even after closing the browser.
 
 ---
 
-## 8. Generalizzazione media management cross-modale
+## 8. Cross-mode generalisation of media management
 
-### Principio
+### Principle
 
-Il Layer F (media context block) è costruito **una sola volta** in `resolveContext()` (già usato da tutti i route LLM) e iniettato in **tutte** le chiamate:
+Layer F (the media context block) is built **once** in `resolveContext()` (already used by every LLM route) and injected into **all** calls:
 
 - Zero Effort generation
-- Zero Effort prompt optimization  
+- Zero Effort prompt optimisation  
 - Workspace chat-preview stream
 - Focused edit (quando `useInProject` asset esistono)
+- Focused edit (when `useInProject` assets exist)
+### Asset manager in the workspace (GodMode)
 
-### Asset manager in workspace (GodMode)
+Added to the sidebar or the asset panel:
 
-Aggiunta nella sidebar o nel pannello asset:
+- An editable `usageHint` field per asset (text input, saved via PATCH)
+- A `useInProject` toggle to include or exclude the asset from Layer F
+- An "Active in prompt" badge when `useInProject: true && usageHint`
 
-- Per ogni asset, campo editabile `usageHint` (input testo, salva via PATCH)
-- Toggle `useInProject` per includere o escludere l'asset dal Layer F
-- Badge "Attivo nel prompt" quando `useInProject: true && usageHint`
+### "Media in the prompt" section (debug/visibility)
 
-### Sezione "Media nel prompt" (debug/visibility)
-
-Nel pannello debug del workspace (già esistente via `/llm/prompt-preview`) aggiungere una sezione che mostra il Layer F renderizzato così com'è iniettato nel system prompt.
-
----
-
-## 9. Piano a onde
-
-### Wave 1 — Feedback visivo (2–3 giorni)
-
-**Nessuna regressione possibile — solo additive frontend.**
-
-File coinvolti:
-
-- `apps/web/app/launch/[projectId]/page.tsx` — aggiunta stati `thinkingText`, `draftAnswer`, UI stream
-- `apps/web/lib/api/llm.ts` — wiring `streamOptimizePrompt` (endpoint già esiste)
-
-Deliverable:
-
-- Stream thinking + answer visibile durante la generazione zero-effort
-- Ottimizzazione con testo in arrivo e contatore token
-- Nessun cambio backend
+In the workspace debug panel (already available via `/llm/prompt-preview`), add a section that shows Layer F rendered exactly as it is injected into the system prompt.
 
 ---
 
-### Wave 2 — Media upload step + Layer F (5–7 giorni)
+## 9. Wave plan
 
-**Impatto medio — backend additive, nessun breaking change.**
+### Wave 1 — Visual feedback (2–3 days)
 
-File backend:
+**No regression possible — frontend-additive only.**
 
-- `apps/api/src/domain/entities/ProjectAsset.ts` — aggiunta `usageHint?: string`
-- `apps/api/src/infra/db/mongo/MongoProjectAssetRepository.ts` — persistenza `usageHint`
-- `apps/api/src/application/llm/mediaContextBuilder.ts` — **nuovo file** `buildMediaContextBlock()`
-- `apps/api/src/application/llm/systemPromptComposer.ts` — Layer F additive
-- `apps/api/src/presentation/http/routes/llmRoutes.ts` — caricamento asset in `resolveContext()`
-- `apps/api/src/presentation/http/routes/projectAssetRoutes.ts` — nuovo endpoint `/signed-url`
-- `apps/api/src/infra/security/AssetSignedUrlService.ts` — **nuovo file** JWT signing
+Files involved:
 
-File frontend:
+- `apps/web/app/launch/[projectId]/page.tsx` — add `thinkingText` and `draftAnswer` state, plus the stream UI
+- `apps/web/lib/api/llm.ts` — wire up `streamOptimizePrompt` (the endpoint already exists)
 
-- `apps/web/app/launch/[projectId]/page.tsx` — nuovo Step4Content, spostamento step generazione a Step5
-- `apps/web/lib/api/assets.ts` — funzioni upload, patch usageHint, get signed-url
-- `apps/web/components/launch/MediaUploadStep.tsx` — **nuovo componente** drag-drop + usage input
+Deliverables:
 
-Deliverable:
-
-- Step 4 funzionante con upload, hint, preview thumbnail
-- Asset con `usageHint` e `useInProject: true` iniettati nel prompt
-- URL firmati funzionanti e accessibili dal LLM
-- Layer F in tutte le chiamate LLM
+- Thinking + answer stream visible during zero-effort generation
+- Optimisation with incoming text and a token counter
+- No backend change
 
 ---
 
-### Wave 3 — Generalizzazione workspace (3–4 giorni)
+### Wave 2 — Media upload step + Layer F (5–7 days)
 
-**Impatto basso — UI additive sul pannello asset esistente.**
+**Medium impact — backend additive, no breaking change.**
 
-File coinvolti:
+Backend files:
 
-- `apps/web/app/workspace/[projectId]/page.tsx` — aggiunta campo usageHint nell'asset panel
-- `apps/web/components/workspace/` — update UI asset list
-- Nessun cambio backend (Layer F già attivo da Wave 2)
+- `apps/api/src/domain/entities/ProjectAsset.ts` — add `usageHint?: string`
+- `apps/api/src/infra/db/mongo/MongoProjectAssetRepository.ts` — persist `usageHint`
+- `apps/api/src/application/llm/mediaContextBuilder.ts` — **new file**, `buildMediaContextBlock()`
+- `apps/api/src/application/llm/systemPromptComposer.ts` — additive Layer F
+- `apps/api/src/presentation/http/routes/llmRoutes.ts` — load assets in `resolveContext()`
+- `apps/api/src/presentation/http/routes/projectAssetRoutes.ts` — new `/signed-url` endpoint
+- `apps/api/src/infra/security/AssetSignedUrlService.ts` — **new file**, JWT signing
 
-Deliverable:
+Frontend files:
 
-- Workspace mostra e permette editing di `usageHint` per ogni asset
-- Badge "Attivo nel prompt" visibile
-- Sezione Layer F nel pannello debug prompt
+- `apps/web/app/launch/[projectId]/page.tsx` — new Step4Content, generation step moved to Step 5
+- `apps/web/lib/api/assets.ts` — upload, patch usageHint and get signed-url functions
+- `apps/web/components/launch/MediaUploadStep.tsx` — **new component**, drag-drop + usage input
+
+Deliverables:
+
+- Step 4 working, with upload, hint and thumbnail preview
+- Assets with `usageHint` and `useInProject: true` injected into the prompt
+- Signed URLs working and reachable by the LLM
+- Layer F on every LLM call
 
 ---
 
-### Wave 4 — Async job + auto-publish + notifiche email (7–9 giorni)
+### Wave 3 — Workspace generalisation (3–4 days)
 
-**Impatto medio — nuova collection MongoDB, estensione PublishProject, nuova dipendenza Nodemailer.**
+**Low impact — additive UI on the existing asset panel.**
 
-File backend:
+Files involved:
 
-- `apps/api/src/domain/entities/AsyncJob.ts` — **nuovo** (include `resultPublishUrl`, `resultPublishId`)
-- `apps/api/src/infra/db/mongo/MongoAsyncJobRepository.ts` — **nuovo**
-- `apps/api/src/presentation/http/routes/asyncJobRoutes.ts` — **nuovo** (`POST /v1/projects/:id/jobs`, `GET /v1/projects/:id/jobs/:jobId`)
-- `apps/api/src/infra/notifications/EmailNotifier.ts` — **nuovo** (Nodemailer + template preview URL)
-- `apps/api/src/application/use-cases/LaunchZeroEffortProject.ts` — integrazione job tracking + auto-publish
-- `apps/api/src/domain/entities/SiteDeployment.ts` — aggiunta `source`, `ttlDays`, `expiresAt` (additive)
-- `apps/api/src/application/use-cases/PublishProject.ts` — gestione `source: "zero_effort_auto"` + TTL
-- `apps/api/src/presentation/http/routes/publicRoutes.ts` — **nuovo** `GET /v1/public/previews/:publishId` (no auth)
+- `apps/web/app/workspace/[projectId]/page.tsx` — add the usageHint field to the asset panel
+- `apps/web/components/workspace/` — update the asset list UI
+- No backend change (Layer F is already active from Wave 2)
 
-File frontend:
+Deliverables:
 
-- `apps/web/app/launch/[projectId]/page.tsx` — banner "torna più tardi", polling, preferenza notifica
-- `apps/web/app/preview/[publishId]/page.tsx` — **nuova route** deeplink landing (SSR pubblica)
-- `apps/web/lib/api/jobs.ts` — **nuovo** client polling
+- The workspace shows and allows editing of `usageHint` for each asset
+- "Active in prompt" badge visible
+- Layer F section in the prompt debug panel
 
-Dipendenze nuove:
+---
+
+### Wave 4 — Async job + auto-publish + email notifications (7–9 days)
+
+**Medium impact — new MongoDB collection, PublishProject extension, new Nodemailer dependency.**
+
+Backend files:
+
+- `apps/api/src/domain/entities/AsyncJob.ts` — **new** (includes `resultPublishUrl`, `resultPublishId`)
+- `apps/api/src/infra/db/mongo/MongoAsyncJobRepository.ts` — **new**
+- `apps/api/src/presentation/http/routes/asyncJobRoutes.ts` — **new** (`POST /v1/projects/:id/jobs`, `GET /v1/projects/:id/jobs/:jobId`)
+- `apps/api/src/infra/notifications/EmailNotifier.ts` — **new** (Nodemailer + preview URL template)
+- `apps/api/src/application/use-cases/LaunchZeroEffortProject.ts` — job tracking + auto-publish integration
+- `apps/api/src/domain/entities/SiteDeployment.ts` — add `source`, `ttlDays`, `expiresAt` (additive)
+- `apps/api/src/application/use-cases/PublishProject.ts` — handle `source: "zero_effort_auto"` + TTL
+- `apps/api/src/presentation/http/routes/publicRoutes.ts` — **new** `GET /v1/public/previews/:publishId` (no auth)
+
+Frontend files:
+
+- `apps/web/app/launch/[projectId]/page.tsx` — "come back later" banner, polling, notification preference
+- `apps/web/app/preview/[publishId]/page.tsx` — **new route**, deeplink landing (public SSR)
+- `apps/web/lib/api/jobs.ts` — **new** polling client
+
+New dependencies:
 
 - `nodemailer` (backend)
 - ENV: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `ZERO_EFFORT_PREVIEW_TTL_DAYS` (default: 7)
 
-Deliverable:
+Deliverables:
 
-- Generazione avviata → job tracciato in DB
-- Al completamento: sito auto-pubblicato al path UUID (`/p/{publishId}`)
-- Preview URL incluso nell'email di notifica
-- Pagina deeplink `/preview/{publishId}` pubblica con iframe + CTA guidate
-- Utente può chiudere tab e tornare — trova il sito già pubblicato
-- Polling frontend ogni 5s con aggiornamento automatico
+- Generation started → job tracked in the DB
+- On completion: site auto-published to the UUID path (`/p/{publishId}`)
+- Preview URL included in the notification email
+- Public deeplink page `/preview/{publishId}` with iframe + guided CTAs
+- The user can close the tab and come back — the site is already published
+- Frontend polling every 5s with automatic refresh
 
 ---
 
-### Wave 5 — Telegram (opzionale, 3–4 giorni)
+### Wave 5 — Telegram (optional, 3–4 days)
 
-**Impatto basso — dipendenza aggiuntiva, nessuna regressione.**
+**Low impact — extra dependency, no regression.**
 
-File backend:
+Backend files:
 
-- `apps/api/src/infra/notifications/TelegramNotifier.ts` — **nuovo**
+- `apps/api/src/infra/notifications/TelegramNotifier.ts` — **new**
 - ENV: `TELEGRAM_BOT_TOKEN`
 
 UX:
 
-- Settings utente: inserisci Telegram Chat ID (o collega via deep link bot)
-- Notifica al completamento con link diretto
+- User settings: enter a Telegram Chat ID (or link the bot via deep link)
+- Notification on completion with a direct link
 
 ---
 
-## 10. Analisi rischio e regressioni
+## 10. Risk and regression analysis
 
-| Wave | Rischio regressione | Mitigazione |
+| Wave | Regression risk | Mitigation |
 |---|---|---|
-| Wave 1 | Nessuno | Solo stati React aggiuntivi, nessun cambio API |
-| Wave 2 — Layer F | Basso | Layer F è stringa vuota se nessun asset con usageHint — comportamento identico all'attuale |
-| Wave 2 — Step 4 | Nessuno | Step aggiuntivo — lo step generazione si sposta ma non cambia |
-| Wave 2 — signed URL | Basso | Nuovo endpoint isolato — non tocca endpoint esistenti |
-| Wave 3 | Nessuno | UI additive |
-| Wave 4 — job tracking | Medio | Il path SSE sincrono deve rimanere funzionante in parallelo al path async |
-| Wave 4 — auto-publish | Basso | Best-effort: se fallisce, il job è comunque `done` e l'email invia il link workspace invece del preview |
-| Wave 4 — SiteDeployment | Basso | I campi `source`, `ttlDays`, `expiresAt` sono additive — i deploy esistenti hanno `source: "user_initiated"` per default |
-| Wave 4 — preview page | Nessuno | Route nuova, non tocca workspace né dashboard |
-| Wave 4 — email | Basso | Se SMTP non configurato, email silenziosamente skippata (no crash) |
-| Wave 5 | Nessuno | Dipendenza opzionale, notifica best-effort |
+| Wave 1 | None | Extra React state only, no API change |
+| Wave 2 — Layer F | Low | Layer F is an empty string when no asset has a usageHint — behaviour identical to today |
+| Wave 2 — Step 4 | None | Extra step — the generation step shifts but does not change |
+| Wave 2 — signed URL | Low | Isolated new endpoint — does not touch existing endpoints |
+| Wave 3 | None | Additive UI |
+| Wave 4 — job tracking | Medium | The synchronous SSE path must keep working alongside the async path |
+| Wave 4 — auto-publish | Low | Best-effort: on failure the job is still `done` and the email carries the workspace link instead of the preview |
+| Wave 4 — SiteDeployment | Low | `source`, `ttlDays` and `expiresAt` are additive — existing deployments default to `source: "user_initiated"` |
+| Wave 4 — preview page | None | New route, touches neither the workspace nor the dashboard |
+| Wave 4 — email | Low | If SMTP is not configured the email is silently skipped (no crash) |
+| Wave 5 | None | Optional dependency, best-effort notification |
 
-### Regola generale
+### General rule
 
-Tutti i layer aggiunti sono **additive e opt-in**:
+Every added layer is **additive and opt-in**:
 
-- Layer F: attivo solo se esistono asset con `usageHint && useInProject`
-- Async job: attivo solo se l'utente clicca "chiudi e torna più tardi"
-- Auto-publish: best-effort, mai bloccante per la generazione
-- Email: inviata solo se SMTP configurato E utente ha selezionato il canale
-- Step 4: skippabile con "Salta questo step"
-- Preview page: pubblica e leggera — non impatta workspace né login flow
+- Layer F: active only when assets with `usageHint && useInProject` exist
+- Async job: active only when the user clicks "close and come back later"
+- Auto-publish: best-effort, never blocking for generation
+- Email: sent only when SMTP is configured AND the user selected the channel
+- Step 4: skippable via "Skip this step"
+- Preview page: public and lightweight — no impact on the workspace or the login flow
 
 ---
 
-## 11. Stima complessiva
+## 11. Overall estimate
 
-| Wave | Giorni stimati | Dipendenze esterne |
+| Wave | Estimated days | External dependencies |
 |---|---|---|
-| Wave 1 | 2–3 | Nessuna |
-| Wave 2 | 5–7 | Nessuna (JWT già disponibile con jose/jsonwebtoken) |
-| Wave 3 | 3–4 | Nessuna |
-| Wave 4 | 7–9 | Nodemailer + SMTP account + `PublishProject` use case stabile (già spec'd) |
+| Wave 1 | 2–3 | None |
+| Wave 2 | 5–7 | None (JWT already available via jose/jsonwebtoken) |
+| Wave 3 | 3–4 | None |
+| Wave 4 | 7–9 | Nodemailer + SMTP account + a stable `PublishProject` use case (already spec'd) |
 | Wave 5 | 3–4 | Telegram Bot API token |
-| **Totale (Wave 1–4)** | **17–23 giorni** | Solo SMTP account + `PublishProject` completato |
+| **Total (Waves 1–4)** | **17–23 days** | SMTP account + `PublishProject` completed |
 
-Le Wave 1 e Wave 2 sono indipendenti e parallelizzabili (frontend vs backend). Wave 3 dipende da Wave 2. Wave 4 dipende da Wave 2 (Layer F stabile) e dalla presenza del `PublishProject` use case (già spec'd in `UX_REVIEW_AND_PUBLISH_SPEC.md`, da completare se non già implementato).
+Waves 1 and 2 are independent and can run in parallel (frontend vs backend). Wave 3 depends on Wave 2. Wave 4 depends on Wave 2 (stable Layer F) and on the `PublishProject` use case existing (already spec'd in `UX_REVIEW_AND_PUBLISH_SPEC.md`, to be completed if not yet implemented).
 
 ---
 
-## 12. Relazione con specifiche esistenti
+## 12. Relationship to existing specs
 
-| Spec esistente | Relazione con questo documento |
+| Existing spec | Relationship to this document |
 |---|---|
-| `ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md` | Layer F è l'implementazione del "media context block" descritto in quella spec. Questo documento lo applica concretamente alla modalità zero-effort e generalizza cross-modale. |
-| `MULTIMODE_UX_MVP_EXECUTION_SPEC.md` | Lo step 4 media è un'estensione additive del wizard zero-effort già pianificato — non in conflitto. |
-| `IMAGE_PROMPTING_PIPELINE_SPEC.md` | Complementare — quella spec riguarda la generazione di immagini AI. Questo riguarda l'uso di immagini caricate dall'utente come contesto. |
-| `PREPROMPT_ENGINE_SPEC.md` | Il Layer F si inserisce nella catena del preprompt engine — compatibile. |
-| `UX_REVIEW_AND_PUBLISH_SPEC.md` | L'auto-publish (Wave 4) riusa direttamente il `PublishProject` use case e il path UUID `/p/{publishId}` già spec'd in quel documento. Estende `SiteDeployment` con `source` e `ttlDays` in modo additive. La pagina deeplink `/preview/[publishId]` è una nuova route Next.js che wrappa l'iframe del path UUID con CTA guidate. |
-| `EXPORT_AND_PUBLISH_SPEC.md` | Il sistema di subdomain random (M4b) è il target futuro. Per MVP si usa path UUID (già implementabile senza nginx). La struttura `SubdomainAllocation` resta per il publish permanente su subdomain custom. |
+| `ASSET_AWARE_CONTEXT_ENRICHMENT_SPEC.md` | Layer F is the implementation of the "media context block" described in that spec. This document applies it concretely to zero-effort mode and generalises it across modes. |
+| `MULTIMODE_UX_MVP_EXECUTION_SPEC.md` | The media step 4 is an additive extension of the already-planned zero-effort wizard — no conflict. |
+| `IMAGE_PROMPTING_PIPELINE_SPEC.md` | Complementary — that spec covers AI image generation. This one covers using user-uploaded images as context. |
+| `PREPROMPT_ENGINE_SPEC.md` | Layer F slots into the preprompt engine chain — compatible. |
+| `UX_REVIEW_AND_PUBLISH_SPEC.md` | Auto-publish (Wave 4) reuses the `PublishProject` use case and the `/p/{publishId}` UUID path already spec'd there. It extends `SiteDeployment` with `source` and `ttlDays` additively. The deeplink page `/preview/[publishId]` is a new Next.js route wrapping the UUID-path iframe with guided CTAs. |
+| `EXPORT_AND_PUBLISH_SPEC.md` | The random subdomain system (M4b) is the future target. For the MVP the UUID path is used (implementable without nginx). The `SubdomainAllocation` structure remains for permanent publication on a custom subdomain. |
 
 ---
 
-## 13. Raccomandazione operativa
+## 13. Operational recommendation
 
-**Sequenza consigliata:**
+**Recommended sequence:**
 
-1. Iniziare da Wave 1 (2–3 giorni) — visibilità immediata per l'utente senza nessun rischio.
-2. Avviare Wave 2 backend e Wave 2 frontend in parallelo — team o agenti separati.
-3. Wave 3 dopo Wave 2 completata — minimo effort.
-4. Wave 4 pianificata dopo stabilizzazione Wave 2/3, richiede decisione su provider SMTP.
-5. Wave 5 opzionale — valutare in base al feedback utenti su Wave 4.
+1. Start with Wave 1 (2–3 days) — immediate visibility for the user at no risk.
+2. Run Wave 2 backend and Wave 2 frontend in parallel — separate teams or agents.
+3. Wave 3 once Wave 2 is complete — minimal effort.
+4. Wave 4 planned after Wave 2/3 stabilise; needs a decision on the SMTP provider.
+5. Wave 5 optional — decide based on user feedback on Wave 4.
 
-**Da non fare:**
+**What not to do:**
 
-- Non implementare async job (Wave 4) prima che il Layer F (Wave 2) sia stabile — il job tracking non ha senso se il prompt non è ancora arricchito correttamente.
-- Non rendere gli asset URL permanentemente pubblici — usare sempre il signed URL pattern.
-- Non forzare l'utente a passare per lo Step 4 — il salto deve essere sempre possibile.
-- Non usare il subdomain nginx (M4b) per l'auto-publish in Wave 4 — il path UUID è sufficiente e non richiede infrastruttura aggiuntiva. Nginx resta il target per il publish permanente custom (M4b futuro).
-- Non puntare l'email direttamente all'iframe `/p/{publishId}` — usare sempre `/preview/{publishId}` come deeplink, così l'utente vede le CTA guidate e non un sito nudo senza contesto.
-- Non bloccare la generazione se l'auto-publish fallisce — trattare sempre come best-effort.
+- Do not implement the async job (Wave 4) before Layer F (Wave 2) is stable — job tracking is pointless while the prompt is not yet enriched correctly.
+- Do not make asset URLs permanently public — always use the signed URL pattern.
+- Do not force the user through Step 4 — skipping must always be possible.
+- Do not use the nginx subdomain (M4b) for auto-publish in Wave 4 — the UUID path is enough and needs no extra infrastructure. Nginx remains the target for permanent custom publication (future M4b).
+- Do not point the email straight at the `/p/{publishId}` iframe — always use `/preview/{publishId}` as the deeplink, so the user sees the guided CTAs and not a bare site with no context.
+- Do not block generation when auto-publish fails — always treat it as best-effort.
 
 ---
 
-> Documento creato: 2026-04-22  
-> Aggiornato: 2026-04-22 — aggiunta sezione auto-publish, deeplink landing page, integrazione con PublishProject e SiteDeployment  
-> Aggiornare questo documento se cambiano le decisioni architetturali su job store, URL strategy, publish TTL o struttura step wizard.
+> Document created: 2026-04-22  
+> Updated: 2026-04-22 — added the auto-publish section, deeplink landing page, and integration with PublishProject and SiteDeployment  
+> Update this document if the architectural decisions change around the job store, URL strategy, publish TTL or the wizard step structure.

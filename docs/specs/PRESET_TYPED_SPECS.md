@@ -1,9 +1,9 @@
-# Andy Code Cat — Preset Tipizzati + Config Discovery + Prompt Modulare
+# Andy Code Cat — Typed Presets + Config Discovery + Modular Prompt
 
-> **Revisione:** 2026-04-08  
-> **Stato:** PROPOSTA — da approvare prima dell'implementazione  
-> **Dipendenze:** M0-STYLE ✅ (style profiling + moodboard), M4a ✅ (asset manager)  
-> **Prepara:** M2 (PrepromptEngine modular layers)
+> **Revision:** 2026-04-08  
+> **Status:** PROPOSAL — to be approved before implementation  
+> **Dependencies:** M0-STYLE ✅ (style profiling + moodboard), M4a ✅ (asset manager)  
+> **Prepares:** M2 (PrepromptEngine modular layers)
 
 ---
 
@@ -54,95 +54,95 @@ The superadmin must be able to create a new template model from a few natural-la
 The low-level LLM model-template catalog is not the current product focus.
 It should be treated as a secondary infrastructure layer kept aside for future runtime tuning.
 
-## 0. Contesto e Motivazione
+## 0. Context and Motivation
 
-### 0.1 Stato attuale
+### 0.1 Current State
 
-| Componente | Stato | Problema |
+| Component | Status | Problem |
 |---|---|---|
-| `PROJECT_PRESETS` in dashboard | Array di label + icona | Non connesso a nulla downstream. Click preset → popola solo il nome del progetto. |
-| `ProjectConfigPopup` | Moodboard + tag + assets | La sezione sinistra non ha guida scopribile per tipo di progetto. Categorie tag incomplete vs. onboarding utente. |
-| `prePromptTemplate` | Template Nunjucks flat per progetto | Monolitico. La parte "Landing Page" è mescolata al resto. Nessuna specializzazione per preset. |
-| Asset thumb | Upload funziona, thumb per immagini | `useInProject` e `delete` nascosti in gear menu hover, non immediatamente visibili. |
-| `StyleProfileResolver` | Non implementato (rinviato da M0-STYLE) | Il profilo utente + moodboard progetto non vengono mai usati per arricchire il system prompt. |
+| `PROJECT_PRESETS` in the dashboard | Array of labels + icons | Not connected to anything downstream. Clicking a preset → only populates the project name. |
+| `ProjectConfigPopup` | Moodboard + tags + assets | The left section has no discoverable guidance per project type. Tag categories incomplete vs. user onboarding. |
+| `prePromptTemplate` | Flat Nunjucks template per project | Monolithic. The "Landing Page" part is mixed in with the rest. No specialization per preset. |
+| Asset thumb | Upload works, thumbnails for images | `useInProject` and `delete` hidden in a hover gear menu, not immediately visible. |
+| `StyleProfileResolver` | Not implemented (deferred from M0-STYLE) | The user profile + project moodboard are never used to enrich the system prompt. |
 
-### 0.2 Obiettivo di questa milestone
+### 0.2 Goal of This Milestone
 
-Implementare in due sub-milestone incrementali (A e B) le basi per:
+Implement, in two incremental sub-milestones (A and B), the foundations for:
 
-1. **Preset tipizzati** — ogni preset ha: output spec tecnica, brief template, tag defaults, blocco prompt modulare.
-2. **Config Discovery guidata** — la popup di configurazione progetto diventa "discoverable": brief pre-compilato, tag per tipo di output, sezione sticky del preset selezionato.
-3. **Prompt modulare** — il system prompt Layer 1 (chat-preview) viene spezzato in `base + style_enrichment + preset_module`, permettendo a M2 di costruire sopra senza refactoring.
-4. **Asset thumb UX polish** — `useInProject` (flag "indicepabile") visibile sempre, delete accessibile senza hover.
+1. **Typed presets** — each preset has: technical output spec, brief template, default tags, modular prompt block.
+2. **Guided Config Discovery** — the project configuration popup becomes "discoverable": pre-filled brief, tags per output type, sticky section for the selected preset.
+3. **Modular prompt** — the Layer 1 (chat-preview) system prompt is split into `base + style_enrichment + preset_module`, letting M2 build on top without a refactor.
+4. **Asset thumb UX polish** — `useInProject` (the "indexable" flag) always visible, delete accessible without hover.
 
 ---
 
-## 1. Analisi Gap rispetto alle Richieste
+## 1. Gap Analysis Against Requirements
 
-### 1.1 Richieste utente mappate
+### 1.1 Mapped User Requirements
 
-| Richiesta | Componente impattato | Delta rispetto allo stato attuale |
+| Request | Impacted component | Delta vs. current state |
 |---|---|---|
-| Preset → specifiche aggiuntive come "system" (analoghe a moodboard utente) | `ProjectPreset` catalog + `project.presetId` + Layer 1 system builder | Non esiste. Da costruire. |
-| Profilazione guidata tag per tipo progetto (come onboarding utente) | `ProjectConfigPopup` left column + `TAG_CATEGORIES` completo | Parziale: 7 categorie su 10. Mancano `audience`, `feature`, `sector`. |
-| Sezione sinistra discoverable per il brief pre-compilato per ogni stile | `ProjectConfigPopup` brief section + preset detection + hint template | Non esiste. Il brief è un textarea vuoto. |
-| Tag per sezione nella popup di configurazione progetto | `ProjectConfigPopup` TAG_CATEGORIES | Già presenti in parte. Da completare con categorie mancanti. |
-| Asset: thumbnail con `useInProject` visibile, eliminazione diretta | `AssetThumb` component | Parziale: thumb per immagini ✅, ma useInProject/delete dentro gear menu hover. |
-| Motore di prompting incorpora le spec preset | Layer 1 system prompt builder | Non esiste separazione base/preset. Il prePromptTemplate è flat. |
-| Specializzare il caso Landing Page/Website in parte dinamica | `prePromptTemplate` → `base_template + preset_module` | Da spezzare. |
-| A4: forza CSS `@page A4` + dimensioni print | `PresetOutputSpec` per A4 | Da definire nel catalog. |
-| Slide: multi-section 16:9 o 3:4 come pagine PDF | `PresetOutputSpec` per slideshow/keynote | Da definire nel catalog. |
-| Infografica: masonry, icon-heavy, poster | `PresetOutputSpec` per infographic | Da definire nel catalog. |
-| Manifesto: struttura comunicato politico/brand | `PresetOutputSpec` per manifesto | Da definire nel catalog. |
-| Form: costruzione step guidato da compilare | `PresetOutputSpec` per form | Da definire nel catalog. |
+| Preset → additional specs acting as "system" (analogous to the user moodboard) | `ProjectPreset` catalog + `project.presetId` + Layer 1 system builder | Doesn't exist. To be built. |
+| Guided tag profiling per project type (like user onboarding) | `ProjectConfigPopup` left column + complete `TAG_CATEGORIES` | Partial: 7 of 10 categories. Missing `audience`, `feature`, `sector`. |
+| Discoverable left section for the pre-filled brief per style | `ProjectConfigPopup` brief section + preset detection + hint template | Doesn't exist. The brief is an empty textarea. |
+| Tags per section in the project configuration popup | `ProjectConfigPopup` TAG_CATEGORIES | Partially present already. To be completed with the missing categories. |
+| Assets: thumbnail with visible `useInProject`, direct deletion | `AssetThumb` component | Partial: thumbnail for images ✅, but useInProject/delete inside a hover gear menu. |
+| Prompting engine incorporates the preset specs | Layer 1 system prompt builder | No base/preset separation exists. `prePromptTemplate` is flat. |
+| Specialize the Landing Page/Website case into a dynamic part | `prePromptTemplate` → `base_template + preset_module` | To be split. |
+| A4: force `@page A4` CSS + print dimensions | `PresetOutputSpec` for A4 | To be defined in the catalog. |
+| Slide: multi-section 16:9 or 3:4 as PDF pages | `PresetOutputSpec` for slideshow/keynote | To be defined in the catalog. |
+| Infographic: masonry, icon-heavy, poster | `PresetOutputSpec` for infographic | To be defined in the catalog. |
+| Manifesto: political/brand statement structure | `PresetOutputSpec` for manifesto | To be defined in the catalog. |
+| Form: guided step-by-step construction to fill in | `PresetOutputSpec` for form | To be defined in the catalog. |
 
 ---
 
-## 2. Architettura Proposta
+## 2. Proposed Architecture
 
-### 2.1 Entità: `ProjectPreset` (static catalog, solo backend)
+### 2.1 Entity: `ProjectPreset` (static catalog, backend only)
 
-Non è un documento MongoDB. È un catalogo statico in-code, come `StyleTag`. Evita
-overhead DB per entity che non cambiano a runtime.
+It is not a MongoDB document. It's a static in-code catalog, like `StyleTag`. This avoids
+DB overhead for an entity that doesn't change at runtime.
 
 ```typescript
 // apps/api/src/domain/entities/ProjectPreset.ts
 
 export interface PresetOutputSpec {
-  /** Modello di pagina generata */
+  /** Generated page model */
   pageModel: 'single_page' | 'multi_page' | 'slide_deck' | 'print_a4';
   
-  /** Modello di scorrimento/navigazione */
+  /** Scroll/navigation model */
   sectionModel: 'scroll' | 'paginated' | 'masonry' | 'stepped_form';
   
-  /** Numero di pagine/slide previste (null = variabile) */
+  /** Expected number of pages/slides (null = variable) */
   recommendedPageCount?: number;
   
-  /** Aspect ratio per output multi-pagina o stampa */
+  /** Aspect ratio for multi-page or print output */
   aspectRatio?: '16:9' | '4:3' | 'A4_portrait' | 'A4_landscape' | 'free';
   
-  /** Blocco CSS da iniettare hardcoded nell'output (vincoli di stampa, dimensioni slide) */
-  cssConstraints?: string;  // es. "@page { size: A4 portrait; margin: 1.5cm; }"
+  /** CSS block hardcoded into the output (print constraints, slide dimensions) */
+  cssConstraints?: string;  // e.g. "@page { size: A4 portrait; margin: 1.5cm; }"
   
-  /** L'output è pensato per la stampa / esportazione PDF */
+  /** Whether the output is meant for print / PDF export */
   printReady: boolean;
   
   /**
-   * Blocco di istruzioni aggiuntive per il sistema di generazione.
-   * Iniettato nel system message PRIMA del prePromptTemplate base.
-   * Max 500 token. Istruzioni strutturali forti (es. "Ogni sezione deve occupare
-   * esattamente larghezza 1270px × altezza 714px" per le slide 16:9).
+   * Block of additional instructions for the generation system.
+   * Injected into the system message BEFORE the base prePromptTemplate.
+   * Max 500 tokens. Strong structural instructions (e.g. "Each section must occupy
+   * exactly width 1270px × height 714px" for 16:9 slides).
    */
   systemPromptModule: string;
 }
 
 export interface PresetTagDefaults {
-  /** Tag pre-selezionati per categoria alla creazione del progetto */
-  visualTags?: string[];        // es. ["visual:minimal", "visual:corporate"]
-  layoutTags?: string[];        // es. ["layout:hero-first"]
-  toneTags?: string[];          // es. ["tone:formal-professional"]
-  featureTags?: string[];       // es. ["feature:contact-form", "feature:pricing-table"]
-  audienceTags?: string[];      // es. ["audience:b2b"]
+  /** Tags pre-selected per category when the project is created */
+  visualTags?: string[];        // e.g. ["visual:minimal", "visual:corporate"]
+  layoutTags?: string[];        // e.g. ["layout:hero-first"]
+  toneTags?: string[];          // e.g. ["tone:formal-professional"]
+  featureTags?: string[];       // e.g. ["feature:contact-form", "feature:pricing-table"]
+  audienceTags?: string[];      // e.g. ["audience:b2b"]
   typographyTags?: string[];
   paletteTags?: string[];
 }
@@ -152,27 +152,27 @@ export interface ProjectPreset {
   label: string;                // "Landing Page"
   labelIt: string;
   labelEn: string;
-  hint: string;                 // "Singola pagina orientata conversione"
+  hint: string;                 // "Single page oriented toward conversion"
   icon: string;                 // lucide icon name
   
   outputSpec: PresetOutputSpec;
   defaultTags: PresetTagDefaults;
   
-  /** Brief template pre-compilato per la popup di configurazione */
-  briefTemplate: string;        // max 600 chars, interpolabile con {{projectName}}
+  /** Brief template pre-filled for the configuration popup */
+  briefTemplate: string;        // max 600 chars, interpolatable with {{projectName}}
   
-  /** Note di stile pre-compilate per la popup di configurazione */
+  /** Style notes pre-filled for the configuration popup */
   styleTemplate: string;        // max 400 chars
   
   /**
-   * Domande guida per il brief discovery (sezione sinistra popup configurazione).
-   * Array di stringhe mostrate come placeholder/accordion guidato.
+   * Guiding questions for brief discovery (left section of the configuration popup).
+   * Array of strings shown as a guided placeholder/accordion.
    */
-  briefGuideQuestions: string[];  // max 5 domande brevi
+  briefGuideQuestions: string[];  // max 5 short questions
 }
 ```
 
-### 2.2 Catalogo Preset — 9 Preset Definiti
+### 2.2 Preset Catalog — 9 Defined Presets
 
 ```typescript
 export const PRESET_CATALOG: ProjectPreset[] = [
@@ -181,7 +181,7 @@ export const PRESET_CATALOG: ProjectPreset[] = [
   {
     id: "neutral",
     label: "Vuoto / Neutro", labelIt: "Vuoto / Neutro", labelEn: "Blank / Neutral",
-    hint: "Parti da una tela bianca",
+    hint: "Start from a blank canvas",
     icon: "Sparkles",
     outputSpec: {
       pageModel: 'single_page',
@@ -193,9 +193,9 @@ export const PRESET_CATALOG: ProjectPreset[] = [
     briefTemplate: "",
     styleTemplate: "",
     briefGuideQuestions: [
-      "Qual è lo scopo principale di questa pagina?",
-      "Chi è il pubblico target?",
-      "Qual è il messaggio principale da comunicare?",
+      "What is the main purpose of this page?",
+      "Who is the target audience?",
+      "What is the main message to communicate?",
     ],
   },
 
@@ -203,34 +203,34 @@ export const PRESET_CATALOG: ProjectPreset[] = [
   {
     id: "landing",
     label: "Landing Page", labelIt: "Landing Page", labelEn: "Landing Page",
-    hint: "Singola pagina orientata conversione",
+    hint: "Single page oriented toward conversion",
     icon: "LayoutTemplate",
     outputSpec: {
       pageModel: 'single_page',
       sectionModel: 'scroll',
       printReady: false,
-      systemPromptModule: `FORMATO OUTPUT — LANDING PAGE:
-Struttura la pagina come landing page a conversione:
-1. HERO: headline forte, subheading, CTA primaria above-the-fold.
-2. SOCIAL PROOF / TRUST: testimonial, loghi clienti, numeri chiave.
-3. FEATURES / VALORE: sezioni benefit con icone o immagini.
-4. CTA secondaria o pricing table.
-5. FOOTER: contatti, legal links.
-Ogni sezione ha un obiettivo di conversione preciso. Niente distrazioni.
-La CTA primaria deve essere visibile senza scroll.`,
+      systemPromptModule: `OUTPUT FORMAT — LANDING PAGE:
+Structure the page as a conversion-oriented landing page:
+1. HERO: strong headline, subheading, primary CTA above-the-fold.
+2. SOCIAL PROOF / TRUST: testimonials, client logos, key numbers.
+3. FEATURES / VALUE: benefit sections with icons or images.
+4. Secondary CTA or pricing table.
+5. FOOTER: contacts, legal links.
+Every section has a precise conversion goal. No distractions.
+The primary CTA must be visible without scrolling.`,
     },
     defaultTags: {
       layoutTags: ["layout:hero-first"],
       featureTags: ["feature:contact-form"],
     },
-    briefTemplate: "Landing page orientata alla conversione per {{projectName}}. L'obiettivo principale è generare lead/contatti/acquisti. Il pubblico target è [...]",
-    styleTemplate: "Layout pulito con gerarchia visiva forte. Hero impattante, CTA ben visibile.",
+    briefTemplate: "Conversion-oriented landing page for {{projectName}}. The main goal is to generate leads/contacts/purchases. The target audience is [...]",
+    styleTemplate: "Clean layout with strong visual hierarchy. Impactful hero, clearly visible CTA.",
     briefGuideQuestions: [
-      "Qual è la singola azione che vuoi che il visitatore compia?",
-      "Quali sono i 3 principali benefici del tuo prodotto/servizio?",
-      "Chi è il cliente ideale (settore, ruolo, problema)?",
-      "Hai testimonianze o dati di prova da includere?",
-      "Hai un'offerta o incentivo per la conversione (prova gratuita, sconto, ecc.)?",
+      "What is the single action you want the visitor to take?",
+      "What are the top 3 benefits of your product/service?",
+      "Who is the ideal customer (sector, role, problem)?",
+      "Do you have testimonials or proof points to include?",
+      "Do you have an offer or incentive for conversion (free trial, discount, etc.)?",
     ],
   },
 
@@ -238,35 +238,35 @@ La CTA primaria deve essere visibile senza scroll.`,
   {
     id: "website",
     label: "Website", labelIt: "Website", labelEn: "Website",
-    hint: "Sito multi-sezione classico",
+    hint: "Classic multi-section site",
     icon: "Files",
     outputSpec: {
-      pageModel: 'single_page',   // Layer 1 genera single-page; Layer 2 potrà multi-page
+      pageModel: 'single_page',   // Layer 1 generates single-page; Layer 2 may generate multi-page
       sectionModel: 'scroll',
       printReady: false,
-      systemPromptModule: `FORMATO OUTPUT — WEBSITE:
-Struttura come sito web classico multi-sezione con navigazione sticky in cima:
-1. HEADER con logo, navigazione (Home, Chi siamo, Servizi, Contatti).
-2. HERO con identità e proposta di valore.
-3. ABOUT / CHI SIAMO.
-4. SERVIZI / PRODOTTI (card grid).
-5. PORTFOLIO o CASE STUDY (opzionale).
-6. TESTIMONIAL.
-7. CONTATTI con form.
-8. FOOTER completo.
-Ogni sezione ha un anchor ID per la navigazione interna.`,
+      systemPromptModule: `OUTPUT FORMAT — WEBSITE:
+Structure as a classic multi-section website with sticky top navigation:
+1. HEADER with logo, navigation (Home, About, Services, Contact).
+2. HERO with identity and value proposition.
+3. ABOUT.
+4. SERVICES / PRODUCTS (card grid).
+5. PORTFOLIO or CASE STUDY (optional).
+6. TESTIMONIALS.
+7. CONTACT with form.
+8. Full FOOTER.
+Every section has an anchor ID for internal navigation.`,
     },
     defaultTags: {
       layoutTags: ["layout:hero-first"],
       featureTags: ["feature:contact-form", "feature:testimonials"],
     },
-    briefTemplate: "Sito web istituzionale per {{projectName}}. Presenta l'azienda, i servizi e facilita il contatto con i potenziali clienti.",
-    styleTemplate: "Struttura classica, professionale. Navigazione chiara. Sezioni ben distinte.",
+    briefTemplate: "Institutional website for {{projectName}}. Presents the company, its services, and makes it easy for prospective clients to get in touch.",
+    styleTemplate: "Classic, professional structure. Clear navigation. Well-distinct sections.",
     briefGuideQuestions: [
-      "Quali sezioni del sito sono prioritarie?",
-      "Quanti servizi/prodotti vuoi mostrare?",
-      "Hai un portfolio o casi studio da includere?",
-      "Come vuoi che i visitatori ti contattino?",
+      "Which sections of the site are the priority?",
+      "How many services/products do you want to show?",
+      "Do you have a portfolio or case studies to include?",
+      "How do you want visitors to contact you?",
     ],
   },
 
@@ -274,34 +274,34 @@ Ogni sezione ha un anchor ID per la navigazione interna.`,
   {
     id: "form",
     label: "Form", labelIt: "Form", labelEn: "Form",
-    hint: "Raccolta lead e contatti con step guidati",
+    hint: "Lead and contact collection with guided steps",
     icon: "FormInput",
     outputSpec: {
       pageModel: 'single_page',
       sectionModel: 'stepped_form',
       printReady: false,
-      systemPromptModule: `FORMATO OUTPUT — FORM MULTI-STEP:
-Costruisci un form multi-step (wizard) con queste caratteristiche:
-- STEP 1: dati principali (minimo campi necessari).
-- STEP 2: dettagli aggiuntivi.
-- STEP 3: riepilogo + invio.
-Navigation: bottoni "Avanti" / "Indietro" / "Invia".
-Progress bar visibile in cima.
-Validazione client-side per ogni step prima di procedere.
-Ogni step occupi lo schermo verticalmente, senza scroll orizzontale.
-Il form deve essere mobile-first.`,
+      systemPromptModule: `OUTPUT FORMAT — MULTI-STEP FORM:
+Build a multi-step form (wizard) with these characteristics:
+- STEP 1: main data (minimum necessary fields).
+- STEP 2: additional details.
+- STEP 3: summary + submit.
+Navigation: "Next" / "Back" / "Submit" buttons.
+Progress bar visible at the top.
+Client-side validation for each step before proceeding.
+Each step occupies the screen vertically, no horizontal scroll.
+The form must be mobile-first.`,
     },
     defaultTags: {
       featureTags: ["feature:contact-form"],
       toneTags: ["tone:friendly-casual"],
     },
-    briefTemplate: "Form guidato multi-step per {{projectName}}. Lo scopo è raccogliere [tipo di dati] in modo semplice e progressivo.",
-    styleTemplate: "Interfaccia pulita, pochi campi per step, focus sul completamento.",
+    briefTemplate: "Guided multi-step form for {{projectName}}. The goal is to collect [type of data] in a simple, progressive way.",
+    styleTemplate: "Clean interface, few fields per step, focus on completion.",
     briefGuideQuestions: [
-      "Quali informazioni vuoi raccogliere dall'utente?",
-      "Quanti step logici ha il processo?",
-      "Cosa succede dopo l'invio del form (conferma, reindirizzamento)?",
-      "Hai requisiti di validazione particolari?",
+      "What information do you want to collect from the user?",
+      "How many logical steps does the process have?",
+      "What happens after the form is submitted (confirmation, redirect)?",
+      "Do you have specific validation requirements?",
     ],
   },
 
@@ -309,35 +309,35 @@ Il form deve essere mobile-first.`,
   {
     id: "manifesto",
     label: "Manifesto", labelIt: "Manifesto", labelEn: "Manifesto",
-    hint: "Pagina identità, valori e dichiarazione d'intenti",
+    hint: "Identity, values and statement of intent page",
     icon: "RectangleEllipsis",
     outputSpec: {
       pageModel: 'single_page',
       sectionModel: 'scroll',
       printReady: false,
-      systemPromptModule: `FORMATO OUTPUT — MANIFESTO:
-Struttura come manifesto brand/identitario con questi elementi:
-1. APERTURA: titolo evocativo + claim fondamentale (grande, centrato).
-2. PROBLEMA / PERCHÉ: dichiarazione del problema che si vuole risolvere.
-3. VALORI: lista di 3-7 valori fondamentali, ognuno con una riga esplicativa.
-4. VISIONE: dove si vuole arrivare, il futuro immaginato.
-5. AZIONE / CALL: cosa chiedi al lettore (unirsi, credere, agire).
-6. FIRMA: nome/brand + data.
-Tipografia forte e gerarchica. Molto testo, poco decorativismo.
-Contrasto netto tra sfondo e testo. Tono solenne ma energico.`,
+      systemPromptModule: `OUTPUT FORMAT — MANIFESTO:
+Structure as a brand/identity manifesto with these elements:
+1. OPENING: evocative title + core claim (large, centered).
+2. PROBLEM / WHY: statement of the problem you want to solve.
+3. VALUES: a list of 3-7 core values, each with an explanatory line.
+4. VISION: where you want to get to, the imagined future.
+5. ACTION / CALL: what you're asking the reader to do (join, believe, act).
+6. SIGNATURE: name/brand + date.
+Strong, hierarchical typography. Lots of text, little decoration.
+Sharp contrast between background and text. Solemn but energetic tone.`,
     },
     defaultTags: {
       visualTags: ["visual:bold"],
       toneTags: ["tone:inspirational", "tone:authoritative-expert"],
       typographyTags: ["typo:display-bold"],
     },
-    briefTemplate: "Manifesto di {{projectName}}: una dichiarazione pubblica di valori, visione e missione. Rivolto a [pubblico].",
-    styleTemplate: "Tipografia display dominante. Palette scura o a forte contrasto. Nessun elemento superfluo.",
+    briefTemplate: "Manifesto for {{projectName}}: a public statement of values, vision and mission. Aimed at [audience].",
+    styleTemplate: "Dominant display typography. Dark or high-contrast palette. No superfluous elements.",
     briefGuideQuestions: [
-      "Qual è il valore o principio fondante che vuoi dichiarare?",
-      "Chi deve sentirsi chiamato in causa da questo manifesto?",
-      "Quali sono i 3-5 valori irrinunciabili?",
-      "Qual è l'azione che chiedi al lettore?",
+      "What is the founding value or principle you want to state?",
+      "Who should feel called out by this manifesto?",
+      "What are the 3-5 non-negotiable values?",
+      "What action are you asking the reader to take?",
     ],
   },
 
@@ -345,7 +345,7 @@ Contrasto netto tra sfondo e testo. Tono solenne ma energico.`,
   {
     id: "slideshow",
     label: "Presentazione", labelIt: "Presentazione", labelEn: "Slideshow",
-    hint: "Deck navigabile a slide — esportabile come PDF 16:9",
+    hint: "Navigable slide deck — exportable as a 16:9 PDF",
     icon: "Presentation",
     outputSpec: {
       pageModel: 'slide_deck',
@@ -369,32 +369,32 @@ Contrasto netto tra sfondo e testo. Tono solenne ma energico.`,
 }
 @page { size: 1270px 714px; margin: 0; }
 @media print { body { margin: 0; } .slide { page-break-after: always; } }`,
-      systemPromptModule: `FORMATO OUTPUT — PRESENTAZIONE SLIDE 16:9:
-Crea una presentazione con slide navigabili.
-VINCOLI TECNICI (NON NEGOZIABILI):
-- Ogni slide è un div.slide di 1270×714px.
-- Nessun contenuto deve uscire da queste dimensioni.
-- Navigazione con frecce sinistra/destra o pulsanti prev/next.
-- Slide counter visibile (es. "3 / 10").
-- Esportabile come PDF 16:9 (ogni slide = 1 pagina).
-STRUTTURA TIPICA:
-  Slide 1: Cover (titolo, autore, data)
-  Slide 2: Agenda / Indice
-  Slide 3-N: Contenuto (max 5 punti per slide)
-  Slide N: Conclusione + CTA
-Font grande (min 24px corpo), bullet points, mai testo denso.`,
+      systemPromptModule: `OUTPUT FORMAT — 16:9 SLIDE PRESENTATION:
+Create a presentation with navigable slides.
+TECHNICAL CONSTRAINTS (NON-NEGOTIABLE):
+- Each slide is a div.slide of 1270×714px.
+- No content may extend beyond these dimensions.
+- Navigation with left/right arrows or prev/next buttons.
+- Visible slide counter (e.g. "3 / 10").
+- Exportable as a 16:9 PDF (each slide = 1 page).
+TYPICAL STRUCTURE:
+  Slide 1: Cover (title, author, date)
+  Slide 2: Agenda / Index
+  Slide 3-N: Content (max 5 points per slide)
+  Slide N: Conclusion + CTA
+Large font (min 24px body), bullet points, never dense text.`,
     },
     defaultTags: {
       visualTags: ["visual:corporate"],
       typographyTags: ["typo:sans-serif-clean"],
     },
-    briefTemplate: "Presentazione di {{projectName}} in formato slide 16:9. Argomento: [argomento]. Audience: [chi vede la presentazione].",
-    styleTemplate: "Slide pulite, massimo 5 punti per slide, grafica di supporto al testo.",
+    briefTemplate: "Presentation for {{projectName}} in 16:9 slide format. Topic: [topic]. Audience: [who is watching the presentation].",
+    styleTemplate: "Clean slides, max 5 points per slide, graphics supporting the text.",
     briefGuideQuestions: [
-      "Qual è l'obiettivo della presentazione (vendita, formazione, pitch, report)?",
-      "A quante slide punti circa?",
-      "Chi è l'audience e qual è il contesto (riunione interna, cliente, conferenza)?",
-      "Hai contenuti/dati specifici da includere?",
+      "What is the presentation's goal (sales, training, pitch, report)?",
+      "Roughly how many slides are you aiming for?",
+      "Who is the audience and what is the context (internal meeting, client, conference)?",
+      "Do you have specific content/data to include?",
     ],
   },
 
@@ -402,7 +402,7 @@ Font grande (min 24px corpo), bullet points, mai testo denso.`,
   {
     id: "keynote",
     label: "Keynote", labelIt: "Keynote", labelEn: "Keynote",
-    hint: "Presentazione visuale ad alto impatto — stile conferenza",
+    hint: "High-impact visual presentation — conference style",
     icon: "GalleryVertical",
     outputSpec: {
       pageModel: 'slide_deck',
@@ -422,29 +422,29 @@ Font grande (min 24px corpo), bullet points, mai testo denso.`,
   box-sizing: border-box;
 }
 @page { size: 1920px 1080px; margin: 0; }`,
-      systemPromptModule: `FORMATO OUTPUT — KEYNOTE VISUALE:
-Presentazione ad alto impatto visivo per conferenze o all-hands.
-VINCOLI TECNICI:
-- Ogni slide è 1920×1080px (full HD).
-- Prevalenza immagini/visual su testo.
-- Max 2-3 parole chiave per slide (non lista punti).
-- Transizioni implicate nel markup (class="slide active/next").
-- Navigazione keyboard-friendly (frecce).
-STRUTTURA:
-  Cover spettacolare, slide di solo-citazione, slide numerica (dato in grande),
-  slide emotiva (foto + claim), slide di sintesi finale.
-Tipografia display. Immagini fullbleed. Testo in sovrapposizione con overlay scuro.`,
+      systemPromptModule: `OUTPUT FORMAT — VISUAL KEYNOTE:
+High visual-impact presentation for conferences or all-hands.
+TECHNICAL CONSTRAINTS:
+- Each slide is 1920×1080px (full HD).
+- Images/visuals dominate over text.
+- Max 2-3 keywords per slide (not a bullet list).
+- Transitions implied in the markup (class="slide active/next").
+- Keyboard-friendly navigation (arrows).
+STRUCTURE:
+  Spectacular cover, quote-only slide, numeric slide (a large stat),
+  emotional slide (photo + claim), final summary slide.
+Display typography. Fullbleed images. Text overlaid with a dark overlay.`,
     },
     defaultTags: {
       visualTags: ["visual:bold", "visual:futuristic"],
       typographyTags: ["typo:display-bold"],
     },
-    briefTemplate: "Keynote visuale di {{projectName}} per una presentazione ad alto impatto. Tema centrale: [tema]. Durata stimata: [minuti].",
-    styleTemplate: "Full-bleed visuals, testo dominante, palette forte e contrastata.",
+    briefTemplate: "Visual keynote for {{projectName}} for a high-impact presentation. Central theme: [theme]. Estimated duration: [minutes].",
+    styleTemplate: "Full-bleed visuals, dominant text, strong high-contrast palette.",
     briefGuideQuestions: [
-      "Qual è il messaggio che rimane in testa dopo la presentazione?",
-      "Hai immagini emotive o icone di brand da usare?",
-      "Qual è il tono: ispirazionale, tecnico, visionario?",
+      "What is the message that should stick after the presentation?",
+      "Do you have emotional images or brand icons to use?",
+      "What is the tone: inspirational, technical, visionary?",
     ],
   },
 
@@ -452,7 +452,7 @@ Tipografia display. Immagini fullbleed. Testo in sovrapposizione con overlay scu
   {
     id: "a4poster",
     label: "A4 Poster", labelIt: "A4 Poster", labelEn: "A4 Poster",
-    hint: "Layout singola pagina stampabile come PDF A4",
+    hint: "Single-page layout printable as an A4 PDF",
     icon: "FileImage",
     outputSpec: {
       pageModel: 'print_a4',
@@ -489,111 +489,111 @@ body {
   html, body { width: var(--page-w); height: var(--page-h); }
   .page { page-break-after: always; }
 }`,
-      systemPromptModule: `FORMATO OUTPUT — DOCUMENTO A4 STAMPABILE (MULTI-VARIANT):
+      systemPromptModule: `OUTPUT FORMAT — PRINTABLE A4 DOCUMENT (MULTI-VARIANT):
 
-VINCOLI TECNICI BASE (NON NEGOZIABILI):
-- Ogni pagina: div w-[210mm] h-[297mm] overflow-hidden flex flex-col bg-white (Tailwind).
-- ZERO overflow, nessun scroll, nessun viewport unit (no vw/vh), nessun position:fixed.
-- NON usare <input>, <textarea>, <select> — non si stampano correttamente.
-  Per campi compilabili usare: div con border-b-2 border-slate-200 (scrivibile a mano su carta).
-- Print-ready: ogni .page deve avere print:m-0 print:shadow-none print:border-none.
-- Multi-pagina: ogni div.page ha class "print:break-after-page".
-- Font: Tailwind text-* (body ≥ text-[11px]; display fino a text-5xl); no font in vw.
+BASE TECHNICAL CONSTRAINTS (NON-NEGOTIABLE):
+- Every page: div w-[210mm] h-[297mm] overflow-hidden flex flex-col bg-white (Tailwind).
+- ZERO overflow, no scroll, no viewport units (no vw/vh), no position:fixed.
+- Do NOT use <input>, <textarea>, <select> — they don't print correctly.
+  For fillable fields use: a div with border-b-2 border-slate-200 (writable by hand on paper).
+- Print-ready: every .page must have print:m-0 print:shadow-none print:border-none.
+- Multi-page: every div.page has class "print:break-after-page".
+- Font: Tailwind text-* (body ≥ text-[11px]; display up to text-5xl); no font in vw.
 
-RILEVAMENTO SUB-TIPO — analizza il brief e scegli la struttura appropriata:
+SUB-TYPE DETECTION — analyze the brief and choose the appropriate structure:
 
-▶ A — POSTER / LOCANDINA
-  Trigger: "poster", "locandina", "flyer", "invito", "evento", "annuncio"
-  Singola pagina decorativa. Gerarchia: titolo dominante > visual/immagine > info > footer.
+▶ A — POSTER / FLYER
+  Trigger: "poster", "flyer", "invitation", "event", "announcement"
+  Single decorative page. Hierarchy: dominant title > visual/image > info > footer.
   Shell: <div class="w-[210mm] h-[297mm] p-8 bg-white flex flex-col justify-between overflow-hidden print:m-0">
-  Struttura: HEADER (titolo display text-5xl font-black tracking-tighter) | CORPO (visual + claim) |
-             FOOTER (data, luogo, contatti — border-t pt-4 text-sm text-slate-500).
-  NON usare campi compilabili o griglie dati.
+  Structure: HEADER (display title text-5xl font-black tracking-tighter) | BODY (visual + claim) |
+             FOOTER (date, location, contacts — border-t pt-4 text-sm text-slate-500).
+  Do NOT use fillable fields or data grids.
 
-▶ B — DOCUMENTO / REPORT MULTI-PAGINA
-  Trigger: "documento", "report", "guida", "manuale", "relazione", "brochure", "handbook", "fascicolo"
-  Sequenza di div.page indipendenti. Pagina 1 = copertina.
-  COPERTINA: sfondo colorato pieno, titolo centrato (text-4xl font-black), sottotitolo, data, logo.
-  PAGINE INTERNE:
-    header: flex justify-between border-b pb-2 mb-6 | titolo abbreviato + numero pagina text-[9px]
-    corpo: grid grid-cols-2 gap-6 (o single-col per testi lunghi)
-    sezioni: h2 text-lg font-bold mb-3 border-b pb-1 + paragrafi text-[11px] leading-relaxed
+▶ B — MULTI-PAGE DOCUMENT / REPORT
+  Trigger: "document", "report", "guide", "manual", "handbook", "brochure", "booklet"
+  Sequence of independent div.page elements. Page 1 = cover.
+  COVER: full-color background, centered title (text-4xl font-black), subtitle, date, logo.
+  INNER PAGES:
+    header: flex justify-between border-b pb-2 mb-6 | abbreviated title + page number text-[9px]
+    body: grid grid-cols-2 gap-6 (or single-col for long text)
+    sections: h2 text-lg font-bold mb-3 border-b pb-1 + paragraphs text-[11px] leading-relaxed
     footer: border-t mt-auto pt-2 flex justify-between text-[9px] text-slate-400
 
-▶ C — CANVAS / WORKSHEET PARTECIPANTE
-  Trigger: "canvas", "scheda", "worksheet", "modulo", "partecipante", "esercizio", "brainstorming"
-  Pagina interattiva per compilazione su carta. NON usare elementi form HTML.
+▶ C — PARTICIPANT CANVAS / WORKSHEET
+  Trigger: "canvas", "worksheet", "form", "participant", "exercise", "brainstorming"
+  Interactive page for filling out on paper. Do NOT use HTML form elements.
   Shell: <div class="w-[210mm] h-[297mm] p-8 bg-white flex flex-col gap-4 overflow-hidden print:m-0">
-  ANATOMIA (in ordine dall'alto):
+  ANATOMY (top to bottom):
   1. HEADER: flex items-start justify-between
-     sinistra — titolo event (text-3xl font-black italic tracking-tighter) + sottotitolo text-xs
-     destra — blocco info: border-l-4 border-{accent} pl-4 con data + luogo text-sm
+     left — event title (text-3xl font-black italic tracking-tighter) + subtitle text-xs
+     right — info block: border-l-4 border-{accent} pl-4 with date + location text-sm
   2. METADATA FIELDS (grid grid-cols-3 gap-4):
-     ogni campo = <div class="py-2 border-b-2 border-slate-200">
+     each field = <div class="py-2 border-b-2 border-slate-200">
        <div class="text-[9px] uppercase font-bold text-slate-400">{label}</div>
-       <div class="h-5"></div>  {/* spazio per scrittura a mano */}
+       <div class="h-5"></div>  {/* space for handwriting */}
      </div>
   3. PROMPT CARDS (grid grid-cols-4 gap-2):
-     ogni card = <div class="bg-{accent}-50 p-3 rounded-lg border border-{accent}-100">
-       <div class="text-[9px] font-bold text-{accent}-600 uppercase mb-1">{fase}</div>
-       <p class="text-[11px] text-slate-700 leading-snug">{domanda stimolo}</p>
+     each card = <div class="bg-{accent}-50 p-3 rounded-lg border border-{accent}-100">
+       <div class="text-[9px] font-bold text-{accent}-600 uppercase mb-1">{phase}</div>
+       <p class="text-[11px] text-slate-700 leading-snug">{prompt question}</p>
      </div>
-  4. FREE-DRAW AREA (area disegno — occupa lo spazio rimanente):
+  4. FREE-DRAW AREA (drawing area — takes up the remaining space):
      <div class="flex-grow border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 relative overflow-hidden"
           style="background:radial-gradient(#{accent-color} 1px,transparent 1px);background-size:20px 20px">
-       {/* WATERMARK decorativo — non interferisce con lo spazio di disegno */}
+       {/* decorative WATERMARK — does not interfere with the drawing space */}
        <div class="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
-         <span class="text-[140px] font-black text-white opacity-20">{PAROLA_CHIAVE}</span>
+         <span class="text-[140px] font-black text-white opacity-20">{KEYWORD}</span>
        </div>
-       <div class="absolute bottom-2 left-3 text-[9px] uppercase font-bold text-{accent}-300">{label area}</div>
+       <div class="absolute bottom-2 left-3 text-[9px] uppercase font-bold text-{accent}-300">{area label}</div>
      </div>
   5. BOTTOM GRID (grid grid-cols-3 gap-3):
-     col-span-2 — area keywords: lista numerata 1/2/3 con div border-b per ognuna
-     col 3 — domanda aperta: div border-b h-12 (spazio di risposta)
+     col-span-2 — keyword area: a numbered 1/2/3 list with a border-b div for each
+     col 3 — open question: div border-b h-12 (answer space)
   6. FOOTER (mt-auto border-t pt-2 flex justify-between text-[9px] text-slate-400):
-     nome organizzazione | anno/edizione
+     organization name | year/edition
 
-▶ D — GUIDA FACILITATORE / STAFF
-  Trigger: "facilitatore", "staff", "guida facilitazione", "conduttore", "formatore", "agenda staff"
-  Multi-pagina. Badge "SOLO STAFF" prominente. Distinta dal materiale partecipante.
-  Shell: stessa del Canvas ma con badge header prominente.
-  ANATOMIA:
-  1. HEADER: badge staff (span bg-{accent}-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase)
-             + titolo inline text-xl font-black + sottotitolo italic text-xs text-slate-500
-  2. TIMELINE FASI (grid grid-cols-4 gap-2):
-     cella normale: p-3 rounded-lg text-center border border-{accent}-200 bg-{accent}-50 text-{accent}-700
-     cella ATTIVA: bg-{accent}-600 text-white font-bold (evidenziata visivamente)
-     contenuto cella: orario (text-xs font-bold) + nome fase (text-[10px] mt-1)
-  3. EXERCISE GUIDE ITEMS (per ogni attività):
+▶ D — FACILITATOR / STAFF GUIDE
+  Trigger: "facilitator", "staff", "facilitation guide", "moderator", "trainer", "staff agenda"
+  Multi-page. Prominent "STAFF ONLY" badge. Distinct from the participant material.
+  Shell: same as Canvas but with a prominent header badge.
+  ANATOMY:
+  1. HEADER: staff badge (span bg-{accent}-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase)
+             + inline title text-xl font-black + subtitle italic text-xs text-slate-500
+  2. PHASE TIMELINE (grid grid-cols-4 gap-2):
+     normal cell: p-3 rounded-lg text-center border border-{accent}-200 bg-{accent}-50 text-{accent}-700
+     ACTIVE cell: bg-{accent}-600 text-white font-bold (visually highlighted)
+     cell content: time (text-xs font-bold) + phase name (text-[10px] mt-1)
+  3. EXERCISE GUIDE ITEMS (for each activity):
      <div class="flex gap-4 items-start bg-slate-50/50 p-3 rounded-lg border border-slate-100">
-       <div class="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white bg-{color}-500 shrink-0 text-sm">{lettera}</div>
+       <div class="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white bg-{color}-500 shrink-0 text-sm">{letter}</div>
        <div>
-         <span class="font-bold text-sm text-slate-800">{titolo}</span>
-         <p class="text-xs text-slate-600 italic mt-0.5">Obiettivo: {obiettivo}</p>
-         <p class="text-[10px] text-slate-500 mt-1">💡 {tip pratico}</p>
+         <span class="font-bold text-sm text-slate-800">{title}</span>
+         <p class="text-xs text-slate-600 italic mt-0.5">Goal: {goal}</p>
+         <p class="text-[10px] text-slate-500 mt-1">💡 {practical tip}</p>
        </div>
      </div>
   4. TIPS CALLOUT: div bg-yellow-50 p-4 rounded-xl border border-yellow-200
-     + span font-bold text-yellow-800 (titolo avviso) + ul list-disc ml-4 text-sm text-yellow-700
+     + span font-bold text-yellow-800 (warning title) + ul list-disc ml-4 text-sm text-yellow-700
   5. FOOTER: border-t mt-auto pt-2 flex items-center justify-between text-[9px] text-slate-400
-     logo badge (w-8 h-8 bg-{accent}-900 rounded-lg text-white font-bold) + "Documento riservato"
+     logo badge (w-8 h-8 bg-{accent}-900 rounded-lg text-white font-bold) + "Confidential document"
 
-PALETTE STAMPA (scegli un accent tematico coerente):
-- Evento culturale/creativo: cyan-600 | Corporate/istituzionale: blue-700 | Sostenibilità: emerald-600
-- Usa slate-800 per testi primari, slate-400 per secondario, bg-white per pagina.
-- Punta a ink-friendly: leggibile anche in stampa B/N.`,
+PRINT PALETTE (choose a coherent thematic accent):
+- Cultural/creative event: cyan-600 | Corporate/institutional: blue-700 | Sustainability: emerald-600
+- Use slate-800 for primary text, slate-400 for secondary, bg-white for the page.
+- Aim for ink-friendly: readable even in B/W print.`,
     },
     defaultTags: {
       visualTags: ["visual:bold"],
       typographyTags: ["typo:display-bold"],
     },
-    briefTemplate: "Poster/locandina A4 per {{projectName}}. Da stampare come volantino o esportare come PDF. Contenuto principale: [titolo evento / messaggio chiave].",
-    styleTemplate: "Layout a foglio singolo stampabile. Gerarchia tipografica forte. Immagini e testo bilanciati nel formato A4.",
+    briefTemplate: "A4 poster/flyer for {{projectName}}. To be printed as a flyer or exported as a PDF. Main content: [event title / key message].",
+    styleTemplate: "Printable single-sheet layout. Strong typographic hierarchy. Balanced images and text in the A4 format.",
     briefGuideQuestions: [
-      "È per stampa in bianco/nero o a colori?",
-      "Qual è il titolo principale o evento?",
-      "Quali informazioni essenziali devono stare nel foglio (data, luogo, contatti)?",
-      "Hai un logo o immagine da includere?",
+      "Is it for black-and-white or color printing?",
+      "What is the main title or event?",
+      "What essential information needs to be on the sheet (date, location, contacts)?",
+      "Do you have a logo or image to include?",
     ],
   },
 
@@ -601,87 +601,87 @@ PALETTE STAMPA (scegli un accent tematico coerente):
   {
     id: "infographic",
     label: "Infographic", labelIt: "Infografica", labelEn: "Infographic",
-    hint: "Visualizzazione dati, icone, sequenze narrative — stile poster/manifesto ricco",
+    hint: "Data visualization, icons, narrative sequences — rich poster/manifesto style",
     icon: "Sparkles",
     outputSpec: {
       pageModel: 'single_page',
       sectionModel: 'masonry',
       printReady: false,
-      systemPromptModule: `FORMATO OUTPUT — INFOGRAFICA (MULTI-VARIANT):
+      systemPromptModule: `OUTPUT FORMAT — INFOGRAPHIC (MULTI-VARIANT):
 
-Una pagina ad alta densità visiva. I dati parlano per immagini; il testo è sintetico.
+A visually dense page. Data speaks through imagery; text is concise.
 
-RILEVAMENTO SUB-TIPO — analizza il brief e scegli la struttura:
+SUB-TYPE DETECTION — analyze the brief and choose the structure:
 
-▶ A — INFOGRAFICA VERTICALE (default)
-  Trigger: generico, "dati", "statistiche", "storytelling visivo", "panoramica"
-  Pagina verticale lunga. Sequenza narrativa dall'alto verso il basso.
-  STRUTTURA:
-    TITOLO GRANDE (messaggio chiave, text-5xl font-black)
-    → PROBLEMA (icona + 1 frase, bg-slate-800 text-white p-6)
-    → DATI 1-2-3 (grid grid-cols-3: numero text-6xl font-black + label text-xs uppercase)
-    → PROCESSO FLOW (step orizzontali: flex gap-4 items-center con frecce →)
-    → RISULTATI (percentuale o stat in cerchio o badge prominente)
-    → CONCLUSIONE + CTA (sezione finale con bottone o invito all'azione)
-  TECNICHE:
-    - Alternanza sezioni chiare/scure per ritmo visivo.
-    - Ogni dato chiave: box colorato, cerchio, badge — MAI inline nel testo.
-    - Max 30-40 parole per sezione. Icone SVG inline o emoji come decoratori.
+▶ A — VERTICAL INFOGRAPHIC (default)
+  Trigger: generic, "data", "statistics", "visual storytelling", "overview"
+  Long vertical page. Top-to-bottom narrative sequence.
+  STRUCTURE:
+    BIG TITLE (key message, text-5xl font-black)
+    → PROBLEM (icon + 1 sentence, bg-slate-800 text-white p-6)
+    → DATA 1-2-3 (grid grid-cols-3: number text-6xl font-black + label text-xs uppercase)
+    → PROCESS FLOW (horizontal steps: flex gap-4 items-center with → arrows)
+    → RESULTS (percentage or stat in a circle or a prominent badge)
+    → CONCLUSION + CTA (final section with a button or call to action)
+  TECHNIQUES:
+    - Alternate light/dark sections for visual rhythm.
+    - Every key data point: colored box, circle, badge — NEVER inline in the text.
+    - Max 30-40 words per section. Inline SVG icons or emoji as decorators.
 
-▶ B — CARD GRID / ATTIVITÀ (parole chiave: esercizi, attività, opzioni, schede, workshop, "scegli tra")
-  Griglia di schede colorate. Ideale per: esercizi workshop, menù di opzioni, confronto elementi.
-  CONTAINER: grid grid-cols-2 gap-4 (eventuale card finale col-span-2 per elemento dominante).
-  ANATOMIA CARD:
+▶ B — CARD GRID / ACTIVITIES (keywords: exercises, activities, options, cards, workshop, "choose between")
+  Grid of colored cards. Ideal for: workshop exercises, option menus, comparing elements.
+  CONTAINER: grid grid-cols-2 gap-4 (an optional final card col-span-2 for a dominant element).
+  CARD ANATOMY:
     Wrapper:      border-2 border-{color}-300 rounded-2xl p-5 flex flex-col bg-{color}-50/30
     Letter badge: div w-8 h-8 rounded-lg flex items-center justify-center font-black text-white bg-{color}-500
-    Categoria:    span text-xs font-bold uppercase tracking-widest text-{color}-700 mt-2
-    Domanda:      p text-sm font-bold italic text-slate-800 mt-1
-    Descrizione:  p text-[11px] leading-relaxed text-slate-600 flex-grow mt-2
-    Footer card:  div mt-auto pt-3 border-t border-{color}-100 text-[10px] italic text-slate-500
-  SCHEMA COLORI (una palette distinta per card, in ordine):
+    Category:     span text-xs font-bold uppercase tracking-widest text-{color}-700 mt-2
+    Question:     p text-sm font-bold italic text-slate-800 mt-1
+    Description:  p text-[11px] leading-relaxed text-slate-600 flex-grow mt-2
+    Card footer:  div mt-auto pt-3 border-t border-{color}-100 text-[10px] italic text-slate-500
+  COLOR SCHEME (a distinct palette per card, in order):
     A → cyan   (bg-cyan-50/30,   border-cyan-300,   badge: bg-cyan-500)
     B → slate  (bg-slate-50/30,  border-slate-300,  badge: bg-slate-500)
     C → red    (bg-red-50/30,    border-red-300,    badge: bg-red-500)
     D → indigo (bg-indigo-50/30, border-indigo-300, badge: bg-indigo-500)
-    E → yellow (bg-yellow-50/30, border-yellow-300, badge: bg-yellow-600 — non 500)
-  CARD COL-SPAN-2: contenuto interno a grid grid-cols-3 gap-6.
+    E → yellow (bg-yellow-50/30, border-yellow-300, badge: bg-yellow-600 — not 500)
+  COL-SPAN-2 CARD: inner content as a grid grid-cols-3 gap-6.
 
-▶ C — TIMELINE / PROCESSO (trigger: fasi, step, roadmap, processo, sequenza, agenda, tappe)
-  STRUTTURA: header con titolo + contesto numerico ("X fasi") | timeline grid | dettaglio fasi.
-  TIMELINE: grid grid-cols-N gap-2 (N = numero di step/fasi).
-    Cella normale: p-3 rounded-lg text-center border border-{color}-200 bg-{color}-50 text-{color}-700.
-    Cella ATTIVA/CORRENTE: bg-{color}-600 text-white font-bold.
-    Contenuto cella: numero/icona (text-lg font-bold) + etichetta breve (text-[10px] mt-1).
-  DETTAGLIO FASE (card sotto la timeline per la fase attiva): titolo, obiettivo, materiali, durata.
+▶ C — TIMELINE / PROCESS (trigger: phases, steps, roadmap, process, sequence, agenda, milestones)
+  STRUCTURE: header with title + numeric context ("X phases") | timeline grid | phase detail.
+  TIMELINE: grid grid-cols-N gap-2 (N = number of steps/phases).
+    Normal cell: p-3 rounded-lg text-center border border-{color}-200 bg-{color}-50 text-{color}-700.
+    ACTIVE/CURRENT cell: bg-{color}-600 text-white font-bold.
+    Cell content: number/icon (text-lg font-bold) + short label (text-[10px] mt-1).
+  PHASE DETAIL (card below the timeline for the active phase): title, goal, materials, duration.
 
-▶ D — DASHBOARD DATI (trigger: KPI, metriche, statistiche, performance, dashboard, numeri chiave)
-  STRUTTURA: riga KPI | area grafici | tabella sintetica.
-  KPI CARD (grid grid-cols-3 o 4):
-    span text-4xl font-black text-{color}-600 (numero)
+▶ D — DATA DASHBOARD (trigger: KPI, metrics, statistics, performance, dashboard, key numbers)
+  STRUCTURE: KPI row | chart area | summary table.
+  KPI CARD (grid grid-cols-3 or 4):
+    span text-4xl font-black text-{color}-600 (number)
     + p text-xs uppercase tracking-wide text-slate-500 (label)
-    + span text-sm text-green-600 (variazione ↑ o ↓)
-  AREA GRAFICI: placeholder div colorato con dati testuali (se nessuna libreria grafica disponibile).
-  TABELLA: table con thead bg-slate-100 e righe alternate bg-white/bg-slate-50 text-[11px].
+    + span text-sm text-green-600 (change ↑ or ↓)
+  CHART AREA: colored placeholder div with textual data (if no charting library is available).
+  TABLE: table with thead bg-slate-100 and alternating rows bg-white/bg-slate-50 text-[11px].
 
-TECNICHE COMUNI:
-  BADGE LETTERA/ICONA: div.w-8.h-8.rounded-lg.flex.items-center.justify-center.font-black.text-white.bg-{color}-500
-  CALLOUT BOX AVVISO:  div.bg-yellow-50.p-4.rounded-xl.border.border-yellow-200 + ul.list-disc.ml-4.text-sm.text-yellow-700
-  SEZIONE SCURA:       div.bg-slate-800.text-white.p-8 (per alternare ritmo chiaro/scuro)
-  DATO IN EVIDENZA:    span.text-5xl.font-black.text-{color}-600 su sfondo neutro
+COMMON TECHNIQUES:
+  LETTER/ICON BADGE:   div.w-8.h-8.rounded-lg.flex.items-center.justify-center.font-black.text-white.bg-{color}-500
+  WARNING CALLOUT BOX: div.bg-yellow-50.p-4.rounded-xl.border.border-yellow-200 + ul.list-disc.ml-4.text-sm.text-yellow-700
+  DARK SECTION:        div.bg-slate-800.text-white.p-8 (to alternate light/dark rhythm)
+  HIGHLIGHTED DATA:    span.text-5xl.font-black.text-{color}-600 on a neutral background
 
-Pensa come un art director, non come un copywriter. Priorità: impatto visivo → chiarezza → completezza.`,
+Think like an art director, not a copywriter. Priority: visual impact → clarity → completeness.`,
     },
     defaultTags: {
       visualTags: ["visual:bold"],
       layoutTags: ["layout:full-bleed-images", "layout:dense-info"],
     },
-    briefTemplate: "Infografica per {{projectName}} sui dati/concetti: [argomento]. Dati chiave da mostrare: [dati]. Audience: [chi legge].",
-    styleTemplate: "Alta densità visiva. Icone, numeri, colori. Ritmo alternante verticale.",
+    briefTemplate: "Infographic for {{projectName}} about the data/concepts: [topic]. Key data to show: [data]. Audience: [who is reading].",
+    styleTemplate: "High visual density. Icons, numbers, colors. Alternating vertical rhythm.",
     briefGuideQuestions: [
-      "Qual è il dato o messaggio principale da comunicare?",
-      "Hai dati numerici o statistiche da visualizzare?",
-      "È una sequenza narrativa (processo/timeline) o una panoramica comparativa?",
-      "Hai icone o visual di brand da incorporare?",
+      "What is the main data point or message to communicate?",
+      "Do you have numeric data or statistics to visualize?",
+      "Is it a narrative sequence (process/timeline) or a comparative overview?",
+      "Do you have brand icons or visuals to incorporate?",
     ],
   },
 ];
@@ -694,36 +694,36 @@ export const VALID_PRESET_IDS = new Set(PRESET_CATALOG.map(p => p.id));
 
 ## 3. Sub-Milestone A — Preset Catalog + Config UX Discovery
 
-> **Stima:** 2–3 giorni  
-> **Obiettivo:** il preset selezionato al momento della creazione progetto diventa un contesto strutturato nel moodboard e nella popup di configurazione.
+> **Estimate:** 2–3 days  
+> **Goal:** the preset selected at project creation time becomes a structured context in the moodboard and in the configuration popup.
 
 ### 3.1 Backend — M-PRESET-A
 
 #### 3.1.1 `ProjectPreset` entity
 
 - File: `apps/api/src/domain/entities/ProjectPreset.ts`  
-- Contenuto: interfacce + `PRESET_CATALOG` array + `PRESET_MAP` + `VALID_PRESET_IDS` (come descritto in §2.2).
+- Content: interfaces + `PRESET_CATALOG` array + `PRESET_MAP` + `VALID_PRESET_IDS` (as described in §2.2).
 
-#### 3.1.2 Campo `presetId` in `Project`
+#### 3.1.2 `presetId` field on `Project`
 
-- Aggiungere `presetId?: string` allo schema Mongoose di `Project`.
-- Aggiungere `presetId?: string` al Zod schema in `packages/contracts/`.
-- `createProject` use-case accetta `presetId?: string` nell'input; valida che sia un `VALID_PRESET_ID` se fornito.
+- Add `presetId?: string` to the Mongoose schema for `Project`.
+- Add `presetId?: string` to the Zod schema in `packages/contracts/`.
+- The `createProject` use-case accepts `presetId?: string` in the input; validates it is a `VALID_PRESET_ID` if provided.
 
-#### 3.1.3 Endpoint `GET /v1/presets`
+#### 3.1.3 `GET /v1/presets` Endpoint
 
-- Route pubblica (no auth).
-- Risposta: `{ presets: ProjectPreset[] }` dal `PRESET_CATALOG`.
-- No DB, pura lettura dal catalog statico.
+- Public route (no auth).
+- Response: `{ presets: ProjectPreset[] }` from `PRESET_CATALOG`.
+- No DB, pure read from the static catalog.
 
-#### 3.1.4 `ProjectMoodboard` — seed da preset alla creazione
+#### 3.1.4 `ProjectMoodboard` — Seeded From the Preset at Creation
 
-- Quando si crea un progetto con `presetId`, il moodboard viene auto-seeded:
-  - `visualTags`, `layoutTags`, `toneTags`, `featureTags`, `audienceTags`, `typographyTags`, `paletteTags` ← da `preset.defaultTags`
-  - `projectBrief` ← `preset.briefTemplate` (con `{{projectName}}` rimpiazzato)
+- When a project is created with `presetId`, the moodboard is auto-seeded:
+  - `visualTags`, `layoutTags`, `toneTags`, `featureTags`, `audienceTags`, `typographyTags`, `paletteTags` ← from `preset.defaultTags`
+  - `projectBrief` ← `preset.briefTemplate` (with `{{projectName}}` replaced)
   - `styleNotes` ← `preset.styleTemplate`
-- Se `presetId` non è fornito (fast-create), moodboard rimane vuoto come ora.
-- Implementare in `CreateProject` use-case (o in `GetProjectMoodboard` auto-create path).
+- If `presetId` is not provided (fast-create), the moodboard remains empty as it does now.
+- Implement in the `CreateProject` use-case (or in the `GetProjectMoodboard` auto-create path).
 
 ### 3.2 Frontend — M-PRESET-A
 
@@ -733,61 +733,61 @@ export const VALID_PRESET_IDS = new Set(PRESET_CATALOG.map(p => p.id));
 export async function getPresets(): Promise<{ presets: ProjectPreset[] }>
 ```
 
-#### 3.2.2 `ProjectPreset` TypeScript interfaces in `lib/api.ts`
+#### 3.2.2 `ProjectPreset` TypeScript Interfaces in `lib/api.ts`
 
-Aggiungere le interfacce `ProjectPreset`, `PresetOutputSpec`, `PresetTagDefaults`.
+Add the `ProjectPreset`, `PresetOutputSpec`, `PresetTagDefaults` interfaces.
 
-#### 3.2.3 Dashboard — preset card con "configura e crea" flow
+#### 3.2.3 Dashboard — Preset Card With a "Configure and Create" Flow
 
-Attualmente: click preset → `setNewProjectName(preset.label)` → apre dialog solo con input nome.  
+Currently: clicking a preset → `setNewProjectName(preset.label)` → opens a dialog with only a name input.
 Target:
 
-- Click preset → apre `PresetCreationDialog` (o modal) con:
-  - Step 1: nome progetto (input) + brief pre-compilato (textarea editabile) + style notes pre-compilate
-  - Step 2 (opzionale, accordion): tag categories pre-selezionati (modificabili)
-  - Bottone "Crea" → `POST /v1/projects { name, presetId }` → redirect workspace
-- Mantenere anche il bottone "Crea veloce →" per fast-create senza configurazione.
+- Clicking a preset → opens `PresetCreationDialog` (or a modal) with:
+  - Step 1: project name (input) + pre-filled brief (editable textarea) + pre-filled style notes
+  - Step 2 (optional, accordion): pre-selected tag categories (editable)
+  - "Create" button → `POST /v1/projects { name, presetId }` → redirect to the workspace
+- Also keep the "Quick create →" button for a fast-create with no configuration.
 
-Alternativa più semplice (no-break): mantenere il dialog corrente, ma:
+Simpler alternative (no-break): keep the current dialog, but:
 
-- Aggiungere campo `presetId` hidden al form
-- Caricare brief/style template dal preset e pre-compilare i campi
-- Mostrare accordion collassabile "Opzioni preset" con i tag pre-selezionati
+- Add a hidden `presetId` field to the form
+- Load the brief/style template from the preset and pre-fill the fields
+- Show a collapsible "Preset options" accordion with the pre-selected tags
 
-#### 3.2.4 `ProjectConfigPopup` — completare TAG_CATEGORIES e preset awareness
+#### 3.2.4 `ProjectConfigPopup` — Complete TAG_CATEGORIES and Preset Awareness
 
-Aggiungere le categorie mancanti all'array `TAG_CATEGORIES`:
+Add the missing categories to the `TAG_CATEGORIES` array:
 
 ```typescript
 { key: "audience",  field: "audienceTags",  label: "Audience / Target" },
-{ key: "feature",   field: "featureTags",   label: "Funzionalità richieste" },
-{ key: "sector",    field: "sectorTags",    label: "Settore / Ambito" },
+{ key: "feature",   field: "featureTags",   label: "Requested features" },
+{ key: "sector",    field: "sectorTags",    label: "Sector / Domain" },
 ```
 
-Nota: verificare che `ProjectMoodboard` entity/schema includa questi campi.
+Note: verify that the `ProjectMoodboard` entity/schema includes these fields.
 
-Aggiungere badge "preset attivo" in cima alla sezione sinistra se `project.presetId` è valorizzato:
+Add an "active preset" badge at the top of the left section if `project.presetId` is set:
 
 ```tsx
 {project.presetId && (
   <div className="flex items-center gap-2 mb-4 p-2 bg-primary/10 rounded-md border border-primary/20">
     <Badge variant="outline">{presetLabel}</Badge>
-    <span className="text-xs text-muted-foreground">Preset attivo — brief e tag sono stati pre-compilati dal preset.</span>
+    <span className="text-xs text-muted-foreground">Active preset — the brief and tags were pre-filled from the preset.</span>
   </div>
 )}
 ```
 
-Brief section migliorata: se `moodboard.projectBrief` è vuoto e `project.presetId` valorizzato, mostrare un **accordion "Guida al brief"** con le `briefGuideQuestions` del preset come placeholder/spunto.
+Improved brief section: if `moodboard.projectBrief` is empty and `project.presetId` is set, show a **"Brief guide" accordion** with the preset's `briefGuideQuestions` as a placeholder/prompt.
 
-#### 3.2.5 `AssetThumb` — useInProject e delete sempre visibili
+#### 3.2.5 `AssetThumb` — Always-visible useInProject and Delete
 
-Attualmente: `useInProject` checkbox e delete button sono dentro un gear menu visibile solo su hover.
+Currently: the `useInProject` checkbox and the delete button live inside a gear menu visible only on hover.
 
-Target (non-invasivo): la riga inferiore della thumb mostra sempre:
+Target (non-invasive): the thumbnail's bottom row always shows:
 
-- Toggle compatto `useInProject` (icona bookmark o check piccolo)
-- Bottone delete (icona cestino, small, rosso) sempre visibile
-- Gear menu rimane per roleChange e descriptionText (invariato)
+- Compact `useInProject` toggle (bookmark icon or small check)
+- Delete button (trash icon, small, red) always visible
+- The gear menu remains for roleChange and descriptionText (unchanged)
 
 ```
 ┌──────────────────────┐
@@ -795,35 +795,35 @@ Target (non-invasivo): la riga inferiore della thumb mostra sempre:
 │                      │
 ├──────────────────────┤
 │ 📎 label (truncated) │
-│ [🔖 usa] ........[🗑] │
+│ [🔖 use] ........[🗑] │
 └──────────────────────┘
 ```
 
-### 3.3 Testabile — M-PRESET-A
+### 3.3 Testable — M-PRESET-A
 
 ```
-1. GET /v1/presets → 9 preset con outputSpec, defaultTags, briefTemplate
+1. GET /v1/presets → 9 presets with outputSpec, defaultTags, briefTemplate
 2. POST /v1/projects { name: "Test", presetId: "landing" }
    → project.presetId === "landing"
-   → GET /v1/projects/:id/moodboard → visualTags include "layout:hero-first",
-     projectBrief pre-compilato, featureTags include "feature:contact-form"
-3. Dashboard: click preset "A4 Poster" → brief textarea pre-compilato, style notes pre-compilate
-4. ProjectConfigPopup: categorie "Audience / Target" e "Funzionalità richieste" visibili e cliccabili
-5. AssetThumb: checkbox useInProject e pulsante delete visibili senza hover
+   → GET /v1/projects/:id/moodboard → visualTags includes "layout:hero-first",
+     projectBrief pre-filled, featureTags includes "feature:contact-form"
+3. Dashboard: click "A4 Poster" preset → brief textarea pre-filled, style notes pre-filled
+4. ProjectConfigPopup: "Audience / Target" and "Requested features" categories visible and clickable
+5. AssetThumb: useInProject checkbox and delete button visible without hover
 ```
 
 ---
 
-## 4. Sub-Milestone B — Prompt Modulare + Style Profile Resolver
+## 4. Sub-Milestone B — Modular Prompt + Style Profile Resolver
 
-> **Stima:** 2–3 giorni  
-> **Obiettivo:** il system prompt Layer 1 (chat-preview) riceve arricchimento strutturato da: profilo utente + moodboard progetto + modulo preset. Prerequisito diretto per M2.
+> **Estimate:** 2–3 days  
+> **Goal:** the Layer 1 (chat-preview) system prompt receives structured enrichment from: user profile + project moodboard + preset module. Direct prerequisite for M2.
 
 ### 4.1 Backend — M-PRESET-B
 
 #### 4.1.1 `StyleProfileResolver`
 
-Implementa il componente rimandato da M0-STYLE.
+Implements the component deferred from M0-STYLE.
 
 ```typescript
 // apps/api/src/application/services/StyleProfileResolver.ts
@@ -833,13 +833,13 @@ class StyleProfileResolver {
 }
 ```
 
-Logica fallback cascade (da spec ONBOARDING_AND_STYLE_PROFILING_SPEC.md §4.3):
+Fallback cascade logic (from spec ONBOARDING_AND_STYLE_PROFILING_SPEC.md §4.3):
 
-- Per ogni campo: `ProjectMoodboard > UserStyleProfile > PLATFORM_DEFAULTS`
+- For every field: `ProjectMoodboard > UserStyleProfile > PLATFORM_DEFAULTS`
 
 #### 4.1.2 `Layer0PromptBuilder`
 
-Implementa il componente rimandato da M0-STYLE.
+Implements the component deferred from M0-STYLE.
 
 ```typescript
 // apps/api/src/application/services/Layer0PromptBuilder.ts
@@ -849,34 +849,34 @@ class Layer0PromptBuilder {
 }
 
 interface Layer0Output {
-  systemPromptAddendum: string;  // ~200-400 token, stile + identità + features
-  designTokens: Record<string, string>;  // variabili Nunjucks per template
+  systemPromptAddendum: string;  // ~200-400 tokens, style + identity + features
+  designTokens: Record<string, string>;  // Nunjucks variables for the template
 }
 ```
 
 Output `systemPromptAddendum` structure example (compact):
 
 ```
-[IDENTITY] freelancer · settore: tech-saas · audience: b2c
-[VISUAL] stile: minimal, dark · palette: ocean-blue (#0077B6 / #023E8A) · typo: sans-serif-clean
+[IDENTITY] freelancer · sector: tech-saas · audience: b2c
+[VISUAL] style: minimal, dark · palette: ocean-blue (#0077B6 / #023E8A) · typo: sans-serif-clean
 [LAYOUT] hero-first · whitespace-heavy
 [TONE] friendly-casual · inspirational
 [FEATURES] contact-form · testimonials
-[BRIEF] Landing page per agenzia SEO...
+[BRIEF] Landing page for an SEO agency...
 ```
 
-#### 4.1.3 `PresetPromptModule` injection
+#### 4.1.3 `PresetPromptModule` Injection
 
-Nel Layer 1 system prompt builder:
+In the Layer 1 system prompt builder:
 
 ```typescript
-// Ordine di composizione del system message:
-// 1. [layer0_addendum]   ← stile + identità (StyleProfileResolver + Layer0PromptBuilder)
-// 2. [preset_module]     ← istruzioni strutturali del preset (preset.outputSpec.systemPromptModule)
-// 3. [base_template]     ← prePromptTemplate esistente (Nunjucks)
+// System message composition order:
+// 1. [layer0_addendum]   ← style + identity (StyleProfileResolver + Layer0PromptBuilder)
+// 2. [preset_module]     ← preset's structural instructions (preset.outputSpec.systemPromptModule)
+// 3. [base_template]     ← existing prePromptTemplate (Nunjucks)
 ```
 
-Implementazione in `apps/api/src/infra/llm/buildMessagesWithHistory.ts` (o dove attualmente si costruisce il system message per chat-preview):
+Implementation in `apps/api/src/infra/llm/buildMessagesWithHistory.ts` (or wherever the chat-preview system message is currently built):
 
 ```typescript
 async function buildSystemMessage(project, userId): Promise<string> {
@@ -888,7 +888,7 @@ async function buildSystemMessage(project, userId): Promise<string> {
   
   const baseTemplate = project.aiConfig?.prePromptTemplate ?? DEFAULT_TEMPLATE;
   
-  // Concatenazione ordinata con separatori
+  // Ordered concatenation with separators
   return [
     layer0.systemPromptAddendum,
     presetModule ? `\n\n---\n${presetModule}` : "",
@@ -897,16 +897,16 @@ async function buildSystemMessage(project, userId): Promise<string> {
 }
 ```
 
-#### 4.1.4 `cssConstraints` nel Layer 1 output
+#### 4.1.4 `cssConstraints` in the Layer 1 Output
 
-Quando l'LLM genera HTML/CSS/JS, il `cssConstraints` del preset deve essere iniettato:
+When the LLM generates HTML/CSS/JS, the preset's `cssConstraints` must be injected:
 
-- Nella sezione CSS generata (wrappato in commento `/* preset: a4poster */`).
-- O come istruzione esplicita nel `systemPromptModule` (già incluso nel template di ogni preset).
+- Into the generated CSS section (wrapped in a `/* preset: a4poster */` comment).
+- Or as an explicit instruction in `systemPromptModule` (already included in each preset's template).
 
-#### 4.1.5 Endpoint `GET /v1/projects/:id/prompt-preview` (opzionale, debug)
+#### 4.1.5 `GET /v1/projects/:id/prompt-preview` Endpoint (optional, debug)
 
-Restituisce il system message risolto per il progetto, per debugging:
+Returns the resolved system message for the project, for debugging:
 
 ```json
 {
@@ -917,39 +917,39 @@ Restituisce il system message risolto per il progetto, per debugging:
 }
 ```
 
-### 4.2 Testabile — M-PRESET-B
+### 4.2 Testable — M-PRESET-B
 
 ```
-1. StyleProfileResolver: utente con profile visual ["visual:minimal"], progetto con moodboard
-   featureTags ["feature:contact-form"] → resolved.features include "contact-form",
-   resolved.visual.mood include "minimal"
+1. StyleProfileResolver: user with visual profile ["visual:minimal"], project with moodboard
+   featureTags ["feature:contact-form"] → resolved.features includes "contact-form",
+   resolved.visual.mood includes "minimal"
 
-2. Layer0PromptBuilder: resolved → systemPromptAddendum compatto (< 500 token)
+2. Layer0PromptBuilder: resolved → compact systemPromptAddendum (< 500 tokens)
 
-3. Chat-preview con progetto presetId="a4poster":
-   - system message include il preset module "VINCOLI TECNICI... 210×297mm..."
-   - system message include layer0 addendum con stile
+3. Chat-preview with project presetId="a4poster":
+   - system message includes the preset module "TECHNICAL CONSTRAINTS... 210×297mm..."
+   - system message includes the layer0 addendum with style
 
-4. Chat-preview con presetId="slideshow":
-   - system message include "Ogni slide è un div.slide di 1270×714px"
-   - L'LLM genera HTML con div.slide e dimensioni corrette
+4. Chat-preview with presetId="slideshow":
+   - system message includes "Each slide is a div.slide of 1270×714px"
+   - the LLM generates HTML with div.slide and the correct dimensions
 
-5. GET /v1/projects/:id/prompt-preview → 200 con tutti e 3 i layer visibili
+5. GET /v1/projects/:id/prompt-preview → 200 with all 3 layers visible
 ```
 
 ---
 
-## 5. Dipendenze e Impatto Architetturale
+## 5. Dependencies and Architectural Impact
 
-### 5.1 Campi da aggiungere a schemi esistenti
+### 5.1 Fields to Add to Existing Schemas
 
-| Schema | Campo aggiunto | Backward compat |
+| Schema | Added field | Backward compat |
 |---|---|---|
-| `Project` (Mongoose + Zod) | `presetId?: string` | ✅ opzionale, default undefined |
-| `ProjectMoodboard` (Mongoose) | `audienceTags?: string[]`, `featureTags?: string[]`, `sectorTags?: string[]` | ✅ già parzialmente presenti in spec, da aggiungere allo schema se mancanti |
-| `Project.aiConfig` | Nessun cambio — `prePromptTemplate` rimane, il modulo preset viene letto dal catalog | ✅ no-break |
+| `Project` (Mongoose + Zod) | `presetId?: string` | ✅ optional, defaults to undefined |
+| `ProjectMoodboard` (Mongoose) | `audienceTags?: string[]`, `featureTags?: string[]`, `sectorTags?: string[]` | ✅ already partially present in the spec, add to the schema if missing |
+| `Project.aiConfig` | No change — `prePromptTemplate` stays, the preset module is read from the catalog | ✅ no-break |
 
-### 5.2 File da creare (nuovi)
+### 5.2 Files to Create (new)
 
 ```
 apps/api/src/domain/entities/ProjectPreset.ts          [M-PRESET-A]
@@ -959,7 +959,7 @@ apps/api/src/presentation/http/routes/presetRoutes.ts      [M-PRESET-A]
 apps/web/components/PresetCreationDialog.tsx               [M-PRESET-A]
 ```
 
-### 5.3 File da modificare (non-break)
+### 5.3 Files to Modify (non-break)
 
 ```
 apps/api/src/domain/entities/Project.ts          + presetId field
@@ -972,43 +972,43 @@ apps/web/components/ProjectConfigPopup.tsx       + TAG_CATEGORIES, preset badge,
 apps/web/components/ProjectConfigPopup.tsx       + AssetThumb useInProject/delete visible
 ```
 
-### 5.4 Relazione con M2 (PrepromptEngine)
+### 5.4 Relationship With M2 (PrepromptEngine)
 
-M-PRESET-B introduce il pattern compositivo (layer0 + presetModule + baseTemplate) **senza** ancora il pieno LayerComposer/Nunjucks di M2. Quando M2 verrà implementato:
+M-PRESET-B introduces the compositional pattern (layer0 + presetModule + baseTemplate) **without** yet having M2's full LayerComposer/Nunjucks. Once M2 is implemented:
 
-- `systemPromptModule` del preset diventa un **Layer** nel `PrepromptProfile` (type: `constraint`, condizione `project.presetId === "a4poster"`).
-- `Layer0PromptBuilder` diventa il layer `type: system` iniettato automaticamente all'inizio.
-- Nessun refactoring radicale: M-PRESET-B è già il pattern giusto, M2 lo generalizza.
+- The preset's `systemPromptModule` becomes a **Layer** in the `PrepromptProfile` (type: `constraint`, condition `project.presetId === "a4poster"`).
+- `Layer0PromptBuilder` becomes the `type: system` layer injected automatically at the start.
+- No radical refactor: M-PRESET-B is already the right pattern, M2 generalizes it.
 
 ---
 
-## 6. Posizionamento nel Development Plan
+## 6. Position in the Development Plan
 
 ```
 M0-STYLE  ✅  (style profiling + onboarding + moodboard)
      │
-     ├── M0.5  (focused asset control — parzialmente completato)
+     ├── M0.5  (focused asset control — partially completed)
      │
-     └── M-PRESET-A  ← NUOVO (preset catalog + config UX + tag completeness)
+     └── M-PRESET-A  ← NEW (preset catalog + config UX + tag completeness)
                │
-               └── M-PRESET-B  ← NUOVO (style resolver + prompt modulare)
+               └── M-PRESET-B  ← NEW (style resolver + modular prompt)
                          │
                          └── M1  (context bridge Layer1→Layer2)
                                    │
-                                   └── M2  (PrepromptEngine — ora enriched)
+                                   └── M2  (PrepromptEngine — now enriched)
 ```
 
-**M-PRESET-A e M0.5** sono indipendenti e possono procedere in parallelo.  
-**M-PRESET-B** dipende da M-PRESET-A (serve il catalog con `systemPromptModule`).  
-**M2** dipende concettualmente da M-PRESET-B (pattern già definito, non da reinventare).
+**M-PRESET-A and M0.5** are independent and can proceed in parallel.  
+**M-PRESET-B** depends on M-PRESET-A (needs the catalog with `systemPromptModule`).  
+**M2** conceptually depends on M-PRESET-B (pattern already defined, not to be reinvented).
 
 ---
 
-## 7. Rischi e Mitigazioni
+## 7. Risks and Mitigations
 
-| Rischio | Probabilità | Mitigazione |
+| Risk | Probability | Mitigation |
 |---|---|---|
-| `audienceTags`/`featureTags` non presenti nello schema Mongoose `ProjectMoodboard` | Medio | Verificare `domain/entities/ProjectMoodboard.ts` e schema prima di iniziare M-PRESET-A. Aggiungere se necessario. |
-| Il `prePromptTemplate` attuale di un progetto esistente confligge con il preset module iniettato | Basso | Il preset module è iniettato PRIMA del baseTemplate con separatore `---`. Il baseTemplate esistente non viene toccato. |
-| Token budget: layer0 + presetModule + baseTemplate supera il limite di input | Basso | Layer0 è max ~400 token, presetModule è max ~200 token. Budget totale rimane sotto 6500 token per il system message. |
-| Thumbnail generation per PDF (server-side) non implementata | Medio | Fuori scope per questa milestone. PDF mostrano icona `FileText` (comportamento invariato). Rimandare a M4b extension. |
+| `audienceTags`/`featureTags` not present in the Mongoose `ProjectMoodboard` schema | Medium | Verify `domain/entities/ProjectMoodboard.ts` and the schema before starting M-PRESET-A. Add if necessary. |
+| An existing project's current `prePromptTemplate` conflicts with the injected preset module | Low | The preset module is injected BEFORE the baseTemplate with a `---` separator. The existing baseTemplate is not touched. |
+| Token budget: layer0 + presetModule + baseTemplate exceeds the input limit | Low | Layer0 is max ~400 tokens, presetModule is max ~200 tokens. Total budget stays under 6500 tokens for the system message. |
+| Thumbnail generation for PDF (server-side) not implemented | Medium | Out of scope for this milestone. PDFs show the `FileText` icon (unchanged behavior). Defer to the M4b extension. |
