@@ -44,6 +44,12 @@ const ACCEPTED_MIME_TYPES = [
     "application/xhtml+xml",
     "text/csv",
     "application/csv",
+    // RTF
+    "application/rtf",
+    "text/rtf",
+    "text/richtext",
+    // OpenDocument Text
+    "application/vnd.oasis.opendocument.text",
     // Spreadsheets
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel",
@@ -63,6 +69,8 @@ const ACCEPTED_MIME_TYPES = [
     "image/heif",
     "image/avif",
 ];
+/** Browser/OS combinations that report an empty file.type for these extensions. */
+const FALLBACK_EXTENSIONS = [".rtf", ".odt"];
 
 type EntryPhase = "idle" | "classifying" | "creating" | "uploading" | "analyzing" | "prefilling" | "redirecting" | "queuing";
 type EntryGenerationMode = Extract<VibeGenerationMode, "auto">;
@@ -512,8 +520,12 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
     const addFiles = useCallback((incoming: File[]) => {
         const maxFiles = attachmentPolicy.maxAttachmentsPerPrompt;
         const maxFileSizeBytes = attachmentPolicy.maxFileSizeBytes;
+        // Some OS/browser combinations report an empty file.type for .rtf/.odt — fall back to extension.
+        const isAccepted = (f: File) =>
+            ACCEPTED_MIME_TYPES.includes(f.type)
+            || (f.type === "" && FALLBACK_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext)));
         const valid = incoming.filter(
-            (f) => f.size <= maxFileSizeBytes && ACCEPTED_MIME_TYPES.includes(f.type),
+            (f) => f.size <= maxFileSizeBytes && isAccepted(f),
         );
         if (valid.length < incoming.length) {
             setError(t("vibecore.attachLimitError", "Some files are unsupported or exceed the allowed limits."));
@@ -1042,7 +1054,7 @@ export function VibeCoreEntry({ token, mode, onModeChange }: VibeCoreEntryProps)
                             <input
                                 type="file"
                                 multiple
-                                accept=".pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
+                                accept=".pdf,.docx,.doc,.rtf,.odt,.txt,.md,.html,.csv,.xlsx,.xls,.pptx,.ppt,image/*"
                                 className="sr-only"
                                 onChange={handleFileInput}
                                 disabled={isLoading || autoMode || files.length >= attachmentPolicy.maxAttachmentsPerPrompt}

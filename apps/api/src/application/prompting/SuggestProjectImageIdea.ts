@@ -5,6 +5,7 @@ import type { PromptExecutionLogRepository } from "../../domain/repositories/Pro
 import { env } from "../../config";
 import { buildChatCompletionRequestBody } from "../llm/chatRequestAdapter";
 import type { GetLlmCatalog } from "../use-cases/GetLlmCatalog";
+import { resolveComposerCascade } from "../llm/catalogModels";
 import { buildContextAwareImagePrompt, type ImagePromptContextPacket } from "./buildImagePromptContext";
 import { buildSuggestImageIdeaRequest } from "./buildSuggestImageIdeaInstruction";
 import { resolveLlmCallCost } from "../cost/resolveLlmCallCost";
@@ -147,21 +148,19 @@ export class SuggestProjectImageIdea {
 
         try {
             const catalog = await this.getLlmCatalog.execute();
-            const activeProviders = catalog.providers.filter((provider) => provider.isActive);
-            const requestedModel = input.model?.trim();
+            // Single shared cascade (see AGENTS.md Rule Zero's second corollary): a caller-supplied
+            // model id is a request, not an authority — resolveComposerCascade verifies it against
+            // the active catalog instead of trusting it verbatim.
+            const cascade = resolveComposerCascade({
+                providers: catalog.providers,
+                requestedProvider: input.provider ?? taskSettings.provider,
+                requestedModel: input.model?.trim() || taskSettings.model,
+                pipelineRole: "dialogue",
+                envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
+            });
 
-            const selectedProviderCatalog =
-                activeProviders.find((provider) => provider.provider === input.provider)
-                ?? (requestedModel
-                    ? activeProviders.find((provider) => provider.models.some((model) => model.isActive && model.id === requestedModel))
-                    : undefined)
-                ?? activeProviders.find((provider) => provider.provider === taskSettings.provider)
-                ?? activeProviders.find((provider) => provider.provider === env.LLM_DEFAULT_PROVIDER)
-                ?? activeProviders.find((provider) => provider.provider === FALLBACK_PROVIDER)
-                ?? activeProviders[0];
-
-            if (!selectedProviderCatalog) {
-                await persistLog("failed", fallback.suggestion, undefined, undefined, "No active provider configured for suggestion");
+            if (!cascade.providerCatalog || !cascade.roleModel) {
+                await persistLog("failed", fallback.suggestion, undefined, undefined, "No active provider/model configured for suggestion");
                 return {
                     suggestion: fallback.suggestion,
                     suggestedPrompt: fallback.suggestedPrompt,
@@ -172,16 +171,8 @@ export class SuggestProjectImageIdea {
                 };
             }
 
-            const providerCatalog = selectedProviderCatalog;
-
-            const activeModels = providerCatalog.models.filter((model) => model.isActive);
-            const modelId =
-                (requestedModel && providerCatalog.apiType === "openai-compatible" ? requestedModel : undefined)
-                || (taskSettings.model && activeModels.some((model) => model.id === taskSettings.model) ? taskSettings.model : undefined)
-                || activeModels.find((model) => model.role === "dialogue" && model.isDefault)?.id
-                || activeModels.find((model) => model.isDefault)?.id
-                || activeModels[0]?.id
-                || FALLBACK_MODEL;
+            const providerCatalog = cascade.providerCatalog;
+            const modelId = cascade.roleModel.id;
 
             const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
             if (!authHeader && providerCatalog.authType !== "none") {

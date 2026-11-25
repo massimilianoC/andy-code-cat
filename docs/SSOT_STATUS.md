@@ -116,6 +116,10 @@ the flags are gone from the tracked source, and only survive in untracked `debug
 - One artifact write path, with content hashes, declared bases, server-side stale-base refusal,
   no-op suppression, chain-derived version numbering, and child re-linking on delete.
 - The Prompt tab resolves the trace of the **selected** version, not always the newest one.
+- The image-prompt optimizer, the image-direction suggester and the admin template drafter resolve
+  their model through the shared composer cascade (`resolveComposerCascade`): a model the operator
+  switched off is never dispatched, and no hardcoded model id is sent (closed 2026-11-25, pinned by
+  `OptimizeImagePrompt.modelSelection.test.ts`).
 
 All of the above is covered by unit tests that pass today (§7).
 
@@ -126,35 +130,27 @@ All of the above is covered by unit tests that pass today (§7).
 In priority order. This is a short list on purpose — everything that was on the old lists and is
 actually finished has been removed rather than marked done.
 
-**1. Three LLM features still choose their own model, with a hardcoded fallback.**
-`OptimizeImagePrompt`, `SuggestProjectImageIdea` and `DraftProjectTemplate` each carry a private
-cascade ending in a hardcoded `MiniMaxAI/MiniMax-M3`. They do not consult the run lock and they do
-not use the shared catalogue check, so an operator switching a model off does not govern them. This
-is the largest remaining gap in "one place decides which model runs", and it is the same class of bug
-the whole programme was started to fix. Either route them through `resolveComposerCascade`, or write
-down explicitly that they are out of scope and why.
-
-**2. The execution journal is not joined to the run.**
+**1. The execution journal is not joined to the run.**
 `PromptExecutionLog` has no `pipelineRunId`, no snapshot id and no cost-record id. The programme
 document explicitly required all of them. Today the only thing tying a run, its prompt, its snapshot
 and its cost together is the stdout trace — which means the question "what did this cost and what did
 it send?" is answerable while the container logs are still around, and not afterwards. Adding the
 field is small; not having it undermines the transparency the programme was for.
 
-**3. Documentation authority is unresolved.**
+**2. Documentation authority is unresolved.**
 `I18`, `I19` and `I20` — the increments the tracker says remain — are defined in **no document**. The
 tracker points at a "resume authority" that numbers its work `U0`–`U5` and never mentions them. Two
 analyses and one programme document still label themselves "active authority" / "no implementation is
 implied" for work that shipped. This document is the fix for that; §6 says which files to retire.
 
-**4. Dead legacy code from the cutover was never removed.**
+**3. Dead legacy code from the cutover was never removed.**
 The workspace page still contains the `sessionStorage` / `autoPrompt` handoff reader, although
 nothing anywhere writes it — the legacy launch path it belonged to is gone. The `I8` shadow-mode
 divergence instrumentation is also still wired into three production use cases. Neither is harmful;
 both are exactly the "legacy call-site removal" that `I20` was supposed to be, and leaving them makes
 the code read as if two paths still exist.
 
-**5. Two artifact rules were deliberately left open, and should stay visible.**
+**4. Two artifact rules were deliberately left open, and should stay visible.**
 `AL-019` — unsaved editor content is preferred over the active version when a generation is sent, so
 what feeds the model can be text that was never saved as a version. `AL-027` — the cost record does
 not share the execution id. Both were cut from the execution plan on purpose. They are not

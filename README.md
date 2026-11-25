@@ -39,7 +39,7 @@
   cost
 - **Real cost accounting**: the cost the provider reports for each call where it exposes one, a
   price table or flat-rate estimate otherwise, in one ledger per project
-- **Documents as context**: PDF, DOCX, XLSX, PPTX, CSV, TXT and Markdown attachments feed the brief
+- **Documents as context**: PDF, DOCX, legacy DOC, ODT, RTF, XLSX, PPTX, CSV, TXT and Markdown attachments feed the brief
 - **Working forms in generated sites**: a declarative form runtime, delivered by email (mailto)
 - **Focused editing** for targeted HTML, CSS and JS changes, with recovery of interrupted runs
 - **JWT auth and tenant isolation** with double-sandbox enforcement
@@ -216,8 +216,10 @@ A change reaches `main` only through Gitflow, and only with all of these green:
 | `npm run release:version:validate` | `RELEASE_VERSION` format (`YYYY.MM.DD.N`) |
 | `npm run guard:public-repo` | No secrets, private keys, private infrastructure details or stray files in the public tree |
 
-End-to-end specs in [`tests/e2e/`](tests/e2e/) run against a live stack and call real providers,
-so they spend real money.
+Every pull request into `develop` or `main` runs the first four in CI
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) and the public-repo guard in its own
+workflow. End-to-end specs in [`tests/e2e/`](tests/e2e/) run against a live stack and call real
+providers, so they spend real money and are not part of CI.
 
 ---
 

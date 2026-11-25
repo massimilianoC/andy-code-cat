@@ -4,6 +4,7 @@ import type { PlatformConfigRepository } from "../../domain/repositories/Platfor
 import type { PromptExecutionLogRepository } from "../../domain/repositories/PromptExecutionLogRepository";
 import type { UserRepository } from "../../domain/repositories/UserRepository";
 import type { GetLlmCatalog } from "./GetLlmCatalog";
+import { resolveComposerCascade } from "../llm/catalogModels";
 import { buildDraftProjectTemplateRequest } from "../prompting/draftProjectTemplateInstruction";
 import { estimateCost, type CostEstimate } from "../llm/costPolicy";
 import { getSiliconFlowPrice } from "../llm/siliconflowPricing";
@@ -13,8 +14,6 @@ import { CostTransactionService } from "../cost/CostTransactionService";
 import { ResourceType } from "../../domain/entities/CostTransaction";
 
 const TASK_KEY = "draft_template_model";
-const FALLBACK_PROVIDER = "siliconflow";
-const FALLBACK_MODEL = "MiniMaxAI/MiniMax-M3";
 const INTERNAL_PROJECT_ID = "admin-template-registry";
 
 interface DraftTemplateUsage {
@@ -124,21 +123,22 @@ export class DraftProjectTemplate {
         });
 
         const catalog = await this.getLlmCatalog.execute();
-        const activeProviders = catalog.providers.filter((provider) => provider.isActive);
-        const selectedProviderCatalog = activeProviders.find((provider) => provider.provider === taskSettings.provider)
-            ?? activeProviders.find((provider) => provider.provider === FALLBACK_PROVIDER)
-            ?? activeProviders[0];
+        // Single shared cascade (see AGENTS.md Rule Zero's second corollary) — routes through the
+        // same verified resolution the rest of the composer uses instead of a private reimplementation.
+        const cascade = resolveComposerCascade({
+            providers: catalog.providers,
+            requestedProvider: taskSettings.provider,
+            requestedModel: taskSettings.model,
+            pipelineRole: "dialogue",
+            envDefaultProvider: env.LLM_DEFAULT_PROVIDER,
+        });
 
-        if (!selectedProviderCatalog) {
-            throw new Error("No active LLM provider configured for template drafting");
+        if (!cascade.providerCatalog || !cascade.roleModel) {
+            throw new Error("No active LLM provider/model configured for template drafting");
         }
 
-        const providerCatalog = selectedProviderCatalog;
-
-        const modelId = providerCatalog.models.find((model) => model.isActive && model.id === taskSettings.model)?.id
-            ?? providerCatalog.models.find((model) => model.isActive && model.isDefault)?.id
-            ?? providerCatalog.models.find((model) => model.isActive)?.id
-            ?? FALLBACK_MODEL;
+        const providerCatalog = cascade.providerCatalog;
+        const modelId = cascade.roleModel.id;
 
         const authHeader = resolveAuthHeader(providerCatalog.provider, providerCatalog.authType);
         if (!authHeader && providerCatalog.authType !== "none") {
