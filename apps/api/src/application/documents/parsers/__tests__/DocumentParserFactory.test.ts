@@ -55,6 +55,23 @@ describe("DocumentParserFactory", () => {
         expect(getParser("application/json")).not.toBeNull();
     });
 
+    it("returns a parser for application/rtf", () => {
+        expect(getParser("application/rtf")).not.toBeNull();
+    });
+
+    it("returns a parser for text/rtf", () => {
+        expect(getParser("text/rtf")).not.toBeNull();
+    });
+
+    it("returns a parser for odt mime", () => {
+        expect(getParser("application/vnd.oasis.opendocument.text")).not.toBeNull();
+    });
+
+    it("returns null for odp/ods (not supported yet)", () => {
+        expect(getParser("application/vnd.oasis.opendocument.presentation")).toBeNull();
+        expect(getParser("application/vnd.oasis.opendocument.spreadsheet")).toBeNull();
+    });
+
     it("returns null for unknown mime type", () => {
         expect(getParser("application/octet-stream")).toBeNull();
     });

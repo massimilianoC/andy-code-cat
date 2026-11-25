@@ -39,7 +39,7 @@
   cost
 - **Real cost accounting**: the cost the provider reports for each call where it exposes one, a
   price table or flat-rate estimate otherwise, in one ledger per project
-- **Documents as context**: PDF, DOCX, XLSX, PPTX, CSV, TXT and Markdown attachments feed the brief
+- **Documents as context**: PDF, DOCX, legacy DOC, ODT, RTF, XLSX, PPTX, CSV, TXT and Markdown attachments feed the brief
 - **Working forms in generated sites**: a declarative form runtime, delivered by email (mailto)
 - **Focused editing** for targeted HTML, CSS and JS changes, with recovery of interrupted runs
 - **JWT auth and tenant isolation** with double-sandbox enforcement

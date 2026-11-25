@@ -3,8 +3,10 @@ import type { EnrichmentAssetKind } from "../../../domain/entities/AssetEnrichme
 const PDF_MIMES = new Set(["application/pdf"]);
 const DOCX_MIMES = new Set([
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/msword",
+    "application/msword", // kept: legacy .doc still reports assetKind "docx" (see AssetEnrichmentTrace.ts)
 ]);
+const RTF_MIMES = new Set(["application/rtf", "text/rtf", "text/richtext"]);
+const ODT_MIMES = new Set(["application/vnd.oasis.opendocument.text"]);
 const PLAIN_MIMES = new Set(["text/plain", "text/markdown", "text/x-markdown"]);
 const HTML_MIMES = new Set(["text/html", "application/xhtml+xml"]);
 const XLSX_MIMES = new Set([
@@ -37,6 +39,10 @@ export function detectEnrichmentKind(mimeType: string): EnrichmentAssetKind {
 
     if (PDF_MIMES.has(mime)) return "pdf";
     if (DOCX_MIMES.has(mime)) return "docx";
+    // RTF_MIMES must be checked before the text/plain / PLAIN_MIMES branches below —
+    // text/rtf starts with "text/" and would otherwise fall into plain-text handling.
+    if (RTF_MIMES.has(mime)) return "rtf";
+    if (ODT_MIMES.has(mime)) return "odt";
     if (mime === "text/plain") return "txt";
     if (PLAIN_MIMES.has(mime)) return "md";
     if (HTML_MIMES.has(mime)) return "html";
@@ -50,7 +56,8 @@ export function detectEnrichmentKind(mimeType: string): EnrichmentAssetKind {
 }
 
 export function isDocumentKind(kind: EnrichmentAssetKind): boolean {
-    return kind === "pdf" || kind === "docx" || kind === "txt" || kind === "md"
+    return kind === "pdf" || kind === "docx" || kind === "rtf" || kind === "odt"
+        || kind === "txt" || kind === "md"
         || kind === "html" || kind === "xlsx" || kind === "csv" || kind === "pptx";
 }
 
