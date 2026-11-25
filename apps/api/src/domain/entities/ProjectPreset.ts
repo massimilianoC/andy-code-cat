@@ -288,17 +288,28 @@ export const ARCADE_PLAYABILITY_MODULE = `
 ARCADE PLAYABILITY (platform contract, applies to every game):
 CONTROLS
 - Keyboard first, no mouse required. Movement: BOTH WASD and the arrow keys. Primary action: Space. Secondary action: Shift (also K). Start and confirm: Enter. Pause: P (also Escape).
-- Read input with keydown/keyup listeners on window, using event.code with event.key as fallback, into a set of pressed keys that the game loop polls. Call event.preventDefault() for the keys you use so the page never scrolls.
-- The platform maps USB gamepads and arcade sticks onto exactly these keys: never use the Gamepad API yourself and never bind core actions to other keys.
+- Read input with keydown/keyup listeners on window, using event.code with event.key as fallback, through one KEYS table, into a set of pressed keys that the game loop polls. Call event.preventDefault() for the keys you use so the page never scrolls.
+- The platform maps USB gamepads and arcade sticks onto exactly these keys: never use the Gamepad API or an engine gamepad plugin, and never bind core actions to other keys.
 - Show a controls legend on the start screen and on the pause screen, for example "WASD / arrows move · SPACE jump · ENTER start · P pause", large enough to read from a sofa.
 STRUCTURE
-- Start screen, play, pause, game over, and an instant restart with Enter or Space.
-- Progression: at least 3 levels or waves of rising difficulty; the HUD shows score and level.
-- Fit a 16:9 screen without scrolling; HUD text at least 24px.
+- Start screen, play, pause, game over, and an instant restart (under one second) with Enter or Space. Auto-pause when the page is hidden (visibilitychange).
+- Progression: at least 3 levels or waves, OR for endless and score-attack games escalating named tiers ("ZONE 2") every 30-45 seconds. Introduce one new element per level; a boss or milestone every 3-5 levels.
+- Level 1 opens with 3-5 safe seconds and one-verb prompts ("SPACE to jump") that disappear after first use. No text walls.
+- Fairness: never an unavoidable hazard, at least 0.4 s of reaction time at the current speed. Hand-made levels are data arrays checked at load for reachability or solvability.
+- Fit a 16:9 screen without scrolling; HUD text at least 24px; the HUD shows score, level or tier, lives and multiplier.
+GAME FEEL
+- Update in fixed 1/60 s steps with an accumulator (cap catch-up at 5 steps, clamp dt) and render separately; never tie speed to the frame rate.
+- Every player action gets an immediate response: a sound, a particle burst or a flash. Short screen shake (decaying, opposite to the hit), 40-80 ms hit-stop on strong hits, easing on all motion, floating score pop-ups. Pool particles and bullets with a hard cap (about 300).
+- Accessibility: never convey essential information by colour alone (add shape or icon), colour-blind-safe palette, a reduced-motion toggle in the pause screen that disables shake, flashes and parallax (default from prefers-reduced-motion), no flashing faster than 3 times per second.
 SCORE
-- At game over call exactly once: if (window.AndyArcade) window.AndyArcade.submitScore(finalScore), with finalScore an integer >= 0. The platform keeps the leaderboard and asks the player's name: do not build a remote leaderboard, a name prompt or any network call. A local best score in localStorage, wrapped in try/catch, is fine.
+- Integer score with a combo or multiplier (for example a 2 s chain window, x1 to x8, reset on hit) and risk-reward bonuses, so better play means a clearly higher score. No score that grows while idle.
+- At game over call exactly once: if (window.AndyArcade) window.AndyArcade.submitScore(finalScore), with finalScore an integer >= 0. The platform keeps the leaderboard and asks the player's name: do not build a remote leaderboard, a name prompt or any network call. Show "NEW BEST" against a local best kept in localStorage inside try/catch (storage may be unavailable).
+LIBRARIES AND AUDIO
+- Prefer plain Canvas 2D; use Phaser 3.90.0 only when the genre needs it, Matter.js 0.20.0 for physics puzzles, three.js 0.160.0 (no addons: OrbitControls and loaders do not exist in that build) only for 3D. One engine per game, exact pinned URLs, plain <script src> tags, never type="module" or import maps. Do not use p5 for arcade games.
+- Sound is procedural, never audio files: Web Audio oscillators, or ZzFX from https://cdn.jsdelivr.net/npm/zzfx@1.4.0/ZzFXMicro.min.js (then call zzfxX.resume() on the first key press). Resume audio on the first key press of the start screen and wrap every sound call in try/catch.
+- After the library tags, check the engine global exists; if the CDN failed, show a visible "Could not load the game engine, reload to try again" message instead of a blank page. Never fetch anything else from the network.
 ORIGINALITY
-- When the request cites an existing game, borrow its mechanics only: invent the title, the characters, the art and the level design. Never reproduce names, characters, logos or sprites of existing games.`;
+- When the request cites an existing game, borrow its mechanics only: invent the title, the characters, the art, the music and the level layouts. Never reproduce names, characters, logos, sprites, maze layouts or jingles of existing games.`;
 
 const RAW_PRESET_CATALOG: ProjectPreset[] = [
 
