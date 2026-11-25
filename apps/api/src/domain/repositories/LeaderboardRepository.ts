@@ -9,4 +9,6 @@ export interface LeaderboardRepository {
     deleteById(scope: LeaderboardScope, entryId: string): Promise<boolean>;
     /** Keeps the best `keep` entries of a board and deletes the rest. Returns how many were removed. */
     prune(scope: LeaderboardScope, keep: number): Promise<number>;
+    /** Every board of a project, for project deletion. Still scoped to the owner. */
+    deleteAllForProject(ownerUserId: string, projectId: string): Promise<number>;
 }

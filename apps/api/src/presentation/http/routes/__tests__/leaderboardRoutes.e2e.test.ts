@@ -123,4 +123,18 @@ describe("project leaderboard", () => {
         expect((await api.delete(`/v1/projects/${gameA}/leaderboard/${id}`)).status).toBe(204);
         expect((await api.delete(`/v1/projects/${gameA}/leaderboard/${id}`)).status).toBe(404);
     });
+    it("deletes every board of a project together with the project, and nothing else", async () => {
+        const { getDb } = await import("../../../../infra/db/mongo");
+        const scores = (await getDb()).collection("leaderboard_scores");
+        const api = as(owner, gameB);
+        await api.post(`/v1/projects/${gameB}/leaderboard`, { player: "B1", score: 1 });
+        await api.post(`/v1/projects/${gameB}/leaderboard`, { boardId: "daily", player: "B2", score: 2 });
+        const gameABefore = await scores.countDocuments({ projectId: gameA });
+        expect(await scores.countDocuments({ projectId: gameB })).toBe(2);
+
+        expect((await api.delete(`/v1/projects/${gameB}`)).status).toBeLessThan(300);
+
+        expect(await scores.countDocuments({ projectId: gameB })).toBe(0);
+        expect(await scores.countDocuments({ projectId: gameA })).toBe(gameABefore);
+    });
 });
