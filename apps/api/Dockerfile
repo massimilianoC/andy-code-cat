@@ -35,6 +35,10 @@ FROM base AS build
 COPY . .
 RUN npm install
 RUN npm run build -w packages/contracts && npm run build -w apps/api
+# npm workspaces install a dependency under apps/api/node_modules when it cannot be hoisted (a
+# version pinned for the API alone, e.g. puppeteer). Make sure the folder exists so the prod stage
+# can always copy it.
+RUN mkdir -p apps/api/node_modules
 
 FROM node:22.23.5-alpine AS prod
 # Chromium needed for Puppeteer at runtime — https://pptr.dev/guides/docker
@@ -49,11 +53,15 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 WORKDIR /workspace
 COPY --from=build /workspace/node_modules ./node_modules
+COPY --from=build /workspace/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /workspace/apps/api/package.json ./apps/api/package.json
 COPY --from=build /workspace/apps/api/dist ./apps/api/dist
 COPY --from=build /workspace/packages/contracts/package.json ./packages/contracts/package.json
 COPY --from=build /workspace/packages/contracts/dist ./packages/contracts/dist
 COPY --from=build /workspace/docs/skills/template-skills ./docs/skills/template-skills
+# Fail the build, not the first start in production, when a runtime dependency of the API is
+# missing from the image (release 2026.11.25.6 shipped without puppeteer this way).
+RUN node -e "const fs=require('fs');const deps=Object.keys(require('./apps/api/package.json').dependencies||{});const missing=deps.filter((d)=>!fs.existsSync('apps/api/node_modules/'+d)&&!fs.existsSync('node_modules/'+d));if(missing.length){console.error('Missing API runtime dependencies: '+missing.join(', '));process.exit(1)}"
 # Baked at build time from the repo-root RELEASE_VERSION (SSOT, see CLAUDE.md). A running
 # container reports the version of the code inside it, so API and web cannot silently drift.
 ARG RELEASE_VERSION=unknown
