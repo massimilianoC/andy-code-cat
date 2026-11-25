@@ -98,3 +98,7 @@ vps_admin
 *.p12
 *.pfx
 .ssh/
+
+# ─── Claude Code agent worktrees and local settings ────────────────────────
+.claude/worktrees/
+.claude/settings.local.json
