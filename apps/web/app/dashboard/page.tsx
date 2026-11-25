@@ -372,6 +372,9 @@ export default function DashboardPage() {
                     <Button variant="ghost" size="sm" onClick={() => router.push("/onboarding?edit=1")}>
                         {t("dashboard.stylePrefs")}
                     </Button>
+                    <Button variant="ghost" size="sm" onClick={() => router.push("/arcade")}>
+                        🎮 {t("dashboard.arcade")}
+                    </Button>
                     {canAccessSuperadmin ? (
                         <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>{t("dashboard.superadmin")}</Button>
                     ) : null}

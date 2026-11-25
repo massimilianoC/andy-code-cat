@@ -89,7 +89,8 @@
       "description": "Bastano un paio di minuti: i tuoi gusti diventano il punto di partenza di ogni progetto. Puoi farlo anche più tardi dal pulsante «Preferenze» in alto.",
       "yes": "Sì",
       "notNow": "Non adesso"
-    }
+    },
+    "arcade": "Arcade"
   },
   "onboarding": {
     "loading": "Caricamento...",
@@ -1185,5 +1186,49 @@
     "discardConfirmBody": "Rimuove il progetto, la sua cronologia dei prompt, i costi registrati e la sessione di lavoro. Non è reversibile. Il lavoro già pagato che stavi per riprendere va perso con lui.",
     "discardConfirm": "Sì, elimina",
     "backToChoice": "Torna indietro"
+  },
+  "arcade": {
+    "hint": "Frecce/WASD · Invio/A scegli · Esc/B indietro",
+    "newGame": "Nuovo gioco",
+    "controls": "Comandi",
+    "forging": "In forgiatura",
+    "forgeFailed": "Un gioco non è stato creato",
+    "forgingStarted": "Il tuo gioco è in preparazione: arriva sullo scaffale tra qualche minuto.",
+    "loading": "Caricamento…",
+    "empty": "Ancora nessun gioco. Scegli “Nuovo gioco” e lascia fare ad Andy.",
+    "noVersion": "Questo gioco non ha ancora una versione giocabile.",
+    "newGameTitle": "Crea un nuovo gioco",
+    "wheel": {
+      "genre": "Genere",
+      "style": "Stile",
+      "setting": "Mondo",
+      "hero": "Eroe",
+      "twist": "Twist"
+    },
+    "extra": "La tua idea (facoltativa)",
+    "extraPlaceholder": "es. l'eroe raccoglie calzini perduti e i nemici sono aspirapolvere",
+    "random": "Casuale",
+    "create": "Crea",
+    "createHint": "Richiede qualche minuto e consuma credito AI. Nel frattempo puoi continuare a giocare.",
+    "controlsTitle": "Comandi",
+    "action": "Azione",
+    "keyboard": "Tastiera",
+    "gamepad": "Gamepad (standard)",
+    "noPads": "Nessun controller: collegalo e premi un pulsante qualsiasi.",
+    "nonStandard": "layout non standard, rimappalo",
+    "pressFor": "Premi il pulsante per",
+    "remap": "Rimappa",
+    "resetMapping": "Ripristina",
+    "controlsHint": "I giochi usano WASD/frecce, Spazio, Shift, Invio e P. Ogni controller USB viene tradotto in quei tasti. SELECT o Esc due volte torna allo scaffale.",
+    "backHint": "SELECT / Esc Esc",
+    "gameOver": "GAME OVER",
+    "enterInitials": "Inserisci le tue iniziali",
+    "saveScore": "Salva punteggio",
+    "skip": "Salta",
+    "leaderboard": "Classifica",
+    "yourRank": "Sei #{{rank}}",
+    "noScores": "Ancora nessun punteggio",
+    "playAgain": "Gioca ancora",
+    "library": "Scaffale"
   }
 }

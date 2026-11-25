@@ -145,6 +145,8 @@ export function createProjectRoutes(): Router {
                     totalCostEur: costMap[p.id] ?? 0,
                     publishedUrl: deploymentByProject.get(p.id) ?? null,
                     activeThumbnailSnapshotId: activeSnap?.thumbnailPath ? activeSnap.id : undefined,
+                    // The version a player gets (Arcade): the active one, thumbnail or not.
+                    activeSnapshotId: activeSnap?.id,
                 };
             });
 
