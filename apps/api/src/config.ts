@@ -16,6 +16,8 @@ const DEFAULT_SILICONFLOW_IMAGE_SIZE = "1024x1024";
 const envSchema = z.object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     API_PORT: z.coerce.number().default(4000),
+    /** Reverse-proxy hops in front of the API (see app.ts). 1 = the stack's own nginx. */
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
     PUBLIC_API_BASE_URL: z.string().url().optional(),
     MONGODB_URI: z.string().min(1),
     MONGODB_DB_NAME: z.string().min(1).default("andy-code-cat"),
@@ -94,6 +96,9 @@ const envSchema = z.object({
     MEDIA_CLASSIFIER_MODEL: z.string().default("heuristic-media-classifier-v1"),
     EXPORT_JWT_SECRET: z.string().min(16).default("change-me-export-secret-32chars!!"),
     EXPORT_DOWNLOAD_TTL: z.string().default("3600"),
+    // Salt of the IP hash stored with captured form submissions (FORMS_CAPTURE.md). Optional:
+    // when unset it is derived from EXPORT_JWT_SECRET. Changing it only affects new submissions.
+    FORM_IP_HASH_SALT: z.string().optional(),
     UPLOAD_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
     // ── Document Context Layer (DCL) enrichment ───────────────────────────────
     ENRICHMENT_ENABLED: z.string().default("true"),

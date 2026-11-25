@@ -13,7 +13,7 @@ import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/Mong
 import { MongoSessionRepository } from "../../../infra/repositories/MongoSessionRepository";
 import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
-import { MongoLeaderboardRepository } from "../../../infra/repositories/MongoLeaderboardRepository";
+import { composeProjectDataRegistry } from "../../../composition/composeProjectData";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { resolvePublicSitesConfig, resolvePublicSiteUrl } from "../../../application/publish/publicSiteAddress";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
@@ -108,7 +108,7 @@ export function createProjectRoutes(): Router {
         new MongoProjectAssetRepository(),
         siteDeploymentRepository,
         getFileStorage(),
-        new MongoLeaderboardRepository(),
+        composeProjectDataRegistry(),
     );
     const duplicateProject = new DuplicateProject(projectRepository, promptConfigRepository);
     const getProjectMoodboard = new GetProjectMoodboard(moodboardRepository, projectRepository);

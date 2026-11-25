@@ -7,7 +7,7 @@ import { authMiddleware } from "../middlewares/authMiddleware";
 import { createSandboxMiddleware } from "../middlewares/sandboxMiddleware";
 import type { RequestWithContext } from "../types";
 
-/** Owner API for the initial mailto form adapter. Public BaaS routes are intentionally absent. */
+/** Owner API for project form settings (mailto | capture). The public capture submit path lives with the publish routes (publishedFormSubmitRoutes.ts). */
 export function createFormServiceRoutes(): Router {
     const router = Router();
     const projectRepository = new MongoProjectRepository();

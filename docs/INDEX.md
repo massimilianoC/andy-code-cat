@@ -71,6 +71,7 @@ Read in this order before making changes:
 | [docs/runbooks/BETA_LAUNCH_HARDENING_PLAN.md](runbooks/BETA_LAUNCH_HARDENING_PLAN.md) | Beta-readiness checklist |
 | [install.sh](../install.sh) | Self-configuring one-file installer — local and domain modes, auto SSL via certbot |
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker workflow for dev and deploy-like stacks |
+| [docs/research/ARCADE_GAMES_RESEARCH_2026-11-25.md](research/ARCADE_GAMES_RESEARCH_2026-11-25.md) | Arcade research: genres by generation reliability, quality dynamics, verified CDN game libraries, allowlist problems and backlog |
 | [docs/specs/ARCADE_MODE_MVP.md](specs/ARCADE_MODE_MVP.md) | Andy Arcade: game-console mode over the shared core — shelf, gamepad runtime, playability prompt block, leaderboard capability, and how to build another mode |
 | [docs/guides/PUBLISHED_SITE_ADDRESSES.md](guides/PUBLISHED_SITE_ADDRESSES.md) | Published site addresses: `/p/{id}/` and `/{slug}/`, the superadmin publish URL mode (path or subdomain), server and domain moves |
 | [docs/guides/AGENT_RELEASE_CHECKLIST.md](guides/AGENT_RELEASE_CHECKLIST.md) | Release and branch checklist for agents |
@@ -114,6 +115,7 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
+| [docs/specs/PROJECT_DATA_PANEL.md](specs/PROJECT_DATA_PANEL.md) | Owner's project data panel: every record a platform capability stored (leaderboards, …) — browse, JSON view, delete, typed-confirmation clear, JSON/CSV export; the capability contract and how to add one |
 | [docs/specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md](specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md) | **Proposed, not implemented** — why the first generation feels silent, and an incremental plan for real progress events and an inspector panel |
 | [docs/specs/SESSION_INSPECTOR_SPEC.md](specs/SESSION_INSPECTOR_SPEC.md) | **Feature B, ready to implement** — the Prompt view becomes three collapsible blocks (Vibe / Zero Effort / Generation) reading only what the database already owns |
 | [docs/specs/PROMPT_LAYER_REDUNDANCY_ANALYSIS.md](specs/PROMPT_LAYER_REDUNDANCY_ANALYSIS.md) | **Feature C** — measured on real runs: no literal redundancy exists, 25% of the prompt is static boilerplate that caching handles for free, and the question worth asking instead |
@@ -154,6 +156,7 @@ Read in this order before making changes:
 | [docs/specs/BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | Broad BaaS capability catalog; historical SDK sketches are superseded by the Platform Capability Runtime decision and event-driven security model |
 | [docs/specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md](specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md) | Agent-executable first capability: declarative forms, mailto/relay/capture, scoped Forms Inbox persistence, Layer V/runtime parity, privacy policy, tests and delivery waves |
 | [docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md](specs/FORM_RUNTIME_MAILTO_FOUNDATION.md) | Definitive mailto v1 form runtime: Layer V ownership, canonical snapshots, owner configuration, deterministic multi-step compilation, and isolated E2E |
+| [docs/specs/FORMS_CAPTURE.md](specs/FORMS_CAPTURE.md) | Saved form submissions (`capture` mode): same-origin public submit path, server-side manifest validation, trust boundary, `form_submissions` data, project data capability, retention and GDPR notes |
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
 | [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | ⚠️ Historical generic multi-model playbook; not the current product routing contract |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin controls and platform governance |

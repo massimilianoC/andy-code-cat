@@ -14,7 +14,7 @@ import type { ZeroEffortFormProposalRepository } from "../../domain/repositories
 import type { DidacticArtifactKnowledgeRepository } from "../../domain/repositories/DidacticArtifactKnowledgeRepository";
 import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAssetRepository";
 import type { SiteDeploymentRepository } from "../../domain/repositories/SiteDeploymentRepository";
-import type { LeaderboardRepository } from "../../domain/repositories/LeaderboardRepository";
+import type { ProjectDataRegistry } from "../projectData/ProjectDataRegistry";
 import type { IFileStorage } from "../../infra/storage/IFileStorage";
 
 export interface DeletedProjectCounts {
@@ -32,7 +32,8 @@ export interface DeletedProjectCounts {
     didacticArtifactKnowledge: number;
     projectAssets: number;
     siteDeployments: number;
-    leaderboardEntries: number;
+    /** Records removed per project data capability (docs/specs/PROJECT_DATA_PANEL.md), by capability id. */
+    projectData: Record<string, number>;
 }
 
 /**
@@ -76,6 +77,13 @@ export interface DeletedProjectCounts {
  * that a rejected Zero Effort run needs, and delegates the removal here rather than performing its
  * own — two ways to delete a project would eventually disagree about what "deleted" means.
  *
+ * Records stored by platform capabilities (arcade leaderboards, and any capability added later)
+ * are not listed one by one: they are purged through the `ProjectDataRegistry`
+ * (composition/composeProjectData.ts), the same registry the owner's data panel reads, so adding a
+ * capability there is enough for its records to leave with the project. A capability was once
+ * forgotten here (leaderboard_scores, release 2026.11.25.5); the registry is the fix for the class,
+ * not just that instance.
+ *
  * Every associated-data repository is optional so existing wiring keeps compiling, but a caller
  * that omits one is choosing the old, partial behaviour for that collection. Every production
  * wiring should pass them all.
@@ -99,7 +107,7 @@ export class DeleteProject {
         private readonly projectAssetRepo?: ProjectAssetRepository,
         private readonly siteDeploymentRepo?: SiteDeploymentRepository,
         private readonly fileStorage?: IFileStorage,
-        private readonly leaderboardRepo?: LeaderboardRepository,
+        private readonly projectDataRegistry?: ProjectDataRegistry,
     ) { }
 
     async execute(projectId: string, userId: string): Promise<DeletedProjectCounts> {
@@ -163,7 +171,7 @@ export class DeleteProject {
             didacticArtifactKnowledge,
             projectAssets,
             siteDeployments,
-            leaderboardEntries,
+            projectData,
         ] = await Promise.all([
             this.promptExecutionLogRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
             this.costTransactionRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
@@ -179,7 +187,16 @@ export class DeleteProject {
             this.didacticArtifactKnowledgeRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
             this.projectAssetRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
             this.siteDeploymentRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
-            this.leaderboardRepo?.deleteAllForProject(userId, projectId).catch(() => 0) ?? 0,
+            // Same rule as every collection above (a failure must not stop the deletion), but not
+            // silent: capability records may be visitor data, so a failed purge is logged loudly.
+            this.projectDataRegistry?.purgeProject({ ownerUserId: userId, projectId }).catch((error: unknown) => {
+                console.error("[DeleteProject] project data purge failed; capability records may be orphaned", {
+                    projectId,
+                    ownerUserId: userId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                return {} as Record<string, number>;
+            }) ?? ({} as Record<string, number>),
         ]);
 
         await this.projectRepo.deleteById(projectId, userId);
@@ -199,7 +216,7 @@ export class DeleteProject {
             didacticArtifactKnowledge,
             projectAssets,
             siteDeployments,
-            leaderboardEntries,
+            projectData,
         };
     }
 }

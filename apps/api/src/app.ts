@@ -28,6 +28,7 @@ import { createVibecoreRoutes } from "./presentation/http/routes/vibecoreRoutes"
 import { createNotificationRoutes } from "./presentation/http/routes/notificationRoutes";
 import { createBackgroundRunRoutes } from "./presentation/http/routes/backgroundRunRoutes";
 import { createLeaderboardRoutes } from "./presentation/http/routes/leaderboardRoutes";
+import { createProjectDataRoutes } from "./presentation/http/routes/projectDataRoutes";
 import { createDatasetRoutes } from "./presentation/http/routes/datasetRoutes";
 import { createDidacticRoutes } from "./presentation/http/routes/didacticRoutes";
 import { createFormServiceRoutes } from "./presentation/http/routes/formServiceRoutes";
@@ -36,8 +37,11 @@ import { createRecoveryRoutes } from "./presentation/http/routes/recoveryRoutes"
 export function createApp() {
     const app = express();
 
-    // Trust the first proxy hop (nginx) so req.ip reflects the real client IP.
-    app.set("trust proxy", 1);
+    // Trust the reverse proxies in front of the API so req.ip is the real client IP. One hop is the
+    // stack's own nginx; a host with another proxy in front (Caddy, Traefik, a load balancer) needs
+    // TRUST_PROXY_HOPS=2, or every visitor shares that proxy's IP and per-IP rate limits (form
+    // submissions, auth) become one limit for everyone.
+    app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
     // Restrict CORS to the configured origin(s); default is "*" for local dev.
     // Keep requests without Origin (health checks, curl, server-side probes) allowed.
@@ -61,13 +65,18 @@ export function createApp() {
     app.use(helmet());
     app.use(cors(corsOptions));
     app.options("*", cors(corsOptions));
-    app.use(express.json({ limit: "8mb" }));
     app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
 
     // Publish routes are created up-front so the PUBLIC check-slug router can be
     // mounted before any router that applies a global authMiddleware. The auth-protected
     // apiRouter and the static /p router are mounted later, at their normal positions.
-    const { apiRouter: publishApi, staticRouter: publishStatic, publicRouter: publishPublic, siteRouter: publishSites } = createPublishRoutes();
+    const { apiRouter: publishApi, staticRouter: publishStatic, publicRouter: publishPublic, siteRouter: publishSites, formSubmitRouter: publishFormSubmit } = createPublishRoutes();
+
+    // Public capture submit (POST /p/:publishId/_pf/forms/:formId/submit). Before the global JSON
+    // parser so its own 16 KB body limit applies, not the 8 MB one (docs/specs/FORMS_CAPTURE.md).
+    app.use("/p", publishFormSubmit);
+
+    app.use(express.json({ limit: "8mb" }));
 
     app.use("/", createHealthRoutes());
     app.use("/v1/auth", createAuthRoutes());
@@ -98,6 +107,7 @@ export function createApp() {
     app.use("/v1", createNotificationRoutes());
     app.use("/v1", createBackgroundRunRoutes());
     app.use("/v1", createLeaderboardRoutes());
+    app.use("/v1", createProjectDataRoutes());
     app.use("/v1", createDidacticRoutes());
     app.use("/v1", createDatasetRoutes());
 

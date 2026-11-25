@@ -23,15 +23,24 @@ export interface FormRuntimeMarkupResult {
 }
 
 /**
+ * Where the compiled artifact will run. Only a publish knows its publishId, so only a published
+ * site gets a submit URL; preview and ZIP compile the same markup without one.
+ */
+export interface FormRuntimeContext {
+    publishId?: string;
+}
+
+/**
  * Application boundary for artifact-side form delivery modes. Future modes
  * must implement this interface and be registered explicitly; generated code
  * never selects an arbitrary endpoint or adapter.
  */
-export interface FormRuntimeAdapter<TSettings extends { mode: string } = ProjectFormSettingsInput> {
+export interface FormRuntimeAdapter<TSettings extends ProjectFormSettingsInput = ProjectFormSettingsInput> {
     readonly mode: TSettings["mode"];
     compileMarkup(
         artifacts: FormRuntimeArtifacts,
         manifest: ServiceManifestV1 | undefined,
         settings: TSettings,
+        context: FormRuntimeContext,
     ): FormRuntimeMarkupResult;
 }

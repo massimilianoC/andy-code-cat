@@ -82,10 +82,15 @@ navigation; the keyboard works everywhere (arrows/WASD, Enter/Space, Esc/Backspa
 ## 4. Prompt specialisation
 
 `ARCADE_PLAYABILITY_MODULE` is appended to the `systemPromptModule` of the four arcade presets. It
-fixes the control scheme above, requires a controls legend on the start and pause screens, at
-least three levels, a 16:9 fit, the `submitScore` call at game over (guarded, exactly once, no
-network and no remote leaderboard), and originality: when a request cites an existing game, only
-its mechanics may be borrowed — title, characters, art and levels are invented.
+fixes the control scheme above (and forbids the Gamepad API), requires a controls legend on the start
+and pause screens, levels or — for endless games — escalating named tiers, a safe first few seconds,
+fairness and solvability rules, a fixed-timestep loop, game feel (feedback on every action, capped
+particles), accessibility (no colour-only information, reduced-motion toggle), a combo/multiplier
+score submitted once through `submitScore` (no network, no remote leaderboard), library and
+procedural-audio rules (Canvas 2D first, pinned Phaser / Matter / three without addons, ZzFX, a
+visible message if the CDN fails), and originality: when a request cites an existing game, only its
+mechanics may be borrowed. The rules come from
+[ARCADE_GAMES_RESEARCH_2026-11-25.md](../research/ARCADE_GAMES_RESEARCH_2026-11-25.md).
 
 The live preset catalog is Mongo-backed and wins over the static one: **reseed presets** on every
 deployment that takes this release (`docs/runbooks/PRESET_RESEED.md`), or the block never reaches
@@ -103,7 +108,10 @@ First persistent capability of the platform runtime, built as
   authentication and the project sandbox, and the path must name the sandboxed project;
 - strict input: player 1–16 letters, digits, spaces or `. _ -`; integer score 0–1e9; unknown
   fields rejected; writes rate-limited; each board keeps its best 500 entries;
-- `boardId` defaults to `default`; a game may have several boards later (speedrun, daily…).
+- `boardId` defaults to `default`; a game may have several boards later (speedrun, daily…);
+- the owner browses, exports and clears boards from the project data panel, and the boards are
+  purged with their project through the same registry
+  ([PROJECT_DATA_PANEL.md](PROJECT_DATA_PANEL.md)).
 
 Scores are written by the project owner's Arcade session only. A score comes from code running in
 the browser, so it can always be forged by its own player; that is acceptable for a home console
@@ -125,7 +133,31 @@ and is why there is no anonymous write path yet.
 5. **Automatic playtest:** load each new game headless, press keys, reject versions that throw or
    never draw, before they reach the shelf.
 6. **Lighter templates:** genre-specific sub-presets (shmup, maze, falling blocks…) with their own
-   prompt modules and level-data conventions.
+   prompt modules and level-data conventions (see the research document, §4).
+7. **Audio with a gamepad only:** keys synthesised by the shell are not a user activation, so
+   WebAudio stays suspended until a real key or click reaches the game frame. Add a "press any key
+   or click to start" hand-off in the shell.
+
+### TODO — play while the next game is forging
+
+Today a game started from **New game** shows a progress bar on the shelf (polled every 8 s, also
+while a game is open), but nothing tells the player when it lands. Planned:
+
+- **In-game menu** on START or SELECT: an overlay drawn by the shell over the game frame (Resume ·
+  New game · Shelf). Opening it sends `P` to the game, which the playability contract requires to
+  pause; the frame stays mounted, so closing the menu resumes the same game. The shell cannot
+  freeze the frame's JavaScript itself: a game that ignores `P` keeps running behind the overlay.
+- **New game from the menu** without leaving the game, and a **"ready" toast** when a forging run
+  turns `done` (reusing the background-run notifications the dashboard already shows), with
+  "Play now" / "Later".
+- **Presets:** `vr-aframe` (needs a headset or a mouse) and `interactive-story` (choice-driven,
+  could map A/B to choices) are not on the shelf yet; decide per preset.
+
+### TODO — a more engaging shelf (see the UI notes in the release discussion of 2026-11-25)
+
+Immersive home (big preview of the focused game with genre, best score and top three), rows by
+genre plus "New" and "Forging" rows, text-free cover art, an attract mode when idle, UI sounds and
+gamepad rumble, selectable themes, 10-foot sizing with an overscan-safe area.
 
 ## 7. Building another mode on the same core
 
