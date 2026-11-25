@@ -10,6 +10,41 @@ database.
 
 ---
 
+## 2026.11.25.6 — Saved forms, project data panel, arcade quality
+
+### Features
+
+- **Saved form submissions:** form settings gain a `capture` mode next to `mailto`. Forms on a
+  published site post to the site's own address (`/p/{publishId}/_pf/forms/{formId}/submit`); the
+  server checks the live deployment, the owner, the settings and the deployed manifest, validates
+  every field, stores the submission (no raw IP), and refuses anything else. Preview and ZIP say
+  that the form saves only on the published site. Settings: **Forms** button in the project
+  configuration. See [FORMS_CAPTURE.md](../specs/FORMS_CAPTURE.md).
+- **Project data panel:** **Data** button in the project configuration: every record the platform
+  stored for the project (form submissions, arcade leaderboards), as JSON, with delete, clear with
+  typed confirmation, and JSON/CSV export. Project deletion purges every capability through one
+  registry. See [PROJECT_DATA_PANEL.md](../specs/PROJECT_DATA_PANEL.md).
+- **Arcade quality pass:** the game playability block now asks for levels or escalating tiers,
+  fair and solvable levels, a fixed-timestep loop, game feel, accessibility, combo scoring and
+  procedural audio, with pinned libraries; five new genres, three styles and four twists on the
+  wheels. Research: [ARCADE_GAMES_RESEARCH_2026-11-25.md](../research/ARCADE_GAMES_RESEARCH_2026-11-25.md).
+- Recovered work: RTF/ODT/legacy DOC parsing, shared model cascade for image prompts, `;` repair in
+  model JSON, CI workflow (already in 2026.11.25.3).
+
+### Upgrade notes
+
+- **Reseed presets** (`seed-presets.js`) for the new game block.
+- **`TRUST_PROXY_HOPS`**: set it to the number of reverse proxies in front of the API (1 = the
+  stack's nginx, the default; 2 when Caddy, Traefik or a load balancer sits in front of nginx).
+  Otherwise every visitor shares that proxy's IP and per-IP limits (form submissions, login) apply
+  to everyone at once.
+- Sites with subdomain addresses need their wildcard vhost to proxy `/p/` to the API for forms to
+  submit.
+- New collections `form_submissions` (and a new index on `leaderboard_scores`) are created on first
+  use; no migration. Existing mailto form settings keep working unchanged.
+
+---
+
 ## 2026.11.25.5 — Hotfix
 
 - Deleting a project now also deletes its leaderboard scores. In 2026.11.25.4 they were left
