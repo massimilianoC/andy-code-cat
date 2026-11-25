@@ -28,6 +28,11 @@ export const ARCADE_GENRES: ArcadeOption[] = [
     { id: "breakout", en: "Brick breaker", it: "Spacca mattoni", prompt: "a brick breaker: move a paddle, bounce the ball, break every brick, catch power-ups" },
     { id: "racer", en: "Top-down racer", it: "Corse dall'alto", prompt: "a top-down racer: steer around a track, overtake rivals, finish laps before the timer runs out" },
     { id: "arena", en: "Arena survival", it: "Sopravvivenza in arena", prompt: "an arena survival game: move around a closed arena, attack waves of enemies, survive as long as possible" },
+    { id: "snake", en: "Snake", it: "Serpente", prompt: "a snake game on a grid: steer the growing snake to food, never bite yourself or the walls, speed rises with length" },
+    { id: "flapper", en: "One-button flyer", it: "Volo a un tasto", prompt: "a one-button flyer: Space flaps upward against gravity through gaps in endless obstacles generated from a seed" },
+    { id: "survivor", en: "Survivor", it: "Sopravvissuto", prompt: "a survivor-like: the hero moves and weapons fire automatically at the nearest enemy, collect XP gems and pick one of three upgrades at each level-up (the game pauses while choosing)" },
+    { id: "towers", en: "Tower defense", it: "Difesa a torri", prompt: "a tower defense: enemies walk a fixed path in waves, move a grid cursor and place or upgrade three tower types with the gold you earn" },
+    { id: "minigolf", en: "Minigolf", it: "Minigolf", prompt: "a minigolf course of 9 holes: aim with left/right, hold Space to charge the shot power, fewer strokes give a higher integer score" },
 ];
 
 export const ARCADE_STYLES: ArcadeOption[] = [
@@ -36,6 +41,9 @@ export const ARCADE_STYLES: ArcadeOption[] = [
     { id: "neon-vector", en: "Neon vector", it: "Vettoriale neon", prompt: "glowing neon vector lines on a black background, like an old vector arcade cabinet" },
     { id: "handheld", en: "Handheld green", it: "Portatile verde", prompt: "a four-shade green monochrome palette, like an old handheld console" },
     { id: "lowpoly-3d", en: "Low-poly 3D", it: "3D low-poly", prompt: "simple low-poly 3D with three.js and a fixed or follow camera" },
+    { id: "crt-arcade", en: "CRT arcade", it: "Cabinato CRT", prompt: "a glowing CRT arcade look: bright sprites drawn with canvas shapes, a CSS scanline overlay and a soft vignette" },
+    { id: "paper-cut", en: "Paper cut-out", it: "Carta ritagliata", prompt: "layered paper cut-out shapes with soft drop shadows and a warm paper palette" },
+    { id: "pastel-cozy", en: "Pastel cozy", it: "Pastello cozy", prompt: "flat pastel vector shapes, rounded corners and a calm, cozy palette" },
 ];
 
 export const ARCADE_SETTINGS: ArcadeOption[] = [
@@ -45,6 +53,8 @@ export const ARCADE_SETTINGS: ArcadeOption[] = [
     { id: "underwater", en: "Underwater", it: "Sott'acqua", prompt: "a coral reef deep underwater" },
     { id: "jungle-temple", en: "Jungle temple", it: "Tempio nella giungla", prompt: "a lost temple in the jungle" },
     { id: "candy-land", en: "Candy land", it: "Mondo di caramelle", prompt: "a land made of sweets and candy" },
+    { id: "clockwork-city", en: "Clockwork city", it: "Città a orologeria", prompt: "a city of gears and brass towers" },
+    { id: "cloud-kingdom", en: "Cloud kingdom", it: "Regno delle nuvole", prompt: "floating islands in a sky of clouds" },
 ];
 
 export const ARCADE_HEROES: ArcadeOption[] = [
@@ -53,6 +63,8 @@ export const ARCADE_HEROES: ArcadeOption[] = [
     { id: "tiny-dragon", en: "Tiny dragon", it: "Draghetto", prompt: "a tiny dragon who cannot fly yet" },
     { id: "skater-ghost", en: "Skater ghost", it: "Fantasma skater", prompt: "a ghost on a skateboard" },
     { id: "snail-knight", en: "Snail knight", it: "Lumaca cavaliere", prompt: "a brave snail in armour" },
+    { id: "paper-plane", en: "Paper plane", it: "Aereo di carta", prompt: "a brave paper plane" },
+    { id: "mushroom", en: "Tiny mushroom", it: "Funghetto", prompt: "a tiny walking mushroom" },
 ];
 
 export const ARCADE_TWISTS: ArcadeOption[] = [
@@ -61,6 +73,10 @@ export const ARCADE_TWISTS: ArcadeOption[] = [
     { id: "time-still", en: "Time moves when you move", it: "Il tempo scorre se ti muovi", prompt: "enemies and bullets move only while the hero moves" },
     { id: "one-button", en: "One-button controls", it: "Un solo pulsante", prompt: "the whole game is played with the primary action button only" },
     { id: "shrinking", en: "Shrinking world", it: "Mondo che si restringe", prompt: "the playfield shrinks a little every few seconds" },
+    { id: "daily-seed", en: "Daily challenge", it: "Sfida del giorno", prompt: "every level is generated from a seed made from today's date, so all players face the same layout today" },
+    { id: "fog", en: "Fog of war", it: "Nebbia", prompt: "the hero sees only a circle of light around them" },
+    { id: "rising-lava", en: "Rising lava", it: "Lava che sale", prompt: "a deadly boundary slowly chases the hero, so standing still is never safe" },
+    { id: "mutators", en: "Random mutators", it: "Mutatori casuali", prompt: "every 15 seconds a random mutator switches on for a while (low gravity, double speed, giant enemies, mirrored controls), announced on screen" },
 ];
 
 /** Every Arcade prompt starts with this line: the shell recognises its own runs by it. */

@@ -82,10 +82,15 @@ navigation; the keyboard works everywhere (arrows/WASD, Enter/Space, Esc/Backspa
 ## 4. Prompt specialisation
 
 `ARCADE_PLAYABILITY_MODULE` is appended to the `systemPromptModule` of the four arcade presets. It
-fixes the control scheme above, requires a controls legend on the start and pause screens, at
-least three levels, a 16:9 fit, the `submitScore` call at game over (guarded, exactly once, no
-network and no remote leaderboard), and originality: when a request cites an existing game, only
-its mechanics may be borrowed — title, characters, art and levels are invented.
+fixes the control scheme above (and forbids the Gamepad API), requires a controls legend on the start
+and pause screens, levels or — for endless games — escalating named tiers, a safe first few seconds,
+fairness and solvability rules, a fixed-timestep loop, game feel (feedback on every action, capped
+particles), accessibility (no colour-only information, reduced-motion toggle), a combo/multiplier
+score submitted once through `submitScore` (no network, no remote leaderboard), library and
+procedural-audio rules (Canvas 2D first, pinned Phaser / Matter / three without addons, ZzFX, a
+visible message if the CDN fails), and originality: when a request cites an existing game, only its
+mechanics may be borrowed. The rules come from
+[ARCADE_GAMES_RESEARCH_2026-11-25.md](../research/ARCADE_GAMES_RESEARCH_2026-11-25.md).
 
 The live preset catalog is Mongo-backed and wins over the static one: **reseed presets** on every
 deployment that takes this release (`docs/runbooks/PRESET_RESEED.md`), or the block never reaches
@@ -125,7 +130,10 @@ and is why there is no anonymous write path yet.
 5. **Automatic playtest:** load each new game headless, press keys, reject versions that throw or
    never draw, before they reach the shelf.
 6. **Lighter templates:** genre-specific sub-presets (shmup, maze, falling blocks…) with their own
-   prompt modules and level-data conventions.
+   prompt modules and level-data conventions (see the research document, §4).
+7. **Audio with a gamepad only:** keys synthesised by the shell are not a user activation, so
+   WebAudio stays suspended until a real key or click reaches the game frame. Add a "press any key
+   or click to start" hand-off in the shell.
 
 ### TODO — play while the next game is forging
 

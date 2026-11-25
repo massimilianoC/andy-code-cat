@@ -20,7 +20,8 @@ describe("arcade playability contract", () => {
     });
 
     it("names the keys the Arcade shell maps gamepads onto, and the score hook", () => {
-        for (const fragment of ["WASD", "arrow keys", "Space", "Shift", "Enter", "window.AndyArcade.submitScore", "Never reproduce names"]) {
+        for (const fragment of ["WASD", "arrow keys", "Space", "Shift", "Enter", "window.AndyArcade.submitScore", "Never reproduce names",
+            "escalating named tiers", "fixed 1/60 s steps", "reduced-motion", "never use the Gamepad API", "zzfx@1.4.0", "three.js 0.160.0"]) {
             expect(ARCADE_PLAYABILITY_MODULE).toContain(fragment);
         }
     });
