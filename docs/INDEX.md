@@ -154,6 +154,7 @@ Read in this order before making changes:
 | [docs/specs/BAAS_SERVICES_SPEC.md](specs/BAAS_SERVICES_SPEC.md) | Broad BaaS capability catalog; historical SDK sketches are superseded by the Platform Capability Runtime decision and event-driven security model |
 | [docs/specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md](specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md) | Agent-executable first capability: declarative forms, mailto/relay/capture, scoped Forms Inbox persistence, Layer V/runtime parity, privacy policy, tests and delivery waves |
 | [docs/specs/FORM_RUNTIME_MAILTO_FOUNDATION.md](specs/FORM_RUNTIME_MAILTO_FOUNDATION.md) | Definitive mailto v1 form runtime: Layer V ownership, canonical snapshots, owner configuration, deterministic multi-step compilation, and isolated E2E |
+| [docs/specs/FORMS_CAPTURE.md](specs/FORMS_CAPTURE.md) | Saved form submissions (`capture` mode): same-origin public submit path, server-side manifest validation, trust boundary, `form_submissions` data, project data capability, retention and GDPR notes |
 | [docs/specs/RAG_CHATBOT_SPEC.md](specs/RAG_CHATBOT_SPEC.md) | RAG chatbot integration for generated sites |
 | [docs/specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md](specs/MULTIPROVIDER_MULTIMODEL_PLATFORM_PLAYBOOK.md) | ⚠️ Historical generic multi-model playbook; not the current product routing contract |
 | [docs/specs/SUPER_ADMIN_SPEC.md](specs/SUPER_ADMIN_SPEC.md) | Superadmin controls and platform governance |

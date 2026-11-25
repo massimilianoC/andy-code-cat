@@ -2,13 +2,15 @@
 
 > **Status:** target architecture for deferred R4/BaaS work; not a declaration that networked
 > capabilities are enabled in the canonical stack
-> **Last aligned:** 2026-07-15
+> **Last aligned:** 2026-11-25 (forms capture)
 > **Implementation plan:** [Form Runtime + BaaS Delivery](../specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md)
 > **Legacy parent spec:** [BaaS Services Layer](../specs/BAAS_SERVICES_SPEC.md)
 
 The bounded local `mailto` foundation is implemented in the integration candidate through Layer V,
-`service-manifest-v1`, `runtime-plan-v1` and allowlisted browser assets. Public `relay`, `capture`
-and the broader networked capability catalog remain deferred until their roadmap gate is reopened.
+`service-manifest-v1`, `runtime-plan-v1` and allowlisted browser assets. `capture` (saved form
+submissions) is implemented as specified in [Forms Capture](../specs/FORMS_CAPTURE.md). Public
+`relay` and the broader networked capability catalog remain deferred until their roadmap gate is
+reopened.
 
 This document is the current source of truth for capability-runtime boundaries, tenant data
 isolation and the order in which BaaS services should be introduced. Where the older BaaS spec
@@ -67,7 +69,7 @@ capability instance bound to owner + project + deployment
 allowlisted runtime module + application use case + domain repository port
               │
               ▼
-MongoDB / Redis / provider adapters
+MongoDB / provider adapters
 ```
 
 ## Runtime packaging
@@ -192,8 +194,9 @@ operations harder without replacing authorization.
 
 ### Current MongoDB decision
 
-Do not introduce PostgreSQL only for the first Forms Inbox. MongoDB, Redis and the existing clean
-architecture are sufficient when every application query enforces the compound scope. If a future
+Do not introduce PostgreSQL only for the first Forms Inbox. MongoDB and the existing clean
+architecture are sufficient when every application query enforces the compound scope (Redis was
+removed from the stack in 2026-11). If a future
 generic relational service exposes tables through an API, database-enforced row policies such as
 [PostgreSQL/Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security)
 must be evaluated in a separate architecture decision.
@@ -201,7 +204,11 @@ must be evaluated in a separate architecture decision.
 ## Forms Inbox: first persistent capability
 
 `forms.capture` is the first networked and persistent capability. It is the natural evolution of
-the local `mailto` adapter:
+the local `mailto` adapter. **Implemented v1:** [Forms Capture](../specs/FORMS_CAPTURE.md) — the
+scope is `{ ownerUserId, projectId, formId }` (the form id is the capability instance), records
+store `fields`, `privacyNoticeVersion`, `publishId`, `snapshotId`, a salted `ipHash` and
+`createdAt`, and owner access goes through the project data capability `forms`. Status workflow,
+`expiresAt`/TTL and allowlisted `searchableFields` below are not in v1.
 
 ```text
 mailto  → local hand-off; no Andy Code Cat persistence
@@ -257,26 +264,34 @@ actor, reason and outcome.
 
 ### Public submit
 
-Canonical route:
+Canonical route (same origin as the published site):
 
 ```text
-POST /v1/public/svc/:projectKey/forms/:formId/submit
+POST /p/{publishId}/_pf/forms/{formId}/submit
 ```
 
-`projectKey` is a public routing identifier, not a secret. The server resolves it to the active
-deployment and derives `ownerUserId`, `projectId`, `capabilityInstanceId`, manifest version and
-form schema. The request body can never select or override those values.
+It replaces the earlier `/v1/public/svc/:projectKey/...` design: a sites origin or subdomain vhost
+forwards only `/p/`, slug paths and `/health` to the API, so `/v1` is not reachable from a
+published site, and a same-origin request needs no CORS. Sites on subdomain addresses need their
+wildcard vhost to proxy `/p/` to the API.
 
-Before persistence or delivery, the public path must enforce:
+`publishId` is a public routing identifier, not a secret. The server resolves it to the live
+deployment and derives `ownerUserId`, `projectId`, the form (capability instance), the deployed
+snapshot's manifest and form schema. The request body can never select or override those values.
 
-1. active deployment and enabled capability resolution;
-2. exact origin allowlist; CORS is an additional browser control, not authentication;
-3. strict shared-contract validation, unknown-field rejection and payload/field limits;
-4. Redis rate limits per capability and salted IP hash, fail-closed in production;
-5. honeypot and optional CAPTCHA/managed challenge policy;
-6. idempotency key or server-issued submission nonce;
-7. purpose, privacy notice, retention and consent policy;
-8. redacted errors, metrics and execution logs.
+Before persistence or delivery, the public path enforces (details in
+[Forms Capture](../specs/FORMS_CAPTURE.md)):
+
+1. live deployment, site/owner suspension rules and enabled capability resolution;
+2. the site host rule (`decideSiteRequest`; refused, never redirected, on an app host) and
+   `Origin`/`Referer` equal to the request host when present; CORS is not authentication;
+3. strict validation against the deployed manifest, unknown-field rejection and a 16 KB body limit;
+4. per-IP and per-site rate limits — in-memory (`express-rate-limit`), since Redis was removed and
+   the API runs as one instance; a multi-instance API needs a shared store; salted IP hash only;
+5. honeypot (optional CAPTCHA/managed challenge: not in v1);
+6. idempotency key or server-issued submission nonce: not in v1;
+7. privacy notice version evidence (retention and consent policy: not in v1);
+8. redacted errors and logs: no submitted value in either.
 
 ### Owner reads and mutations
 
@@ -385,7 +400,7 @@ green:
 
 - cross-user, cross-project and cross-capability reads/writes fail;
 - no payload or secret appears in logs, errors, metrics or audit records;
-- public routes fail closed when Redis/policy resolution is unavailable in production;
+- public routes fail closed when policy resolution (deployment, owner, settings) is unavailable;
 - preview, publish and ZIP resolve the same manifest/runtime plan;
 - schema migration, TTL, backup/restore and physical deletion have tests/runbooks;
 - feature flag and rollback leave existing static artifacts functional.
@@ -419,7 +434,8 @@ trace-integrity failure.
 4. Generated JavaScript parser/gate and narrowly scoped repair of misplaced known manifests.
 5. Form rendering/theming contract: stable classes, CSS custom properties and accessible DOM.
 6. Mailto behaviour: RFC encoding, long-body/manual-copy fallback and honest protocol-handler UX.
-7. Public `relay`/`capture` error envelope, nonce/idempotency and concrete Redis limits.
+7. Public `relay` error envelope and nonce/idempotency (capture has its envelope and in-memory
+   limits: FORMS_CAPTURE.md).
 8. Data subject request workflow, encryption/search trade-offs and retention policy ownership.
 9. Capability evolution for payments, Telegram, webhooks and catalogs without a monolithic SDK.
 10. Tests: real LLM-to-manifest flow, invalid generated JS isolation, preview/publish/ZIP parity,
@@ -430,6 +446,7 @@ trace-integrity failure.
 ## Related sources
 
 - [Form Runtime + BaaS Delivery](../specs/FORM_RUNTIME_BAAS_IMPLEMENTATION_PLAN.md)
+- [Forms Capture](../specs/FORMS_CAPTURE.md)
 - [BaaS Services Layer](../specs/BAAS_SERVICES_SPEC.md)
 - [Prompting Pipeline Agent Guardrails](../agents/PROMPTING_PIPELINE_AGENT_GUARDRAILS.md)
 - [MongoDB: Build a Multi-Tenant Architecture](https://www.mongodb.com/docs/atlas/build-multi-tenant-arch/)

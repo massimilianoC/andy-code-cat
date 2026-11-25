@@ -73,7 +73,7 @@ for the whole installation:
 | Mode | Shown address | Needs |
 |---|---|---|
 | `path` (default) | `{sitesOrigin}/{slug}/`, or `{sitesOrigin}/p/{publishId}/` without a slug; without a sites origin, relative to the API origin | One hostname and certificate for all sites, distinct from the app's |
-| `subdomain` | `https://{slug or publishId}.{publicDomain}` | Wildcard DNS and a wildcard certificate for `*.{publicDomain}` routed to the published-site server |
+| `subdomain` | `https://{slug or publishId}.{publicDomain}` | Wildcard DNS and a wildcard certificate for `*.{publicDomain}` routed to the published-site server; the wildcard vhost must proxy `/p/` to the API for capture forms ([Forms Capture](../specs/FORMS_CAPTURE.md)) |
 
 The address is computed at read time by one function, `resolvePublicSiteUrl`
 (`apps/api/src/application/publish/publicSiteAddress.ts`), and returned as `publicUrl` by the publish
