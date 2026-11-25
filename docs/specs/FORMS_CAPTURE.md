@@ -85,7 +85,9 @@ Checks, in order (`publishedFormSubmitRoutes.ts`, then `SubmitPublishedForm`):
 
 1. Rate limits, before any work: per client IP (20 / 10 min, across all sites) and per publishId
    (300 / 10 min, from any IP) — `express-rate-limit` in-memory store. Redis was removed from the
-   stack and the API is a single instance; a second instance needs a shared store. → `429`
+   stack and the API is a single instance; a second instance needs a shared store. The client IP is
+   `req.ip`, which is only right when `TRUST_PROXY_HOPS` matches the proxies in front of the API
+   (1 = the stack's nginx; 2 when Caddy, Traefik or a load balancer sits in front of it). → `429`
 2. `Content-Type: application/json` → else `415`.
 3. Host: the same rule as page content (`decideSiteRequest`). A POST on an app host, or on any host
    other than a configured sites origin, is **refused**, never redirected. → `403 FORM_SITE_HOST_REFUSED`
@@ -154,7 +156,7 @@ method; the Mongo implementation spreads it into every filter.
 
 ## Owner access — project data capability
 
-`createFormsProjectDataCapability()` (`apps/api/src/application/forms/FormsProjectDataCapability.ts`)
+`FormsProjectDataCapability` (`apps/api/src/application/forms/FormsProjectDataCapability.ts`), wired in `apps/api/src/composition/composeProjectData.ts`
 implements `ProjectDataCapability` (`id: "forms"`, label "Form submissions"):
 
 - groups: one per form id with submissions; label = form title from the live deployment's manifest,

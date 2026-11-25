@@ -9,9 +9,6 @@ import type {
 import type { FormSubmissionRepository } from "../../domain/repositories/FormSubmissionRepository";
 import type { PreviewSnapshotRepository } from "../../domain/repositories/PreviewSnapshotRepository";
 import type { SiteDeploymentRepository } from "../../domain/repositories/SiteDeploymentRepository";
-import { MongoFormSubmissionRepository } from "../../infra/repositories/MongoFormSubmissionRepository";
-import { MongoPreviewSnapshotRepository } from "../../infra/repositories/MongoPreviewSnapshotRepository";
-import { MongoSiteDeploymentRepository } from "../../infra/repositories/MongoSiteDeploymentRepository";
 
 export const FORMS_PROJECT_DATA_CAPABILITY_ID = "forms";
 
@@ -97,15 +94,4 @@ export class FormsProjectDataCapability implements ProjectDataCapability {
     async clear(scope: ProjectDataScope, groupId?: string): Promise<number> {
         return this.deps.submissions.deleteMany(scope, groupId);
     }
-}
-
-/** The forms capability over the MongoDB repositories; dependencies can be replaced in tests. */
-export function createFormsProjectDataCapability(
-    deps: Partial<ConstructorParameters<typeof FormsProjectDataCapability>[0]> = {},
-): FormsProjectDataCapability {
-    return new FormsProjectDataCapability({
-        submissions: deps.submissions ?? new MongoFormSubmissionRepository(),
-        deployments: deps.deployments ?? new MongoSiteDeploymentRepository(),
-        snapshots: deps.snapshots ?? new MongoPreviewSnapshotRepository(),
-    });
 }

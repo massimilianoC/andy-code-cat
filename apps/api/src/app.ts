@@ -37,8 +37,11 @@ import { createRecoveryRoutes } from "./presentation/http/routes/recoveryRoutes"
 export function createApp() {
     const app = express();
 
-    // Trust the first proxy hop (nginx) so req.ip reflects the real client IP.
-    app.set("trust proxy", 1);
+    // Trust the reverse proxies in front of the API so req.ip is the real client IP. One hop is the
+    // stack's own nginx; a host with another proxy in front (Caddy, Traefik, a load balancer) needs
+    // TRUST_PROXY_HOPS=2, or every visitor shares that proxy's IP and per-IP rate limits (form
+    // submissions, auth) become one limit for everyone.
+    app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
     // Restrict CORS to the configured origin(s); default is "*" for local dev.
     // Keep requests without Origin (health checks, curl, server-side probes) allowed.

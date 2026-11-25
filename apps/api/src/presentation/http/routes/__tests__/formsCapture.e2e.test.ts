@@ -382,8 +382,8 @@ describe("forms capture — public submit and project data", () => {
     });
 
     it("exposes submissions through the forms capability of their own project only", async () => {
-        const { createFormsProjectDataCapability } = await import("../../../../application/forms/FormsProjectDataCapability");
-        const capability = createFormsProjectDataCapability();
+        const { composeProjectDataRegistry } = await import("../../../../composition/composeProjectData");
+        const capability = composeProjectDataRegistry().get("forms")!;
         expect(capability.id).toBe("forms");
         expect(capability.label).toBe("Form submissions");
 
@@ -427,5 +427,18 @@ describe("forms capture — public submit and project data", () => {
         expect(await capability.deleteRecord(scopeA, found.items[0]!.id)).toBe(true);
         expect(await capability.clear(scopeA, "contact")).toBe(totalA);
         expect(await capability.groups(scopeA)).toEqual([]);
+    });
+
+    it("deletes a project's submissions together with the project, and nobody else's", async () => {
+        expect((await submit(publishB, { fields: { email: "b2@example.com", message: "Delete me with B" } })).status).toBe(201);
+        const beforeA = await submissionCount({ projectId: projA });
+        expect(await submissionCount({ projectId: projB })).toBeGreaterThan(0);
+
+        const res = await request(app).delete(`/v1/projects/${projB}`)
+            .set({ Authorization: `Bearer ${tokenFor(ownerB)}`, "x-project-id": projB });
+        expect(res.status).toBeLessThan(300);
+
+        expect(await submissionCount({ projectId: projB })).toBe(0);
+        expect(await submissionCount({ projectId: projA })).toBe(beforeA);
     });
 });
