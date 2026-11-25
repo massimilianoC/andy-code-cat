@@ -10,6 +10,40 @@ database.
 
 ---
 
+## 2026.11.25.3 — Work recovered from stale branches
+
+The branches that had sat unmerged for months were reviewed against the current code. What was still
+valid was ported and tested; the remaining ideas are recorded as nice-to-haves in the
+[roadmap](../project/ROADMAP.md#nice-to-have--ideas-from-retired-branches-2026-11-25).
+
+### Features
+
+- **More document formats as project context:** legacy Word `.doc`, OpenDocument `.odt` and `.rtf`
+  attachments are parsed and enriched like the others. Legacy `.doc` files were previously sent to
+  the DOCX parser, which cannot read them.
+
+### Fixes
+
+- **Model selection:** the image-prompt optimizer, the image-direction suggester and the admin
+  template drafter now choose their model through the same catalog cascade as all other generation.
+  A model the operator switched off is no longer dispatched, and no hardcoded model id is sent.
+- **Malformed model replies:** a reply that separates its JSON fields with `;` instead of `,` is
+  repaired instead of failing to parse.
+- **Superadmin:** "View owner in Users" on the projects page opens that user's detail.
+
+### Repository
+
+- **CI:** every pull request into `develop` or `main` runs the gitflow and version checks, `tsc` and
+  the api and web test suites (`.github/workflows/ci.yml`).
+- The pull-request template asks for the risk tier, acceptance and verification evidence.
+
+### Upgrade notes
+
+- No configuration change. `npm ci` installs two new parser dependencies (`rtf-parser`,
+  `word-extractor`); rebuild the api and worker images.
+
+---
+
 ## 2026.11.25.2 — Public-release readiness
 
 A hygiene and hardening release: no product feature changes. It makes the repository safe to
