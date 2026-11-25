@@ -17,17 +17,31 @@ export interface ProjectTemplateResolution {
  * manifest. Future service adapters may extend this object without changing
  * the immutable artifact contract.
  */
-export interface ProjectFormSettings {
+export interface ProjectFormPrivacyNotice {
+    version: string;
+    url: string;
+    controllerName: string;
+    contactEmail: string;
+}
+
+/** `mailto`: local hand-off to the visitor's email client; nothing is stored. */
+export interface ProjectMailtoFormSettings {
     enabled: boolean;
     mode: "mailto";
     recipientEmail: string;
-    privacyNotice: {
-        version: string;
-        url: string;
-        controllerName: string;
-        contactEmail: string;
-    };
+    privacyNotice: ProjectFormPrivacyNotice;
 }
+
+/** `capture`: validated server-side and stored in `form_submissions` (FORMS_CAPTURE.md). */
+export interface ProjectCaptureFormSettings {
+    enabled: boolean;
+    mode: "capture";
+    /** Kept from an earlier mailto configuration, never used by capture. */
+    recipientEmail?: string;
+    privacyNotice: ProjectFormPrivacyNotice;
+}
+
+export type ProjectFormSettings = ProjectMailtoFormSettings | ProjectCaptureFormSettings;
 
 export interface ProjectServiceConfig {
     forms?: ProjectFormSettings;

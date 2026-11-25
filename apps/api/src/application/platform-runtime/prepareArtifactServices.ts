@@ -12,11 +12,16 @@ export function prepareArtifactServices(input: {
     serviceManifest?: ServiceManifestV1;
     formSettings?: ProjectFormSettingsInput;
     delivery: PlatformRuntimeDelivery;
+    /**
+     * Set by publish only: the site's publishId, from which capture forms get their same-origin
+     * submit path. Preview and ZIP have no backend and pass none (FORMS_CAPTURE.md).
+     */
+    publishId?: string;
 }) {
     return compileConfiguredForms(
         input.artifacts,
         input.serviceManifest,
         input.formSettings,
-        { delivery: input.delivery },
+        { delivery: input.delivery, publishId: input.publishId },
     );
 }

@@ -8,6 +8,10 @@ import { MongoSiteDeploymentRepository } from "../../../infra/repositories/Mongo
 import { MongoPublishHistoryRepository } from "../../../infra/repositories/MongoPublishHistoryRepository";
 import { MongoUserRepository } from "../../../infra/repositories/MongoUserRepository";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
+import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
+import { MongoFormSubmissionRepository } from "../../../infra/repositories/MongoFormSubmissionRepository";
+import { SubmitPublishedForm, resolveFormIpHashSalt } from "../../../application/forms/SubmitPublishedForm";
+import { createPublishedFormSubmitRouter } from "./publishedFormSubmitRoutes";
 import { localFileStorage } from "../../../infra/storage/LocalFileStorage";
 import { composePublishProject } from "../../../composition/composeVibeEntryStages";
 import { UnpublishProject } from "../../../application/use-cases/UnpublishProject";
@@ -80,6 +84,8 @@ function toHistoryDto(e: PublishHistoryEntry) {
  * 2. apiRouter — mounted at /v1, require auth + sandbox
  * 3. staticRouter — mounted at /p, public, serve static files by publishId
  * 4. siteRouter — mounted at the API root LAST, public, serves the same files by custom slug
+ * 5. formSubmitRouter — mounted at /p BEFORE the global JSON parser, public: the capture form
+ *    submit path /p/:publishId/_pf/forms/:formId/submit (docs/specs/FORMS_CAPTURE.md)
  *
  * Why publicRouter is separate: several /v1 routers call `router.use(authMiddleware)`,
  * and Express runs those for every /v1 request that reaches them in mount order. If the
@@ -594,5 +600,32 @@ export function createPublishRoutes() {
         await sendSiteFile(req, res, deployment.publishId, file, "data", deployment);
     });
 
-    return { apiRouter, staticRouter, publicRouter, siteRouter };
+    // ---- POST /p/{publishId}/_pf/forms/{formId}/submit ----
+    // Same host rule as the site's pages (decideSiteRequest), but a POST is refused, never
+    // redirected. The redirect target is irrelevant here, so no deployment lookup is needed.
+    async function isSiteHost(req: Request, publishId: string): Promise<boolean> {
+        const decision = decideSiteRequest({
+            requestHostname: (req.hostname ?? "").toLowerCase(),
+            appHosts: APP_HOSTS,
+            config: await publicSites(),
+            deployment: null,
+            publishId,
+            sitePath: "/",
+        });
+        return decision.action === "serve";
+    }
+
+    const formSubmitRouter = createPublishedFormSubmitRouter({
+        submitForm: new SubmitPublishedForm({
+            deployments: deploymentRepository,
+            users: userRepository,
+            projects: projectRepository,
+            snapshots: new MongoPreviewSnapshotRepository(),
+            submissions: new MongoFormSubmissionRepository(),
+            ipHashSalt: resolveFormIpHashSalt(env),
+        }),
+        isSiteHost,
+    });
+
+    return { apiRouter, staticRouter, publicRouter, siteRouter, formSubmitRouter };
 }
