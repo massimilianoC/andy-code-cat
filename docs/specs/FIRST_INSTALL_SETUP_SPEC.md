@@ -242,8 +242,8 @@ It is intentionally minimal — no sidebar, no navbar — an isolated full-page 
 2. **Single-use** — the `existsWithRole` check makes it idempotent; the endpoint is a no-op after install.
 3. **No install token** — the endpoint returns no JWT; login is a separate, normal flow.
 4. **Password strength** — minimum 12 characters enforced at Zod level; the UI adds a strength meter.
-5. **Sensitive fields in transit** — the endpoint must be served over HTTPS in production (the nginx
-   config already enforces this on the droplet).
+5. **Sensitive fields in transit** — the endpoint must be served over HTTPS in production (terminate
+   TLS at nginx or at your reverse proxy).
 6. **Storage credentials** — if the operator provides custom MinIO credentials, they are stored in
    `PlatformConfig` (encrypted at rest if the planned envelope encryption is enabled in R4).
    Until R4, credentials go into the same config doc as other platform settings and are not

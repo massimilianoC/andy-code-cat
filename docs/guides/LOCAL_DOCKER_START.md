@@ -53,7 +53,7 @@ docker compose -f docker-compose.deploy.yml up --build -d
 
 ## Safe Rebuild (after Dockerfile or dependency changes)
 
-**Rebuilds only the web and API images, leaves MongoDB / Redis / MinIO untouched.**
+**Rebuilds only the web and API images, leaves MongoDB / MinIO untouched.**
 Data is stored in `./data/` bind mounts and is never affected by image rebuilds.
 
 ```bash
@@ -80,7 +80,6 @@ All persistent data lives in bind mounts under `./data/`:
 | Service | Host path | Container path |
 |---|---|---|
 | MongoDB | `./data/mongodb` | `/data/db` |
-| Redis | `./data/redis` | `/data` |
 | MinIO | `./data/minio` | `/data` |
 
 `docker compose up`, `docker compose build`, and `docker compose up --build` **never delete**
@@ -88,22 +87,23 @@ bind-mount data. Only `rm -rf ./data/` would erase it.
 
 ---
 
-## First Run — Install Wizard
+## First Run — Create the First Superadmin
 
-On a fresh deployment (empty `./data/mongodb`) there is no superadmin account.
-Navigate to <http://localhost/install> (or `https://app.DOMAIN/install` in domain mode) to run
-the guided setup wizard and create the first superadmin, set the public domain, and configure
-registration policy.
+On a fresh deployment (empty database) there is no superadmin account. Register an account at
+`/register`, then verify and promote it with `mongosh` as shown below. `install.sh` prints the
+one-line version of this command at the end of its output.
 
-If you used `install.sh` the URL is printed at the end of the script output.
+No verification e-mail is sent. With `AUTH_BYPASS_EMAIL_VERIFICATION=false` (the `install.sh`
+default) an account can log in only once it is marked verified — by the command below for the
+first superadmin, and in `/admin/users` for everyone after that.
 
-See [docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.md) for full details.
+A guided `/install` wizard is specified in
+[docs/specs/FIRST_INSTALL_SETUP_SPEC.md](../specs/FIRST_INSTALL_SETUP_SPEC.md) but is not
+implemented yet.
 
 ---
 
-## Emergency: Promote a User to Superadmin via mongosh
-
-Use this only if the `/install` wizard is not yet deployed or you need immediate access.
+## Promote a User to Superadmin via mongosh
 
 ```bash
 # 1. Open a mongosh session inside the container
@@ -118,7 +118,7 @@ db.users.findOne({ email: "your@email.com" }, { email: 1, roles: 1 })
 # 4. Promote
 db.users.updateOne(
     { email: "your@email.com" },
-    { $set: { roles: ["superadmin"] } }
+    { $set: { roles: ["superadmin"], emailVerified: true } }
 )
 
 # 5. Confirm

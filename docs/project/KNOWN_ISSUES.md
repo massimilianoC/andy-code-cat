@@ -12,6 +12,39 @@ marking it done in place — this file is a queue, not a changelog.
 
 ---
 
+## Dependencies — advisories that need a major upgrade
+
+Measured with `npm audit --omit=dev` on 2026-11-25, after `npm audit fix` (non-breaking) brought
+the count from 39 to 27. What is left needs a major upgrade or a replacement, each with its own
+regression pass:
+
+- **`next` 14.2.x (critical)** — the 14 line gets no further fixes; the advisories close at 16.x.
+  The biggest item: App Router, middleware and `next.config.mjs` need a migration pass.
+- **`xlsx` 0.18.5 (high, no npm fix)** — SheetJS no longer publishes to npm. Either install the
+  maintained build from the SheetJS CDN tarball or replace it. Exposure: spreadsheets uploaded as
+  project documents are parsed server-side.
+- **`puppeteer` 24 → 25**, **`sharp` → 0.35**, **`zod` 3 → 4**, **`minio` 7.1**, **`archiver` 8**,
+  **`adm-zip` 0.6**, **`grapesjs` 0.23** — major bumps; `zod` is shared through
+  `packages/contracts` and touches every schema.
+- `npm audit fix` also moved `puppeteer` to 24.43, whose types drop `networkidle0` for
+  `page.setContent` (`PuppeteerCaptureService.ts`). It is held at 24.40.0 until the capture code is
+  adapted.
+
+## First install — no guided wizard yet
+
+`docs/specs/FIRST_INSTALL_SETUP_SPEC.md` (status: Planned) describes a `/install` wizard. It does not
+exist: the first superadmin is created by registering and promoting the account with `mongosh`
+(`install.sh` prints the command; see `docs/guides/LOCAL_DOCKER_START.md`). No verification e-mail
+is sent either, so with `AUTH_BYPASS_EMAIL_VERIFICATION=false` every later account waits for a
+superadmin to mark it verified in `/admin/users`.
+
+## Deploy stack — MongoDB without authentication
+
+Both compose files run MongoDB without authentication. Since 2026-11-25 every non-nginx port is
+bound to `127.0.0.1`, which keeps it private on a single host; a shared or multi-host setup should
+add `MONGO_INITDB_ROOT_*` and credentials in `MONGODB_URI`. In domain mode the stack still mounts
+`nginx/sites-enabled/local.conf` (see "two CSPs" below, item 2).
+
 ## Admin — LLM Model Console (`/admin/models`)
 
 Reported by the account owner during production use, 2026-08-28.
@@ -44,23 +77,21 @@ Root cause found and mitigated 2026-08-31 (see `docs/guides/GITFLOW_RELEASE_POLI
 deploy-critical files" for why the fix isn't a normal PR).
 
 - Some published artifacts had `/p/media/:assetId` baked into their stored HTML as a **relative**
-  URL instead of an absolute `https://api.sitowebinun.click/p/media/:assetId` one — a symptom of
+  URL instead of an absolute `https://api.<your-domain>/p/media/:assetId` one — a symptom of
   `PUBLIC_API_BASE_URL` being unset or wrong at the moment that specific project's HTML was
   generated (`ResolveAndPersistHtmlImages.ts:36`, `assetPublicUrl()`). Because the URL is
   persisted, not recomputed, fixing today's env value does not retroactively repair already-baked
   artifacts.
-- A live scan of production (`data/www/*/index.html` on the droplet, 2026-08-31) found **10 of 88**
-  published sites affected: `533f3b31`, `5864d85d`, `6c84b195`, `a92ec46d`, `ae299aaf`, `b0db29be`,
-  `b35f5b65`, `b56ad1bd`, `creative-coding-26`, `d4286322`.
-- **Mitigated**, not root-caused: added a `location /p/media/ { proxy_pass ...; }` block to the
-  wildcard-subdomain vhost (`nginx/sites-enabled/andy-code-cat.conf`, section 3b) so a relative
+- A scan of one production installation (`data/www/*/index.html`, 2026-08-31) found **10 of 88**
+  published sites affected.
+- **Mitigated**, not root-caused: add a `location /p/media/ { proxy_pass ...; }` block to the
+  wildcard-subdomain vhost of the production nginx (a host-specific, untracked file) so a relative
   `/p/media/:id` request now reaches the API instead of silently falling through to the SPA
   `index.html` fallback (previously: 200 text/html for every path, including binary asset
-  requests — no console/network error, images just never decoded). Deployed live to `docker-2`
-  and verified (`curl` against `a92ec46d.sitowebinun.click/p/media/...` now returns the real
-  `image/jpeg`, not the index page). This file is gitignored from the public repo on purpose
-  (see `docs/guides/GITFLOW_RELEASE_POLICY.md`), so the change is not visible as a normal commit
-  here — it is recorded there instead.
+  requests — no console/network error, images just never decoded). Verify with `curl` against
+  `<publishId>.<your-domain>/p/media/<assetId>`: it must return the real image type, not the index
+  page. Production vhosts are not tracked in this repository (see
+  `docs/guides/GITFLOW_RELEASE_POLICY.md`).
 - **Still open**: no startup-time guard exists to catch `PUBLIC_API_BASE_URL` being unset/wrong
   again before it bakes a bad URL into new artifacts. Worth a fail-fast check in
   `apps/api/src/config.ts` (reject boot in `production` if the var is unset, rather than silently
@@ -78,8 +109,8 @@ Found 2026-09-11 from a user report: an A-Frame site worked in preview and faile
 `EvalError … 'unsafe-eval' is not an allowed source of script`, then `AFRAME is not defined`.
 
 - A published site is reachable two ways with **different** headers. The public subdomain is
-  served statically by nginx from the droplet's hand-written wildcard vhost (gitignored
-  `nginx/sites-enabled/andy-code-cat.conf`); `/p/:publishId/` is served by the API with
+  served statically by nginx from a hand-written wildcard vhost on the production host
+  (untracked); `/p/:publishId/` is served by the API with
   `PUBLISHED_PAGE_CSP` (`publishRoutes.ts`). The API's policy allowed `'unsafe-eval'`; nginx's did
   not. Preview runs under no CSP, so nothing surfaced before publishing.
 - It was not only A-Frame. A survey of the live sites found **every Alpine.js site** broken on the
@@ -91,16 +122,15 @@ Found 2026-09-11 from a user report: an A-Frame site worked in preview and faile
   site with exactly the errors it had before. `'unsafe-eval'` adds little exposure here: the policy
   already allows `'unsafe-inline'` and any `https:` script, and the isolation that matters is the
   separate origin.
-- The private remote the rule in `GITFLOW_RELEASE_POLICY.md` requires is **not configured on the
-  current workstation**, so the edit is not yet committed anywhere. The workstation's gitignored
-  copy was synced to the live file (hash-verified) so a deploy from it does not revert the fix.
+- If you run a hand-written publish vhost, apply the same directive there and keep the file under
+  your own private version control (see `GITFLOW_RELEASE_POLICY.md`).
 
 **For the cumulative fix** (not done yet):
 
 1. Version the wildcard publish vhost as a domain-parameterised template in the repo, with the CSP
    defined once and shared with `PUBLISHED_PAGE_CSP` — `install.sh` does not generate a publish
    vhost at all today, so a fresh domain install serves published sites only under `/p/`.
-2. Stop shipping `nginx/sites-enabled/local.conf` to the droplet. Deploys copy it and `nginx.conf`
+2. Stop shipping `nginx/sites-enabled/local.conf` to production hosts. Deploys copy it and `nginx.conf`
    includes `sites-enabled/*.conf`, so production answers `Host: localhost` over plain HTTP,
    outside the `/v1/auth/` rate limit the production vhost applies.
 3. In the publish vhost, the `location ~* \.(css|js|…)$` block sets its own `add_header`, which in

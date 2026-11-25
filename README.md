@@ -6,14 +6,15 @@
 > Turn a plain-language idea into a production-ready website with chat refinement, visual editing, export, and publish flows built in.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)](https://nodejs.org)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/Docker-required-blue)](https://docs.docker.com)
 
 ---
 
 > **Status: beta.** Used in production, still moving: APIs and the data model can change between
-> releases. The current release is in [`RELEASE_VERSION`](RELEASE_VERSION).
+> releases. The current release is in [`RELEASE_VERSION`](RELEASE_VERSION); what changed is in the
+> [release notes](docs/releases/RELEASE_NOTES.md).
 
 ## What Andy Code Cat Helps You Do
 
@@ -56,8 +57,9 @@ packages/
   contracts/  Shared Zod schemas and API contracts
 ```
 
-Supporting services: **MongoDB**, **MinIO** (object storage), **Redis**, and **nginx** as the
-reverse proxy.
+Supporting services: **MongoDB**, **nginx** as the reverse proxy, a background **worker** for
+detached generation runs, and optional **MinIO** object storage (files are stored on local disk
+by default).
 
 Start from [AGENTS.md](AGENTS.md) and [docs/INDEX.md](docs/INDEX.md) for the full repository contract and documentation map.
 
@@ -100,8 +102,11 @@ CERTBOT_EMAIL="admin@yourdomain.com"
 SILICONFLOW_API_KEY="sk-..."
 ```
 
-> **Domain mode prerequisite:** before running the script, create two DNS A records pointing to your server:
-> `@` → `<server-IP>` and `*` → `<server-IP>`. Wait for propagation (~5 min).
+> **Domain mode prerequisite:** before running the script, create DNS A records for `app` and
+> `api` pointing to your server, and wait for propagation. Ports 80 and 443 must reach the server
+> (certificates are issued with the HTTP-01 challenge). A wildcard record (`*`) is needed only if
+> you later switch published sites to subdomain addresses — see
+> [docs/guides/PUBLISHED_SITE_ADDRESSES.md](docs/guides/PUBLISHED_SITE_ADDRESSES.md).
 
 ### Step 2 — Run the installer
 
@@ -112,17 +117,30 @@ bash install.sh
 The script generates secrets, builds Docker images, starts all containers, and (in domain mode)
 obtains SSL certificates automatically via Let's Encrypt. It prints the URL at the end.
 
-### Step 3 — Complete the setup wizard
+### Step 3 — Create the first superadmin
 
-Open the URL printed by the installer (e.g. `http://localhost/install`) and follow the
-4-step wizard to:
+A fresh installation has no administrator. The installer prints these steps at the end:
 
-1. Create the first superadmin account
-2. Set the public domain and registration policy
-3. (Optional) Configure custom MinIO storage
-4. Review and confirm — the wizard locks permanently after this step
+1. Register an account at `/register` (e.g. `http://localhost/register`).
+2. Verify and promote it from the server:
 
-After the wizard completes, log in at `/login`.
+   ```bash
+   docker exec andy-code-cat-mongodb mongosh andy-code-cat --quiet --eval \
+     'db.users.updateOne({ email: "you@example.com" }, { $set: { roles: ["superadmin"], emailVerified: true } })'
+   ```
+
+3. Log in at `/login` and open `/admin` to review models, limits and the published-site address.
+
+No verification e-mail is sent: accounts registered later can log in once a superadmin marks them
+verified in `/admin/users`. A guided `/install` wizard is planned
+([spec](docs/specs/FIRST_INSTALL_SETUP_SPEC.md)) but not implemented yet.
+
+### Network exposure
+
+Only nginx listens on public interfaces. MongoDB, the API, the web server and MinIO are bound to
+`127.0.0.1`; keep it that way — MongoDB runs without authentication inside the stack, and Docker
+bypasses host firewalls such as ufw. See
+[docs/security/SECURITY_BASELINE.md](docs/security/SECURITY_BASELINE.md).
 
 ---
 
@@ -138,7 +156,8 @@ I want to deploy Andy Code Cat locally using Docker.
 
 1. Open `install.sh` and set MODE="local" and SILICONFLOW_API_KEY="<my-key>".
 2. Run `bash install.sh` and confirm it completes without errors.
-3. Open http://localhost/install and tell me when the setup wizard is ready.
+3. Open http://localhost/register, register my account, then promote it to superadmin with the
+   mongosh command install.sh prints at the end.
 
 My SiliconFlow API key: <paste key here>
 ```
@@ -153,9 +172,11 @@ I want to deploy Andy Code Cat on this server with HTTPS.
    - DOMAIN="<my-domain>"
    - CERTBOT_EMAIL="<my-email>"
    - SILICONFLOW_API_KEY="<my-key>"
-2. Confirm that DNS A records for @ and * point to this server's public IP.
+2. Confirm that DNS A records for app.<my-domain> and api.<my-domain> point to this server's
+   public IP, and that ports 80 and 443 reach it.
 3. Run `bash install.sh` and confirm certificates are issued.
-4. Open https://app.<my-domain>/install and tell me when the setup wizard is ready.
+4. Tell me when https://app.<my-domain>/register is reachable, then promote my account to
+   superadmin with the mongosh command install.sh prints at the end.
 
 Domain: <my-domain>
 Server IP: <IP>
@@ -207,11 +228,12 @@ so they spend real money.
 | Variable | Required | Description |
 | --- | --- | --- |
 | `SILICONFLOW_API_KEY` | One of the two | SiliconFlow LLM API key |
-| `OPEN_ROUTER_API_KEY` | One of the two | OpenRouter LLM API key |
+| `OPEN_ROUTER_API_KEY` | One of the two | OpenRouter LLM API key (`OPENROUTER_API_KEY` in the `install.sh` configuration block) |
 | `DOMAIN` | Domain mode only | Base domain (e.g. `example.com`) |
 | `CERTBOT_EMAIL` | Domain mode only | Email for Let's Encrypt |
 
-All other secrets (JWT, export token) are generated automatically by the installer.
+All other secrets (JWT, export token, MinIO credentials) are generated automatically by the
+installer. The default LLM provider follows the key you set.
 Full variable reference: [`.env.deploy.example`](.env.deploy.example).
 
 ---
@@ -221,10 +243,11 @@ Full variable reference: [`.env.deploy.example`](.env.deploy.example).
 | Entry point | Purpose |
 | --- | --- |
 | [docs/INDEX.md](docs/INDEX.md) | Full documentation index |
+| [docs/releases/RELEASE_NOTES.md](docs/releases/RELEASE_NOTES.md) | Release notes, newest first |
+| [SECURITY.md](SECURITY.md) | How to report a vulnerability |
 | [docs/agents/CODE_AGENT_INDEX.md](docs/agents/CODE_AGENT_INDEX.md) | Agent-oriented codebase map |
 | [docs/architecture/BOOTSTRAP_ARCHITECTURE.md](docs/architecture/BOOTSTRAP_ARCHITECTURE.md) | Platform structure and runtime overview |
 | [docs/specs/](docs/specs/) | Technical and feature specifications |
-| [docs/handoff/SESSION_RESUME.md](docs/handoff/SESSION_RESUME.md) | Latest working state, measured findings, open issues |
 | [docs/guides/](docs/guides/) | Operational guides and policies |
 | [docs/runbooks/](docs/runbooks/) | Validation and hardening runbooks |
 
