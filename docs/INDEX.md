@@ -114,6 +114,7 @@ Read in this order before making changes:
 | Document | Description |
 | --- | --- |
 | [docs/specs/EXPORT_AND_PUBLISH_SPEC.md](specs/EXPORT_AND_PUBLISH_SPEC.md) | ZIP export and web publishing model |
+| [docs/specs/PROJECT_DATA_PANEL.md](specs/PROJECT_DATA_PANEL.md) | Owner's project data panel: every record a platform capability stored (leaderboards, …) — browse, JSON view, delete, typed-confirmation clear, JSON/CSV export; the capability contract and how to add one |
 | [docs/specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md](specs/GENERATION_PROGRESS_INSPECTOR_PLAN.md) | **Proposed, not implemented** — why the first generation feels silent, and an incremental plan for real progress events and an inspector panel |
 | [docs/specs/SESSION_INSPECTOR_SPEC.md](specs/SESSION_INSPECTOR_SPEC.md) | **Feature B, ready to implement** — the Prompt view becomes three collapsible blocks (Vibe / Zero Effort / Generation) reading only what the database already owns |
 | [docs/specs/PROMPT_LAYER_REDUNDANCY_ANALYSIS.md](specs/PROMPT_LAYER_REDUNDANCY_ANALYSIS.md) | **Feature C** — measured on real runs: no literal redundancy exists, 25% of the prompt is static boilerplate that caching handles for free, and the question worth asking instead |

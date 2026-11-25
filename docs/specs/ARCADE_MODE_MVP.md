@@ -103,7 +103,10 @@ First persistent capability of the platform runtime, built as
   authentication and the project sandbox, and the path must name the sandboxed project;
 - strict input: player 1–16 letters, digits, spaces or `. _ -`; integer score 0–1e9; unknown
   fields rejected; writes rate-limited; each board keeps its best 500 entries;
-- `boardId` defaults to `default`; a game may have several boards later (speedrun, daily…).
+- `boardId` defaults to `default`; a game may have several boards later (speedrun, daily…);
+- the owner browses, exports and clears boards from the project data panel, and the boards are
+  purged with their project through the same registry
+  ([PROJECT_DATA_PANEL.md](PROJECT_DATA_PANEL.md)).
 
 Scores are written by the project owner's Arcade session only. A score comes from code running in
 the browser, so it can always be forged by its own player; that is acceptable for a home console

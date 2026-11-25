@@ -97,6 +97,10 @@ apps/api/src/
     PublishProject.ts / UnpublishProject.ts
     RegenerateMediaByKey.ts ← regenerates keyed artifact media from persisted MediaResolutionTrace
 
+  application/projectData/   ← owner's data panel over every record-storing capability (docs/specs/PROJECT_DATA_PANEL.md)
+    ProjectDataRegistry.ts / ManageProjectData.ts / projectDataCsv.ts / LeaderboardProjectData.ts
+    (wired once in composition/composeProjectData.ts; DeleteProject purges through the same registry)
+
   application/media/
     ResolveArtifactMedia.ts  ← validates mediaManifest, resolves asset://media keys, persists ProjectAsset + MediaResolutionTrace
     assertResolvedMediaPlaceholders.ts ← publish/export/snapshot activation unresolved-media guard
