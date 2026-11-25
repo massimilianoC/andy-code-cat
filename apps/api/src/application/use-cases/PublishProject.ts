@@ -323,6 +323,7 @@ export class PublishProject {
             serviceManifest: snapshot.serviceManifest,
             formSettings: input.formSettings,
             delivery: "external-files",
+            publishId,
         });
         const rawProcessed = postProcess(formRuntime.artifacts);
         const processed = {
@@ -419,6 +420,7 @@ export class PublishProject {
             serviceManifest,
             formSettings,
             delivery: "external-files",
+            publishId: existing.publishId,
         });
         const rawProcessed = postProcess(formRuntime.artifacts);
         const processed = {

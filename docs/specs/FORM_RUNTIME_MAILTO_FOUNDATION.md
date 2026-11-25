@@ -75,7 +75,8 @@ configuration, not an LLM artifact editor or a required generation step.
   binding through the existing double sandbox.
 - The LLM never receives recipient or privacy contact values.
 - No anonymous public endpoint, SMTP relay, capture database, webhook, or arbitrary URL is
-  enabled in v1.
+  enabled by the mailto mode. The `capture` mode, its public submit path and `form_submissions`
+  are specified in [Forms Capture](FORMS_CAPTURE.md).
 - Future `smtp`, `capture`, or external adapters must implement the typed delivery interface and be
   registered explicitly in the application layer; they also require a hardened public router.
   They must not change the manifest into executable instructions or

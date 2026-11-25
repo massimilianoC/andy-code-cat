@@ -11,7 +11,7 @@ export const runtimeAssetSchema = z.object({
 
 export const runtimeCapabilitySchema = z.object({
     id: z.enum(["forms"]),
-    mode: z.enum(["mailto"]),
+    mode: z.enum(["mailto", "capture"]),
     manifestVersion: z.literal("service-manifest-v1"),
 }).strict();
 

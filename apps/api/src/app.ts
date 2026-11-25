@@ -62,13 +62,18 @@ export function createApp() {
     app.use(helmet());
     app.use(cors(corsOptions));
     app.options("*", cors(corsOptions));
-    app.use(express.json({ limit: "8mb" }));
     app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
 
     // Publish routes are created up-front so the PUBLIC check-slug router can be
     // mounted before any router that applies a global authMiddleware. The auth-protected
     // apiRouter and the static /p router are mounted later, at their normal positions.
-    const { apiRouter: publishApi, staticRouter: publishStatic, publicRouter: publishPublic, siteRouter: publishSites } = createPublishRoutes();
+    const { apiRouter: publishApi, staticRouter: publishStatic, publicRouter: publishPublic, siteRouter: publishSites, formSubmitRouter: publishFormSubmit } = createPublishRoutes();
+
+    // Public capture submit (POST /p/:publishId/_pf/forms/:formId/submit). Before the global JSON
+    // parser so its own 16 KB body limit applies, not the 8 MB one (docs/specs/FORMS_CAPTURE.md).
+    app.use("/p", publishFormSubmit);
+
+    app.use(express.json({ limit: "8mb" }));
 
     app.use("/", createHealthRoutes());
     app.use("/v1/auth", createAuthRoutes());

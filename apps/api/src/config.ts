@@ -94,6 +94,9 @@ const envSchema = z.object({
     MEDIA_CLASSIFIER_MODEL: z.string().default("heuristic-media-classifier-v1"),
     EXPORT_JWT_SECRET: z.string().min(16).default("change-me-export-secret-32chars!!"),
     EXPORT_DOWNLOAD_TTL: z.string().default("3600"),
+    // Salt of the IP hash stored with captured form submissions (FORMS_CAPTURE.md). Optional:
+    // when unset it is derived from EXPORT_JWT_SECRET. Changing it only affects new submissions.
+    FORM_IP_HASH_SALT: z.string().optional(),
     UPLOAD_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
     // ── Document Context Layer (DCL) enrichment ───────────────────────────────
     ENRICHMENT_ENABLED: z.string().default("true"),
