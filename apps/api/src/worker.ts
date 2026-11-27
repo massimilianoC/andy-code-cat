@@ -19,6 +19,9 @@ import { backgroundRunLimitsReader } from "./application/background/backgroundRu
 import { MongoPlatformConfigRepository } from "./infra/repositories/MongoPlatformConfigRepository";
 import { SystemNotifier } from "./application/services/SystemNotifier";
 import { MongoSystemNotificationRepository } from "./infra/repositories/MongoSystemNotificationRepository";
+import { installProcessSafetyNet } from "./composition/processSafetyNet";
+
+installProcessSafetyNet("background-worker");
 
 /** Touched on every loop turn; the container health check fails when it goes stale. */
 export const WORKER_ALIVE_FILE = "/tmp/background-worker.alive";
