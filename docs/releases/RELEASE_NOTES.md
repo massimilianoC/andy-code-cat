@@ -35,6 +35,15 @@ database.
 
 ---
 
+## 2026.11.28.1 — Hotfix
+
+- **Security:** a request with a malformed `x-project-id` header could stop the API process
+  (an unhandled rejection in the project sandbox middleware). Malformed ids are now refused with
+  403 before they reach the database, and database failures there go to the error handler.
+  **Every installation should take this release.**
+
+---
+
 ## 2026.11.25.7 — Hotfix
 
 - **The API image of 2026.11.25.6 does not start** (`MODULE_NOT_FOUND: puppeteer`): a dependency

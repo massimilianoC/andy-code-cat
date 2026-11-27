@@ -2,6 +2,16 @@ import type { NextFunction, Response } from "express";
 import type { ProjectRepository } from "../../../domain/repositories/ProjectRepository";
 import type { RequestWithContext } from "../types";
 
+/** Project ids are MongoDB ObjectIds: 24 hex characters. Anything else names no project. */
+const PROJECT_ID_PATTERN = /^[0-9a-f]{24}$/i;
+
+/**
+ * Resolves `x-project-id` to a project the caller owns, or refuses the request.
+ *
+ * Express 4 does not catch a rejected promise from an async middleware: an error thrown here would
+ * be an unhandled rejection, which ends the Node process. A malformed id is therefore refused before
+ * it reaches the database driver (which throws on it), and any other failure goes to `next(error)`.
+ */
 export function createSandboxMiddleware(projectRepository: ProjectRepository) {
     return async function sandboxMiddleware(
         req: RequestWithContext,
@@ -19,7 +29,18 @@ export function createSandboxMiddleware(projectRepository: ProjectRepository) {
             return;
         }
 
-        const project = await projectRepository.findByIdForUser(projectId, req.auth.userId);
+        if (!PROJECT_ID_PATTERN.test(projectId)) {
+            res.status(403).json({ error: "Project not accessible for current user" });
+            return;
+        }
+
+        let project;
+        try {
+            project = await projectRepository.findByIdForUser(projectId, req.auth.userId);
+        } catch (error) {
+            next(error);
+            return;
+        }
         if (!project) {
             res.status(403).json({ error: "Project not accessible for current user" });
             return;
