@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { pipeFileToResponse } from "../pipeFileToResponse";
 import { setAuthenticatedUserFileHeaders } from "../security/userFileHeaders";
 import multer from "multer";
 import { randomUUID } from "crypto";
@@ -402,8 +403,7 @@ export function createUserProfileRoutes(): Router {
             res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(asset.originalName ?? asset.storedFilename)}"`);
             setAuthenticatedUserFileHeaders(res, asset.mimeType);
             if (actualSize > 0) res.setHeader("Content-Length", actualSize);
-            const stream = await brandStorage.createReadStream(filePath);
-            stream.pipe(res);
+            pipeFileToResponse(await brandStorage.createReadStream(filePath), res, `brand asset ${asset.id}`);
         } catch (err) {
             next(err);
         }

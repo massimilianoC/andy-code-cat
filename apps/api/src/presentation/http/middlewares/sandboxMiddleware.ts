@@ -6,7 +6,8 @@ import type { RequestWithContext } from "../types";
 const PROJECT_ID_PATTERN = /^[0-9a-f]{24}$/i;
 
 /**
- * Resolves `x-project-id` to a project the caller owns, or refuses the request.
+ * Resolves `x-project-id` to a project the caller owns, or refuses the request. When the route has
+ * a `:projectId` path parameter it must name the same project as the header.
  *
  * Express 4 does not catch a rejected promise from an async middleware: an error thrown here would
  * be an unhandled rejection, which ends the Node process. A malformed id is therefore refused before
@@ -31,6 +32,15 @@ export function createSandboxMiddleware(projectRepository: ProjectRepository) {
 
         if (!PROJECT_ID_PATTERN.test(projectId)) {
             res.status(403).json({ error: "Project not accessible for current user" });
+            return;
+        }
+
+        // A route that names its project in the path acts on that project only when it is the one
+        // the header resolved. Refused, never substituted: otherwise a handler reading the path
+        // would act on a project the ownership check never looked at.
+        const pathProjectId = req.params?.projectId;
+        if (typeof pathProjectId === "string" && pathProjectId.toLowerCase() !== projectId.toLowerCase()) {
+            res.status(403).json({ error: "Project not accessible for current user", code: "PROJECT_SCOPE_MISMATCH" });
             return;
         }
 

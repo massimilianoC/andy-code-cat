@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { pipeFileToResponse } from "../pipeFileToResponse";
 import { setAuthenticatedUserFileHeaders } from "../security/userFileHeaders";
 import multer from "multer";
 import { authMiddleware } from "../middlewares/authMiddleware";
@@ -780,8 +781,7 @@ export function createProjectAssetRoutes(): Router {
                 if (actualSize > 0) {
                     res.setHeader("Content-Length", actualSize);
                 }
-                const stream = await storage.createReadStream(filePath);
-                stream.pipe(res);
+                pipeFileToResponse(await storage.createReadStream(filePath), res, `asset ${asset.id}`);
             } catch (error) {
                 next(error);
             }
@@ -1011,8 +1011,7 @@ export function createProjectAssetRoutes(): Router {
                 res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(asset.originalName ?? asset.storedFilename)}"`);
                 setAuthenticatedUserFileHeaders(res, asset.mimeType);
                 if (actualSize > 0) res.setHeader("Content-Length", actualSize);
-                const stream = await storage.createReadStream(filePath);
-                stream.pipe(res);
+                pipeFileToResponse(await storage.createReadStream(filePath), res, `asset ${asset.id}`);
             } catch (err) {
                 next(err);
             }
