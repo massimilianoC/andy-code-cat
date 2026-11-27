@@ -24,6 +24,9 @@ database.
   and recent players, back buttons on every screen, full screen and a rotate hint, a toast when a
   game being forged is ready. The notification bell is hidden in the Arcade.
 - `GET /v1/leaderboards/summary`: the best score of each of the caller's games in one request.
+- **Forms on phones:** the right keyboard and autofill per field type, 16px inputs and 44px touch
+  targets, focus and scroll on each step, it/en runtime messages, an offline notice and a 20 s
+  submit timeout. See [FORMS_CAPTURE.md](../specs/FORMS_CAPTURE.md).
 
 ### Upgrade notes
 

@@ -45,7 +45,7 @@ function fakeForm(): FakeForm {
 }
 
 /** Runs the browser module in a bare VM context with just the globals it touches. */
-function loadCaptureAdapter(source: string, fetchImpl: (url: string, init: { body: string }) => Promise<unknown>) {
+function loadCaptureAdapter(source: string, fetchImpl: (url: string, init: { body: string; signal?: { addEventListener(type: string, fn: () => void): void } }) => Promise<unknown>, globals: Record<string, unknown> = {}) {
     const adapters = new Map<string, { deliver(context: Record<string, unknown>): Promise<void> }>();
     const requests: Array<{ url: string; body: unknown }> = [];
     const window = {
@@ -61,6 +61,7 @@ function loadCaptureAdapter(source: string, fetchImpl: (url: string, init: { bod
             requests.push({ url, body: JSON.parse(init.body) });
             return fetchImpl(url, init);
         },
+        ...globals,
     });
     return { adapter: adapters.get("capture")!, requests };
 }
@@ -158,5 +159,43 @@ describe("capture form runtime selection", () => {
         const unknown = { ...capture, mode: "relay" } as unknown as typeof capture;
         expect(() => prepareArtifactServices({ artifacts, serviceManifest: manifest, formSettings: unknown, delivery: "external-files" }))
             .toThrow("Unsupported form runtime mode 'relay'");
+    });
+
+    it("does not send while the device is offline, and keeps the answers in the form", async () => {
+        const result = prepareArtifactServices({ artifacts, serviceManifest: manifest, formSettings: capture, delivery: "external-files", publishId: "ab12cd34" });
+        const harness = loadCaptureAdapter(result.runtimeFiles["pf-forms-capture.v1.js"]!, async () => ({ status: 201 }), { navigator: { onLine: false } });
+        const statuses: string[] = [];
+        const form = fakeForm();
+        await harness.adapter.deliver({
+            form, definition: { id: "contact", fields: [{ id: "email", type: "email" }] }, values: new Map([["email", "ada@example.com"]]),
+            settings: { submitUrls: { contact: "/p/ab12cd34/_pf/forms/contact/submit" } }, showStatus: (m: string) => statuses.push(m), emit: () => true,
+        });
+        expect(harness.requests).toEqual([]);
+        expect(statuses.at(-1)).toContain("offline");
+        expect(form.attributes["data-pf-state"]).toBe("error");
+        expect(form.resetCalls).toBe(0);
+    });
+
+    it("gives up after the timeout instead of staying busy, and says the outcome is unknown", async () => {
+        const result = prepareArtifactServices({ artifacts, serviceManifest: manifest, formSettings: capture, delivery: "external-files", publishId: "ab12cd34" });
+        class FakeAbortController {
+            listeners: Array<() => void> = [];
+            signal = { addEventListener: (_type: string, fn: () => void) => { this.listeners.push(fn); } };
+            abort() { this.listeners.forEach((fn) => fn()); }
+        }
+        const harness = loadCaptureAdapter(
+            result.runtimeFiles["pf-forms-capture.v1.js"]!,
+            (_url, init) => new Promise((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new Error("aborted")))),
+            { AbortController: FakeAbortController, setTimeout: (fn: () => void) => { queueMicrotask(fn); return 1; }, clearTimeout: () => undefined },
+        );
+        const statuses: string[] = [];
+        const form = fakeForm();
+        await harness.adapter.deliver({
+            form, definition: { id: "contact", fields: [{ id: "email", type: "email" }] }, values: new Map([["email", "ada@example.com"]]),
+            settings: { submitUrls: { contact: "/p/ab12cd34/_pf/forms/contact/submit" } }, showStatus: (m: string) => statuses.push(m), emit: () => true,
+        });
+        expect(statuses.at(-1)).toContain("troppo lenta"); // page without lang: Italian messages
+        expect(form.attributes["aria-busy"]).toBe("false");
+        expect(form.attributes["data-pf-state"]).toBe("error");
     });
 });
