@@ -1,8 +1,17 @@
 import { setUserRolesSchema } from "@andy-code-cat/contracts";
 import type { UserRepository } from "../../../domain/repositories/UserRepository";
+import type { SessionRepository } from "../../../domain/repositories/SessionRepository";
 
+/**
+ * Changes an account's roles. They take effect on the next request (authMiddleware reads roles
+ * from the account record); the account's sessions are revoked so it signs in again with tokens
+ * that state the new roles.
+ */
 export class SetUserRole {
-    constructor(private readonly userRepository: UserRepository) {}
+    constructor(
+        private readonly userRepository: UserRepository,
+        private readonly sessionRepository: Pick<SessionRepository, "deleteAllByUserId">,
+    ) {}
 
     async execute(targetUserId: string, callerUserId: string, rawInput: unknown) {
         if (targetUserId === callerUserId) {
@@ -17,6 +26,7 @@ export class SetUserRole {
         }
 
         await this.userRepository.setRoles(targetUserId, roles as ("user" | "admin" | "superadmin")[]);
+        await this.sessionRepository.deleteAllByUserId(targetUserId);
         return { userId: targetUserId, roles };
     }
 }

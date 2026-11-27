@@ -134,7 +134,7 @@ export function createAdminRoutes(): Router {
     const listUsers = new ListUsers(userRepo);
     const getUserDetail = new GetUserDetail(userRepo, projectRepo);
     const blockUser = new BlockUser(userRepo, sessionRepo);
-    const setUserRole = new SetUserRole(userRepo);
+    const setUserRole = new SetUserRole(userRepo, sessionRepo);
     const adminCreateUser = new AdminCreateUser(userRepo);
     const setUserLimits = new SetUserLimits(userRepo);
     const deleteUser = composeDeleteUser();
