@@ -25,4 +25,14 @@ describe("arcade playability contract", () => {
             expect(ARCADE_PLAYABILITY_MODULE).toContain(fragment);
         }
     });
+
+    it("delegates touch, layout, pause and haptics to the Arcade SDK instead of hand-written code", () => {
+        for (const fragment of ["ARCADE SDK", "AndyArcade.configure({ touch, buttons, orientation })", "never write touch controls",
+            "AndyArcade.fit(canvas, width, height)", "AndyArcade.on(\"pause\"", "AndyArcade.vibrate", "if (window.AndyArcade)", "Enter, and Space too"]) {
+            expect(ARCADE_PLAYABILITY_MODULE).toContain(fragment);
+        }
+        for (const id of ARCADE_PRESETS) {
+            expect(PRESET_MAP.get(id)?.outputSpec.systemPromptModule ?? "", id).not.toContain("aggiungi touch se naturale");
+        }
+    });
 });

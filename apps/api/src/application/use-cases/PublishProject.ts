@@ -13,6 +13,7 @@ import { assertNoUnresolvedMediaPlaceholders, UnresolvedMediaPlaceholderError } 
 import { SystemNotifier } from "../services/SystemNotifier";
 import { buildPublishedDatasetBindingPackage } from "../datasets/PublishedDatasetBindings";
 import { repairArtifactsForVisibility } from "../llm/artifactSafetyRepair";
+import { injectArcadeRuntime, usesArcadeSdk } from "@andy-code-cat/contracts";
 
 // ---------------------------------------------------------------------------
 // Artifact post-processing (same logic as ExportLayer1Zip, minimal version)
@@ -344,6 +345,9 @@ export class PublishProject {
             }
         }
         html = normalizePublishedMediaUrls(html);
+        // A game that uses the Arcade SDK gets it on its published site too (docs/specs/ARCADE_SDK.md):
+        // touch controls, page lock, canvas fit and audio unlock work the same as on the console.
+        if (usesArcadeSdk(html, processed.js)) html = injectArcadeRuntime(html);
 
         // 6. Write files to /data/www/{publishId}/
         const files: Record<string, string> = { "index.html": html };
@@ -441,6 +445,9 @@ export class PublishProject {
             }
         }
         html = normalizePublishedMediaUrls(html);
+        // A game that uses the Arcade SDK gets it on its published site too (docs/specs/ARCADE_SDK.md):
+        // touch controls, page lock, canvas fit and audio unlock work the same as on the console.
+        if (usesArcadeSdk(html, processed.js)) html = injectArcadeRuntime(html);
 
         const files: Record<string, string> = { "index.html": html };
         if (processed.css) files["style.css"] = processed.css;

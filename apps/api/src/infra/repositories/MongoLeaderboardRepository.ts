@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { Collection, Filter } from "mongodb";
 import { getDb } from "../db/mongo";
-import type { LeaderboardBoardSummary, LeaderboardEntry, LeaderboardProjectScope, LeaderboardScope } from "../../domain/entities/LeaderboardEntry";
+import type { LeaderboardBoardSummary, LeaderboardEntry, LeaderboardProjectBest, LeaderboardProjectScope, LeaderboardScope } from "../../domain/entities/LeaderboardEntry";
 import type { LeaderboardEntryListQuery, LeaderboardRepository } from "../../domain/repositories/LeaderboardRepository";
 
 /**
@@ -97,6 +97,16 @@ export class MongoLeaderboardRepository implements LeaderboardRepository {
         if (!cutoff.length) return 0;
         const result = await col.deleteMany({ ...scopeFilter(scope), _id: { $in: cutoff.map((doc) => doc._id) } });
         return result.deletedCount;
+    }
+
+    async bestPerProject(ownerUserId: string, boardId: string): Promise<LeaderboardProjectBest[]> {
+        const col = await this.col();
+        const rows = await col.aggregate<{ _id: string; entries: number; best: LeaderboardDocument }>([
+            { $match: { ownerUserId, boardId } },
+            { $sort: { projectId: 1, score: -1, createdAt: 1 } },
+            { $group: { _id: "$projectId", entries: { $sum: 1 }, best: { $first: "$$ROOT" } } },
+        ]).toArray();
+        return rows.map((row) => ({ projectId: row._id, boardId, entries: row.entries, best: toEntity(row.best) }));
     }
 
     async boards(scope: LeaderboardProjectScope): Promise<LeaderboardBoardSummary[]> {

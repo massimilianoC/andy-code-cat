@@ -10,6 +10,28 @@ database.
 
 ---
 
+## Unreleased — Arcade on phones
+
+### Features
+
+- **Arcade SDK v2** (`window.AndyArcade`): generated games call `configure({ touch, buttons,
+  orientation })` and the platform draws the touch controls (d-pad, joystick, swipe or tap), locks
+  the page against scrolling and zoom, fits the canvas to any screen, unlocks audio, and sends
+  pause/resume and haptics. Injected in the Arcade, in the workspace preview and on published
+  sites of games that use it. See [ARCADE_SDK.md](../specs/ARCADE_SDK.md).
+- **Arcade on phones:** pause menu (⏸, SELECT, double Escape), shelf with best scores and a 🏆
+  leaderboard on every game (tap, long-press or gamepad X), score entry with letter wheels, keypad
+  and recent players, back buttons on every screen, full screen and a rotate hint, a toast when a
+  game being forged is ready. The notification bell is hidden in the Arcade.
+- `GET /v1/leaderboards/summary`: the best score of each of the caller's games in one request.
+
+### Upgrade notes
+
+- **Reseed presets** (`docs/runbooks/PRESET_RESEED.md`): the game playability block now tells the
+  model to use the Arcade SDK instead of hand-written touch controls.
+
+---
+
 ## 2026.11.25.7 — Hotfix
 
 - **The API image of 2026.11.25.6 does not start** (`MODULE_NOT_FOUND: puppeteer`): a dependency

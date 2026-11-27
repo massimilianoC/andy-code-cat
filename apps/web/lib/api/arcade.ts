@@ -1,4 +1,4 @@
-import type { LeaderboardEntryDto, LeaderboardSubmitResultDto, SubmitLeaderboardScoreInput } from "@andy-code-cat/contracts";
+import type { LeaderboardEntryDto, LeaderboardProjectSummaryDto, LeaderboardSubmitResultDto, SubmitLeaderboardScoreInput } from "@andy-code-cat/contracts";
 import { call } from "./call";
 import type { PreviewSnapshot } from "./snapshots";
 
@@ -29,5 +29,15 @@ export function submitLeaderboardScore(token: string, projectId: string, input: 
         `/v1/projects/${projectId}/leaderboard`,
         input,
         headers(token, projectId),
+    );
+}
+
+/** Best score of every game of the caller, for the shelf: one request instead of one per game. */
+export function getLeaderboardSummary(token: string, boardId = "default") {
+    return call<{ boardId: string; games: LeaderboardProjectSummaryDto[] }>(
+        "GET",
+        `/v1/leaderboards/summary?boardId=${encodeURIComponent(boardId)}`,
+        undefined,
+        { Authorization: `Bearer ${token}` },
     );
 }

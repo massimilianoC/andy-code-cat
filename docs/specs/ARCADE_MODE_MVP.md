@@ -21,7 +21,7 @@ platform capability (leaderboards). §7 explains how to build another mode the s
 | Part | Where |
 |---|---|
 | Console shell: shelf, play, new game, controls | `apps/web/app/arcade/page.tsx` |
-| Game runtime injected into the game document | `apps/web/lib/arcade/arcadeRuntime.ts` |
+| Game runtime (Arcade SDK) injected into the game document | `packages/contracts/src/arcade.ts`, see [ARCADE_SDK.md](ARCADE_SDK.md) |
 | Gamepad → actions → keys, remapping | `apps/web/lib/arcade/gamepad.ts` |
 | New-game wheels and prompt | `apps/web/lib/arcade/arcadeRecipe.ts` |
 | Playability contract in the game presets | `ARCADE_PLAYABILITY_MODULE` in `apps/api/src/domain/entities/ProjectPreset.ts` |
@@ -59,7 +59,9 @@ the app's storage or session tokens.
 - Key messages from the shell become `keydown`/`keyup` events inside the game, with `key`, `code`,
   `keyCode` and `which` set. A game written only for the keyboard is therefore playable with a
   controller without knowing one exists.
-- Escape pressed twice within 600 ms asks the shell to go back to the shelf.
+- Escape pressed twice within 600 ms opens the shell's pause menu.
+- Since v2 the runtime is the **Arcade SDK**: touch controls, gestures, page lock, canvas fit,
+  pause events, haptics and audio unlock. See [ARCADE_SDK.md](ARCADE_SDK.md).
 
 The **shell** reads controllers (Gamepad API, polled every animation frame in the top-level page —
 not inside the sandbox) and maps them:
@@ -72,7 +74,7 @@ not inside the sandbox) and maps them:
 | X | K | button 2 |
 | Y | P (pause) | button 3 |
 | START | Enter | button 9 |
-| SELECT | — (back to the shelf) | button 8, Home 16 |
+| SELECT | — (pause menu) | button 8, Home 16 |
 
 Controllers with a non-standard layout (cheap USB encoders, DIY boards on RP2040 or Arduino
 acting as HID) are remapped in **Controls**: the wizard asks for each action in turn and stores
@@ -138,7 +140,18 @@ and is why there is no anonymous write path yet.
    WebAudio stays suspended until a real key or click reaches the game frame. Add a "press any key
    or click to start" hand-off in the shell.
 
-### TODO — play while the next game is forging
+### Done — mobile and touch (branch `feat/arcade-mobile-sdk`)
+
+Arcade SDK v2 with platform touch controls; pause menu (⏸, SELECT, double Escape); "game ready"
+toast while playing; shelf for phones (recently played first, NEW badge, best score and 🏆 on each
+cartridge, long-press for the leaderboard); score entry with wheels, keypad and recent players;
+back buttons on every screen; full screen and orientation hint. Details in [ARCADE_SDK.md](ARCADE_SDK.md).
+
+Still open: games made before the SDK keep their own touch controls (or none) and six of the seven
+on the reference shelf never call `submitScore`, so they show no leaderboard — a one-click "make it
+Arcade-ready" edit run is the planned fix.
+
+### TODO — play while the next game is forging (partly done: pause menu and ready toast)
 
 Today a game started from **New game** shows a progress bar on the shelf (polled every 8 s, also
 while a game is open), but nothing tells the player when it lands. Planned:

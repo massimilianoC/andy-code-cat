@@ -1,3 +1,4 @@
+import { injectArcadeRuntime, usesArcadeSdk } from "@andy-code-cat/contracts";
 const TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com/3.4.17"><\/script>';
 const TAILWIND_CLASS_RE = /class=["'][^"']*(?:flex|grid|py-|px-|text-|bg-|font-|rounded|shadow|container|mx-auto)/i;
 // Match only LOCAL placeholder stylesheet/script references (not CDN URLs starting with http/https//)
@@ -18,7 +19,17 @@ function ensureTailwind(doc: string): string {
     return doc;
 }
 
+/**
+ * Builds the previewed document. A game that calls `window.AndyArcade` also gets the Arcade SDK
+ * (packages/contracts/src/arcade.ts), so it previews in the workspace exactly as it plays on the
+ * console and on its published site.
+ */
 export function buildPreviewDoc(html: string, css: string, js: string, rawResponse?: string): PreviewResult {
+    const result = buildPreviewDocInner(html, css, js, rawResponse);
+    return result.doc && usesArcadeSdk(html, js) ? { ...result, doc: injectArcadeRuntime(result.doc) } : result;
+}
+
+function buildPreviewDocInner(html: string, css: string, js: string, rawResponse?: string): PreviewResult {
     const isFullDoc = /<!doctype/i.test(html) || /<html[\s>]/i.test(html);
 
     if (isFullDoc) {
