@@ -6,17 +6,13 @@ import { SeedLlmCatalog } from "./application/use-cases/SeedLlmCatalog";
 import { GetLlmCatalog } from "./application/use-cases/GetLlmCatalog";
 import { GetEffectiveLlmCatalog } from "./application/use-cases/GetEffectiveLlmCatalog";
 import { ReconcileLlmCatalogAvailability } from "./application/use-cases/ReconcileLlmCatalogAvailability";
-import { MongoProjectAssetRepository } from "./infra/repositories/MongoProjectAssetRepository";
-import { MongoExportRepository } from "./infra/repositories/MongoExportRepository";
-import { MongoSiteDeploymentRepository } from "./infra/repositories/MongoSiteDeploymentRepository";
+import { ensureDatabaseIndexes } from "./infra/db/ensureDatabaseIndexes";
 
 async function bootstrap() {
     await getDb();
 
-    // Ensure MongoDB indexes for new collections
-    await new MongoProjectAssetRepository().ensureIndexes();
-    await new MongoExportRepository().ensureIndexes();
-    await new MongoSiteDeploymentRepository().ensureIndexes();
+    // One step for every index the code relies on; a failure is reported, never fatal.
+    await ensureDatabaseIndexes(await getDb());
 
     if (env.LLM_CATALOG_SOURCE === "mongo" && env.llmAutoSeedOnStartup) {
         const repository = new MongoLlmCatalogRepository();
