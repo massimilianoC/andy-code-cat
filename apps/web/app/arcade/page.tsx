@@ -620,6 +620,30 @@ export default function ArcadePage() {
     // Leaving the page (browser back) must not leave the device in fullscreen.
     useEffect(() => () => { void leaveFullscreen(); }, []);
 
+    // The phone's back button (or the browser's) goes back to the shelf from a game or a menu,
+    // instead of leaving the Arcade: one history entry stands for "away from the shelf".
+    const awayEntry = useRef(false);
+    const goBackRef = useRef<() => void>(() => undefined);
+    goBackRef.current = () => { if (view === "play") backToLibrary(); else { setSheet(null); setView("library"); } };
+    useEffect(() => {
+        if (view !== "library" && !awayEntry.current) {
+            window.history.pushState({ andyArcade: "away" }, "");
+            awayEntry.current = true;
+        } else if (view === "library" && awayEntry.current) {
+            awayEntry.current = false;
+            window.history.back(); // consume our own entry; the popstate below ignores it
+        }
+    }, [view]);
+    useEffect(() => {
+        const onPop = () => {
+            if (!awayEntry.current) return;
+            awayEntry.current = false;
+            goBackRef.current();
+        };
+        window.addEventListener("popstate", onPop);
+        return () => window.removeEventListener("popstate", onPop);
+    }, []);
+
     const now = Date.now();
     const readyProject = ready ? projects.find((project) => project.id === ready.projectId) : undefined;
     const needsRotation = view === "play" && touch && portrait && gameConfig?.orientation === "landscape" && !rotateDismissed && !paused && pendingScore === null && !sheet;
