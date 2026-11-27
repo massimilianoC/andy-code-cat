@@ -12,6 +12,58 @@ marking it done in place — this file is a queue, not a changelog.
 
 ---
 
+## Security hardening — open items (review of 2026-11-28)
+
+Found by the 2026-11-28 security review and not closed by the fixes that followed it. Each needs
+its own change and, where noted, an operator decision.
+
+- **Page capture runs untrusted HTML in an unrestricted browser.** The thumbnail/PDF capture
+  (`infra/capture/PuppeteerCaptureService.ts`) starts Chromium without its sandbox and loads
+  snapshot HTML with JavaScript on and no request filtering, inside the API container, which runs
+  as root and holds every secret. Needed: request interception allowing only public `http(s)`
+  addresses, Chromium's own sandbox under a non-root image user, a time and memory ceiling per
+  capture, and ideally a separate capture container with no secrets and no database access.
+- **Production accepts placeholder secrets and a wildcard CORS origin.** `config.ts` only warns
+  when `JWT_*`/`EXPORT_JWT_SECRET` are short or equal to the example values, or `CORS_ORIGIN` is
+  `*`. `install.sh` generates proper values, a hand-copied `.env.example` does not. Needed: refuse
+  to start in production on a known placeholder, a secret shorter than 32 characters, equal JWT
+  secrets or a wildcard origin (one shared placeholder list with `.env.example`); validate the ids
+  inside download tokens before building a path; pin `algorithms: ["HS256"]` on every
+  `jwt.verify`. Check the live environment before shipping, or the API will not restart.
+- **MongoDB authentication** — see "Deploy stack — MongoDB without authentication" below; also an
+  application user with `readWrite` on its own database only, and encrypted backups with a tested
+  restore.
+- **One origin for every site in path mode.** All `/p/{publishId}/` and `/{slug}/` sites share one
+  origin and a permissive CSP, so one site's script can reach another's storage and submit its
+  forms. Today no credential lives there; before any SDK keeps a token or private state on a site,
+  give each site its own subdomain or serve pages with `CSP: sandbox allow-scripts allow-forms
+  allow-popups` (and a submit binding that does not rely on `Origin`). See "two CSPs" below.
+- **Rate limits are per process and per IP.** Counters live in memory and reset on restart; users
+  behind one NAT share a budget. Key authenticated routes by user id, use a shared store if the API
+  ever runs more than one instance, set `X-Forwarded-Host` explicitly in every vhost, and verify on
+  each server that `req.ip` is the client address and not a header the client can supply.
+- **Web app surface.** `next` 14 and `xlsx` (see "Dependencies" below); the unused GrapesJS
+  component and dependency; no CSP on the app (at least `script-src 'self'`, `frame-ancestors
+  'self'`, `object-src 'none'`); access and refresh tokens in `localStorage` — consider a refresh
+  token in an `HttpOnly; Secure; SameSite=Strict` cookie scoped to `/v1/auth`.
+- **Session binding of access tokens.** Roles are now read from the account record on every
+  request and a role change revokes the sessions, but an access token stays valid until it expires
+  (2 h) after a password change, reset or session revocation: its `sid` is not checked, and there is
+  no server-side logout route. Checking `sid` costs one session read per request and, because
+  refresh rotates the token id, would also invalidate in-flight requests of other tabs at every
+  refresh: it needs a design (a session id that does not rotate, kept separate from the refresh
+  token id) before it is switched on.
+- **Public media of unpublished projects.** `/p/media/:assetId` now serves only images, video and
+  audio, but still any such asset by id, published or not: workspace previews (sandboxed frames
+  without credentials) load media from it. Restricting it to assets of live deployments needs a
+  credential-free alternative for previews first (for example short-lived signed URLs).
+- **Form quota refusal.** A submission past the quota answers `FORM_RATE_LIMITED`; a dedicated
+  code in `packages/contracts` and a notice to the owner when a project nears its quota are still to
+  do. Anyone who can reach a site can fill its quota, as with the per-site rate limit; a proof of
+  interaction issued with the page would raise the cost.
+- **Didactic Q&A listing** filters by project only; adding the owner to the repository filter would
+  make it independent of the route check.
+
 ## Dependencies — advisories that need a major upgrade
 
 Measured with `npm audit --omit=dev` on 2026-11-25, after `npm audit fix` (non-breaking) brought
