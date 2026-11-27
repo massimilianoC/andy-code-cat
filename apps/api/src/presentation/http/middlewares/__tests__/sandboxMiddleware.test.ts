@@ -3,9 +3,9 @@ import type { ProjectRepository } from "../../../../domain/repositories/ProjectR
 import { createSandboxMiddleware } from "../sandboxMiddleware";
 import type { RequestWithContext } from "../../types";
 
-function run(projectId: string, repository: Partial<ProjectRepository>) {
+function run(projectId: string, repository: Partial<ProjectRepository>, params: Record<string, string> = {}) {
     const middleware = createSandboxMiddleware(repository as ProjectRepository);
-    const req = { auth: { userId: "64b000000000000000000001" }, headers: { "x-project-id": projectId } } as unknown as RequestWithContext;
+    const req = { auth: { userId: "64b000000000000000000001" }, headers: { "x-project-id": projectId }, params } as unknown as RequestWithContext;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() };
     const next = vi.fn();
     return { done: middleware(req, res as never, next), req, res, next };
@@ -32,6 +32,24 @@ describe("sandboxMiddleware", () => {
 
     it("sets the sandbox for a project the caller owns", async () => {
         const { done, req, next } = run("64B0000000000000000000AA", { findByIdForUser: vi.fn().mockResolvedValue({ id: "64b0000000000000000000aa" }) });
+        await done;
+        expect(req.sandbox).toEqual({ projectId: "64b0000000000000000000aa" });
+        expect(next).toHaveBeenCalledWith();
+    });
+
+    it("refuses a path project that differs from the header project, before any lookup", async () => {
+        const findByIdForUser = vi.fn().mockResolvedValue({ id: "64b0000000000000000000aa" });
+        const { done, req, res, next } = run("64b0000000000000000000aa", { findByIdForUser }, { projectId: "64b0000000000000000000bb" });
+        await done;
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: "PROJECT_SCOPE_MISMATCH" }));
+        expect(req.sandbox).toBeUndefined();
+        expect(next).not.toHaveBeenCalled();
+        expect(findByIdForUser).not.toHaveBeenCalled();
+    });
+
+    it("accepts a path project equal to the header project", async () => {
+        const { done, req, next } = run("64b0000000000000000000aa", { findByIdForUser: vi.fn().mockResolvedValue({ id: "64b0000000000000000000aa" }) }, { projectId: "64B0000000000000000000AA" });
         await done;
         expect(req.sandbox).toEqual({ projectId: "64b0000000000000000000aa" });
         expect(next).toHaveBeenCalledWith();
