@@ -10,6 +10,19 @@ database.
 
 ---
 
+## 2026.11.28.2 — Security hotfix
+
+- **Security:** published-site file serving answers only for regular files inside the site's own
+  folder, and a read error on any file sent to a client can no longer stop the API process.
+- **Security:** a route that names a project in its path now requires it to be the project the
+  request is authorised for (`403 PROJECT_SCOPE_MISMATCH` otherwise), enforced once in the project
+  sandbox middleware.
+- The API and the background worker log stray promise rejections instead of stopping, and exit
+  cleanly (for the container to restart) on an uncaught exception.
+- **Every installation should take this release** (it includes 2026.11.28.1).
+
+---
+
 ## 2026.11.28.1 — Hotfix
 
 - **Security:** a request with a malformed `x-project-id` header could stop the API process

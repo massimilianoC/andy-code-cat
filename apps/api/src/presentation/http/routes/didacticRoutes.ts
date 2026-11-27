@@ -136,6 +136,8 @@ export function createDidacticRoutes(): Router {
     });
 
     // Scope auth + sandbox to the didactic project namespace so unrelated /v1 routes can fall through.
+    // The sandbox refuses a path project that differs from x-project-id; the handlers act on the
+    // sandboxed project only.
     router.use("/projects/:projectId/didactic", didacticLimiter, authMiddleware, sandbox);
 
     const knowledgeRepo = new MongoDidacticArtifactKnowledgeRepository();
@@ -146,7 +148,7 @@ export function createDidacticRoutes(): Router {
     // GET /v1/projects/:projectId/didactic/knowledge?snapshotId=...
     router.get("/projects/:projectId/didactic/knowledge", async (req: RequestWithContext, res, next) => {
         try {
-            const projectId = z.string().min(1).parse(req.params.projectId);
+            const projectId = req.sandbox!.projectId;
             const snapshotId = z.string().min(1).parse(req.query.snapshotId);
             const snapshot = await snapshotRepo.findById(projectId, snapshotId);
             if (!snapshot || snapshot.projectId !== projectId) {
@@ -164,7 +166,7 @@ export function createDidacticRoutes(): Router {
     // POST /v1/projects/:projectId/didactic/knowledge/generate
     router.post("/projects/:projectId/didactic/knowledge/generate", async (req: RequestWithContext, res, next) => {
         try {
-            const projectId = z.string().min(1).parse(req.params.projectId);
+            const projectId = req.sandbox!.projectId;
             const body = generateDidacticKnowledgeSchema.parse(req.body);
             const snapshot = await snapshotRepo.findById(projectId, body.snapshotId);
             if (!snapshot || snapshot.projectId !== projectId) {
@@ -201,7 +203,7 @@ export function createDidacticRoutes(): Router {
     // POST /v1/projects/:projectId/didactic/ask/stream
     router.post("/projects/:projectId/didactic/ask/stream", async (req: RequestWithContext, res, next) => {
         try {
-            const projectId = z.string().min(1).parse(req.params.projectId);
+            const projectId = req.sandbox!.projectId;
             const body = askDidacticQuestionSchema.parse(req.body);
             const snapshot = await snapshotRepo.findById(projectId, body.snapshotId);
             if (!snapshot || snapshot.projectId !== projectId) {
@@ -316,7 +318,7 @@ export function createDidacticRoutes(): Router {
     // GET /v1/projects/:projectId/didactic/qna
     router.get("/projects/:projectId/didactic/qna", async (req: RequestWithContext, res, next) => {
         try {
-            const projectId = z.string().min(1).parse(req.params.projectId);
+            const projectId = req.sandbox!.projectId;
             const useCase = new ListDidacticQna(qnaRepo);
             const entries = await useCase.execute({ projectId });
             res.json({

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { pipeFileToResponse } from "../pipeFileToResponse";
 import { setPublicUserFileHeaders } from "../security/userFileHeaders";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { getFileStorage } from "../../../infra/storage/StorageFactory";
@@ -69,8 +70,7 @@ export function createPublicMediaRoutes(): Router {
                 res.setHeader("Content-Length", actualSize);
             }
 
-            const stream = await storage.createReadStream(filePath);
-            stream.pipe(res);
+            pipeFileToResponse(await storage.createReadStream(filePath), res, `media ${asset.id}`);
         } catch (error) {
             next(error);
         }

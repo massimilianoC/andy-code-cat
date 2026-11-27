@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pipeFileToResponse } from "../pipeFileToResponse";
 import { Router } from "express";
 import { setAuthenticatedUserFileHeaders } from "../security/userFileHeaders";
 import { adminDraftProjectTemplateSchema, adminLlmModelActivationSchema, adminLlmModelPatchSchema, adminProjectPresetPatchSchema, adminSeedLlmRegistrySchema, adminSeedPresetRegistrySchema, createBrandAssetTextSchema, promoteBrandAssetSchema, updateBrandAssetSchema } from "@andy-code-cat/contracts";
@@ -1064,8 +1065,7 @@ export function createAdminRoutes(): Router {
             res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(asset.originalName ?? asset.storedFilename)}"`);
             setAuthenticatedUserFileHeaders(res, asset.mimeType);
             if (actualSize > 0) res.setHeader("Content-Length", actualSize);
-            const stream = await brandStorage.createReadStream(filePath);
-            stream.pipe(res);
+            pipeFileToResponse(await brandStorage.createReadStream(filePath), res, `platform brand asset ${asset.id}`);
         } catch (err) {
             next(err);
         }

@@ -9,6 +9,9 @@ import { ReconcileLlmCatalogAvailability } from "./application/use-cases/Reconci
 import { MongoProjectAssetRepository } from "./infra/repositories/MongoProjectAssetRepository";
 import { MongoExportRepository } from "./infra/repositories/MongoExportRepository";
 import { MongoSiteDeploymentRepository } from "./infra/repositories/MongoSiteDeploymentRepository";
+import { installProcessSafetyNet } from "./composition/processSafetyNet";
+
+installProcessSafetyNet("api");
 
 async function bootstrap() {
     await getDb();
