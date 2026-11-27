@@ -96,6 +96,11 @@ describe("project leaderboard", () => {
         expect((await request(app).get(`/v1/projects/${gameA}/leaderboard`)).status).toBe(401);
     });
 
+    it("refuses a malformed project id with 403 and keeps serving (it used to be an unhandled rejection)", async () => {
+        expect((await as(owner, "not-an-object-id").get(`/v1/projects/not-an-object-id/leaderboard`)).status).toBe(403);
+        expect((await as(owner, gameA).get(`/v1/projects/${gameA}/leaderboard`)).status).toBe(200);
+    });
+
     it("validates player names, scores and unknown fields", async () => {
         const api = as(owner, gameA);
         for (const body of [
