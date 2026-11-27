@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { env } from "../../config";
 import { MongoProjectAssetRepository } from "../repositories/MongoProjectAssetRepository";
 import { MongoExportRepository } from "../repositories/MongoExportRepository";
 import { MongoSiteDeploymentRepository } from "../repositories/MongoSiteDeploymentRepository";
@@ -67,6 +68,23 @@ async function ensureIndex(name: string, run: () => Promise<unknown>): Promise<I
 }
 
 /**
+ * Submissions stored before retention existed have no `expiresAt`, so the TTL index never removes
+ * them. They are dated from their own `createdAt` with the configured retention.
+ */
+export async function backfillFormSubmissionExpiry(db: Db, retentionDays: number): Promise<number> {
+    const col = db.collection("form_submissions");
+    await col.createIndex({ expiresAt: 1 }, { name: "form_submissions_retention", expireAfterSeconds: 0 });
+    const result = await col.updateMany(
+        { expiresAt: { $exists: false } },
+        [{ $set: { expiresAt: { $add: [{ $ifNull: ["$createdAt", "$$NOW"] }, retentionDays * 24 * 60 * 60 * 1000] } } }],
+    );
+    if (result.modifiedCount > 0) {
+        console.log(`[db-indexes] form_submissions: ${result.modifiedCount} record(s) given a retention date`);
+    }
+    return result.modifiedCount;
+}
+
+/**
  * The one boot step that guarantees the database indexes.
  *
  * Invariants that the code relies on are enforced here by the database: one account per email
@@ -90,6 +108,7 @@ export async function ensureDatabaseIndexes(db: Db): Promise<IndexReport[]> {
     reports.push(await ensureIndex("export_records", () => new MongoExportRepository().ensureIndexes()));
     reports.push(await ensureIndex("site_deployments", () => new MongoSiteDeploymentRepository().ensureIndexes()));
     reports.push(await ensureIndex("background_runs", () => new MongoBackgroundRunRepository().ensureIndexes()));
+    reports.push(await ensureIndex("form_submissions_retention", () => backfillFormSubmissionExpiry(db, env.FORM_SUBMISSION_RETENTION_DAYS)));
 
     for (const report of reports) {
         if (report.status === "skipped_duplicates") {

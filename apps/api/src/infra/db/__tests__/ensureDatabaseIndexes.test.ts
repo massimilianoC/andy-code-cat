@@ -87,4 +87,19 @@ describe("ensureDatabaseIndexes", () => {
         expect(errorLog).toHaveBeenCalledWith(expect.stringContaining("users_email_unique NOT created"), expect.anything());
         errorLog.mockRestore();
     });
+
+    it("dates form submissions stored before retention existed, leaving dated ones alone", async () => {
+        const createdAt = new Date("2026-01-01T00:00:00Z");
+        const dated = new Date("2030-01-01T00:00:00Z");
+        await db.collection<{ _id: string }>("form_submissions").insertMany([
+            { _id: "old", createdAt, fields: {} } as never,
+            { _id: "new", createdAt, expiresAt: dated, fields: {} } as never,
+        ]);
+        const { backfillFormSubmissionExpiry } = await import("../ensureDatabaseIndexes");
+        expect(await backfillFormSubmissionExpiry(db, 30)).toBe(1);
+        const old = await db.collection<{ _id: string; expiresAt: Date }>("form_submissions").findOne({ _id: "old" });
+        expect(old?.expiresAt.toISOString()).toBe("2026-01-31T00:00:00.000Z");
+        const kept = await db.collection<{ _id: string; expiresAt: Date }>("form_submissions").findOne({ _id: "new" });
+        expect(kept?.expiresAt.toISOString()).toBe(dated.toISOString());
+    });
 });

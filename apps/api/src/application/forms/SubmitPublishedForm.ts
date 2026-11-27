@@ -5,7 +5,10 @@ import type { ProjectRepository } from "../../domain/repositories/ProjectReposit
 import type { SiteDeploymentRepository } from "../../domain/repositories/SiteDeploymentRepository";
 import type { UserRepository } from "../../domain/repositories/UserRepository";
 import type { FormSubmissionRepository } from "../../domain/repositories/FormSubmissionRepository";
+import type { FormSubmissionQuota } from "../../domain/entities/FormSubmission";
 import { validateFormSubmission } from "./FormSubmissionValidator";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Same shape as the published-site publishId (publishRoutes PUBLISH_ID_RE). */
 const PUBLISH_ID_RE = /^[a-z0-9]{6,12}$/;
@@ -43,7 +46,8 @@ export interface SubmitPublishedFormInput {
  *
  *   publishId → live deployment → not admin-blocked → owner exists and is not blocked
  *             → project owned by that owner → form settings enabled in capture mode
- *             → the deployed snapshot's manifest declares formId → fields validate against it.
+ *             → the deployed snapshot's manifest declares formId → fields validate against it
+ *             → the form and the project are under their quota.
  *
  * The request contributes the publishId and formId it is addressed to, and field values; nothing
  * else. A refusal carries a code and, for validation, issues without values.
@@ -54,8 +58,11 @@ export class SubmitPublishedForm {
         users: Pick<UserRepository, "findById">;
         projects: Pick<ProjectRepository, "findById">;
         snapshots: Pick<PreviewSnapshotRepository, "findById">;
-        submissions: Pick<FormSubmissionRepository, "create">;
+        submissions: Pick<FormSubmissionRepository, "create" | "usage">;
         ipHashSalt: string;
+        quota: FormSubmissionQuota;
+        retentionDays: number;
+        now?: () => Date;
     }) { }
 
     async execute(input: SubmitPublishedFormInput): Promise<SubmitPublishedFormResult> {
@@ -95,8 +102,19 @@ export class SubmitPublishedForm {
         const validation = validateFormSubmission(form, input.fields);
         if (!validation.ok) return refuse(400, "FORM_SUBMISSION_INVALID", validation.issues);
 
+        // Quota: a project's storage is bounded per form and per project, in records and bytes. A
+        // submission past it is refused (and logged for the owner's operator), never stored.
+        const scope = { ownerUserId: deployment.userId, projectId: deployment.projectId, formId: form.id };
+        const usage = await this.deps.submissions.usage(scope);
+        const { quota } = this.deps;
+        if (usage.formRecords >= quota.maxPerForm || usage.projectRecords >= quota.maxPerProject || usage.projectBytes >= quota.maxBytesPerProject) {
+            console.warn("[forms] submission refused: quota reached", { projectId: deployment.projectId, formId: form.id, ...usage });
+            return refuse(429, "FORM_RATE_LIMITED");
+        }
+
+        const now = this.deps.now?.() ?? new Date();
         const stored = await this.deps.submissions.create(
-            { ownerUserId: deployment.userId, projectId: deployment.projectId, formId: form.id },
+            scope,
             {
                 publishId: deployment.publishId,
                 snapshotId: deployment.snapshotId,
@@ -104,6 +122,7 @@ export class SubmitPublishedForm {
                 privacyNoticeVersion: settings.privacyNotice.version,
                 ipHash: hashSubmitterIp(this.deps.ipHashSalt, input.ip),
             },
+            new Date(now.getTime() + this.deps.retentionDays * DAY_MS),
         );
         return { outcome: "stored", submissionId: stored.id };
     }

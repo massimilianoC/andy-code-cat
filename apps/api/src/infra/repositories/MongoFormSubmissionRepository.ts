@@ -7,6 +7,7 @@ import type {
     FormSubmissionListQuery,
     FormSubmissionProjectScope,
     FormSubmissionScope,
+    FormSubmissionUsage,
     NewFormSubmission,
 } from "../../domain/entities/FormSubmission";
 import type { FormSubmissionRepository } from "../../domain/repositories/FormSubmissionRepository";
@@ -65,10 +66,11 @@ export class MongoFormSubmissionRepository implements FormSubmissionRepository {
     private async col(): Promise<Collection<FormSubmissionDocument>> {
         const db = await getDb();
         const col = db.collection<FormSubmissionDocument>(COLLECTION);
-        indexesReady ??= col.createIndex(
-            { ownerUserId: 1, projectId: 1, formId: 1, createdAt: -1 },
-            { name: "form_submissions_scope_created" },
-        ).catch((error) => {
+        indexesReady ??= Promise.all([
+            col.createIndex({ ownerUserId: 1, projectId: 1, formId: 1, createdAt: -1 }, { name: "form_submissions_scope_created" }),
+            // Retention: MongoDB removes each record once its expiresAt has passed.
+            col.createIndex({ expiresAt: 1 }, { name: "form_submissions_retention", expireAfterSeconds: 0 }),
+        ]).catch((error) => {
             indexesReady = null;
             throw error;
         });
@@ -76,8 +78,9 @@ export class MongoFormSubmissionRepository implements FormSubmissionRepository {
         return col;
     }
 
-    async create(scope: FormSubmissionScope, submission: NewFormSubmission): Promise<FormSubmission> {
+    async create(scope: FormSubmissionScope, submission: NewFormSubmission, expiresAt: Date): Promise<FormSubmission> {
         const col = await this.col();
+        const fields = { ...submission.fields };
         const doc: FormSubmissionDocument = {
             _id: randomUUID(),
             ownerUserId: scope.ownerUserId,
@@ -85,13 +88,28 @@ export class MongoFormSubmissionRepository implements FormSubmissionRepository {
             formId: scope.formId,
             publishId: submission.publishId,
             snapshotId: submission.snapshotId,
-            fields: { ...submission.fields },
+            fields,
             privacyNoticeVersion: submission.privacyNoticeVersion,
             ipHash: submission.ipHash,
             createdAt: new Date(),
+            expiresAt,
+            sizeBytes: Buffer.byteLength(JSON.stringify(fields), "utf8"),
         };
         await col.insertOne(doc);
         return toEntity(doc);
+    }
+
+    async usage(scope: FormSubmissionScope): Promise<FormSubmissionUsage> {
+        const col = await this.col();
+        const [formRecords, totals] = await Promise.all([
+            col.countDocuments(projectFilter(scope, scope.formId)),
+            col.aggregate<{ records: number; bytes: number }>([
+                { $match: projectFilter(scope) },
+                // Records stored before sizes were kept count with the BSON size of their fields.
+                { $group: { _id: null, records: { $sum: 1 }, bytes: { $sum: { $ifNull: ["$sizeBytes", { $ifNull: [{ $bsonSize: "$fields" }, 0] }] } } } },
+            ]).toArray(),
+        ]);
+        return { formRecords, projectRecords: totals[0]?.records ?? 0, projectBytes: totals[0]?.bytes ?? 0 };
     }
 
     async groups(scope: FormSubmissionProjectScope): Promise<FormSubmissionGroup[]> {

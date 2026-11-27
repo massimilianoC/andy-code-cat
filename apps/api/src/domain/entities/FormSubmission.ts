@@ -31,6 +31,23 @@ export interface NewFormSubmission {
 export interface FormSubmission extends FormSubmissionScope, NewFormSubmission {
     id: string;
     createdAt: Date;
+    /** When the record is removed (retention). Absent only on records stored before retention existed. */
+    expiresAt?: Date;
+    /** Stored size of the field values, in bytes (quota accounting). */
+    sizeBytes?: number;
+}
+
+/** What a project and one of its forms currently hold, for the quota check. */
+export interface FormSubmissionUsage {
+    formRecords: number;
+    projectRecords: number;
+    projectBytes: number;
+}
+
+export interface FormSubmissionQuota {
+    maxPerForm: number;
+    maxPerProject: number;
+    maxBytesPerProject: number;
 }
 
 export interface FormSubmissionGroup {

@@ -626,6 +626,12 @@ export function createPublishRoutes() {
             snapshots: new MongoPreviewSnapshotRepository(),
             submissions: new MongoFormSubmissionRepository(),
             ipHashSalt: resolveFormIpHashSalt(env),
+            quota: {
+                maxPerForm: env.FORM_SUBMISSIONS_MAX_PER_FORM,
+                maxPerProject: env.FORM_SUBMISSIONS_MAX_PER_PROJECT,
+                maxBytesPerProject: env.FORM_SUBMISSIONS_MAX_BYTES_PER_PROJECT,
+            },
+            retentionDays: env.FORM_SUBMISSION_RETENTION_DAYS,
         }),
         isSiteHost,
     });
