@@ -6,4 +6,7 @@ export interface DidacticQnaRepository {
 
     /** Insert a new Q&A entry. */
     insert(entry: DidacticQnaEntry): Promise<DidacticQnaEntry>;
+
+    /** Remove every Q&A entry of a project (project deletion). */
+    deleteByProject(projectId: string): Promise<number>;
 }

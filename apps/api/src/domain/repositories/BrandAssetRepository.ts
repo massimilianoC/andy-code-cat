@@ -9,4 +9,9 @@ export interface BrandAssetRepository {
     create(input: CreateBrandAssetInput): Promise<BrandAsset>;
     update(id: string, patch: UpdateBrandAssetInput): Promise<BrandAsset>;
     delete(id: string): Promise<boolean>;
+
+    /** Remove the project-scope brand assets of a project (project deletion). */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
+    /** Remove every brand asset an account owns, any scope (account deletion). */
+    deleteByUser(userId: string): Promise<number>;
 }

@@ -10,4 +10,7 @@ export interface LlmPromptConfigRepository {
             prePromptTemplate: string;
         }
     ): Promise<LlmPromptConfig>;
+
+    /** Remove the prompt configuration of a project (project deletion). */
+    deleteByProjectId(projectId: string): Promise<number>;
 }

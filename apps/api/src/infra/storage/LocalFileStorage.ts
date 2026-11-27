@@ -28,6 +28,15 @@ function profilesRoot(): string {
     return path.join(dataRoot(), "profiles");
 }
 
+/** Ids used as path segments by the bulk removals: never empty, never a separator or "..". */
+const PATH_SEGMENT = /^[A-Za-z0-9_-]+$/;
+
+function assertPathSegment(kind: string, value: string): void {
+    if (!PATH_SEGMENT.test(value)) {
+        throw Object.assign(new Error(`Refusing to remove files for an invalid ${kind}`), { statusCode: 500 });
+    }
+}
+
 export class LocalFileStorage implements IFileStorage {
     /** Absolute path for a user+project upload directory. */
     uploadDirPath(userId: string, projectId: string): string {
@@ -288,6 +297,37 @@ export class LocalFileStorage implements IFileStorage {
         } catch (err: unknown) {
             if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Bulk removal — project and account deletion
+    // -----------------------------------------------------------------------
+
+    async deleteProjectFiles(userId: string, projectId: string): Promise<void> {
+        assertPathSegment("user id", userId);
+        assertPathSegment("project id", projectId);
+        await Promise.all([
+            fs.rm(path.join(uploadsRoot(), userId, projectId), { recursive: true, force: true }),
+            fs.rm(path.join(exportsRoot(), userId, projectId), { recursive: true, force: true }),
+            fs.rm(path.join(workspacesRoot(), userId, projectId), { recursive: true, force: true }),
+            fs.rm(path.join(this.thumbnailsRoot(), projectId), { recursive: true, force: true }),
+        ]);
+        // Dataset caches live in the owner's profile folder, one file per dataset asset.
+        const profileDir = this.profileDirPath(userId);
+        let names: string[] = [];
+        try {
+            names = await fs.readdir(profileDir);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+        const prefix = `dataset-cache-${projectId}-`;
+        await Promise.all(names.filter((name) => name.startsWith(prefix)).map((name) => fs.rm(path.join(profileDir, name), { force: true })));
+    }
+
+    async deleteUserFiles(userId: string): Promise<void> {
+        assertPathSegment("user id", userId);
+        await Promise.all([uploadsRoot(), exportsRoot(), workspacesRoot(), profilesRoot()].map((root) =>
+            fs.rm(path.join(root, userId), { recursive: true, force: true })));
     }
 
     // -----------------------------------------------------------------------

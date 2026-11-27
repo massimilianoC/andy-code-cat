@@ -187,10 +187,12 @@ describe("published sites and user files — security regressions", () => {
             expect(bySlug.text).toContain("My site live"); // the publishId directory, not the slug copy
         });
 
-        it("keeps serving a live site whose owner account no longer exists (not a suspension)", async () => {
-            const res = await request(app).get("/orfano/");
-            expect(res.status).toBe(200);
-            expect(res.text).toContain("Orphan owner");
+        it("does not serve a site whose owner account no longer exists, on either address", async () => {
+            for (const p of ["/orfano/", "/p/ab12ab12/", "/p/ab12ab12/style.css"]) {
+                const res = await request(app).get(p);
+                expect(res.status, p).toBe(410);
+                expect(res.text, p).not.toContain("Orphan owner");
+            }
         });
 
         it("keeps a suspended site and a blocked owner's site unreachable on both addresses", async () => {

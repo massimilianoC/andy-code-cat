@@ -96,4 +96,7 @@ export interface ProjectAssetRepository {
             semanticMetadata: AssetSemanticMetadata;
         }>
     ): Promise<ProjectAsset | null>;
+
+    /** Remove every asset row an account owns, library assets included (account deletion). */
+    deleteByUser(userId: string): Promise<number>;
 }

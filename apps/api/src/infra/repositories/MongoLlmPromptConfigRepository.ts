@@ -75,4 +75,11 @@ export class MongoLlmPromptConfigRepository implements LlmPromptConfigRepository
 
         return toEntity(doc);
     }
+
+    /** Remove the prompt configuration of a project (project deletion). */
+    async deleteByProjectId(projectId: string): Promise<number> {
+        const collection = await this.collection();
+        const result = await collection.deleteMany({ projectId });
+        return result.deletedCount ?? 0;
+    }
 }

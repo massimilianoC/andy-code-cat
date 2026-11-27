@@ -74,4 +74,11 @@ export class MongoDidacticQnaRepository implements DidacticQnaRepository {
         await col.insertOne(doc);
         return toEntity(doc);
     }
+
+    /** Remove every Q&A entry of a project (project deletion). */
+    async deleteByProject(projectId: string): Promise<number> {
+        const col = await this.collection();
+        const result = await col.deleteMany({ projectId });
+        return result.deletedCount ?? 0;
+    }
 }

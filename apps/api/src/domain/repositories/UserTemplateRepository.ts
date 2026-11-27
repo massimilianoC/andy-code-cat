@@ -13,4 +13,7 @@ export interface UserTemplateRepository {
     /** Superadmin only: set isSystem=true and make visible tenant-wide. */
     promoteToSystem(id: string): Promise<void>;
     incrementUsage(id: string): Promise<void>;
+
+    /** Remove an account's own templates; templates promoted to system templates stay (account deletion). */
+    deleteByOwner(ownerId: string): Promise<number>;
 }

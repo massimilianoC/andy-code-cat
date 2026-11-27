@@ -13,7 +13,6 @@ import { MongoLlmPromptConfigRepository } from "../../../infra/repositories/Mong
 import { MongoSessionRepository } from "../../../infra/repositories/MongoSessionRepository";
 import { MongoProjectPresetRepository } from "../../../infra/repositories/MongoProjectPresetRepository";
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
-import { composeProjectDataRegistry } from "../../../composition/composeProjectData";
 import { MongoPlatformConfigRepository } from "../../../infra/repositories/MongoPlatformConfigRepository";
 import { resolvePublicSitesConfig, resolvePublicSiteUrl } from "../../../application/publish/publicSiteAddress";
 import { MongoPreviewSnapshotRepository } from "../../../infra/repositories/MongoPreviewSnapshotRepository";
@@ -25,9 +24,8 @@ import { MongoWysiwygEditSessionRepository } from "../../../infra/repositories/M
 import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositories/MongoZeroEffortFormProposalRepository";
 import { MongoDidacticArtifactKnowledgeRepository } from "../../../infra/repositories/MongoDidacticArtifactKnowledgeRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
-import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { ManageProject } from "../../../application/use-cases/ManageProject";
-import { DeleteProject } from "../../../application/use-cases/DeleteProject";
+import { composeDeleteProject } from "../../../composition/composeDeletion";
 import { DuplicateProject } from "../../../application/use-cases/DuplicateProject";
 import { GetProjectMoodboard } from "../../../application/use-cases/GetProjectMoodboard";
 import { UpdateProjectMoodboard } from "../../../application/use-cases/UpdateProjectMoodboard";
@@ -85,31 +83,8 @@ export function createProjectRoutes(): Router {
     const costTransactionRepository = new MongoCostTransactionRepository();
     const sandboxMiddleware = createSandboxMiddleware(projectRepository);
 
-    // Fully wired: a project deleted from the dashboard must not leave its journal, costs,
-    // conversations, sessions, runs, snapshots, media traces, intakes, publish history, WYSIWYG
-    // sessions, form proposals, didactic knowledge, assets or deployments behind pointing at an id
-    // nothing resolves. See DeleteProject's own doc comment for what is deliberately excluded
-    // (auth sessions, execution_logs) and why.
-    const deleteProject = new DeleteProject(
-        projectRepository,
-        moodboardRepository,
-        new MongoPromptExecutionLogRepository(),
-        new MongoConversationRepository(),
-        new MongoWorkSessionRepository(),
-        new MongoPipelineRunRepository(),
-        new MongoCostTransactionRepository(),
-        previewSnapshotRepository,
-        new MongoMediaResolutionTraceRepository(),
-        new MongoVibeIntakeRepository(),
-        new MongoPublishHistoryRepository(),
-        new MongoWysiwygEditSessionRepository(),
-        new MongoZeroEffortFormProposalRepository(),
-        new MongoDidacticArtifactKnowledgeRepository(),
-        new MongoProjectAssetRepository(),
-        siteDeploymentRepository,
-        getFileStorage(),
-        composeProjectDataRegistry(),
-    );
+    // The one project deletion (composition/composeDeleteProject.ts).
+    const deleteProject = composeDeleteProject();
     const duplicateProject = new DuplicateProject(projectRepository, promptConfigRepository);
     const getProjectMoodboard = new GetProjectMoodboard(moodboardRepository, projectRepository);
     const updateProjectMoodboard = new UpdateProjectMoodboard(moodboardRepository, projectRepository);

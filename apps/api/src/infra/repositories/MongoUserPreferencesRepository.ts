@@ -93,4 +93,11 @@ export class MongoUserPreferencesRepository implements UserPreferencesRepository
         if (!doc) throw new Error("Failed to persist user preferences");
         return toEntity(doc);
     }
+
+    /** Remove an account's preferences (account deletion). */
+    async deleteByUserId(userId: string): Promise<number> {
+        const col = await this.collection();
+        const result = await col.deleteMany({ userId });
+        return result.deletedCount ?? 0;
+    }
 }

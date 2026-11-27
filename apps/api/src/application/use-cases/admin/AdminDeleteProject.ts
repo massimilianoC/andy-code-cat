@@ -1,15 +1,25 @@
 import type { ProjectRepository } from "../../../domain/repositories/ProjectRepository";
 import type { SiteDeploymentRepository } from "../../../domain/repositories/SiteDeploymentRepository";
+import type { DeleteProject } from "../DeleteProject";
 
-/** Admin-side project deletion: blocks all live deployments, then removes the project document. */
+/**
+ * Superadmin project deletion. It is the owner's deletion (`DeleteProject`, the only one), run on
+ * the owner's behalf: the same collections, files and published directories go, and a failed step
+ * keeps the project exactly as it does for the owner.
+ *
+ * Live sites are blocked first, so they stop being served even if the deletion then fails part-way.
+ */
 export class AdminDeleteProject {
     constructor(
         private readonly projectRepo: ProjectRepository,
         private readonly deploymentRepo: SiteDeploymentRepository,
+        private readonly deleteProject: DeleteProject,
     ) { }
 
     async execute(projectId: string, adminUserId: string): Promise<{ deleted: boolean }> {
-        // 1. Block all active deployments to take sites offline
+        const project = await this.projectRepo.findById(projectId);
+        if (!project) return { deleted: false };
+
         const deployments = await this.deploymentRepo.findByProjectId(projectId);
         await Promise.all(
             deployments
@@ -17,8 +27,7 @@ export class AdminDeleteProject {
                 .map((d) => this.deploymentRepo.setAdminBlocked(d.publishId, true, adminUserId)),
         );
 
-        // 2. Delete the project document
-        const deleted = await this.projectRepo.adminDeleteById(projectId);
-        return { deleted };
+        await this.deleteProject.execute(projectId, project.ownerUserId);
+        return { deleted: true };
     }
 }

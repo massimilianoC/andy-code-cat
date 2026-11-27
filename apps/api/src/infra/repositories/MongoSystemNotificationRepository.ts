@@ -81,4 +81,11 @@ export class MongoSystemNotificationRepository implements SystemNotificationRepo
         const doc = await col.findOne({ _id: id, userId } as Filter<SystemNotificationDocument>);
         return doc ? toEntity(doc) : null;
     }
+
+    /** Remove every notification addressed to an account (account deletion). */
+    async deleteByUser(userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ userId } as Filter<SystemNotificationDocument>);
+        return result.deletedCount ?? 0;
+    }
 }

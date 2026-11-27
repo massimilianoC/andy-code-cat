@@ -17,9 +17,8 @@ import { BlockUser } from "../../../application/use-cases/admin/BlockUser";
 import { SetUserRole } from "../../../application/use-cases/admin/SetUserRole";
 import { AdminCreateUser } from "../../../application/use-cases/admin/AdminCreateUser";
 import { SetUserLimits } from "../../../application/use-cases/admin/SetUserLimits";
-import { DeleteUser } from "../../../application/use-cases/admin/DeleteUser";
 import { AdminListProjects } from "../../../application/use-cases/admin/AdminListProjects";
-import { AdminDeleteProject } from "../../../application/use-cases/admin/AdminDeleteProject";
+import { composeAdminDeleteProject, composeDeleteUser } from "../../../composition/composeDeletion";
 import { AdminListProjectSnapshots } from "../../../application/use-cases/admin/AdminListProjectSnapshots";
 import { AdminGetProjectSnapshot } from "../../../application/use-cases/admin/AdminGetProjectSnapshot";
 import { AdminAuditLogger } from "../../../application/services/AdminAuditLogger";
@@ -138,7 +137,7 @@ export function createAdminRoutes(): Router {
     const setUserRole = new SetUserRole(userRepo);
     const adminCreateUser = new AdminCreateUser(userRepo);
     const setUserLimits = new SetUserLimits(userRepo);
-    const deleteUser = new DeleteUser(userRepo);
+    const deleteUser = composeDeleteUser();
     const updateUserProfile = new UpdateUserProfile(userRepo);
     const adminResetUserPassword = new AdminResetUserPassword(userRepo, sessionRepo);
     const setUserPasswordResetRequired = new SetUserPasswordResetRequired(userRepo);
@@ -148,7 +147,7 @@ export function createAdminRoutes(): Router {
     const setPlatformConfig = new SetPlatformConfig(configRepo);
     const adminTogglePublication = new AdminTogglePublication(deploymentRepo);
     const adminListProjects = new AdminListProjects(projectRepo, userRepo, deploymentRepo);
-    const adminDeleteProject = new AdminDeleteProject(projectRepo, deploymentRepo);
+    const adminDeleteProject = composeAdminDeleteProject();
     const adminListProjectSnapshots = new AdminListProjectSnapshots(previewSnapshotRepo);
     const adminGetProjectSnapshot = new AdminGetProjectSnapshot(previewSnapshotRepo);
     const seedLlmCatalog = new SeedLlmCatalog(

@@ -83,6 +83,7 @@ const llmContext = {
 const noopQnaRepo: DidacticQnaRepository = {
     listByProject: async () => [],
     insert: async (entry) => entry,
+    deleteByProject: async () => 0,
 };
 
 const noopKnowledgeRepo: DidacticArtifactKnowledgeRepository = {
