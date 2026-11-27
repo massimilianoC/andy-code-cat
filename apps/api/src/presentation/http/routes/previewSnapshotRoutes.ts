@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { pipeFileToResponse } from "../pipeFileToResponse";
 import {
     activatePreviewSnapshotSchema,
     createPreviewSnapshotSchema,
@@ -278,8 +279,7 @@ export function createPreviewSnapshotRoutes(): Router {
                 res.setHeader("Content-Type", "image/jpeg");
                 // Immutable per snapshotId — safe to cache for 1 year
                 res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
-                stream.on("error", next);
-                stream.pipe(res);
+                pipeFileToResponse(stream, res, `thumbnail ${snapshot.id}`);
             } catch (error) {
                 next(error);
             }

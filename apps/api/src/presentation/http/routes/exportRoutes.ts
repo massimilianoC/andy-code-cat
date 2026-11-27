@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { pipeFileToResponse } from "../pipeFileToResponse";
 import jwt from "jsonwebtoken";
 import fs from "fs";
 import path from "path";
@@ -142,7 +143,7 @@ export function createExportRoutes(): Router {
                 if (record.fileSize) {
                     res.setHeader("Content-Length", record.fileSize);
                 }
-                fs.createReadStream(zipPath).pipe(res);
+                pipeFileToResponse(fs.createReadStream(zipPath), res, `export ${record.id}`);
                 exportRepository.incrementDownloadCount(record.id).catch(() => { /* ignore */ });
             } catch (error) {
                 next(error);
@@ -184,7 +185,7 @@ export function createExportRoutes(): Router {
                 const fileSize = await localFileStorage.fileSize(zipPath);
                 res.setHeader("Content-Length", fileSize);
 
-                fs.createReadStream(zipPath).pipe(res);
+                pipeFileToResponse(fs.createReadStream(zipPath), res, `export ${exportId}`);
 
                 // Fire-and-forget: increment download counter
                 exportRepository.incrementDownloadCount(exportId).catch(() => { /* ignore */ });
