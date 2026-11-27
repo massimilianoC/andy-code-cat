@@ -44,11 +44,11 @@ function LetterWheel({ char, active, onFocus, onStep }: { char: string; active: 
                 }}
                 onPointerUp={() => { drag.current = null; }}
                 onPointerCancel={() => { drag.current = null; }}
-                className={`relative flex h-28 w-16 touch-none select-none flex-col items-center justify-center overflow-hidden rounded-xl border-4 border-solid sm:w-20 ${active ? "border-yellow-300 shadow-[0_0_24px_rgba(253,224,71,0.45)]" : "border-slate-600"}`}
+                className={`relative flex h-28 w-16 [@media(max-height:520px)]:h-20 touch-none select-none flex-col items-center justify-center overflow-hidden rounded-xl border-4 border-solid sm:w-20 ${active ? "border-yellow-300 shadow-[0_0_24px_rgba(253,224,71,0.45)]" : "border-slate-600"}`}
             >
-                <span className="text-base font-bold text-slate-600">{neighbour(1)}</span>
-                <span className={`text-5xl font-black leading-none ${active ? "text-yellow-300" : "text-slate-100"}`}>{char}</span>
                 <span className="text-base font-bold text-slate-600">{neighbour(-1)}</span>
+                <span className={`text-5xl font-black leading-none ${active ? "text-yellow-300" : "text-slate-100"}`}>{char}</span>
+                <span className="text-base font-bold text-slate-600">{neighbour(1)}</span>
             </div>
             <button type="button" aria-label="▼" onClick={() => { onFocus(); onStep(-1); }}
                 className="h-11 w-16 rounded-lg border-0 bg-slate-800/80 text-xl text-cyan-300 active:scale-95">▼</button>
@@ -72,7 +72,9 @@ export function ArcadeInitialsEntry(props: {
     const chars = initials.padEnd(INITIALS_LENGTH, "A").slice(0, INITIALS_LENGTH).split("");
 
     return (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 overflow-y-auto bg-black/90 px-4 py-6">
+        <div className="absolute inset-0 z-20 flex flex-col items-center overflow-y-auto overscroll-contain bg-black/90 px-4 py-4">
+            {/* my-auto centres when there is room and scrolls from the top when there is not (landscape phones). */}
+            <div className="my-auto flex w-full flex-col items-center gap-4 [@media(max-height:520px)]:gap-2">
             <p className="text-2xl font-black tracking-widest text-yellow-300 sm:text-3xl">{t("arcade.gameOver")}</p>
             <p className="text-4xl font-black tabular-nums sm:text-5xl">{score.toLocaleString()}</p>
 
@@ -97,7 +99,7 @@ export function ArcadeInitialsEntry(props: {
             </div>
 
             {touch ? (
-                <div className="grid w-full max-w-sm grid-cols-9 gap-1" aria-label={t("arcade.keypad")}>
+                <div className="grid w-full max-w-sm grid-cols-9 gap-1 [@media(max-height:520px)]:max-w-xl [@media(max-height:520px)]:grid-cols-[repeat(13,minmax(0,1fr))]" aria-label={t("arcade.keypad")}>
                     {INITIALS_ALPHABET.split("").map((char) => (
                         <button key={char} type="button" onClick={() => { const next = typeInitial(initials, slot, char); onChange(next.initials, next.slot); }}
                             className="h-10 rounded-md border-0 bg-slate-800 text-lg font-bold text-slate-100 active:bg-yellow-300 active:text-black">
@@ -105,7 +107,7 @@ export function ArcadeInitialsEntry(props: {
                         </button>
                     ))}
                     <button type="button" aria-label={t("arcade.deleteLetter")} onClick={() => onChange(initials, Math.max(0, slot - 1))}
-                        className="col-span-9 h-10 rounded-md border-0 bg-slate-700 text-lg text-slate-100 active:bg-slate-500">⌫ {t("arcade.deleteLetter")}</button>
+                        className="col-span-full h-10 rounded-md border-0 bg-slate-700 text-lg text-slate-100 active:bg-slate-500">⌫ {t("arcade.deleteLetter")}</button>
                 </div>
             ) : null}
 
@@ -118,6 +120,7 @@ export function ArcadeInitialsEntry(props: {
                     className="min-h-12 rounded-xl border-4 border-solid border-slate-600 bg-transparent px-4 text-lg text-slate-100">
                     {t("arcade.skip")}
                 </button>
+            </div>
             </div>
         </div>
     );

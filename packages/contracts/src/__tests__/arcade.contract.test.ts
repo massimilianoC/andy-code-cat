@@ -109,6 +109,29 @@ describe("arcade SDK runtime", () => {
         expect(desktop.appended.some((node) => node.id === "andy-arcade-lock")).toBe(true);
     });
 
+    it("keeps arrows and Space from scrolling a game that never configured the SDK, but not text fields", () => {
+        const keyEvent = (code: string, tagName = "BODY") => {
+            let prevented = false;
+            return { event: { code, key: code, target: { tagName }, isTrusted: true, repeat: false, preventDefault: () => { prevented = true; } }, prevented: () => prevented };
+        };
+        const legacy = fakeBrowser();
+        const arrow = keyEvent("ArrowDown");
+        legacy.fire("keydown", arrow.event);
+        expect(arrow.prevented()).toBe(true);
+        const typing = keyEvent("Space", "INPUT");
+        legacy.fire("keydown", typing.event);
+        expect(typing.prevented()).toBe(false);
+        const letter = keyEvent("KeyA");
+        legacy.fire("keydown", letter.event);
+        expect(letter.prevented()).toBe(false);
+
+        const modern = fakeBrowser();
+        (modern.window.AndyArcade as { configure(o: unknown): void }).configure({ touch: "dpad" });
+        const after = keyEvent("ArrowDown");
+        modern.fire("keydown", after.event);
+        expect(after.prevented()).toBe(false); // the page lock CSS handles it once configured
+    });
+
     it("stays silent towards a parent on a published page", () => {
         const page = fakeBrowser({ framed: false });
         (page.window.AndyArcade as { submitScore(n: number): void }).submitScore(10);

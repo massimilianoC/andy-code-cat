@@ -20,11 +20,13 @@ export function ArcadeLeaderboardSheet(props: {
     onPlay: () => void;
     onClose: () => void;
     closeLabel?: string;
+    /** Closing from the backdrop; off where closing means leaving the game. */
+    backdropCloses?: boolean;
 }) {
     const { t } = useTranslation();
-    const { title, entries, highlightId, rank, playLabel, onPlay, onClose, closeLabel } = props;
+    const { title, entries, highlightId, rank, playLabel, onPlay, onClose, closeLabel, backdropCloses = true } = props;
     return (
-        <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/75 sm:items-center" onClick={onClose} role="dialog" aria-modal="true" aria-label={t("arcade.leaderboard")}>
+        <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/75 sm:items-center" onClick={backdropCloses ? onClose : undefined} role="dialog" aria-modal="true" aria-label={t("arcade.leaderboard")}>
             <div onClick={(event) => event.stopPropagation()}
                 className="max-h-[85dvh] w-full overflow-y-auto rounded-t-3xl border-t-4 border-solid border-cyan-400 bg-[#0b0b24] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgba(34,211,238,0.25)] sm:max-w-md sm:rounded-3xl sm:border-4">
                 <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-600 sm:hidden" />
@@ -36,7 +38,7 @@ export function ArcadeLeaderboardSheet(props: {
                     {entries && !entries.length ? <li className="py-6 text-center text-slate-400">{t("arcade.noScores")}</li> : null}
                     {entries?.map((entry, index) => (
                         <li key={entry.id}
-                            className={`flex items-center justify-between gap-3 border-b border-solid border-slate-800 py-2 ${entry.id === highlightId ? "animate-pulse text-yellow-300" : ""}`}>
+                            className={`flex items-center justify-between gap-3 border-0 border-b border-solid border-slate-800 py-2 ${entry.id === highlightId ? "animate-pulse text-yellow-300" : ""}`}>
                             <span className="flex items-center gap-2">
                                 <span className="w-8 text-center">{MEDALS[index] ?? String(index + 1).padStart(2, "0")}</span>
                                 <span className="font-bold tracking-widest">{entry.player}</span>
@@ -67,11 +69,11 @@ const PAUSE_ICONS: Record<PauseItem, string> = { resume: "▶", restart: "↻", 
 export function ArcadePauseMenu({ title, focus, onChoose, hint }: { title: string; focus: number; onChoose: (item: PauseItem) => void; hint?: string }) {
     const { t } = useTranslation();
     return (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 px-6" role="dialog" aria-modal="true" aria-label={t("arcade.paused")}>
-            <div className="w-full max-w-xs">
+        <div className="absolute inset-0 z-30 flex flex-col items-center overflow-y-auto overscroll-contain bg-black/80 px-6 py-4" role="dialog" aria-modal="true" aria-label={t("arcade.paused")}>
+            <div className="my-auto w-full max-w-xs [@media(max-height:480px)]:max-w-lg">
                 <p className="text-center text-3xl font-black tracking-widest text-yellow-300">⏸ {t("arcade.paused")}</p>
-                <p className="mb-5 truncate text-center text-slate-400">{title}</p>
-                <div className="grid gap-3">
+                <p className="mb-5 truncate text-center text-slate-400 [@media(max-height:480px)]:mb-2">{title}</p>
+                <div className="grid gap-3 [@media(max-height:480px)]:grid-cols-2 [@media(max-height:480px)]:gap-2">
                     {PAUSE_ITEMS.map((item, index) => (
                         <button key={item} type="button" onClick={() => onChoose(item)}
                             className={`flex min-h-12 items-center gap-3 rounded-xl border-4 border-solid px-5 text-left text-lg font-bold active:scale-95 ${index === focus ? "border-yellow-300 bg-yellow-300 text-black" : "border-slate-600 bg-slate-900/80 text-slate-100"}`}>

@@ -418,6 +418,16 @@ const RUNTIME_SOURCE = `(function () {
     }
   });
   window.addEventListener("blur", releaseAll);
+  // A game that never called configure() is not page-locked: keep the arrows and Space from
+  // scrolling the document under it (the game still receives the keys).
+  var SCROLL_KEYS = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1 };
+  window.addEventListener("keydown", function (event) {
+    if (!framed || config || !SCROLL_KEYS[event.code]) return;
+    var target = event.target;
+    var tag = target && target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (target && target.isContentEditable)) return;
+    event.preventDefault();
+  });
   window.addEventListener("keydown", function (event) {
     if (event.key !== "Escape" || event.repeat || !event.isTrusted) return;
     var now = Date.now();

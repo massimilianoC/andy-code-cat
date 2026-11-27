@@ -540,6 +540,12 @@ export default function ArcadePage() {
                 if (event.key === "Escape") target.blur();
                 return;
             }
+            // Backspace edits the initials; it must not skip the score (only Escape or B skips).
+            if (view === "play" && pendingScore !== null && event.key === "Backspace") {
+                event.preventDefault();
+                setInitialsSlot((s) => Math.max(0, s - 1));
+                return;
+            }
             if (view === "play" && pendingScore !== null && /^[a-z0-9]$/i.test(event.key)) {
                 event.preventDefault();
                 const next = typeInitial(initials, initialsSlot, event.key);
@@ -773,11 +779,11 @@ export default function ArcadePage() {
                     <h2 className="mb-4 text-xl font-bold text-cyan-300 sm:text-2xl">{t("arcade.controlsTitle")}</h2>
                     {touch ? <p className="mb-4 rounded-xl border-2 border-solid border-cyan-700 bg-cyan-950/40 p-3 text-sm text-cyan-100 sm:text-base">📱 {t("arcade.touchControlsNote")}</p> : null}
                     <div className="mb-6 overflow-x-auto">
-                        <table className="w-full min-w-[22rem] text-left text-base sm:text-lg">
+                        <table className="w-full min-w-[22rem] border-collapse text-left text-base sm:text-lg">
                             <thead className="text-slate-400"><tr><th className="py-1">{t("arcade.action")}</th><th>{t("arcade.keyboard")}</th><th>{t("arcade.gamepad")}</th></tr></thead>
                             <tbody>
                                 {ARCADE_ACTIONS.map((action) => (
-                                    <tr key={action} className="border-t border-solid border-slate-800">
+                                    <tr key={action} className="border-0 border-t border-solid border-slate-800">
                                         <td className="py-1 font-bold uppercase">{action}</td>
                                         <td>{KEYBOARD_LABEL[action]}</td>
                                         <td>{DEFAULT_BINDINGS[action].map(describeBinding).join(" · ")}</td>
@@ -878,6 +884,7 @@ export default function ArcadePage() {
                         rank={sheet.rank}
                         playLabel={sheet.mode === "shelf" ? `▶ ${t("arcade.play")}` : sheet.mode === "gameover" ? `↻ ${t("arcade.playAgain")}` : `▶ ${t("arcade.pause.resume")}`}
                         closeLabel={sheet.mode === "gameover" ? t("arcade.library") : undefined}
+                        backdropCloses={sheet.mode !== "gameover"}
                         onPlay={sheetPrimary}
                         onClose={sheetClose}
                     />
