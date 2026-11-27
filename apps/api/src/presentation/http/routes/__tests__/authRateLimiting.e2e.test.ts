@@ -1,6 +1,8 @@
 /**
  * E2E: authentication routes are rate limited in the API itself (security review M2).
- * Real app (createApp) and MongoMemoryServer; each case uses its own app so counters start at zero.
+ * Real app (createApp) and MongoMemoryServer; each case uses its own app so counters start at zero,
+ * and per-address cases send a fixed X-Forwarded-For (the app trusts one proxy hop) so the
+ * address does not depend on how the test client connects.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MongoMemoryServer } from "mongodb-memory-server";
@@ -65,18 +67,21 @@ describe("auth rate limiting", () => {
 
     it("limits registrations per address", async () => {
         const app = createApp();
+        const register = () => request(app).post("/v1/auth/register").set("X-Forwarded-For", "203.0.113.10").send({ email: "not-an-email", password: "x" });
         for (let i = 0; i < limits.registrationsPerIp; i++) {
-            const res = await request(app).post("/v1/auth/register").send({ email: "not-an-email", password: "x" });
-            expect(res.status).not.toBe(429);
+            expect((await register()).status).not.toBe(429);
         }
-        expect((await request(app).post("/v1/auth/register").send({ email: "not-an-email", password: "x" })).status).toBe(429);
+        expect((await register()).status).toBe(429);
     });
 
     it("limits refresh attempts per address", async () => {
         const app = createApp();
+        const refresh = () => request(app).post("/v1/auth/refresh").set("X-Forwarded-For", "203.0.113.20").send({});
         for (let i = 0; i < limits.refreshesPerIp; i++) {
-            await request(app).post("/v1/auth/refresh").send({});
+            expect((await refresh()).status).not.toBe(429);
         }
-        expect((await request(app).post("/v1/auth/refresh").send({})).status).toBe(429);
+        expect((await refresh()).status).toBe(429);
+        // Another address keeps its own budget.
+        expect((await request(app).post("/v1/auth/refresh").set("X-Forwarded-For", "203.0.113.21").send({})).status).toBe(400);
     });
 });
