@@ -22,6 +22,8 @@ import { env } from "../../../config";
 import type { PublicSitesConfig } from "../../../domain/entities/PlatformConfig";
 import type { SlugCheckResponse } from "@andy-code-cat/contracts";
 import type { RequestWithContext } from "../types";
+import { asyncHandler } from "../asyncHandler";
+import { pipeFileToResponse } from "../pipeFileToResponse";
 import type { SiteDeployment } from "../../../domain/entities/SiteDeployment";
 import type { PublishHistoryEntry } from "../../../domain/entities/PublishHistory";
 
@@ -45,6 +47,16 @@ const MIME_MAP: Record<string, string> = {
 
 // Validate publishId: only lowercase alphanumeric, 6-12 chars
 const PUBLISH_ID_RE = /^[a-z0-9]{6,12}$/;
+
+/** The stat of a regular file, or null when the path is missing or is not a regular file. */
+async function regularFileStat(filePath: string): Promise<fs.Stats | null> {
+    try {
+        const stat = await fs.promises.stat(filePath);
+        return stat.isFile() ? stat : null;
+    } catch {
+        return null;
+    }
+}
 
 function toDto(d: SiteDeployment, publicSites: PublicSitesConfig) {
     return {
@@ -410,14 +422,8 @@ export function createPublishRoutes() {
         if (await rejectSuspended(res, deploymentRecord)) return;
 
         const filePath = localFileStorage.resolvePublishFile(publishId, "index.html");
-        if (!filePath) {
-            res.status(404).send("Not found");
-            return;
-        }
-
-        try {
-            await fs.promises.access(filePath);
-        } catch {
+        const stat = filePath ? await regularFileStat(filePath) : null;
+        if (!filePath || !stat) {
             res.status(404).send("Not found");
             return;
         }
@@ -425,7 +431,6 @@ export function createPublishRoutes() {
         // index.html must never be served stale — always revalidate.
         // ETag allows the browser to get a 304 Not Modified when the file hasn't changed,
         // avoiding a full re-download while still guaranteeing freshness on every republish.
-        const stat = await fs.promises.stat(filePath);
         const etag = `"${stat.mtimeMs.toString(16)}-${stat.size.toString(16)}"`;
 
         // Override helmet's restrictive default CSP before the 304 check so the permissive
@@ -445,7 +450,7 @@ export function createPublishRoutes() {
         // instant freshness after a republish while still leveraging the browser cache.
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("X-Content-Type-Options", "nosniff");
-        fs.createReadStream(filePath).pipe(res);
+        pipeFileToResponse(fs.createReadStream(filePath), res, `published site ${publishId}`);
     }
 
     /** Any other file of a site: a top-level asset, or a dataset under data/. */
@@ -457,16 +462,16 @@ export function createPublishRoutes() {
             res.status(400).send("Invalid path");
             return;
         }
-
-        const filePath = localFileStorage.resolvePublishFile(publishId, kind === "data" ? `data/${file}` : file);
-        if (!filePath) {
+        // A site never publishes dot-files; "." (an encoded dot decodes to it) names the directory.
+        if (file.startsWith(".")) {
             res.status(404).send("Not found");
             return;
         }
 
-        try {
-            await fs.promises.access(filePath);
-        } catch {
+        const filePath = localFileStorage.resolvePublishFile(publishId, kind === "data" ? `data/${file}` : file);
+        // Only regular files are served: a directory (data/, or the site root) is not one.
+        const stat = filePath ? await regularFileStat(filePath) : null;
+        if (!filePath || !stat) {
             res.status(404).send("Not found");
             return;
         }
@@ -475,7 +480,6 @@ export function createPublishRoutes() {
         const contentType = MIME_MAP[ext] ?? "application/octet-stream";
 
         // ETag + conditional GET for all assets
-        const stat = await fs.promises.stat(filePath);
         const etag = `"${stat.mtimeMs.toString(16)}-${stat.size.toString(16)}"`;
 
         // Same override pattern as the index.html handler: remove helmet's restrictive CSP
@@ -499,11 +503,11 @@ export function createPublishRoutes() {
         res.setHeader("Content-Type", contentType);
         res.setHeader("Cache-Control", cacheControl);
         res.setHeader("X-Content-Type-Options", "nosniff");
-        fs.createReadStream(filePath).pipe(res);
+        pipeFileToResponse(fs.createReadStream(filePath), res, `published site ${publishId}`);
     }
 
     // ---- /p/{publishId}/ ----
-    staticRouter.get("/:publishId", async (req, res) => {
+    staticRouter.get("/:publishId", asyncHandler<{ publishId: string }>(async (req, res) => {
         const { publishId } = req.params;
         if (!PUBLISH_ID_RE.test(publishId)) {
             res.status(404).send("Not found");
@@ -518,9 +522,9 @@ export function createPublishRoutes() {
         }
         if (await divertFromAppOrigin(req, res, publishId, deploymentRecord, `/p/${publishId}`)) return;
         await sendSiteIndex(req, res, publishId, `/p/${publishId}/`, deploymentRecord);
-    });
+    }));
 
-    staticRouter.get("/:publishId/:file", async (req, res) => {
+    staticRouter.get("/:publishId/:file", asyncHandler<{ publishId: string; file: string }>(async (req, res) => {
         const { publishId, file } = req.params;
         if (!PUBLISH_ID_RE.test(publishId) || !file) {
             res.status(404).send("Not found");
@@ -535,9 +539,9 @@ export function createPublishRoutes() {
         }
         if (await divertFromAppOrigin(req, res, publishId, deploymentRecord, `/p/${publishId}`)) return;
         await sendSiteFile(req, res, publishId, file, "asset", deploymentRecord);
-    });
+    }));
 
-    staticRouter.get("/:publishId/data/:file", async (req, res) => {
+    staticRouter.get("/:publishId/data/:file", asyncHandler<{ publishId: string; file: string }>(async (req, res) => {
         const { publishId, file } = req.params;
         if (!PUBLISH_ID_RE.test(publishId) || !file) {
             res.status(404).send("Not found");
@@ -552,7 +556,7 @@ export function createPublishRoutes() {
         }
         if (await divertFromAppOrigin(req, res, publishId, deploymentRecord, `/p/${publishId}`)) return;
         await sendSiteFile(req, res, publishId, file, "data", deploymentRecord);
-    });
+    }));
 
     // ---- /{slug}/ ----
     // Mounted at the API root, after every other route. A first segment that cannot be a slug
@@ -564,7 +568,7 @@ export function createPublishRoutes() {
         return deploymentRepository.findLiveByCustomSlug(slug);
     }
 
-    siteRouter.get("/:slug", async (req, res, next) => {
+    siteRouter.get("/:slug", asyncHandler<{ slug: string }>(async (req, res, next) => {
         const { slug } = req.params;
         if (!isPublicSiteSlug(slug)) return next();
         const deployment = await liveDeploymentForSlug(slug);
@@ -574,9 +578,9 @@ export function createPublishRoutes() {
         }
         if (await divertFromAppOrigin(req, res, deployment.publishId, deployment, `/${slug}`)) return;
         await sendSiteIndex(req, res, deployment.publishId, `/${slug}/`, deployment);
-    });
+    }));
 
-    siteRouter.get("/:slug/:file", async (req, res, next) => {
+    siteRouter.get("/:slug/:file", asyncHandler<{ slug: string; file: string }>(async (req, res, next) => {
         const { slug, file } = req.params;
         if (!isPublicSiteSlug(slug)) return next();
         const deployment = await liveDeploymentForSlug(slug);
@@ -586,9 +590,9 @@ export function createPublishRoutes() {
         }
         if (await divertFromAppOrigin(req, res, deployment.publishId, deployment, `/${slug}`)) return;
         await sendSiteFile(req, res, deployment.publishId, file, "asset", deployment);
-    });
+    }));
 
-    siteRouter.get("/:slug/data/:file", async (req, res, next) => {
+    siteRouter.get("/:slug/data/:file", asyncHandler<{ slug: string; file: string }>(async (req, res, next) => {
         const { slug, file } = req.params;
         if (!isPublicSiteSlug(slug)) return next();
         const deployment = await liveDeploymentForSlug(slug);
@@ -598,7 +602,7 @@ export function createPublishRoutes() {
         }
         if (await divertFromAppOrigin(req, res, deployment.publishId, deployment, `/${slug}`)) return;
         await sendSiteFile(req, res, deployment.publishId, file, "data", deployment);
-    });
+    }));
 
     // ---- POST /p/{publishId}/_pf/forms/{formId}/submit ----
     // Same host rule as the site's pages (decideSiteRequest), but a POST is refused, never
