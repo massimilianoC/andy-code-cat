@@ -69,6 +69,21 @@ language is Italian or unset (as the rest of the form runtime), English otherwis
 
 A honeypot input (`pf_hp`, off-screen, `aria-hidden`, no tab stop) is rendered in capture forms.
 
+### Phones and weak networks
+
+- **Fields** get the right keyboard and autofill by type when the model gave none: `email`
+  (`inputmode=email`, `autocomplete=email`, no autocapitalise or spellcheck), `tel`, `url`, and
+  `inputmode=decimal` for `number`. A model-provided `autocomplete` always wins.
+- **CSS phone layer** (`/* pf-form-mobile-v1 */`, appended once even to stylesheets that already
+  carry the base form CSS): inputs at least 16px (iOS zooms into smaller ones), 44px touch targets,
+  full-width buttons under 480px, visible success and error states.
+- **Multi-step:** each new step scrolls the form into view and focuses its first field; status
+  messages scroll into view; the step and status texts follow the page language (it/en).
+- **Capture delivery:** nothing is sent while `navigator.onLine` is false (the answers stay in the
+  form); a submission that gets no answer within 20 s is aborted and the visitor is told the outcome
+  is unknown instead of the form staying busy. A retry after a timeout can store a duplicate; an
+  idempotency key is the planned fix.
+
 ## Public submit — trust boundary
 
 ```text

@@ -1196,7 +1196,7 @@
     "backToChoice": "Torna indietro"
   },
   "arcade": {
-    "hint": "Frecce/WASD · Invio/A scegli · Esc/B indietro",
+    "hint": "Frecce/WASD · Invio/A scegli · X classifica · Esc/B indietro",
     "newGame": "Nuovo gioco",
     "controls": "Comandi",
     "forging": "In forgiatura",
@@ -1227,8 +1227,7 @@
     "pressFor": "Premi il pulsante per",
     "remap": "Rimappa",
     "resetMapping": "Ripristina",
-    "controlsHint": "I giochi usano WASD/frecce, Spazio, Shift, Invio e P. Ogni controller USB viene tradotto in quei tasti. SELECT o Esc due volte torna allo scaffale.",
-    "backHint": "SELECT / Esc Esc",
+    "controlsHint": "I giochi usano WASD/frecce, Spazio, Shift, Invio e P. Ogni controller USB viene tradotto in quei tasti. SELECT o Esc due volte apre il menu di pausa.",
     "gameOver": "GAME OVER",
     "enterInitials": "Inserisci le tue iniziali",
     "saveScore": "Salva punteggio",
@@ -1237,7 +1236,29 @@
     "yourRank": "Sei #{{rank}}",
     "noScores": "Ancora nessun punteggio",
     "playAgain": "Gioca ancora",
-    "library": "Scaffale"
+    "library": "Scaffale",
+    "newBadge": "NUOVO",
+    "dashboard": "Torna alla dashboard",
+    "close": "Chiudi",
+    "play": "Gioca",
+    "paused": "Pausa",
+    "pauseHint": "SELECT o Esc Esc apre questo menu · B riprende",
+    "rotate": "Ruota il telefono in orizzontale",
+    "playAnyway": "Gioca comunque",
+    "gameReady": "«{{name}}» è pronto!",
+    "playNow": "Gioca ora",
+    "shelfHint": "Invio o A per giocare · X per la classifica",
+    "shelfHintTouch": "Tocca per giocare · tieni premuto o 🏆 per la classifica",
+    "touchControlsNote": "Su telefono e tablet i comandi touch compaiono dentro il gioco quando serve: levetta o croce a sinistra, pulsanti A/B a destra, oppure swipe e tocchi. Il pulsante ⏸ in alto apre la pausa.",
+    "keypad": "Tastierino",
+    "deleteLetter": "Indietro",
+    "pause": {
+      "resume": "Riprendi",
+      "restart": "Ricomincia",
+      "leaderboard": "Classifica",
+      "fullscreen": "Schermo intero",
+      "shelf": "Esci allo scaffale"
+    }
   },
   "projectData": {
     "title": "Dati del progetto",

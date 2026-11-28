@@ -1,4 +1,4 @@
-import type { LeaderboardBoardSummary, LeaderboardEntry, LeaderboardProjectScope, LeaderboardScope } from "../entities/LeaderboardEntry";
+import type { LeaderboardBoardSummary, LeaderboardEntry, LeaderboardProjectBest, LeaderboardProjectScope, LeaderboardScope } from "../entities/LeaderboardEntry";
 
 export interface LeaderboardEntryListQuery {
     /** One board, or every board of the project when undefined. */
@@ -18,6 +18,9 @@ export interface LeaderboardRepository {
     deleteById(scope: LeaderboardScope, entryId: string): Promise<boolean>;
     /** Keeps the best `keep` entries of a board and deletes the rest. Returns how many were removed. */
     prune(scope: LeaderboardScope, keep: number): Promise<number>;
+
+    /** The best entry of one board in every project of one owner, by the same ordering as top(). */
+    bestPerProject(ownerUserId: string, boardId: string): Promise<LeaderboardProjectBest[]>;
 
     // ── Owner data panel (docs/specs/PROJECT_DATA_PANEL.md) ─────────────────────────────────────
     /** Every board of the project that holds at least one entry. */

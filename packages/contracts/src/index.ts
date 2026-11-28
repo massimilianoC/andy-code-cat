@@ -33,3 +33,4 @@ export * from "./workSession";
 export * from "./backgroundRun";
 export * from "./leaderboard";
 export * from "./projectData";
+export * from "./arcade";

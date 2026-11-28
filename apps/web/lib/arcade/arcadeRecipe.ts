@@ -5,6 +5,10 @@
  * names, and the preset's ARCADE PLAYABILITY block does the rest.
  */
 
+import { ARCADE_GAME_PRESET_IDS, type ArcadeTouchButton, type ArcadeTouchLayout } from "@andy-code-cat/contracts";
+
+export { ARCADE_GAME_PRESET_IDS };
+
 export interface ArcadeOption {
     id: string;
     en: string;
@@ -13,26 +17,30 @@ export interface ArcadeOption {
     prompt: string;
 }
 
-export const ARCADE_GAME_PRESET_IDS = ["videogame", "freerunner", "seriousgame", "game3d"] as const;
+/** A genre also fixes how it plays on a phone: the SDK layout and the face buttons it shows. */
+export interface ArcadeGenre extends ArcadeOption {
+    touch: ArcadeTouchLayout;
+    buttons: ArcadeTouchButton[];
+}
 
 export function isArcadeProject(project: { presetId?: string }): boolean {
     return Boolean(project.presetId && (ARCADE_GAME_PRESET_IDS as readonly string[]).includes(project.presetId));
 }
 
-export const ARCADE_GENRES: ArcadeOption[] = [
-    { id: "platformer", en: "Platformer", it: "Platform", prompt: "a side-scrolling platformer: run, jump between platforms, avoid enemies and pits, collect items" },
-    { id: "shmup", en: "Space shooter", it: "Sparatutto spaziale", prompt: "a vertical shoot 'em up: fly, dodge bullets, shoot waves of enemies, a boss at the end of each level" },
-    { id: "maze", en: "Maze chase", it: "Labirinto", prompt: "a maze chase: collect every dot in the maze while enemies hunt you, power-ups turn the tables for a few seconds" },
-    { id: "blocks", en: "Falling blocks", it: "Blocchi che cadono", prompt: "a falling-block puzzle: rotate and place pieces, clear full lines, speed rises with each level" },
-    { id: "runner", en: "Endless runner", it: "Corsa infinita", prompt: "an endless runner: the hero runs on its own, jump and slide over obstacles, distance and coins make the score" },
-    { id: "breakout", en: "Brick breaker", it: "Spacca mattoni", prompt: "a brick breaker: move a paddle, bounce the ball, break every brick, catch power-ups" },
-    { id: "racer", en: "Top-down racer", it: "Corse dall'alto", prompt: "a top-down racer: steer around a track, overtake rivals, finish laps before the timer runs out" },
-    { id: "arena", en: "Arena survival", it: "Sopravvivenza in arena", prompt: "an arena survival game: move around a closed arena, attack waves of enemies, survive as long as possible" },
-    { id: "snake", en: "Snake", it: "Serpente", prompt: "a snake game on a grid: steer the growing snake to food, never bite yourself or the walls, speed rises with length" },
-    { id: "flapper", en: "One-button flyer", it: "Volo a un tasto", prompt: "a one-button flyer: Space flaps upward against gravity through gaps in endless obstacles generated from a seed" },
-    { id: "survivor", en: "Survivor", it: "Sopravvissuto", prompt: "a survivor-like: the hero moves and weapons fire automatically at the nearest enemy, collect XP gems and pick one of three upgrades at each level-up (the game pauses while choosing)" },
-    { id: "towers", en: "Tower defense", it: "Difesa a torri", prompt: "a tower defense: enemies walk a fixed path in waves, move a grid cursor and place or upgrade three tower types with the gold you earn" },
-    { id: "minigolf", en: "Minigolf", it: "Minigolf", prompt: "a minigolf course of 9 holes: aim with left/right, hold Space to charge the shot power, fewer strokes give a higher integer score" },
+export const ARCADE_GENRES: ArcadeGenre[] = [
+    { id: "platformer", en: "Platformer", it: "Platform", prompt: "a side-scrolling platformer: run, jump between platforms, avoid enemies and pits, collect items", touch: "dpad", buttons: ["a", "b"] },
+    { id: "shmup", en: "Space shooter", it: "Sparatutto spaziale", prompt: "a vertical shoot 'em up: fly, dodge bullets, shoot waves of enemies, a boss at the end of each level", touch: "joystick", buttons: ["a", "b"] },
+    { id: "maze", en: "Maze chase", it: "Labirinto", prompt: "a maze chase: collect every dot in the maze while enemies hunt you, power-ups turn the tables for a few seconds", touch: "dpad", buttons: [] },
+    { id: "blocks", en: "Falling blocks", it: "Blocchi che cadono", prompt: "a falling-block puzzle: rotate and place pieces, clear full lines, speed rises with each level", touch: "swipe", buttons: [] },
+    { id: "runner", en: "Endless runner", it: "Corsa infinita", prompt: "an endless runner: the hero runs on its own, jump and slide over obstacles, distance and coins make the score", touch: "swipe", buttons: [] },
+    { id: "breakout", en: "Brick breaker", it: "Spacca mattoni", prompt: "a brick breaker: move a paddle, bounce the ball, break every brick, catch power-ups", touch: "dpad", buttons: ["a"] },
+    { id: "racer", en: "Top-down racer", it: "Corse dall'alto", prompt: "a top-down racer: steer around a track, overtake rivals, finish laps before the timer runs out", touch: "joystick", buttons: ["a"] },
+    { id: "arena", en: "Arena survival", it: "Sopravvivenza in arena", prompt: "an arena survival game: move around a closed arena, attack waves of enemies, survive as long as possible", touch: "joystick", buttons: ["a", "b"] },
+    { id: "snake", en: "Snake", it: "Serpente", prompt: "a snake game on a grid: steer the growing snake to food, never bite yourself or the walls, speed rises with length", touch: "swipe", buttons: [] },
+    { id: "flapper", en: "One-button flyer", it: "Volo a un tasto", prompt: "a one-button flyer: Space flaps upward against gravity through gaps in endless obstacles generated from a seed", touch: "tap", buttons: [] },
+    { id: "survivor", en: "Survivor", it: "Sopravvissuto", prompt: "a survivor-like: the hero moves and weapons fire automatically at the nearest enemy, collect XP gems and pick one of three upgrades at each level-up (the game pauses while choosing)", touch: "joystick", buttons: ["a"] },
+    { id: "towers", en: "Tower defense", it: "Difesa a torri", prompt: "a tower defense: enemies walk a fixed path in waves, move a grid cursor and place or upgrade three tower types with the gold you earn", touch: "dpad", buttons: ["a", "b"] },
+    { id: "minigolf", en: "Minigolf", it: "Minigolf", prompt: "a minigolf course of 9 holes: aim with left/right, hold Space to charge the shot power, fewer strokes give a higher integer score", touch: "dpad", buttons: ["a"] },
 ];
 
 export const ARCADE_STYLES: ArcadeOption[] = [
@@ -116,7 +124,7 @@ export function randomArcadeRecipe(random: () => number = Math.random): ArcadeRe
 }
 
 export function buildArcadeGamePrompt(recipe: ArcadeRecipe): string {
-    const genre = pick(ARCADE_GENRES, recipe.genre);
+    const genre = ARCADE_GENRES.find((option) => option.id === recipe.genre) ?? ARCADE_GENRES[0]!;
     const style = pick(ARCADE_STYLES, recipe.style);
     const setting = pick(ARCADE_SETTINGS, recipe.setting);
     const hero = pick(ARCADE_HEROES, recipe.hero);
@@ -128,7 +136,8 @@ export function buildArcadeGamePrompt(recipe: ArcadeRecipe): string {
         twist.prompt ? `Twist: ${twist.prompt}.` : "",
         recipe.extra.trim() ? `Player's own idea: ${recipe.extra.trim().slice(0, 600)}` : "",
         "Gameplay: a start screen with the title and a controls legend, at least three levels of rising difficulty, score and lives in the HUD, game over with an instant restart.",
-        "Controls: WASD or arrow keys to move, Space for the main action, Shift for the second action, Enter to start, P to pause.",
+        "Controls: WASD or arrow keys to move, Space for the main action, Shift for the second action, Enter or Space to start, P to pause.",
+        `Touch: call AndyArcade.configure({ touch: "${genre.touch}", buttons: ${JSON.stringify(genre.buttons)}, orientation: "${genre.touch === "swipe" || genre.touch === "tap" ? "portrait" : "landscape"}" }) as the ARCADE SDK rules say; do not draw touch controls yourself.`,
         "Everything must be original: if the idea recalls an existing game, keep only the mechanics and invent the title, characters and art.",
     ];
     return lines.filter(Boolean).join("\n");

@@ -73,6 +73,7 @@ Read in this order before making changes:
 | [docs/guides/LOCAL_DOCKER_START.md](guides/LOCAL_DOCKER_START.md) | Local Docker workflow for dev and deploy-like stacks |
 | [docs/research/ARCADE_GAMES_RESEARCH_2026-11-25.md](research/ARCADE_GAMES_RESEARCH_2026-11-25.md) | Arcade research: genres by generation reliability, quality dynamics, verified CDN game libraries, allowlist problems and backlog |
 | [docs/specs/ARCADE_MODE_MVP.md](specs/ARCADE_MODE_MVP.md) | Andy Arcade: game-console mode over the shared core — shelf, gamepad runtime, playability prompt block, leaderboard capability, and how to build another mode |
+| [docs/specs/ARCADE_SDK.md](specs/ARCADE_SDK.md) | Arcade SDK (`window.AndyArcade` v2): platform touch controls, gestures, page lock, canvas fit, pause, haptics and audio unlock for generated games, injected in the Arcade, the preview and published sites |
 | [docs/guides/PUBLISHED_SITE_ADDRESSES.md](guides/PUBLISHED_SITE_ADDRESSES.md) | Published site addresses: `/p/{id}/` and `/{slug}/`, the superadmin publish URL mode (path or subdomain), server and domain moves |
 | [docs/guides/AGENT_RELEASE_CHECKLIST.md](guides/AGENT_RELEASE_CHECKLIST.md) | Release and branch checklist for agents |
 | [docs/guides/GITFLOW_RELEASE_POLICY.md](guides/GITFLOW_RELEASE_POLICY.md) | Gitflow branch semantics and release policy |

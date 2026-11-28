@@ -287,16 +287,27 @@ function withPresetMeta(preset: ProjectPreset): ProjectPreset {
 export const ARCADE_PLAYABILITY_MODULE = `
 ARCADE PLAYABILITY (platform contract, applies to every game):
 CONTROLS
-- Keyboard first, no mouse required. Movement: BOTH WASD and the arrow keys. Primary action: Space. Secondary action: Shift (also K). Start and confirm: Enter. Pause: P (also Escape).
+- Keyboard first, no mouse required. Movement: BOTH WASD and the arrow keys. Primary action: Space. Secondary action: Shift (also K). Start and confirm: Enter, and Space too (a phone has no Enter). Pause: P (also Escape).
 - Read input with keydown/keyup listeners on window, using event.code with event.key as fallback, through one KEYS table, into a set of pressed keys that the game loop polls. Call event.preventDefault() for the keys you use so the page never scrolls.
 - The platform maps USB gamepads and arcade sticks onto exactly these keys: never use the Gamepad API or an engine gamepad plugin, and never bind core actions to other keys.
-- Show a controls legend on the start screen and on the pause screen, for example "WASD / arrows move · SPACE jump · ENTER start · P pause", large enough to read from a sofa.
+- Show a controls legend on the start screen and on the pause screen, for example "WASD / arrows move · SPACE jump · ENTER start · P pause", large enough to read from a sofa. When window.AndyArcade && AndyArcade.isTouch, show the touch legend instead ("stick moves · A jump", "swipe to move · tap to jump").
+ARCADE SDK (window.AndyArcade, provided by the platform; never define it yourself)
+- Every call is guarded, because a downloaded copy of the game runs without the SDK: if (window.AndyArcade) { ... }. Without it the game still plays with the keyboard.
+- Touch and mobile: never write touch controls, on-screen buttons, virtual joysticks, swipe detection or gesture code, and never load a touch or gesture library. Once, at startup, call AndyArcade.configure({ touch, buttons, orientation }). The SDK draws the controls on phones and tablets only, turns them into the same keys as the keyboard, and locks the page against scrolling, zooming, text selection and long-press menus.
+  - touch "dpad": platformers, mazes, grid and puzzle movement. "joystick": free top-down movement, shooters, racers, arenas. "swipe": lanes, runners, snake, falling blocks (a swipe taps the arrow key, a tap presses Space). "tap": one-button games (touching the screen holds Space). "pointer": only when aiming or dragging is the game itself; then read pointerdown/pointermove/pointerup (never mouse-only events) and still keep a keyboard path.
+  - buttons: the face buttons the game uses, ["a"] = Space, ["a","b"] = Space and Shift (also "x" = K, "y" = P); [] for swipe or tap games.
+  - orientation: "landscape" or "portrait", the one the playfield is designed for, or "any".
+  - With "dpad" or "joystick" the controls cover the two bottom corners (about 190 px high): keep score, lives and essential HUD at the top of the screen.
+- Layout: draw on one canvas at a fixed internal resolution (for example 960x540 landscape or 540x960 portrait) and call AndyArcade.fit(canvas, width, height): it letterboxes the canvas to any screen and keeps it fitted on resize and rotation. Never size the game from window.innerWidth in a way that crops it, and never let the page scroll.
+- Pause: AndyArcade.on("pause", pauseGame) and AndyArcade.on("resume", resumeGame). The console's own menu calls them; P still toggles pause from the keyboard.
+- Feedback: AndyArcade.vibrate(20) on hits, deaths and level-ups (the SDK ignores it where vibration does not exist).
+- Audio: the SDK resumes every AudioContext on the first tap or key press and shows a "tap to play" splash while audio is locked; still resume your context on the first key press as below.
 STRUCTURE
 - Start screen, play, pause, game over, and an instant restart (under one second) with Enter or Space. Auto-pause when the page is hidden (visibilitychange).
 - Progression: at least 3 levels or waves, OR for endless and score-attack games escalating named tiers ("ZONE 2") every 30-45 seconds. Introduce one new element per level; a boss or milestone every 3-5 levels.
 - Level 1 opens with 3-5 safe seconds and one-verb prompts ("SPACE to jump") that disappear after first use. No text walls.
 - Fairness: never an unavoidable hazard, at least 0.4 s of reaction time at the current speed. Hand-made levels are data arrays checked at load for reachability or solvability.
-- Fit a 16:9 screen without scrolling; HUD text at least 24px; the HUD shows score, level or tier, lives and multiplier.
+- Fit any screen without scrolling (AndyArcade.fit above); HUD text at least 24px at the internal resolution; the HUD shows score, level or tier, lives and multiplier.
 GAME FEEL
 - Update in fixed 1/60 s steps with an accumulator (cap catch-up at 5 steps, clamp dt) and render separately; never tie speed to the frame rate.
 - Every player action gets an immediate response: a sound, a particle burst or a flash. Short screen shake (decaying, opposite to the hit), 40-80 ms hit-stop on strong hits, easing on all motion, floating score pop-ups. Pool particles and bullets with a hard cap (about 300).
@@ -968,7 +979,7 @@ STRUTTURA OBBLIGATORIA:
 REGOLE DI DESIGN:
 - Preferisci meccaniche semplici ma finite a sistemi ambiziosi incompleti.
 - Lo stato del gioco resta locale alla pagina; nessun backend richiesto.
-- I controlli devono essere spiegati nel gioco e funzionare almeno con tastiera; aggiungi touch se naturale.
+- I controlli devono essere spiegati nel gioco e funzionare con la tastiera; il touch lo fornisce la piattaforma con AndyArcade.configure (vedi ARCADE SDK), non disegnarlo tu.
 - Se usi canvas o engine, rispetta le regole globali di container del prompt base.
 ${ARCADE_PLAYABILITY_MODULE}`,
         },

@@ -1196,7 +1196,7 @@
     "backToChoice": "Go back"
   },
   "arcade": {
-    "hint": "Arrows/WASD · Enter/A select · Esc/B back",
+    "hint": "Arrows/WASD · Enter/A select · X leaderboard · Esc/B back",
     "newGame": "New game",
     "controls": "Controls",
     "forging": "Forging",
@@ -1227,8 +1227,7 @@
     "pressFor": "Press the button for",
     "remap": "Remap",
     "resetMapping": "Reset",
-    "controlsHint": "Games use WASD/arrows, Space, Shift, Enter and P. Any USB controller is turned into those keys. SELECT or Esc twice goes back to the shelf.",
-    "backHint": "SELECT / Esc Esc",
+    "controlsHint": "Games use WASD/arrows, Space, Shift, Enter and P. Every USB controller is translated into those keys. SELECT or Esc twice opens the pause menu.",
     "gameOver": "GAME OVER",
     "enterInitials": "Enter your initials",
     "saveScore": "Save score",
@@ -1237,7 +1236,29 @@
     "yourRank": "You are #{{rank}}",
     "noScores": "No scores yet",
     "playAgain": "Play again",
-    "library": "Shelf"
+    "library": "Shelf",
+    "newBadge": "NEW",
+    "dashboard": "Back to dashboard",
+    "close": "Close",
+    "play": "Play",
+    "paused": "Paused",
+    "pauseHint": "SELECT or Esc Esc opens this menu · B resumes",
+    "rotate": "Turn your phone sideways",
+    "playAnyway": "Play anyway",
+    "gameReady": "“{{name}}” is ready!",
+    "playNow": "Play now",
+    "shelfHint": "Enter or A to play · X for the leaderboard",
+    "shelfHintTouch": "Tap to play · long-press or 🏆 for the leaderboard",
+    "touchControlsNote": "On phones and tablets, touch controls appear inside the game when it needs them: a stick or d-pad on the left, A/B buttons on the right, or swipes and taps. The ⏸ button at the top opens the pause menu.",
+    "keypad": "Keypad",
+    "deleteLetter": "Back",
+    "pause": {
+      "resume": "Resume",
+      "restart": "Restart",
+      "leaderboard": "Leaderboard",
+      "fullscreen": "Full screen",
+      "shelf": "Back to the shelf"
+    }
   },
   "projectData": {
     "title": "Project data",
