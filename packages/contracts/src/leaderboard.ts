@@ -41,6 +41,14 @@ export interface LeaderboardEntryDto {
     createdAt: string;
 }
 
+/** Best score of one project's board, for the Arcade shelf (one request for every game). */
+export interface LeaderboardProjectSummaryDto {
+    projectId: string;
+    boardId: string;
+    entries: number;
+    best: { player: string; score: number; createdAt: string };
+}
+
 export interface LeaderboardSubmitResultDto {
     entry: LeaderboardEntryDto;
     /** 1-based position of the new entry on its board. */

@@ -69,6 +69,39 @@ describe("compileMailtoForms", () => {
         expect(disabled.artifacts).toEqual(input);
     });
 
+    it("renders phone-friendly fields: the right keyboard and autofill, without overriding the model", () => {
+        const phoneManifest: ServiceManifestV1 = {
+            ...manifest,
+            forms: [{
+                ...manifest.forms[0]!,
+                steps: [{
+                    id: "details", title: "Dettagli", fields: [
+                        { id: "email", type: "email", label: "Email", required: true, dataCategory: "contact" },
+                        { id: "phone", type: "tel", label: "Telefono", required: false, dataCategory: "contact", autocomplete: "tel-national" },
+                        { id: "guests", type: "number", label: "Ospiti", required: false, dataCategory: "request" },
+                    ],
+                }],
+            }],
+        };
+        const html = compileMailtoForms({ html: "<div data-pf-form-id='contact'></div>", css: "", js: "" }, phoneManifest, settings).artifacts.html;
+        expect(html).toMatch(/name='email'[^>]*autocomplete='email'[^>]*inputmode='email'[^>]*autocapitalize='off'/);
+        expect(html).toMatch(/name='phone'[^>]*autocomplete='tel-national'[^>]*inputmode='tel'/);
+        expect(html).not.toContain("autocomplete='tel'");
+        expect(html).toMatch(/name='guests'[^>]*inputmode='decimal'/);
+    });
+
+    it("adds the phone CSS layer once, also to a stylesheet that already has the base form CSS", () => {
+        const input = { html: "<div data-pf-form-id='contact'></div>", css: "", js: "" };
+        const first = compileMailtoForms(input, manifest, settings).artifacts.css;
+        expect(first).toContain("/* pf-form-mobile-v1 */");
+        expect(first).toContain("font-size:max(16px,1em)");
+        expect(first.split("/* pf-form-mobile-v1 */").length).toBe(2);
+
+        const older = compileMailtoForms({ ...input, css: ".pf-form{display:grid}" }, manifest, settings).artifacts.css;
+        expect(older.startsWith(".pf-form{display:grid}")).toBe(true);
+        expect(older.split("/* pf-form-mobile-v1 */").length).toBe(2);
+    });
+
     it("fails closed when a configured manifest has no matching declarative slot", () => {
         expect(() => compileMailtoForms({ html: "<main></main>", css: "", js: "" }, manifest, settings)).toThrow("Form slot missing");
     });

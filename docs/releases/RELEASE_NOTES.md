@@ -10,6 +10,44 @@ database.
 
 ---
 
+## Unreleased — Arcade on phones
+
+### Features
+
+- **Arcade SDK v2** (`window.AndyArcade`): generated games call `configure({ touch, buttons,
+  orientation })` and the platform draws the touch controls (d-pad, joystick, swipe or tap), locks
+  the page against scrolling and zoom, fits the canvas to any screen, unlocks audio, and sends
+  pause/resume and haptics. Injected in the Arcade, in the workspace preview and on published
+  sites of games that use it. See [ARCADE_SDK.md](../specs/ARCADE_SDK.md).
+- **Arcade on phones:** pause menu (⏸, SELECT, double Escape), shelf with best scores and a 🏆
+  leaderboard on every game (tap, long-press or gamepad X), score entry with letter wheels, keypad
+  and recent players, back buttons on every screen, full screen and a rotate hint, a toast when a
+  game being forged is ready. The notification bell is hidden in the Arcade.
+- `GET /v1/leaderboards/summary`: the best score of each of the caller's games in one request.
+- **Forms on phones:** the right keyboard and autofill per field type, 16px inputs and 44px touch
+  targets, focus and scroll on each step, it/en runtime messages, an offline notice and a 20 s
+  submit timeout. See [FORMS_CAPTURE.md](../specs/FORMS_CAPTURE.md).
+
+### Upgrade notes
+
+- **Reseed presets** (`docs/runbooks/PRESET_RESEED.md`): the game playability block now tells the
+  model to use the Arcade SDK instead of hand-written touch controls.
+
+---
+
+## 2026.11.28.2 — Security hotfix
+
+- **Security:** published-site file serving answers only for regular files inside the site's own
+  folder, and a read error on any file sent to a client can no longer stop the API process.
+- **Security:** a route that names a project in its path now requires it to be the project the
+  request is authorised for (`403 PROJECT_SCOPE_MISMATCH` otherwise), enforced once in the project
+  sandbox middleware.
+- The API and the background worker log stray promise rejections instead of stopping, and exit
+  cleanly (for the container to restart) on an uncaught exception.
+- **Every installation should take this release** (it includes 2026.11.28.1).
+
+---
+
 ## 2026.11.28.1 — Hotfix
 
 - **Security:** a request with a malformed `x-project-id` header could stop the API process

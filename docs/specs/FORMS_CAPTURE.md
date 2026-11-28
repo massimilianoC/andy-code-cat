@@ -69,6 +69,21 @@ language is Italian or unset (as the rest of the form runtime), English otherwis
 
 A honeypot input (`pf_hp`, off-screen, `aria-hidden`, no tab stop) is rendered in capture forms.
 
+### Phones and weak networks
+
+- **Fields** get the right keyboard and autofill by type when the model gave none: `email`
+  (`inputmode=email`, `autocomplete=email`, no autocapitalise or spellcheck), `tel`, `url`, and
+  `inputmode=decimal` for `number`. A model-provided `autocomplete` always wins.
+- **CSS phone layer** (`/* pf-form-mobile-v1 */`, appended once even to stylesheets that already
+  carry the base form CSS): inputs at least 16px (iOS zooms into smaller ones), 44px touch targets,
+  full-width buttons under 480px, visible success and error states.
+- **Multi-step:** each new step scrolls the form into view and focuses its first field; status
+  messages scroll into view; the step and status texts follow the page language (it/en).
+- **Capture delivery:** nothing is sent while `navigator.onLine` is false (the answers stay in the
+  form); a submission that gets no answer within 20 s is aborted and the visitor is told the outcome
+  is unknown instead of the form staying busy. A retry after a timeout can store a duplicate; an
+  idempotency key is the planned fix.
+
 ## Public submit — trust boundary
 
 ```text
@@ -191,8 +206,8 @@ Storage is bounded per form and per project, checked before every insert:
 | `FORM_SUBMISSIONS_MAX_PER_PROJECT` | 20000 | records of all forms of a project |
 | `FORM_SUBMISSIONS_MAX_BYTES_PER_PROJECT` | 50 MiB | stored `fields` bytes of a project |
 
-A submission past a quota is refused with 429 `FORM_RATE_LIMITED` (the visitor is told to try
-later) and the refusal is logged with the project, form and usage. Retention frees space over time;
+A submission past a quota is refused with 507 `FORM_QUOTA_EXCEEDED` (the visitor is told the
+form is not accepting submissions and nothing was saved) and the refusal is logged with the project, form and usage. Retention frees space over time;
 the owner frees it at once from the data panel. Known limit: anyone who can reach the site can fill
 the quota, as with the per-site rate limit; a dedicated refusal code and an owner notification are
 open (see `docs/project/KNOWN_ISSUES.md`).

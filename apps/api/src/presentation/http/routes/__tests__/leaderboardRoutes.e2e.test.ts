@@ -117,6 +117,22 @@ describe("project leaderboard", () => {
         }
     });
 
+    it("summarises the best score of each of the caller's games, and only theirs", async () => {
+        await as(stranger, strangersGame).post(`/v1/projects/${strangersGame}/leaderboard`, { player: "EVE", score: 999_999 });
+        const summary = await request(app).get("/v1/leaderboards/summary").set({ Authorization: `Bearer ${tokenFor(owner)}` });
+        expect(summary.status).toBe(200);
+        expect(summary.body.boardId).toBe("default");
+        const games = summary.body.games as Array<{ projectId: string; entries: number; best: { player: string; score: number } }>;
+        expect(games.map((g) => g.projectId)).toEqual([gameA]);
+        expect(games[0]!.best).toMatchObject({ player: "BOB", score: 300 });
+        expect(games[0]!.entries).toBe(3);
+
+        const speedrun = await request(app).get("/v1/leaderboards/summary?boardId=speedrun").set({ Authorization: `Bearer ${tokenFor(owner)}` });
+        expect(speedrun.body.games[0].best.player).toBe("ZED");
+        expect((await request(app).get("/v1/leaderboards/summary?boardId=../x").set({ Authorization: `Bearer ${tokenFor(owner)}` })).status).toBe(400);
+        expect((await request(app).get("/v1/leaderboards/summary")).status).toBe(401);
+    });
+
     it("lets the owner delete an entry, and nobody delete across scopes", async () => {
         const api = as(owner, gameA);
         const created = await api.post(`/v1/projects/${gameA}/leaderboard`, { player: "DEL", score: 7 });

@@ -149,12 +149,15 @@ export class LocalFileStorage implements IFileStorage {
         return written;
     }
 
-    /** Resolve a file path within a publish directory. Returns null if it would escape the root. */
+    /**
+     * Resolve a path strictly inside a publish directory. Returns null for the directory itself
+     * and for anything outside it (a sibling directory sharing the prefix included). Whether the
+     * path is a regular file is the caller's check: this only bounds where it may point.
+     */
     resolvePublishFile(publishId: string, relativePath: string): string | null {
-        const dir = this.publishDirPath(publishId);
-        const resolved = path.resolve(dir, relativePath);
-        // Path traversal guard
-        if (!resolved.startsWith(path.resolve(dir))) return null;
+        const root = path.resolve(this.publishDirPath(publishId));
+        const resolved = path.resolve(root, relativePath);
+        if (!resolved.startsWith(root + path.sep)) return null;
         return resolved;
     }
 

@@ -109,7 +109,8 @@ export class SubmitPublishedForm {
         const { quota } = this.deps;
         if (usage.formRecords >= quota.maxPerForm || usage.projectRecords >= quota.maxPerProject || usage.projectBytes >= quota.maxBytesPerProject) {
             console.warn("[forms] submission refused: quota reached", { projectId: deployment.projectId, formId: form.id, ...usage });
-            return refuse(429, "FORM_RATE_LIMITED");
+            // 507: a full store is not the visitor's fault and retrying soon will not help.
+            return refuse(507, "FORM_QUOTA_EXCEEDED");
         }
 
         const now = this.deps.now?.() ?? new Date();

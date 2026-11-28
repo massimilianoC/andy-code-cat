@@ -34,6 +34,17 @@ export function createLeaderboardRoutes(): Router {
         return { ownerUserId: req.auth!.userId, projectId: req.sandbox!.projectId, boardId };
     }
 
+    // The owner's own games only: the scope is the JWT subject, so no project header is involved.
+    router.get("/leaderboards/summary", readLimiter, authMiddleware,
+        async (req: RequestWithContext, res, next) => {
+            try {
+                const boardId = leaderboardBoardIdSchema.parse(String(req.query.boardId ?? LEADERBOARD_DEFAULT_BOARD_ID));
+                res.json({ boardId, games: await manageLeaderboard.summary(req.auth!.userId, boardId) });
+            } catch (error) {
+                next(error);
+            }
+        });
+
     router.get("/projects/:projectId/leaderboard", readLimiter, authMiddleware, sandboxMiddleware, samePathProject,
         async (req: RequestWithContext, res, next) => {
             try {

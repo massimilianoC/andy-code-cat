@@ -53,6 +53,7 @@ const MESSAGES: Record<FormSubmissionErrorCode, string> = {
     FORM_SUBMISSION_TOO_LARGE: "Form submission too large",
     FORM_SUBMISSION_UNSUPPORTED_MEDIA_TYPE: "Form submissions must be application/json",
     FORM_RATE_LIMITED: "Too many submissions, try again later",
+    FORM_QUOTA_EXCEEDED: "This form is not accepting submissions at the moment",
     FORM_TEMPORARILY_UNAVAILABLE: "Temporarily unavailable",
 };
 

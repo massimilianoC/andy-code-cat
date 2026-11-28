@@ -256,9 +256,9 @@ describe("forms capture — public submit and project data", () => {
         // One more fits under the form quota, the next does not.
         const formQuota = make({ ...roomy, maxPerForm: usage.formRecords + 1 });
         expect(await formQuota.execute(input)).toMatchObject({ outcome: "stored" });
-        expect(await formQuota.execute(input)).toEqual({ outcome: "refused", status: 429, code: "FORM_RATE_LIMITED" });
-        expect(await make({ ...roomy, maxPerProject: usage.projectRecords }).execute(input)).toMatchObject({ status: 429 });
-        expect(await make({ ...roomy, maxBytesPerProject: usage.projectBytes }).execute(input)).toMatchObject({ status: 429 });
+        expect(await formQuota.execute(input)).toEqual({ outcome: "refused", status: 507, code: "FORM_QUOTA_EXCEEDED" });
+        expect(await make({ ...roomy, maxPerProject: usage.projectRecords }).execute(input)).toMatchObject({ status: 507, code: "FORM_QUOTA_EXCEEDED" });
+        expect(await make({ ...roomy, maxBytesPerProject: usage.projectBytes }).execute(input)).toMatchObject({ status: 507, code: "FORM_QUOTA_EXCEEDED" });
         expect((await submissions.usage(scope)).formRecords).toBe(usage.formRecords + 1);
         warn.mockRestore();
     });

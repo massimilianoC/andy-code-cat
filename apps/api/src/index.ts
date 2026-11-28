@@ -7,6 +7,9 @@ import { GetLlmCatalog } from "./application/use-cases/GetLlmCatalog";
 import { GetEffectiveLlmCatalog } from "./application/use-cases/GetEffectiveLlmCatalog";
 import { ReconcileLlmCatalogAvailability } from "./application/use-cases/ReconcileLlmCatalogAvailability";
 import { ensureDatabaseIndexes } from "./infra/db/ensureDatabaseIndexes";
+import { installProcessSafetyNet } from "./composition/processSafetyNet";
+
+installProcessSafetyNet("api");
 
 async function bootstrap() {
     await getDb();

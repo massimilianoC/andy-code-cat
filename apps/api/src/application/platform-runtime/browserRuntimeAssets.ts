@@ -39,9 +39,24 @@ export const PF_RUNTIME_CORE_V1 = String.raw`;(() => {
 export const PF_FORMS_UI_V1 = String.raw`;(() => {
   const runtime = window.PageForgeRuntime;
   if (!runtime) return;
+  const italian = String(document.documentElement.lang || "it").toLowerCase().indexOf("it") === 0;
+  const TEXT = italian ? {
+    unavailable: "Il servizio del modulo non è disponibile.",
+    incomplete: "Completa i campi obbligatori prima di continuare.",
+    failed: "Non è stato possibile inviare il modulo. Riprova.",
+  } : {
+    unavailable: "The form service is not available.",
+    incomplete: "Fill in the required fields before continuing.",
+    failed: "The form could not be sent. Please try again.",
+  };
+  // On a phone the status line is often below the fold: bring it into view when it changes.
   const showStatus = (form, message) => {
     const node = form.querySelector(".pf-form__status");
-    if (node) node.textContent = message;
+    if (!node) return;
+    node.textContent = message;
+    if (message && typeof node.scrollIntoView === "function") {
+      try { node.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (_) { node.scrollIntoView(false); }
+    }
   };
   runtime.registerModule({
     id: "forms-ui",
@@ -54,24 +69,31 @@ export const PF_FORMS_UI_V1 = String.raw`;(() => {
         const definition = formsConfig.definitions.find((item) => item.id === form.dataset.pfFormId);
         const adapter = core.getAdapter(formsConfig.mode);
         if (!definition || !adapter) {
-          showStatus(form, "Il servizio del modulo non è disponibile.");
+          showStatus(form, TEXT.unavailable);
           return;
         }
         form.dataset.pfMounted = "true";
         const steps = Array.from(form.querySelectorAll("[data-pf-step]"));
         let currentStep = 0;
-        const showStep = (index) => {
+        const showStep = (index, focus) => {
           currentStep = Math.max(0, Math.min(index, steps.length - 1));
           steps.forEach((step, stepIndex) => { step.hidden = stepIndex !== currentStep; });
           const progress = form.querySelector("[data-pf-step-current]");
           if (progress) progress.textContent = String(currentStep + 1);
+          if (!focus || !steps[currentStep]) return;
+          // A new step starts at its first field, with the top of the form in view.
+          if (typeof form.scrollIntoView === "function") {
+            try { form.scrollIntoView({ block: "start", behavior: "smooth" }); } catch (_) { form.scrollIntoView(true); }
+          }
+          const first = steps[currentStep].querySelector("input:not([type='hidden']), select, textarea");
+          if (first && typeof first.focus === "function") { try { first.focus({ preventScroll: true }); } catch (_) { first.focus(); } }
         };
         const validateStep = () => {
           const fields = Array.from((steps[currentStep] && steps[currentStep].querySelectorAll("input, select, textarea")) || []);
           const invalid = fields.find((field) => !field.checkValidity());
           if (invalid) {
             invalid.reportValidity();
-            showStatus(form, "Completa i campi obbligatori prima di continuare.");
+            showStatus(form, TEXT.incomplete);
             return false;
           }
           showStatus(form, "");
@@ -81,9 +103,9 @@ export const PF_FORMS_UI_V1 = String.raw`;(() => {
           const target = event.target;
           if (!(target instanceof Element)) return;
           if (target.closest("[data-pf-next]")) {
-            if (validateStep()) showStep(currentStep + 1);
+            if (validateStep()) showStep(currentStep + 1, true);
           } else if (target.closest("[data-pf-back]")) {
-            showStep(currentStep - 1);
+            showStep(currentStep - 1, true);
           }
         });
         form.addEventListener("submit", (event) => {
@@ -99,7 +121,7 @@ export const PF_FORMS_UI_V1 = String.raw`;(() => {
             settings: formsConfig,
             showStatus: (message) => showStatus(form, message),
             emit: core.emit,
-          })).catch(() => showStatus(form, "Non è stato possibile preparare la bozza. Copia i dati manualmente."));
+          })).catch(() => showStatus(form, TEXT.failed));
         });
         showStep(0);
         core.emit("pf:form-mounted", { formId: definition.id, mode: formsConfig.mode }, false);
@@ -202,6 +224,9 @@ export const PF_FORMS_CAPTURE_V1 = String.raw`;(() => {
     invalid: "Alcuni campi non sono validi. Controlla i campi evidenziati e riprova.",
     rateLimited: "Troppi invii in poco tempo. Attendi qualche minuto e riprova.",
     failed: "Invio non riuscito: i dati non sono stati salvati. Riprova più tardi.",
+    full: "Questo modulo al momento non accetta altri invii: i dati non sono stati salvati. Contatta il sito in un altro modo.",
+    offline: "Sei offline: i dati non sono stati inviati. Restano nel modulo, riprova quando torna la connessione.",
+    timeout: "La connessione è troppo lenta: non sappiamo se l'invio è arrivato. Controlla la connessione e riprova.",
   } : {
     unavailable: "This form saves data only on the published site. In preview and in the ZIP export sending is disabled: nothing was sent.",
     sending: "Sending…",
@@ -209,7 +234,11 @@ export const PF_FORMS_CAPTURE_V1 = String.raw`;(() => {
     invalid: "Some fields are not valid. Check the highlighted fields and try again.",
     rateLimited: "Too many submissions in a short time. Wait a few minutes and try again.",
     failed: "Sending failed: your data was not saved. Please try again later.",
+    full: "This form is not accepting more submissions right now: your data was not saved. Please contact the site another way.",
+    offline: "You are offline: nothing was sent. Your answers are still in the form, try again when you are back online.",
+    timeout: "The connection is too slow: we cannot tell whether it arrived. Check your connection and try again.",
   };
+  const SUBMIT_TIMEOUT_MS = 20000;
   const setState = (form, state) => { form.setAttribute("data-pf-state", state); };
   const setBusy = (form, busy) => {
     form.setAttribute("aria-busy", busy ? "true" : "false");
@@ -271,10 +300,20 @@ export const PF_FORMS_CAPTURE_V1 = String.raw`;(() => {
         const honeypot = context.values.get("pf_hp");
         if (typeof honeypot === "string" && honeypot !== "") body.hp = honeypot;
 
+        if (typeof navigator !== "undefined" && navigator.onLine === false) {
+          setState(form, "error");
+          context.showStatus(MESSAGES.offline);
+          emit("failed", { httpStatus: 0, reason: "offline" });
+          return;
+        }
         setBusy(form, true);
         setState(form, "sending");
         context.showStatus(MESSAGES.sending);
         let response = null;
+        let timedOut = false;
+        // A phone on a weak network must not stay "sending" forever.
+        const controller = typeof AbortController === "function" ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => { timedOut = true; controller.abort(); }, SUBMIT_TIMEOUT_MS) : null;
         try {
           response = await fetch(url, {
             method: "POST",
@@ -283,11 +322,20 @@ export const PF_FORMS_CAPTURE_V1 = String.raw`;(() => {
             credentials: "omit",
             cache: "no-store",
             redirect: "error",
+            signal: controller ? controller.signal : undefined,
           });
         } catch (_) {
           response = null;
+        } finally {
+          if (timer) clearTimeout(timer);
         }
         setBusy(form, false);
+        if (!response && timedOut) {
+          setState(form, "error");
+          context.showStatus(MESSAGES.timeout);
+          emit("failed", { httpStatus: 0, reason: "timeout" });
+          return;
+        }
 
         if (response && (response.status === 201 || response.status === 202)) {
           form.reset();
@@ -304,6 +352,8 @@ export const PF_FORMS_CAPTURE_V1 = String.raw`;(() => {
           context.showStatus(MESSAGES.invalid);
         } else if (response && response.status === 429) {
           context.showStatus(MESSAGES.rateLimited);
+        } else if (response && response.status === 507) {
+          context.showStatus(MESSAGES.full);
         } else {
           context.showStatus(MESSAGES.failed);
         }

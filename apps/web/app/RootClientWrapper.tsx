@@ -11,6 +11,9 @@ import type { ReactNode } from "react";
 export function RootClientWrapper({ children }: { children: ReactNode }) {
     const pathname = usePathname();
     const isWorkspace = pathname?.startsWith("/workspace/") ?? false;
+    // The Arcade is full-screen: the floating trigger would cover the game's HUD. Runs that land
+    // while playing are announced by the Arcade itself.
+    const isArcade = pathname === "/arcade" || (pathname?.startsWith("/arcade/") ?? false);
 
     return (
         <I18nProvider>
@@ -18,7 +21,7 @@ export function RootClientWrapper({ children }: { children: ReactNode }) {
                 <NotificationsProvider>
                     <SessionRefreshModal />
                     {children}
-                    <NotificationPanel hideTrigger={isWorkspace} />
+                    <NotificationPanel hideTrigger={isWorkspace || isArcade} />
                 </NotificationsProvider>
             </SessionProvider>
         </I18nProvider>
