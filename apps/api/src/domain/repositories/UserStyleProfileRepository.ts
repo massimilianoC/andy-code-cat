@@ -9,4 +9,7 @@ export interface UserStyleProfileRepository {
 
     /** Initialise an empty profile for a newly registered user. Only inserts — does NOT overwrite. */
     initForUser(input: CreateUserStyleProfileInput): Promise<UserStyleProfile>;
+
+    /** Remove an account's style profile (account deletion). */
+    deleteByUserId(userId: string): Promise<number>;
 }

@@ -253,6 +253,35 @@ export class MinioFileStorage implements IFileStorage {
     }
 
     // -----------------------------------------------------------------------
+    // Bulk removal — objects under a prefix, then the local parts (exports, workspaces)
+    // -----------------------------------------------------------------------
+
+    private async removePrefix(prefix: string): Promise<void> {
+        await this.ensureBucketReady();
+        const names = await new Promise<string[]>((resolve, reject) => {
+            const found: string[] = [];
+            const stream = this.client.listObjectsV2(this.bucket, prefix, true);
+            stream.on("data", (item: { name?: string }) => { if (item.name) found.push(item.name); });
+            stream.on("error", reject);
+            stream.on("end", () => resolve(found));
+        });
+        if (names.length > 0) await this.client.removeObjects(this.bucket, names);
+    }
+
+    async deleteProjectFiles(userId: string, projectId: string): Promise<void> {
+        await this.fallback.deleteProjectFiles(userId, projectId);
+        await this.removePrefix(`${this.keyFor("uploads", userId, projectId)}/`);
+        await this.removePrefix(`${this.keyFor("thumbnails", projectId)}/`);
+        await this.removePrefix(this.keyFor("profiles", userId, `dataset-cache-${projectId}-`));
+    }
+
+    async deleteUserFiles(userId: string): Promise<void> {
+        await this.fallback.deleteUserFiles(userId);
+        await this.removePrefix(`${this.keyFor("uploads", userId)}/`);
+        await this.removePrefix(`${this.keyFor("profiles", userId)}/`);
+    }
+
+    // -----------------------------------------------------------------------
     // Snapshot thumbnails — stored in MinIO under thumbnails/{projectId}/{snapshotId}.jpg
     // -----------------------------------------------------------------------
 

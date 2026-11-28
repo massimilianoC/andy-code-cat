@@ -148,4 +148,11 @@ export class MongoUserStyleProfileRepository implements UserStyleProfileReposito
         if (!doc) throw new Error("Failed to persist user style profile");
         return toEntity(doc);
     }
+
+    /** Remove an account's style profile (account deletion). */
+    async deleteByUserId(userId: string): Promise<number> {
+        const col = await this.collection();
+        const result = await col.deleteMany({ userId });
+        return result.deletedCount ?? 0;
+    }
 }

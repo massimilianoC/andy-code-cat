@@ -99,6 +99,12 @@ const envSchema = z.object({
     // Salt of the IP hash stored with captured form submissions (FORMS_CAPTURE.md). Optional:
     // when unset it is derived from EXPORT_JWT_SECRET. Changing it only affects new submissions.
     FORM_IP_HASH_SALT: z.string().optional(),
+    // Volume and retention of captured form submissions (FORMS_CAPTURE.md "Quota and retention").
+    // A submission past a quota is refused; each stored submission expires after the retention.
+    FORM_SUBMISSION_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
+    FORM_SUBMISSIONS_MAX_PER_FORM: z.coerce.number().int().positive().default(5_000),
+    FORM_SUBMISSIONS_MAX_PER_PROJECT: z.coerce.number().int().positive().default(20_000),
+    FORM_SUBMISSIONS_MAX_BYTES_PER_PROJECT: z.coerce.number().int().positive().default(50 * 1024 * 1024),
     UPLOAD_MAX_SIZE_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
     // ── Document Context Layer (DCL) enrichment ───────────────────────────────
     ENRICHMENT_ENABLED: z.string().default("true"),

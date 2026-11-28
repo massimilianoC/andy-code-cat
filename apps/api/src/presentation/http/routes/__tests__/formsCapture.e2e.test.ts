@@ -217,6 +217,52 @@ describe("forms capture — public submit and project data", () => {
         expect(JSON.stringify(doc)).not.toContain(ip);
     });
 
+    it("stores each submission with its size and a server-computed expiry, removed by a TTL index", async () => {
+        const res = await submit(publishA, validBody);
+        expect(res.status).toBe(201);
+        const [doc] = await (await db()).collection("form_submissions").find({ projectId: projA }).sort({ createdAt: -1 }).limit(1).toArray();
+        const days = (doc!.expiresAt.getTime() - doc!.createdAt.getTime()) / 86_400_000;
+        expect(days).toBeCloseTo(365, 3);
+        expect(doc!.sizeBytes).toBe(Buffer.byteLength(JSON.stringify(doc!.fields), "utf8"));
+        const indexes = await (await db()).collection("form_submissions").indexes();
+        expect(indexes.find((i) => i.name === "form_submissions_retention")).toMatchObject({ expireAfterSeconds: 0 });
+    });
+
+    it("refuses a submission once the form, the project or the project's bytes reach the quota (429)", async () => {
+        const { SubmitPublishedForm } = await import("../../../../application/forms/SubmitPublishedForm");
+        const { MongoSiteDeploymentRepository } = await import("../../../../infra/repositories/MongoSiteDeploymentRepository");
+        const { MongoUserRepository } = await import("../../../../infra/repositories/MongoUserRepository");
+        const { MongoProjectRepository } = await import("../../../../infra/repositories/MongoProjectRepository");
+        const { MongoPreviewSnapshotRepository } = await import("../../../../infra/repositories/MongoPreviewSnapshotRepository");
+        const { MongoFormSubmissionRepository } = await import("../../../../infra/repositories/MongoFormSubmissionRepository");
+        const submissions = new MongoFormSubmissionRepository();
+        const scope = { ownerUserId: ownerA.toHexString(), projectId: projA, formId: "contact" };
+        const usage = await submissions.usage(scope);
+        expect(usage.formRecords).toBeGreaterThan(0);
+        const make = (quota: { maxPerForm: number; maxPerProject: number; maxBytesPerProject: number }) => new SubmitPublishedForm({
+            deployments: new MongoSiteDeploymentRepository(),
+            users: new MongoUserRepository(),
+            projects: new MongoProjectRepository(),
+            snapshots: new MongoPreviewSnapshotRepository(),
+            submissions,
+            ipHashSalt: "test-salt",
+            quota,
+            retentionDays: 30,
+        });
+        const input = { publishId: publishA, formId: "contact", fields: validBody.fields, ip: "198.51.100.250" };
+        const roomy = { maxPerForm: 1_000, maxPerProject: 1_000, maxBytesPerProject: 10_000_000 };
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+        // One more fits under the form quota, the next does not.
+        const formQuota = make({ ...roomy, maxPerForm: usage.formRecords + 1 });
+        expect(await formQuota.execute(input)).toMatchObject({ outcome: "stored" });
+        expect(await formQuota.execute(input)).toEqual({ outcome: "refused", status: 507, code: "FORM_QUOTA_EXCEEDED" });
+        expect(await make({ ...roomy, maxPerProject: usage.projectRecords }).execute(input)).toMatchObject({ status: 507, code: "FORM_QUOTA_EXCEEDED" });
+        expect(await make({ ...roomy, maxBytesPerProject: usage.projectBytes }).execute(input)).toMatchObject({ status: 507, code: "FORM_QUOTA_EXCEEDED" });
+        expect((await submissions.usage(scope)).formRecords).toBe(usage.formRecords + 1);
+        warn.mockRestore();
+    });
+
     it("refuses when capture is disabled or the project uses mailto (409)", async () => {
         const mailto = await submit(publishMailto, validBody);
         expect(mailto.status).toBe(409);

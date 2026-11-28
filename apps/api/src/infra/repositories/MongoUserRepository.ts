@@ -49,19 +49,28 @@ export class MongoUserRepository implements UserRepository {
         const collection = await this.collection();
         const now = new Date();
 
-        const result = await collection.insertOne({
-            _id: new ObjectId(),
-            email: input.email.toLowerCase(),
-            passwordHash: input.passwordHash,
-            passwordPolicyVersion: input.passwordPolicyVersion,
-            firstName: input.firstName,
-            lastName: input.lastName,
-            emailVerified: input.emailVerified,
-            isBlocked: false,
-            roles: ["user"],
-            llmPreferences: input.llmPreferences,
-            createdAt: now
-        });
+        let result;
+        try {
+            result = await collection.insertOne({
+                _id: new ObjectId(),
+                email: input.email.toLowerCase(),
+                passwordHash: input.passwordHash,
+                passwordPolicyVersion: input.passwordPolicyVersion,
+                firstName: input.firstName,
+                lastName: input.lastName,
+                emailVerified: input.emailVerified,
+                isBlocked: false,
+                roles: ["user"],
+                llmPreferences: input.llmPreferences,
+                createdAt: now
+            });
+        } catch (error) {
+            // The unique email index (infra/db/ensureDatabaseIndexes.ts) settles concurrent registrations.
+            if ((error as { code?: number }).code === 11000) {
+                throw Object.assign(new Error("Email already in use"), { statusCode: 409 });
+            }
+            throw error;
+        }
 
         const created = await collection.findOne({ _id: result.insertedId });
         if (!created) {

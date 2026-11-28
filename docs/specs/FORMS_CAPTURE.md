@@ -149,8 +149,8 @@ never the payload. A test asserts no submitted value reaches `console.*`.
 
 ## Data stored
 
-One shared collection, `form_submissions` — never a collection or database per project. Index
-`{ ownerUserId: 1, projectId: 1, formId: 1, createdAt: -1 }`.
+One shared collection, `form_submissions` — never a collection or database per project. Indexes
+`{ ownerUserId: 1, projectId: 1, formId: 1, createdAt: -1 }` and the retention TTL on `expiresAt`.
 
 | Field | Content |
 |---|---|
@@ -161,6 +161,8 @@ One shared collection, `form_submissions` — never a collection or database per
 | `privacyNoticeVersion` | the project's privacy notice version in force at submission |
 | `ipHash` | `sha256(salt + IP)`; the raw IP is never stored |
 | `createdAt` | server time |
+| `expiresAt` | `createdAt` + `FORM_SUBMISSION_RETENTION_DAYS`, computed by the server |
+| `sizeBytes` | stored size of `fields`, for the byte quota |
 
 Salt: `FORM_IP_HASH_SALT` when set, otherwise derived from `EXPORT_JWT_SECRET` (so the hash is
 never unsalted). The hash is for abuse investigation by the operator and is not shown to the owner
@@ -187,10 +189,28 @@ project data panel (`composeProjectData.ts`).
 
 ## Retention
 
-v1 has no automatic expiry: submissions are kept until the owner deletes them (one, one form, all)
-from the data panel, or the project is deleted (the project data registry purges every capability).
-A server-calculated `expiresAt` with a TTL index is the planned next step
-(PLATFORM_CAPABILITY_RUNTIME.md, "Forms Inbox").
+Every submission carries `expiresAt` = `createdAt` + `FORM_SUBMISSION_RETENTION_DAYS` (default 365),
+computed by the server; a TTL index on `expiresAt` removes it once that time has passed. Records
+stored before retention existed are given an `expiresAt` from their `createdAt` by the boot index
+step (`infra/db/ensureDatabaseIndexes.ts`). Changing the retention applies to new submissions and to
+records that have none yet, not to records already dated. The owner can still delete earlier (one,
+one form, all) from the data panel, and project deletion purges every capability.
+
+## Quota
+
+Storage is bounded per form and per project, checked before every insert:
+
+| Variable | Default | Bound |
+|---|---|---|
+| `FORM_SUBMISSIONS_MAX_PER_FORM` | 5000 | records of one form |
+| `FORM_SUBMISSIONS_MAX_PER_PROJECT` | 20000 | records of all forms of a project |
+| `FORM_SUBMISSIONS_MAX_BYTES_PER_PROJECT` | 50 MiB | stored `fields` bytes of a project |
+
+A submission past a quota is refused with 507 `FORM_QUOTA_EXCEEDED` (the visitor is told the
+form is not accepting submissions and nothing was saved) and the refusal is logged with the project, form and usage. Retention frees space over time;
+the owner frees it at once from the data panel. Known limit: anyone who can reach the site can fill
+the quota, as with the per-site rate limit; a dedicated refusal code and an owner notification are
+open (see `docs/project/KNOWN_ISSUES.md`).
 
 ## GDPR note
 

@@ -21,4 +21,9 @@ export interface ExportRepository {
     updateFailed(id: string, errorMessage: string): Promise<ExportRecord | null>;
 
     incrementDownloadCount(id: string): Promise<void>;
+
+    /** Remove the export records of a project; the zip files go with the project's files. */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
+    /** Remove every export record of an account (account deletion). */
+    deleteByUser(userId: string): Promise<number>;
 }

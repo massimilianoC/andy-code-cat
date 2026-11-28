@@ -216,4 +216,18 @@ export class MongoBackgroundRunRepository implements BackgroundRunRepository {
         if (flagged) return toEntity(flagged);
         return this.findByIdForUser(id, userId);
     }
+
+    /** Remove every run of a project, whatever its status (project deletion). */
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId, userId });
+        return result.deletedCount ?? 0;
+    }
+
+    /** Remove every run of an account (account deletion). */
+    async deleteByUser(userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ userId });
+        return result.deletedCount ?? 0;
+    }
 }

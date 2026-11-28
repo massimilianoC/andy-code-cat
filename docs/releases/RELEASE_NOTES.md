@@ -28,10 +28,35 @@ database.
   targets, focus and scroll on each step, it/en runtime messages, an offline notice and a 20 s
   submit timeout. See [FORMS_CAPTURE.md](../specs/FORMS_CAPTURE.md).
 
+### Security
+
+- **Account and project deletion are complete:** deleting a user blocks the account, revokes its
+  sessions and deletes every project through the same path as a project deletion; a project
+  deletion removes every record and file of every capability and keeps the project when any purge
+  step fails (`PROJECT_DELETE_INCOMPLETE`) instead of leaving orphans. The site of a deleted
+  account answers 410.
+- **Database invariants at boot** (`ensureDatabaseIndexes`): unique `users.email` (concurrent
+  registrations cannot create duplicates; a duplicate email answers 409), unique session token ids,
+  session and form-submission expiry by TTL. Existing duplicates are logged and the index is
+  skipped instead of blocking boot.
+- **Rate limits on authentication:** login (per email and per IP), registration, refresh and
+  password change answer `429 AUTH_RATE_LIMITED` past their budget.
+- **Public media** serves images, video and audio only, and no longer redirects off-site.
+- **Form storage is bounded:** per-form and per-project quotas in records and bytes
+  (`507 FORM_QUOTA_EXCEEDED`), and a retention period after which submissions expire.
+- **Roles are read from the database** on every request; changing a user's role revokes their
+  sessions.
+- Remaining hardening items are listed in `docs/project/KNOWN_ISSUES.md`.
+
 ### Upgrade notes
 
 - **Reseed presets** (`docs/runbooks/PRESET_RESEED.md`): the game playability block now tells the
   model to use the Arcade SDK instead of hand-written touch controls.
+- **New optional settings** (defaults are safe): `FORM_SUBMISSION_RETENTION_DAYS`,
+  `FORM_SUBMISSIONS_MAX_PER_FORM`, `FORM_SUBMISSIONS_MAX_PER_PROJECT`,
+  `FORM_SUBMISSIONS_MAX_BYTES_PER_PROJECT` (see `.env.example`).
+- The first boot creates the new indexes and backfills the expiry of stored form submissions;
+  check the API log for `ensureDatabaseIndexes` warnings (duplicate emails are reported there).
 
 ---
 

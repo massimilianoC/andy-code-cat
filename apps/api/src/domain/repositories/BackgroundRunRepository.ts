@@ -55,4 +55,9 @@ export interface BackgroundRunRepository {
      * is flagged and the worker stops it at its next heartbeat or step boundary.
      */
     requestCancel(id: string, userId: string, now: Date): Promise<BackgroundRun | null>;
+
+    /** Remove every run of a project, whatever its status (project deletion). */
+    deleteByProject(projectId: string, userId: string): Promise<number>;
+    /** Remove every run of an account (account deletion). */
+    deleteByUser(userId: string): Promise<number>;
 }

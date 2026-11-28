@@ -95,6 +95,8 @@ export type FormSubmissionErrorCode =
     | "FORM_SUBMISSION_TOO_LARGE"
     | "FORM_SUBMISSION_UNSUPPORTED_MEDIA_TYPE"
     | "FORM_RATE_LIMITED"
+    /** The project's storage for submissions is full; the owner must export or clear it. */
+    | "FORM_QUOTA_EXCEEDED"
     | "FORM_TEMPORARILY_UNAVAILABLE";
 
 export interface FormSubmissionErrorResponse {

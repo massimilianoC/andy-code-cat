@@ -15,4 +15,7 @@ export interface SystemNotificationRepository {
     listForUser(userId: string, query?: SystemNotificationQuery): Promise<SystemNotification[]>;
     listForAdmin(query?: SystemNotificationQuery): Promise<SystemNotification[]>;
     markRead(id: string, userId: string): Promise<SystemNotification | null>;
+
+    /** Remove every notification addressed to an account (account deletion). */
+    deleteByUser(userId: string): Promise<number>;
 }

@@ -16,7 +16,7 @@ export class RegisterUser {
 
         const existing = await this.userRepository.findByEmail(normalizedEmail);
         if (existing) {
-            throw new Error("Email already in use");
+            throw Object.assign(new Error("Email already in use"), { statusCode: 409 });
         }
 
         const user = await this.userRepository.create({

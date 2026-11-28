@@ -100,6 +100,7 @@ apps/api/src/
   application/projectData/   ← owner's data panel over every record-storing capability (docs/specs/PROJECT_DATA_PANEL.md)
     ProjectDataRegistry.ts / ManageProjectData.ts / projectDataCsv.ts / LeaderboardProjectData.ts
     (wired once in composition/composeProjectData.ts; DeleteProject purges through the same registry)
+    Project, superadmin-project and account deletion are wired once in composition/composeDeletion.ts
 
   application/media/
     ResolveArtifactMedia.ts  ← validates mediaManifest, resolves asset://media keys, persists ProjectAsset + MediaResolutionTrace

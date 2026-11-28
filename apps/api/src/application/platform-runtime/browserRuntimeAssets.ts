@@ -224,6 +224,7 @@ export const PF_FORMS_CAPTURE_V1 = String.raw`;(() => {
     invalid: "Alcuni campi non sono validi. Controlla i campi evidenziati e riprova.",
     rateLimited: "Troppi invii in poco tempo. Attendi qualche minuto e riprova.",
     failed: "Invio non riuscito: i dati non sono stati salvati. Riprova più tardi.",
+    full: "Questo modulo al momento non accetta altri invii: i dati non sono stati salvati. Contatta il sito in un altro modo.",
     offline: "Sei offline: i dati non sono stati inviati. Restano nel modulo, riprova quando torna la connessione.",
     timeout: "La connessione è troppo lenta: non sappiamo se l'invio è arrivato. Controlla la connessione e riprova.",
   } : {
@@ -233,6 +234,7 @@ export const PF_FORMS_CAPTURE_V1 = String.raw`;(() => {
     invalid: "Some fields are not valid. Check the highlighted fields and try again.",
     rateLimited: "Too many submissions in a short time. Wait a few minutes and try again.",
     failed: "Sending failed: your data was not saved. Please try again later.",
+    full: "This form is not accepting more submissions right now: your data was not saved. Please contact the site another way.",
     offline: "You are offline: nothing was sent. Your answers are still in the form, try again when you are back online.",
     timeout: "The connection is too slow: we cannot tell whether it arrived. Check your connection and try again.",
   };
@@ -350,6 +352,8 @@ export const PF_FORMS_CAPTURE_V1 = String.raw`;(() => {
           context.showStatus(MESSAGES.invalid);
         } else if (response && response.status === 429) {
           context.showStatus(MESSAGES.rateLimited);
+        } else if (response && response.status === 507) {
+          context.showStatus(MESSAGES.full);
         } else {
           context.showStatus(MESSAGES.failed);
         }

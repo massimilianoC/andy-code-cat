@@ -36,4 +36,7 @@ export interface ServiceApiKeyRepository {
     delete(id: string): Promise<void>;
     /** Resolve plain-text key — decrypts on-the-fly, never stored in entity */
     resolvePlaintext(key: ServiceApiKey): Promise<string>;
+
+    /** Remove every service key an account owns (account deletion). */
+    deleteByUser(userId: string): Promise<number>;
 }

@@ -337,4 +337,11 @@ export class MongoProjectAssetRepository implements ProjectAssetRepository {
         const doc = await col.findOne(accessFilter);
         return doc ? toEntity(doc) : null;
     }
+
+    /** Remove every asset row an account owns, library assets included (account deletion). */
+    async deleteByUser(userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ userId } as Filter<ProjectAssetDocument>);
+        return result.deletedCount ?? 0;
+    }
 }

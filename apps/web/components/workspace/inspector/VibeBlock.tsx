@@ -74,7 +74,8 @@ export function VibeBlock({ intake, classifyLog, costEur }: VibeBlockProps) {
                                 </span>
                                 <span style={{ color: "#6b7280", fontSize: "0.7rem" }}>{attachment.mimeType ?? "—"}</span>
                                 <span style={{ color: "#6b7280", fontSize: "0.7rem" }}>{formatBytes(attachment.sizeBytes)}</span>
-                                {attachment.assetId && (
+                                {/* /p/media serves only embeddable media; other attachments are private to the owner. */}
+                                {attachment.assetId && /^(image|video|audio)\//i.test(attachment.mimeType ?? "") && (
                                     <a
                                         href={getPublicAssetUrl(attachment.assetId)}
                                         target="_blank"
