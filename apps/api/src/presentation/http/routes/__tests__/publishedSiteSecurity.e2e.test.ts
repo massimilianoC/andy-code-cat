@@ -2,8 +2,8 @@
  * E2E regressions for the 2026-11-23 security review of published sites and user files.
  * Real app (createApp), MongoMemoryServer, real files in a temporary DATA_DIR.
  *
- *  1. /p/media never lets a user upload execute: script-capable types are downloads with a
- *     sandbox CSP; only passive types are inline; external references redirect to http(s) only.
+ *  1. /p/media serves only embeddable media (images, video, audio): documents and scripts are
+ *     not public, SVG is a sandboxed download, external references are never redirected to.
  *  2. A slug can never be a publishId (shared directory namespace) and is unique among live
  *     deployments — enforced by a MongoDB unique index, not by a check-then-write.
  *  3. /p/{x} serves only a live deployment's publishId — never a slug copy or an orphan directory,
@@ -95,8 +95,9 @@ describe("published sites and user files — security regressions", () => {
             asset("44444444-4444-4444-8444-444444444444", "image/png", "photo.png"),
             asset("55555555-5555-4555-8555-555555555555", "image/png", "ref.png", { externalUrl: "javascript:alert(1)" }),
             asset("66666666-6666-4666-8666-666666666666", "image/png", "ref2.png", { externalUrl: "https://images.example.com/a.png" }),
+            asset("77777777-7777-4777-8777-777777777777", "text/csv", "private.csv"),
         ]);
-        for (const [file, content] of [["evil.html", "<script>alert(1)</script>"], ["evil.js", "alert(1)"], ["logo.svg", "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"], ["photo.png", "PNGDATA"]]) {
+        for (const [file, content] of [["evil.html", "<script>alert(1)</script>"], ["evil.js", "alert(1)"], ["logo.svg", "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"], ["photo.png", "PNGDATA"], ["private.csv", "secret,data"]]) {
             writeFile(`uploads/${ownerId}/${project}/${file}`, content!);
         }
     });
@@ -110,19 +111,13 @@ describe("published sites and user files — security regressions", () => {
     });
 
     describe("1. /p/media", () => {
-        it("serves an uploaded text/html as an inert download", async () => {
-            const res = await request(app).get("/p/media/11111111-1111-4111-8111-111111111111");
-            expect(res.status).toBe(200);
-            expect(res.headers["content-type"]).toContain("application/octet-stream");
-            expect(res.headers["content-disposition"]).toMatch(/^attachment;/);
-            expect(res.headers["x-content-type-options"]).toBe("nosniff");
-            expect(res.headers["content-security-policy"]).toMatch(/^sandbox;/);
-        });
-
-        it("never serves an uploaded script with a script MIME type", async () => {
-            const res = await request(app).get("/p/media/22222222-2222-4222-8222-222222222222");
-            expect(res.headers["content-type"]).toContain("application/octet-stream");
-            expect(res.headers["content-disposition"]).toMatch(/^attachment;/);
+        it("does not serve an uploaded document or script publicly", async () => {
+            for (const id of ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "77777777-7777-4777-8777-777777777777"]) {
+                const res = await request(app).get(`/p/media/${id}`);
+                expect(res.status, id).toBe(404);
+                expect(res.text, id).not.toContain("alert");
+                expect(res.text, id).not.toContain("secret");
+            }
         });
 
         it("keeps SVG usable in <img> but downloads it on navigation, sandboxed", async () => {
@@ -139,11 +134,12 @@ describe("published sites and user files — security regressions", () => {
             expect(res.headers["content-disposition"]).toMatch(/^inline;/);
         });
 
-        it("redirects external references to http(s) only", async () => {
-            expect((await request(app).get("/p/media/55555555-5555-4555-8555-555555555555")).status).toBe(404);
-            const ok = await request(app).get("/p/media/66666666-6666-4666-8666-666666666666");
-            expect(ok.status).toBe(302);
-            expect(ok.headers.location).toBe("https://images.example.com/a.png");
+        it("never redirects to an external reference (no open redirect)", async () => {
+            for (const id of ["55555555-5555-4555-8555-555555555555", "66666666-6666-4666-8666-666666666666"]) {
+                const res = await request(app).get(`/p/media/${id}`);
+                expect(res.status, id).toBe(404);
+                expect(res.headers.location, id).toBeUndefined();
+            }
         });
     });
 
@@ -187,10 +183,12 @@ describe("published sites and user files — security regressions", () => {
             expect(bySlug.text).toContain("My site live"); // the publishId directory, not the slug copy
         });
 
-        it("keeps serving a live site whose owner account no longer exists (not a suspension)", async () => {
-            const res = await request(app).get("/orfano/");
-            expect(res.status).toBe(200);
-            expect(res.text).toContain("Orphan owner");
+        it("does not serve a site whose owner account no longer exists, on either address", async () => {
+            for (const p of ["/orfano/", "/p/ab12ab12/", "/p/ab12ab12/style.css"]) {
+                const res = await request(app).get(p);
+                expect(res.status, p).toBe(410);
+                expect(res.text, p).not.toContain("Orphan owner");
+            }
         });
 
         it("keeps a suspended site and a blocked owner's site unreachable on both addresses", async () => {

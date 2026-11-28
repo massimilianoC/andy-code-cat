@@ -397,13 +397,16 @@ export function createPublishRoutes() {
                 );
                 return true;
             }
-            // A live site whose owner record is gone (deleted account) is not a suspension: it keeps
-            // being served, as before, and is reported so the superadmin can decide (admin block).
+            // A site whose owner account is gone has nobody responsible for it: it is not served.
+            // Account deletion removes the deployment too; this covers records left by older
+            // deletions.
             if (!owner) {
-                console.warn("[published-site] owner account not found; serving live site — block it from the admin panel if unwanted", {
+                console.warn("[published-site] owner account not found; not serving", {
                     publishId: deploymentRecord.publishId,
                     userId: deploymentRecord.userId,
                 });
+                res.status(410).setHeader("Content-Type", "text/plain; charset=utf-8").send("This site is no longer available.");
+                return true;
             }
         }
         return false;
@@ -627,6 +630,12 @@ export function createPublishRoutes() {
             snapshots: new MongoPreviewSnapshotRepository(),
             submissions: new MongoFormSubmissionRepository(),
             ipHashSalt: resolveFormIpHashSalt(env),
+            quota: {
+                maxPerForm: env.FORM_SUBMISSIONS_MAX_PER_FORM,
+                maxPerProject: env.FORM_SUBMISSIONS_MAX_PER_PROJECT,
+                maxBytesPerProject: env.FORM_SUBMISSIONS_MAX_BYTES_PER_PROJECT,
+            },
+            retentionDays: env.FORM_SUBMISSION_RETENTION_DAYS,
         }),
         isSiteHost,
     });

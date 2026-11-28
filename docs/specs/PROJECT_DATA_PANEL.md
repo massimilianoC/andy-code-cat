@@ -134,8 +134,9 @@ translation only if the capability label should be localised later.
 - **Bounded export.** At most `PROJECT_DATA_EXPORT_MAX_RECORDS` records per export; CSV cells are
   protected against formula injection.
 - **Deletion is complete.** Project deletion purges every registered capability. A purge failure is
-  logged as an error and does not stop the deletion — the same rule every other collection follows
-  in `DeleteProject`.
+  logged as an error and keeps the project: `DeleteProject` removes the project row only when every
+  step (files, records, capability data) succeeded, and answers `PROJECT_DELETE_INCOMPLETE`
+  otherwise, so the deletion can be repeated.
 
 ## 7. Leaderboard capability
 

@@ -52,6 +52,16 @@ export interface IFileStorage {
     /** Remove a thumbnail file (best-effort). */
     deleteThumbnailFile(storedPath: string): Promise<void>;
 
+    // --- Bulk removal (project and account deletion) ---
+    /**
+     * Remove every stored file of one project: uploads (assets, project brand assets), exports,
+     * workspaces, snapshot thumbnails and dataset caches. Missing files are not an error; any other
+     * failure rejects, so the caller can keep the records that still point at the files.
+     */
+    deleteProjectFiles(userId: string, projectId: string): Promise<void>;
+    /** Remove every stored file of one account: uploads, exports, workspaces and profile data. */
+    deleteUserFiles(userId: string): Promise<void>;
+
     // --- Utils ---
     ensureDir(dirPath: string): Promise<void>;
     fileExists(filePath: string): Promise<boolean>;

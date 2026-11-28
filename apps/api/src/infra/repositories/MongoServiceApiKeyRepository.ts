@@ -173,4 +173,11 @@ export class MongoServiceApiKeyRepository implements ServiceApiKeyRepository {
     async resolvePlaintext(key: ServiceApiKey): Promise<string> {
         return this.crypto.decrypt(key.encryptedKey, key.iv, key.authTag);
     }
+
+    /** Remove every service key an account owns (account deletion). */
+    async deleteByUser(userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ ownerType: "user", ownerUserId: userId });
+        return result.deletedCount ?? 0;
+    }
 }

@@ -18,6 +18,14 @@ export interface LeaderboardBoardSummary {
     lastWriteAt: Date;
 }
 
+/** Best entry of one board of one project: a row of the owner's Arcade shelf. */
+export interface LeaderboardProjectBest {
+    projectId: string;
+    boardId: string;
+    entries: number;
+    best: LeaderboardEntry;
+}
+
 export interface LeaderboardEntry extends LeaderboardScope {
     id: string;
     player: string;

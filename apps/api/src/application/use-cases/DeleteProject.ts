@@ -14,6 +14,11 @@ import type { ZeroEffortFormProposalRepository } from "../../domain/repositories
 import type { DidacticArtifactKnowledgeRepository } from "../../domain/repositories/DidacticArtifactKnowledgeRepository";
 import type { ProjectAssetRepository } from "../../domain/repositories/ProjectAssetRepository";
 import type { SiteDeploymentRepository } from "../../domain/repositories/SiteDeploymentRepository";
+import type { DidacticQnaRepository } from "../../domain/repositories/DidacticQnaRepository";
+import type { BrandAssetRepository } from "../../domain/repositories/BrandAssetRepository";
+import type { LlmPromptConfigRepository } from "../../domain/repositories/LlmPromptConfigRepository";
+import type { BackgroundRunRepository } from "../../domain/repositories/BackgroundRunRepository";
+import type { ExportRepository } from "../../domain/repositories/ExportRepository";
 import type { ProjectDataRegistry } from "../projectData/ProjectDataRegistry";
 import type { IFileStorage } from "../../infra/storage/IFileStorage";
 
@@ -30,193 +35,185 @@ export interface DeletedProjectCounts {
     wysiwygEditSessions: number;
     zeroEffortFormProposals: number;
     didacticArtifactKnowledge: number;
+    didacticQnaEntries: number;
     projectAssets: number;
+    projectBrandAssets: number;
+    promptConfigs: number;
+    backgroundRuns: number;
+    exportRecords: number;
     siteDeployments: number;
     /** Records removed per project data capability (docs/specs/PROJECT_DATA_PANEL.md), by capability id. */
     projectData: Record<string, number>;
 }
 
 /**
- * Deleting a project deletes what the project wrote.
+ * Everything a project deletion touches. Only the project and moodboard repositories are required
+ * so a test can wire the part it is about; the one production wiring is
+ * composition/composeDeleteProject.ts, which passes every dependency.
+ */
+export interface DeleteProjectDependencies {
+    projects: ProjectRepository;
+    moodboards: ProjectMoodboardRepository;
+    promptExecutionLogs?: PromptExecutionLogRepository;
+    conversations?: ConversationRepository;
+    workSessions?: WorkSessionRepository;
+    pipelineRuns?: PipelineRunRepository;
+    costTransactions?: ICostTransactionRepository;
+    previewSnapshots?: PreviewSnapshotRepository;
+    mediaResolutionTraces?: MediaResolutionTraceRepository;
+    vibeIntakes?: VibeIntakeRepository;
+    publishHistory?: PublishHistoryRepository;
+    wysiwygEditSessions?: WysiwygEditSessionRepository;
+    zeroEffortFormProposals?: ZeroEffortFormProposalRepository;
+    didacticKnowledge?: DidacticArtifactKnowledgeRepository;
+    didacticQna?: DidacticQnaRepository;
+    projectAssets?: ProjectAssetRepository;
+    brandAssets?: BrandAssetRepository;
+    promptConfigs?: LlmPromptConfigRepository;
+    backgroundRuns?: BackgroundRunRepository;
+    exports?: ExportRepository;
+    siteDeployments?: SiteDeploymentRepository;
+    fileStorage?: IFileStorage;
+    projectData?: ProjectDataRegistry;
+}
+
+/** A deletion step that failed: the project is kept and the caller is told which steps. */
+export class ProjectDeletionIncompleteError extends Error {
+    readonly statusCode = 500;
+    readonly code = "PROJECT_DELETE_INCOMPLETE";
+    readonly userMessage = "La cancellazione del progetto non è stata completata. Il progetto è stato conservato: riprova.";
+    readonly details: { projectId: string; failedSteps: string[] };
+
+    constructor(projectId: string, failedSteps: string[]) {
+        super(`Project deletion incomplete; failed steps: ${failedSteps.join(", ")}`);
+        this.name = "ProjectDeletionIncompleteError";
+        this.details = { projectId, failedSteps };
+    }
+}
+
+type Step<T> = readonly [name: string, run: () => Promise<T>];
+
+/**
+ * Deleting a project deletes what the project wrote: every project-scoped collection, its stored
+ * files and its published directories, then the project row.
  *
- * It used to remove the project row and its moodboard and stop there, which predates the journal,
- * the cost ledger, work sessions and pipeline runs — so every deletion from the dashboard left all
- * four behind as orphans pointing at a projectId nothing resolves. That was invisible precisely
- * because orphaned rows do not show up anywhere; you only find them by counting.
+ * The rule is all-or-nothing as far as the project row is concerned. Each step runs; if any of
+ * them fails, the project row is kept, the failure is logged with the step names, and the caller
+ * receives `ProjectDeletionIncompleteError`. The deletion can then be repeated: every step is
+ * idempotent. Keeping the row matters because it is the only handle an owner or an operator has
+ * on the data that was not removed — a project that disappears while its visitor data, files or
+ * published site survive is the orphan state this use case exists to prevent.
  *
- * A second audit (2026-09-07), measured the same way, found nine more project-scoped collections
- * the first pass missed: preview snapshots, media-resolution traces, vibe intakes, publish history,
- * site deployments, WYSIWYG edit sessions, zero-effort form proposals, didactic artifact knowledge
- * and project assets. All nine are now included below.
+ * Order: files first (published directories, then every stored file of the project), records
+ * after, project row last. A failed file step stops before any record is removed, so the records
+ * that point at the files are still there.
  *
- * Two collections were deliberately left out:
+ * Deliberately not removed:
  *
- * - `sessions` (auth refresh-token sessions, `MongoSessionRepository`) are user-scoped, not
- *   project-scoped — the `projectId` field on a session record is only "the project selected at
- *   login," not an ownership boundary. Deleting a project must not invalidate a user's login just
- *   because the project they happened to be on when they last logged in is gone. There is already a
- *   dedicated user-scoped cleanup (`deleteAllByUserId`) for the case that actually matters.
- * - `execution_logs` (`MongoExecutionLogRepository`, see docs/specs/EXECUTION_LOG_SPEC.md) is
- *   explicitly documented as a 90-day TTL-indexed audit trail ("per-project, per-domain audit trail
- *   of key application events"). It already self-expires and exists specifically to survive the
- *   actions taken on a project, including its deletion — deleting it early would defeat the one
- *   purpose the collection has. Note this is a DIFFERENT collection from `prompt_execution_logs`
- *   (`journalRows` below), which has always been in scope.
+ * - `sessions` (auth sessions) are user-scoped; the `projectId` on a session is only the project
+ *   selected at login. Account deletion removes them.
+ * - `execution_logs` is a 90-day TTL audit trail (docs/specs/EXECUTION_LOG_SPEC.md) that exists to
+ *   survive the actions taken on a project, deletion included. It is a different collection from
+ *   `prompt_execution_logs` (`journalRows`), which is removed.
  *
- * `project_assets` and `site_deployments` reference files (on local disk or in MinIO), not just DB
- * rows. Deleting only the row would leak the file — worse than leaving both behind, since a
- * matching DB row is the only thing that lets an operator find an orphaned file later. So for these
- * two, the files are removed first (via `IFileStorage.deleteUpload` / `deletePublishDir` — the same
- * calls `DeleteProjectAsset` and `UnpublishProject` make for a single item; one file-deletion path,
- * reused rather than duplicated) and the DB rows only after, via the bulk `deleteByProject` calls
- * below. `preview_snapshots` also has a thumbnail file, but neither this repository's `deleteById`
- * nor `DeletePreviewSnapshot` has ever cleaned that up — treating it as project-scoped DB-only data
- * here matches that existing, unrelated gap rather than making the file side worse.
+ * Records stored by platform capabilities (form submissions, arcade leaderboards, any capability
+ * added later) are purged through the `ProjectDataRegistry` (composition/composeProjectData.ts),
+ * the same registry the owner's data panel reads.
  *
- * There is one deletion, and this is it. `DiscardPendingProject` adds the guard and the reporting
- * that a rejected Zero Effort run needs, and delegates the removal here rather than performing its
- * own — two ways to delete a project would eventually disagree about what "deleted" means.
- *
- * Records stored by platform capabilities (arcade leaderboards, and any capability added later)
- * are not listed one by one: they are purged through the `ProjectDataRegistry`
- * (composition/composeProjectData.ts), the same registry the owner's data panel reads, so adding a
- * capability there is enough for its records to leave with the project. A capability was once
- * forgotten here (leaderboard_scores, release 2026.11.25.5); the registry is the fix for the class,
- * not just that instance.
- *
- * Every associated-data repository is optional so existing wiring keeps compiling, but a caller
- * that omits one is choosing the old, partial behaviour for that collection. Every production
- * wiring should pass them all.
+ * There is one deletion, and this is it: the dashboard, the Zero Effort discard, the superadmin
+ * and account deletion all run it (composition/composeDeleteProject.ts).
  */
 export class DeleteProject {
-    constructor(
-        private readonly projectRepo: ProjectRepository,
-        private readonly moodboardRepo: ProjectMoodboardRepository,
-        private readonly promptExecutionLogRepo?: PromptExecutionLogRepository,
-        private readonly conversationRepo?: ConversationRepository,
-        private readonly workSessionRepo?: WorkSessionRepository,
-        private readonly pipelineRunRepo?: PipelineRunRepository,
-        private readonly costTransactionRepo?: ICostTransactionRepository,
-        private readonly previewSnapshotRepo?: PreviewSnapshotRepository,
-        private readonly mediaResolutionTraceRepo?: MediaResolutionTraceRepository,
-        private readonly vibeIntakeRepo?: VibeIntakeRepository,
-        private readonly publishHistoryRepo?: PublishHistoryRepository,
-        private readonly wysiwygEditSessionRepo?: WysiwygEditSessionRepository,
-        private readonly zeroEffortFormProposalRepo?: ZeroEffortFormProposalRepository,
-        private readonly didacticArtifactKnowledgeRepo?: DidacticArtifactKnowledgeRepository,
-        private readonly projectAssetRepo?: ProjectAssetRepository,
-        private readonly siteDeploymentRepo?: SiteDeploymentRepository,
-        private readonly fileStorage?: IFileStorage,
-        private readonly projectDataRegistry?: ProjectDataRegistry,
-    ) { }
+    constructor(private readonly deps: DeleteProjectDependencies) { }
 
     async execute(projectId: string, userId: string): Promise<DeletedProjectCounts> {
-        // Verify ownership before doing anything
-        const project = await this.projectRepo.findByIdForUser(projectId, userId);
+        const d = this.deps;
+        const project = await d.projects.findByIdForUser(projectId, userId);
         if (!project) {
             throw Object.assign(new Error("Project not found"), { statusCode: 404 });
         }
 
-        // Clean up moodboard (best effort — don't fail if missing)
-        try {
-            await this.moodboardRepo.deleteByProjectId(projectId);
-        } catch {
-            // best effort
-        }
-
-        // Files first, same order DeleteProjectAsset and UnpublishProject each use for a single
-        // item: if the DB delete below fails the file is already gone, and an orphaned row pointing
-        // at a missing file is far easier to spot and clean up later than a file with no row at
-        // all. Best-effort — a storage failure here must not stop the project row (and everything
-        // else) from being removed.
-        try {
-            const ownedAssets = await this.projectAssetRepo?.listOwnedByProject(projectId, userId) ?? [];
-            await Promise.all(
-                ownedAssets.map((asset) =>
-                    this.fileStorage?.deleteUpload(userId, projectId, asset.storedFilename).catch(() => { })
-                ),
-            );
-        } catch {
-            // best effort
-        }
-        try {
-            const deployments = await this.siteDeploymentRepo?.findByProjectId(projectId) ?? [];
-            await Promise.all(
-                deployments.flatMap((deployment) => [
-                    this.fileStorage?.deletePublishDir(deployment.publishId).catch(() => { }),
-                    deployment.customSlug
-                        ? this.fileStorage?.deletePublishDir(deployment.customSlug).catch(() => { })
-                        : undefined,
-                ]),
-            );
-        } catch {
-            // best effort
-        }
-
-        // Associated data first, project row last. If one of these throws the project survives and
-        // can be deleted again; the reverse order would leave rows pointing at a project the user
-        // can no longer see, which is the orphan state this exists to prevent.
-        const [
-            journalRows,
-            costTransactions,
-            conversations,
-            workSessions,
-            pipelineRuns,
-            previewSnapshots,
-            mediaResolutionTraces,
-            vibeIntakes,
-            publishHistoryEntries,
-            wysiwygEditSessions,
-            zeroEffortFormProposals,
-            didacticArtifactKnowledge,
-            projectAssets,
-            siteDeployments,
-            projectData,
-        ] = await Promise.all([
-            this.promptExecutionLogRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
-            this.costTransactionRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
-            this.conversationRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
-            this.workSessionRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
-            this.pipelineRunRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
-            this.previewSnapshotRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
-            this.mediaResolutionTraceRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
-            this.vibeIntakeRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
-            this.publishHistoryRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
-            this.wysiwygEditSessionRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
-            this.zeroEffortFormProposalRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
-            this.didacticArtifactKnowledgeRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
-            this.projectAssetRepo?.deleteByProject(projectId, userId).catch(() => 0) ?? 0,
-            this.siteDeploymentRepo?.deleteByProject(projectId).catch(() => 0) ?? 0,
-            // Same rule as every collection above (a failure must not stop the deletion), but not
-            // silent: capability records may be visitor data, so a failed purge is logged loudly.
-            this.projectDataRegistry?.purgeProject({ ownerUserId: userId, projectId }).catch((error: unknown) => {
-                console.error("[DeleteProject] project data purge failed; capability records may be orphaned", {
-                    projectId,
-                    ownerUserId: userId,
-                    error: error instanceof Error ? error.message : String(error),
-                });
-                return {} as Record<string, number>;
-            }) ?? ({} as Record<string, number>),
+        await this.runAll(projectId, [
+            ["published directories", async () => {
+                const deployments = await d.siteDeployments?.findByProjectId(projectId) ?? [];
+                await Promise.all(deployments.flatMap((deployment) => [
+                    d.fileStorage?.deletePublishDir(deployment.publishId),
+                    deployment.customSlug ? d.fileStorage?.deletePublishDir(deployment.customSlug) : undefined,
+                ]));
+            }],
+            ["project files", async () => { await d.fileStorage?.deleteProjectFiles(userId, projectId); }],
         ]);
 
-        await this.projectRepo.deleteById(projectId, userId);
+        const zero = async () => 0;
+        const counts = await this.runAll<unknown>(projectId, [
+            ["moodboard", async () => { await d.moodboards.deleteByProjectId(projectId); return 0; }],
+            ["journalRows", () => d.promptExecutionLogs?.deleteByProject(projectId, userId) ?? zero()],
+            ["costTransactions", () => d.costTransactions?.deleteByProject(projectId, userId) ?? zero()],
+            ["conversations", () => d.conversations?.deleteByProject(projectId, userId) ?? zero()],
+            ["workSessions", () => d.workSessions?.deleteByProject(projectId, userId) ?? zero()],
+            ["pipelineRuns", () => d.pipelineRuns?.deleteByProject(projectId, userId) ?? zero()],
+            ["previewSnapshots", () => d.previewSnapshots?.deleteByProject(projectId) ?? zero()],
+            ["mediaResolutionTraces", () => d.mediaResolutionTraces?.deleteByProject(projectId) ?? zero()],
+            ["vibeIntakes", () => d.vibeIntakes?.deleteByProject(projectId, userId) ?? zero()],
+            ["publishHistoryEntries", () => d.publishHistory?.deleteByProject(projectId) ?? zero()],
+            ["wysiwygEditSessions", () => d.wysiwygEditSessions?.deleteByProject(projectId) ?? zero()],
+            ["zeroEffortFormProposals", () => d.zeroEffortFormProposals?.deleteByProject(projectId, userId) ?? zero()],
+            ["didacticArtifactKnowledge", () => d.didacticKnowledge?.deleteByProject(projectId) ?? zero()],
+            ["didacticQnaEntries", () => d.didacticQna?.deleteByProject(projectId) ?? zero()],
+            ["projectAssets", () => d.projectAssets?.deleteByProject(projectId, userId) ?? zero()],
+            ["projectBrandAssets", () => d.brandAssets?.deleteByProject(projectId, userId) ?? zero()],
+            ["promptConfigs", () => d.promptConfigs?.deleteByProjectId(projectId) ?? zero()],
+            ["backgroundRuns", () => d.backgroundRuns?.deleteByProject(projectId, userId) ?? zero()],
+            ["exportRecords", () => d.exports?.deleteByProject(projectId, userId) ?? zero()],
+            ["siteDeployments", () => d.siteDeployments?.deleteByProject(projectId) ?? zero()],
+            ["projectData", () => d.projectData?.purgeProject({ ownerUserId: userId, projectId }) ?? Promise.resolve({})],
+        ]);
 
+        await d.projects.deleteById(projectId, userId);
+
+        const [, journalRows, costTransactions, conversations, workSessions, pipelineRuns, previewSnapshots,
+            mediaResolutionTraces, vibeIntakes, publishHistoryEntries, wysiwygEditSessions, zeroEffortFormProposals,
+            didacticArtifactKnowledge, didacticQnaEntries, projectAssets, projectBrandAssets, promptConfigs,
+            backgroundRuns, exportRecords, siteDeployments] = counts as number[];
+        const projectData = counts[counts.length - 1] as Record<string, number>;
         return {
-            journalRows,
-            costTransactions,
-            conversations,
-            workSessions,
-            pipelineRuns,
-            previewSnapshots,
-            mediaResolutionTraces,
-            vibeIntakes,
-            publishHistoryEntries,
-            wysiwygEditSessions,
-            zeroEffortFormProposals,
-            didacticArtifactKnowledge,
-            projectAssets,
-            siteDeployments,
+            journalRows: journalRows!,
+            costTransactions: costTransactions!,
+            conversations: conversations!,
+            workSessions: workSessions!,
+            pipelineRuns: pipelineRuns!,
+            previewSnapshots: previewSnapshots!,
+            mediaResolutionTraces: mediaResolutionTraces!,
+            vibeIntakes: vibeIntakes!,
+            publishHistoryEntries: publishHistoryEntries!,
+            wysiwygEditSessions: wysiwygEditSessions!,
+            zeroEffortFormProposals: zeroEffortFormProposals!,
+            didacticArtifactKnowledge: didacticArtifactKnowledge!,
+            didacticQnaEntries: didacticQnaEntries!,
+            projectAssets: projectAssets!,
+            projectBrandAssets: projectBrandAssets!,
+            promptConfigs: promptConfigs!,
+            backgroundRuns: backgroundRuns!,
+            exportRecords: exportRecords!,
+            siteDeployments: siteDeployments!,
             projectData,
         };
+    }
+
+    /** Runs every step; when one or more fail, logs them and throws with their names. */
+    private async runAll<T>(projectId: string, steps: ReadonlyArray<Step<T>>): Promise<T[]> {
+        const results = await Promise.allSettled(steps.map(([, run]) => run()));
+        const failed = results.flatMap((result, index) => result.status === "rejected" ? [steps[index]![0]] : []);
+        if (failed.length > 0) {
+            console.error("[DeleteProject] deletion incomplete; project kept", {
+                projectId,
+                failedSteps: failed,
+                errors: results.flatMap((result) => result.status === "rejected"
+                    ? [result.reason instanceof Error ? result.reason.message : String(result.reason)]
+                    : []),
+            });
+            throw new ProjectDeletionIncompleteError(projectId, failed);
+        }
+        return results.map((result) => (result as PromiseFulfilledResult<T>).value);
     }
 }

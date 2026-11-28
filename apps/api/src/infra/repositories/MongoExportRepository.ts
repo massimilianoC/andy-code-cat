@@ -95,4 +95,18 @@ export class MongoExportRepository implements ExportRepository {
         // TTL index: MongoDB will delete documents after expiresAt
         await col.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
     }
+
+    /** Remove the export records of a project; the zip files go with the project's files. */
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ projectId, userId });
+        return result.deletedCount ?? 0;
+    }
+
+    /** Remove every export record of an account (account deletion). */
+    async deleteByUser(userId: string): Promise<number> {
+        const col = await this.col();
+        const result = await col.deleteMany({ userId });
+        return result.deletedCount ?? 0;
+    }
 }

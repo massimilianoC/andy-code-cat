@@ -9,4 +9,7 @@ export interface UserPreferencesRepository {
 
     /** Initialise default preferences for a newly registered user. Only inserts — does NOT overwrite. */
     initForUser(input: CreateUserPreferencesInput): Promise<UserPreferences>;
+
+    /** Remove an account's preferences (account deletion). */
+    deleteByUserId(userId: string): Promise<number>;
 }

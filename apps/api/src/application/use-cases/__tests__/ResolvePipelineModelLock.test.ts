@@ -19,6 +19,7 @@ class FakeSystemNotificationRepository implements SystemNotificationRepository {
     async listForUser(): Promise<SystemNotification[]> { return []; }
     async listForAdmin(): Promise<SystemNotification[]> { return []; }
     async markRead(): Promise<SystemNotification | null> { return null; }
+    async deleteByUser(): Promise<number> { return 0; }
 }
 
 function fakeCatalog(overrides?: Partial<LlmProviderCatalog>): LlmProviderCatalog {
@@ -362,6 +363,7 @@ describe("ResolvePipelineModelLock — dispatch", () => {
                 async listForUser() { return []; },
                 async listForAdmin() { return []; },
                 async markRead() { return null; },
+                async deleteByUser() { return 0; },
             });
         });
 

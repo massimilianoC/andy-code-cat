@@ -19,11 +19,9 @@ import { MongoZeroEffortFormProposalRepository } from "../../../infra/repositori
 import { MongoDidacticArtifactKnowledgeRepository } from "../../../infra/repositories/MongoDidacticArtifactKnowledgeRepository";
 import { MongoProjectAssetRepository } from "../../../infra/repositories/MongoProjectAssetRepository";
 import { MongoSiteDeploymentRepository } from "../../../infra/repositories/MongoSiteDeploymentRepository";
-import { composeProjectDataRegistry } from "../../../composition/composeProjectData";
-import { getFileStorage } from "../../../infra/storage/StorageFactory";
 import { GetZeroEffortRecoveryStatus } from "../../../application/use-cases/GetZeroEffortRecoveryStatus";
 import { DiscardPendingProject } from "../../../application/use-cases/DiscardPendingProject";
-import { DeleteProject } from "../../../application/use-cases/DeleteProject";
+import { composeDeleteProject } from "../../../composition/composeDeletion";
 
 /**
  * Interrupted-run recovery (docs/specs/INTERRUPTED_RUN_RECOVERY.md §3bis) — Feature A.
@@ -64,26 +62,7 @@ export function createRecoveryRoutes(): Router {
     const discardPendingProject = new DiscardPendingProject(
         projectRepository,
         snapshotRepository,
-        new DeleteProject(
-            projectRepository,
-            moodboardRepository,
-            promptExecutionLogRepository,
-            conversationRepository,
-            workSessionRepository,
-            pipelineRunRepository,
-            costTransactionRepository,
-            snapshotRepository,
-            new MongoMediaResolutionTraceRepository(),
-            new MongoVibeIntakeRepository(),
-            new MongoPublishHistoryRepository(),
-            new MongoWysiwygEditSessionRepository(),
-            new MongoZeroEffortFormProposalRepository(),
-            new MongoDidacticArtifactKnowledgeRepository(),
-            new MongoProjectAssetRepository(),
-            new MongoSiteDeploymentRepository(),
-            getFileStorage(),
-            composeProjectDataRegistry(),
-        ),
+        composeDeleteProject(),
     );
 
     router.get(

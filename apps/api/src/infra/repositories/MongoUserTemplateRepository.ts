@@ -141,4 +141,11 @@ export class MongoUserTemplateRepository implements UserTemplateRepository {
             { $inc: { usageCount: 1 }, $set: { lastUsedAt: new Date(), updatedAt: new Date() } },
         );
     }
+
+    /** Remove an account's own templates; templates promoted to system templates stay (account deletion). */
+    async deleteByOwner(ownerId: string): Promise<number> {
+        const col = await this.collection();
+        const result = await col.deleteMany({ ownerId, isSystem: { $ne: true } });
+        return result.deletedCount ?? 0;
+    }
 }

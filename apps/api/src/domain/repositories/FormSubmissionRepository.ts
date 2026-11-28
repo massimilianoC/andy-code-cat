@@ -4,6 +4,7 @@ import type {
     FormSubmissionListQuery,
     FormSubmissionProjectScope,
     FormSubmissionScope,
+    FormSubmissionUsage,
     NewFormSubmission,
 } from "../entities/FormSubmission";
 
@@ -12,7 +13,10 @@ import type {
  * implementation spreads it into every filter; no method accepts a free-form filter.
  */
 export interface FormSubmissionRepository {
-    create(scope: FormSubmissionScope, submission: NewFormSubmission): Promise<FormSubmission>;
+    /** Stores the submission; it expires at `expiresAt` (retention). */
+    create(scope: FormSubmissionScope, submission: NewFormSubmission, expiresAt: Date): Promise<FormSubmission>;
+    /** Records and bytes held by the form and by its whole project. */
+    usage(scope: FormSubmissionScope): Promise<FormSubmissionUsage>;
     /** Forms of the project that have submissions, with counts. */
     groups(scope: FormSubmissionProjectScope): Promise<FormSubmissionGroup[]>;
     /** Newest first. */

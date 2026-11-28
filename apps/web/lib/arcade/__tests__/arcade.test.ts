@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ACTION_KEY, DEFAULT_BINDINGS, detectBinding, diffActions, readActions, type PadState } from "../gamepad";
 import { injectArcadeRuntime, parseArcadeGameMessage } from "../arcadeRuntime";
 import { ARCADE_GENRES, buildArcadeGamePrompt, randomArcadeRecipe } from "../arcadeRecipe";
+import { isNewGame, normaliseInitials, orderShelf, pushRecent, stepInitial, typeInitial } from "../shelf";
 
 function pad(pressed: number[] = [], axes: number[] = [0, 0]): PadState {
     return { buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i), value: pressed.includes(i) ? 1 : 0 })), axes };
@@ -66,5 +67,47 @@ describe("arcade recipe", () => {
         const recipe = randomArcadeRecipe(() => 0.99);
         expect(ARCADE_GENRES.map((g) => g.id)).toContain(recipe.genre);
         expect(buildArcadeGamePrompt(recipe)).toContain("videogame");
+    });
+});
+
+describe("arcade shelf", () => {
+    it("puts recently played games first, then the newest", () => {
+        const games = [
+            { id: "a", createdAt: "2026-11-01T00:00:00Z" },
+            { id: "b", createdAt: "2026-11-20T00:00:00Z" },
+            { id: "c", createdAt: "2026-11-10T00:00:00Z" },
+            { id: "d", createdAt: "2026-11-25T00:00:00Z" },
+        ];
+        expect(orderShelf(games, ["c", "a"]).map((g) => g.id)).toEqual(["c", "a", "d", "b"]);
+        expect(pushRecent(["x", "y", "z"], "y", 3)).toEqual(["y", "x", "z"]);
+        expect(pushRecent(["x", "y", "z"], "w", 3)).toEqual(["w", "x", "y"]);
+    });
+
+    it("marks a game new for three days, until it is played", () => {
+        const now = Date.parse("2026-11-27T12:00:00Z");
+        expect(isNewGame({ id: "a", createdAt: "2026-11-26T00:00:00Z" }, [], now)).toBe(true);
+        expect(isNewGame({ id: "a", createdAt: "2026-11-26T00:00:00Z" }, ["a"], now)).toBe(false);
+        expect(isNewGame({ id: "a", createdAt: "2026-11-20T00:00:00Z" }, [], now)).toBe(false);
+    });
+
+    it("turns letter wheels with wrap-around and types into slots", () => {
+        expect(stepInitial("AAA", 0, -1)).toBe("9AA");
+        expect(stepInitial("AZA", 1, 1)).toBe("A0A");
+        expect(stepInitial("ABC", 2, 36 * 3 + 1)).toBe("ABD");
+        expect(typeInitial("AAA", 0, "m")).toEqual({ initials: "MAA", slot: 1 });
+        expect(typeInitial("MAA", 2, "x")).toEqual({ initials: "MAX", slot: 2 });
+        expect(typeInitial("MAX", 1, "!")).toEqual({ initials: "MAX", slot: 1 });
+        expect(normaliseInitials("m-x")).toBe("MXA");
+    });
+});
+
+describe("arcade genres", () => {
+    it("give every genre a touch layout the SDK knows, and put it in the prompt", () => {
+        for (const genre of ARCADE_GENRES) {
+            expect(["dpad", "joystick", "swipe", "tap", "pointer", "none"]).toContain(genre.touch);
+            const prompt = buildArcadeGamePrompt({ genre: genre.id, style: "pixel-8bit", setting: "neon-city", hero: "cat-astronaut", twist: "none", extra: "" });
+            expect(prompt).toContain(`touch: "${genre.touch}"`);
+            expect(prompt).toContain("do not draw touch controls yourself");
+        }
     });
 });

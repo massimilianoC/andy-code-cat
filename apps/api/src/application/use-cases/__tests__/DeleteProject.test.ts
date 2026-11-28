@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { DeleteProject } from "../DeleteProject";
+import { DeleteProject, ProjectDeletionIncompleteError } from "../DeleteProject";
 import type { ProjectRepository } from "../../../domain/repositories/ProjectRepository";
 import type { ProjectMoodboardRepository } from "../../../domain/repositories/ProjectMoodboardRepository";
 import type { PromptExecutionLogRepository } from "../../../domain/repositories/PromptExecutionLogRepository";
@@ -16,9 +16,13 @@ import type { ZeroEffortFormProposalRepository } from "../../../domain/repositor
 import type { DidacticArtifactKnowledgeRepository } from "../../../domain/repositories/DidacticArtifactKnowledgeRepository";
 import type { ProjectAssetRepository } from "../../../domain/repositories/ProjectAssetRepository";
 import type { SiteDeploymentRepository } from "../../../domain/repositories/SiteDeploymentRepository";
+import type { DidacticQnaRepository } from "../../../domain/repositories/DidacticQnaRepository";
+import type { BrandAssetRepository } from "../../../domain/repositories/BrandAssetRepository";
+import type { LlmPromptConfigRepository } from "../../../domain/repositories/LlmPromptConfigRepository";
+import type { BackgroundRunRepository } from "../../../domain/repositories/BackgroundRunRepository";
+import type { ExportRepository } from "../../../domain/repositories/ExportRepository";
 import { ProjectDataRegistry } from "../../projectData/ProjectDataRegistry";
 import type { ProjectDataCapability } from "../../../domain/projectData/ProjectDataCapability";
-import type { ProjectAsset } from "../../../domain/entities/ProjectAsset";
 import type { SiteDeployment } from "../../../domain/entities/SiteDeployment";
 import type { Project } from "../../../domain/entities/Project";
 import type { IFileStorage } from "../../../infra/storage/IFileStorage";
@@ -74,22 +78,6 @@ function moodboardRepo(over: Partial<ProjectMoodboardRepository> = {}): ProjectM
     };
 }
 
-function asset(over: Partial<ProjectAsset> = {}): ProjectAsset {
-    return {
-        id: "a1",
-        projectId: PROJECT_ID,
-        userId: USER_ID,
-        scope: "project",
-        originalName: "logo.png",
-        storedFilename: "a1-logo.png",
-        mimeType: "image/png",
-        fileSize: 100,
-        source: "user_upload",
-        createdAt: new Date(),
-        ...over,
-    } as ProjectAsset;
-}
-
 function deployment(over: Partial<SiteDeployment> = {}): SiteDeployment {
     return {
         id: "d1",
@@ -138,6 +126,8 @@ function fileStorage(over: Partial<IFileStorage> = {}): IFileStorage {
         saveThumbnailFile: vi.fn(),
         getThumbnailStream: vi.fn(),
         deleteThumbnailFile: vi.fn(),
+        deleteProjectFiles: vi.fn(async () => undefined),
+        deleteUserFiles: vi.fn(async () => undefined),
         ensureDir: vi.fn(),
         fileExists: vi.fn(),
         fileSize: vi.fn(),
@@ -150,44 +140,53 @@ function countingRepo(count = 0) {
     return { deleteByProject: vi.fn(async () => count) };
 }
 
+const ZERO_COUNTS = {
+    journalRows: 0,
+    costTransactions: 0,
+    conversations: 0,
+    workSessions: 0,
+    pipelineRuns: 0,
+    previewSnapshots: 0,
+    mediaResolutionTraces: 0,
+    vibeIntakes: 0,
+    publishHistoryEntries: 0,
+    wysiwygEditSessions: 0,
+    zeroEffortFormProposals: 0,
+    didacticArtifactKnowledge: 0,
+    didacticQnaEntries: 0,
+    projectAssets: 0,
+    projectBrandAssets: 0,
+    promptConfigs: 0,
+    backgroundRuns: 0,
+    exportRecords: 0,
+    siteDeployments: 0,
+    projectData: {},
+};
+
+const failing = () => vi.fn(async () => { throw new Error("mongo down"); });
+
 describe("DeleteProject", () => {
     it("throws 404 and deletes nothing when the project is not owned by this user", async () => {
         const repo = projectRepo({ findByIdForUser: vi.fn(async () => null) });
         const moodboard = moodboardRepo();
-        const deleteProject = new DeleteProject(repo, moodboard);
+        const storage = fileStorage();
+        const deleteProject = new DeleteProject({ projects: repo, moodboards: moodboard, fileStorage: storage });
 
         await expect(deleteProject.execute(PROJECT_ID, USER_ID)).rejects.toMatchObject({ statusCode: 404 });
 
         expect(repo.deleteById).not.toHaveBeenCalled();
         expect(moodboard.deleteByProjectId).not.toHaveBeenCalled();
+        expect(storage.deleteProjectFiles).not.toHaveBeenCalled();
     });
 
-    it("deletes the project and returns all-zero counts when no associated-data repos are wired", async () => {
-        // Backward-compat path: existing callers that only pass the first two args must keep compiling
-        // and keep working — the old, partial behaviour, not a crash.
+    it("deletes the project and returns all-zero counts when only the required repositories are wired", async () => {
         const repo = projectRepo();
-        const deleteProject = new DeleteProject(repo, moodboardRepo());
+        const deleteProject = new DeleteProject({ projects: repo, moodboards: moodboardRepo() });
 
         const result = await deleteProject.execute(PROJECT_ID, USER_ID);
 
         expect(repo.deleteById).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(result).toEqual({
-            journalRows: 0,
-            costTransactions: 0,
-            conversations: 0,
-            workSessions: 0,
-            pipelineRuns: 0,
-            previewSnapshots: 0,
-            mediaResolutionTraces: 0,
-            vibeIntakes: 0,
-            publishHistoryEntries: 0,
-            wysiwygEditSessions: 0,
-            zeroEffortFormProposals: 0,
-            didacticArtifactKnowledge: 0,
-            projectAssets: 0,
-            siteDeployments: 0,
-            projectData: {},
-        });
+        expect(result).toEqual(ZERO_COUNTS);
     });
 
     it("cascades to every wired collection, ownership-scoped, and reports what it removed", async () => {
@@ -198,20 +197,20 @@ describe("DeleteProject", () => {
         const conversations = countingRepo(1) as unknown as ConversationRepository;
         const workSessions = countingRepo(4) as unknown as WorkSessionRepository;
         const pipelineRuns = countingRepo(1) as unknown as PipelineRunRepository;
-        const previewSnapshots = { ...countingRepo(5), findById: vi.fn(), listByProject: vi.fn() } as unknown as PreviewSnapshotRepository;
+        const previewSnapshots = countingRepo(5) as unknown as PreviewSnapshotRepository;
         const mediaTraces = countingRepo(6) as unknown as MediaResolutionTraceRepository;
         const vibeIntakes = countingRepo(2) as unknown as VibeIntakeRepository;
         const publishHistory = countingRepo(3) as unknown as PublishHistoryRepository;
         const wysiwyg = countingRepo(1) as unknown as WysiwygEditSessionRepository;
         const zeroEffort = countingRepo(2) as unknown as ZeroEffortFormProposalRepository;
         const didactic = countingRepo(1) as unknown as DidacticArtifactKnowledgeRepository;
-
-        const projectAssetRepository: ProjectAssetRepository = {
-            listOwnedByProject: vi.fn(async () => [asset({ id: "a1", storedFilename: "a1-logo.png" }), asset({ id: "a2", storedFilename: "a2-hero.png" })]),
-            deleteByProject: vi.fn(async () => 2),
-        } as unknown as ProjectAssetRepository;
-
-        const siteDeploymentRepository: SiteDeploymentRepository = {
+        const didacticQna = countingRepo(7) as unknown as DidacticQnaRepository;
+        const projectAssets = countingRepo(2) as unknown as ProjectAssetRepository;
+        const brandAssets = countingRepo(2) as unknown as BrandAssetRepository;
+        const promptConfigs = { deleteByProjectId: vi.fn(async () => 1) } as unknown as LlmPromptConfigRepository;
+        const backgroundRuns = countingRepo(3) as unknown as BackgroundRunRepository;
+        const exports = countingRepo(4) as unknown as ExportRepository;
+        const siteDeployments = {
             findByProjectId: vi.fn(async () => [deployment({ publishId: "pub-1", customSlug: "my-slug" })]),
             deleteByProject: vi.fn(async () => 1),
         } as unknown as SiteDeploymentRepository;
@@ -219,54 +218,47 @@ describe("DeleteProject", () => {
         const storage = fileStorage();
         const leaderboard = capability("leaderboard", 4);
         const forms = capability("forms", 1);
-        const registry = new ProjectDataRegistry([leaderboard, forms]);
 
-        const deleteProject = new DeleteProject(
-            repo,
-            moodboard,
-            journal,
+        const deleteProject = new DeleteProject({
+            projects: repo,
+            moodboards: moodboard,
+            promptExecutionLogs: journal,
             conversations,
             workSessions,
             pipelineRuns,
-            cost,
+            costTransactions: cost,
             previewSnapshots,
-            mediaTraces,
+            mediaResolutionTraces: mediaTraces,
             vibeIntakes,
             publishHistory,
-            wysiwyg,
-            zeroEffort,
-            didactic,
-            projectAssetRepository,
-            siteDeploymentRepository,
-            storage,
-            registry,
-        );
+            wysiwygEditSessions: wysiwyg,
+            zeroEffortFormProposals: zeroEffort,
+            didacticKnowledge: didactic,
+            didacticQna,
+            projectAssets,
+            brandAssets,
+            promptConfigs,
+            backgroundRuns,
+            exports,
+            siteDeployments,
+            fileStorage: storage,
+            projectData: new ProjectDataRegistry([leaderboard, forms]),
+        });
 
         const result = await deleteProject.execute(PROJECT_ID, USER_ID);
-        // Every registered capability is purged, with the whole project scope and no group.
+
         expect(leaderboard.clear).toHaveBeenCalledWith({ ownerUserId: USER_ID, projectId: PROJECT_ID });
         expect(forms.clear).toHaveBeenCalledWith({ ownerUserId: USER_ID, projectId: PROJECT_ID });
+        expect(storage.deleteProjectFiles).toHaveBeenCalledWith(USER_ID, PROJECT_ID);
+        expect(moodboard.deleteByProjectId).toHaveBeenCalledWith(PROJECT_ID);
 
-        // Every deleteByProject call is ownership-scoped exactly like the pre-existing five.
-        expect(journal.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(cost.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(conversations.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(workSessions.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(pipelineRuns.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(vibeIntakes.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(zeroEffort.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(projectAssetRepository.deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-
-        // Preview snapshots, media traces, publish history, WYSIWYG sessions, didactic knowledge and
-        // site deployments have no owner field of their own — scoped by projectId, same as their
-        // other finder methods.
-        expect(previewSnapshots.deleteByProject).toHaveBeenCalledWith(PROJECT_ID);
-        expect(mediaTraces.deleteByProject).toHaveBeenCalledWith(PROJECT_ID);
-        expect(publishHistory.deleteByProject).toHaveBeenCalledWith(PROJECT_ID);
-        expect(wysiwyg.deleteByProject).toHaveBeenCalledWith(PROJECT_ID);
-        expect(didactic.deleteByProject).toHaveBeenCalledWith(PROJECT_ID);
-        expect(siteDeploymentRepository.deleteByProject).toHaveBeenCalledWith(PROJECT_ID);
-
+        for (const owned of [journal, cost, conversations, workSessions, pipelineRuns, vibeIntakes, zeroEffort, projectAssets, brandAssets, backgroundRuns, exports]) {
+            expect((owned as unknown as { deleteByProject: ReturnType<typeof vi.fn> }).deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
+        }
+        for (const byProject of [previewSnapshots, mediaTraces, publishHistory, wysiwyg, didactic, didacticQna, siteDeployments]) {
+            expect((byProject as unknown as { deleteByProject: ReturnType<typeof vi.fn> }).deleteByProject).toHaveBeenCalledWith(PROJECT_ID);
+        }
+        expect(promptConfigs.deleteByProjectId).toHaveBeenCalledWith(PROJECT_ID);
         expect(repo.deleteById).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
 
         expect(result).toEqual({
@@ -282,152 +274,86 @@ describe("DeleteProject", () => {
             wysiwygEditSessions: 1,
             zeroEffortFormProposals: 2,
             didacticArtifactKnowledge: 1,
+            didacticQnaEntries: 7,
             projectAssets: 2,
+            projectBrandAssets: 2,
+            promptConfigs: 1,
+            backgroundRuns: 3,
+            exportRecords: 4,
             siteDeployments: 1,
             projectData: { leaderboard: 4, forms: 1 },
         });
     });
 
-    it("deletes each project-owned asset's file before removing the asset rows", async () => {
-        const storage = fileStorage();
-        const listOwnedByProject = vi.fn(async () => [
-            asset({ id: "a1", storedFilename: "a1-logo.png" }),
-            asset({ id: "a2", storedFilename: "a2-hero.png" }),
-        ]);
-        const deleteByProject = vi.fn(async () => 2);
-        const projectAssetRepository = { listOwnedByProject, deleteByProject } as unknown as ProjectAssetRepository;
-
-        const deleteProject = new DeleteProject(
-            projectRepo(),
-            moodboardRepo(),
-            undefined, undefined, undefined, undefined, undefined,
-            undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-            projectAssetRepository,
-            undefined,
-            storage,
-        );
-
-        await deleteProject.execute(PROJECT_ID, USER_ID);
-
-        expect(listOwnedByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(storage.deleteUpload).toHaveBeenCalledWith(USER_ID, PROJECT_ID, "a1-logo.png");
-        expect(storage.deleteUpload).toHaveBeenCalledWith(USER_ID, PROJECT_ID, "a2-hero.png");
-        expect(deleteByProject).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-    });
-
-    it("deletes a deployment's published files, including its custom-slug directory, before removing the rows", async () => {
+    it("deletes a deployment's published files, including its custom-slug directory", async () => {
         const storage = fileStorage();
         const findByProjectId = vi.fn(async () => [
             deployment({ publishId: "pub-1", customSlug: "my-slug" }),
             deployment({ publishId: "pub-2", customSlug: undefined }),
         ]);
-        const deleteByProject = vi.fn(async () => 2);
-        const siteDeploymentRepository = { findByProjectId, deleteByProject } as unknown as SiteDeploymentRepository;
+        const siteDeployments = { findByProjectId, deleteByProject: vi.fn(async () => 2) } as unknown as SiteDeploymentRepository;
 
-        const deleteProject = new DeleteProject(
-            projectRepo(),
-            moodboardRepo(),
-            undefined, undefined, undefined, undefined, undefined,
-            undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-            undefined,
-            siteDeploymentRepository,
-            storage,
-        );
+        await new DeleteProject({ projects: projectRepo(), moodboards: moodboardRepo(), siteDeployments, fileStorage: storage })
+            .execute(PROJECT_ID, USER_ID);
 
-        await deleteProject.execute(PROJECT_ID, USER_ID);
-
-        expect(findByProjectId).toHaveBeenCalledWith(PROJECT_ID);
         expect(storage.deletePublishDir).toHaveBeenCalledWith("pub-1");
         expect(storage.deletePublishDir).toHaveBeenCalledWith("my-slug");
         expect(storage.deletePublishDir).toHaveBeenCalledWith("pub-2");
         expect(storage.deletePublishDir).not.toHaveBeenCalledWith(undefined);
-        expect(deleteByProject).toHaveBeenCalledWith(PROJECT_ID);
     });
 
-    it("still deletes the project when one associated-data delete throws", async () => {
-        // Rule from the original 5-collection cascade: a failure in one collection must not stop the
-        // others, and must not stop the project row itself from being removed.
+    it("keeps the project row when a record purge fails, runs the other purges, and names the failed step", async () => {
         const repo = projectRepo();
-        const journal = { deleteByProject: vi.fn(async () => { throw new Error("mongo down"); }) } as unknown as PromptExecutionLogRepository;
+        const journal = { deleteByProject: failing() } as unknown as PromptExecutionLogRepository;
         const cost = countingRepo(2) as unknown as ICostTransactionRepository;
-
-        const deleteProject = new DeleteProject(repo, moodboardRepo(), journal, undefined, undefined, undefined, cost);
-
-        const result = await deleteProject.execute(PROJECT_ID, USER_ID);
-
-        expect(result.journalRows).toBe(0);
-        expect(result.costTransactions).toBe(2);
-        expect(repo.deleteById).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-    });
-
-    it("still deletes the project when the project data purge throws, and logs it", async () => {
-        const repo = projectRepo();
-        const failing = capability("leaderboard", 0, vi.fn(async () => { throw new Error("mongo down"); }));
         const error = vi.spyOn(console, "error").mockImplementation(() => { });
 
-        const deleteProject = new DeleteProject(
-            repo,
-            moodboardRepo(),
-            undefined, undefined, undefined, undefined, undefined,
-            undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-            undefined, undefined, undefined,
-            new ProjectDataRegistry([failing]),
-        );
+        const deleteProject = new DeleteProject({ projects: repo, moodboards: moodboardRepo(), promptExecutionLogs: journal, costTransactions: cost });
 
-        const result = await deleteProject.execute(PROJECT_ID, USER_ID);
-
-        expect(result.projectData).toEqual({});
-        expect(repo.deleteById).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(error).toHaveBeenCalledWith(expect.stringContaining("project data purge failed"), expect.objectContaining({ projectId: PROJECT_ID }));
+        const failure = await deleteProject.execute(PROJECT_ID, USER_ID).catch((e: unknown) => e);
+        expect(failure).toBeInstanceOf(ProjectDeletionIncompleteError);
+        expect(failure).toMatchObject({ statusCode: 500, code: "PROJECT_DELETE_INCOMPLETE", details: { failedSteps: ["journalRows"] } });
+        expect(cost.deleteByProject).toHaveBeenCalled();
+        expect(repo.deleteById).not.toHaveBeenCalled();
+        expect(error).toHaveBeenCalledWith(expect.stringContaining("deletion incomplete"), expect.objectContaining({ projectId: PROJECT_ID }));
         error.mockRestore();
     });
 
-    it("still deletes the project when asset or deployment file cleanup throws", async () => {
+    it("keeps the project row when the project data (visitor records) purge fails", async () => {
         const repo = projectRepo();
-        const projectAssetRepository = {
-            listOwnedByProject: vi.fn(async () => { throw new Error("mongo down"); }),
-            deleteByProject: vi.fn(async () => 0),
-        } as unknown as ProjectAssetRepository;
-        const siteDeploymentRepository = {
-            findByProjectId: vi.fn(async () => { throw new Error("mongo down"); }),
-            deleteByProject: vi.fn(async () => 0),
-        } as unknown as SiteDeploymentRepository;
+        const broken = capability("forms", 0, failing());
+        const error = vi.spyOn(console, "error").mockImplementation(() => { });
 
-        const deleteProject = new DeleteProject(
-            repo,
-            moodboardRepo(),
-            undefined, undefined, undefined, undefined, undefined,
-            undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-            projectAssetRepository,
-            siteDeploymentRepository,
-            fileStorage(),
-        );
+        const deleteProject = new DeleteProject({ projects: repo, moodboards: moodboardRepo(), projectData: new ProjectDataRegistry([broken]) });
 
-        const result = await deleteProject.execute(PROJECT_ID, USER_ID);
-
-        expect(repo.deleteById).toHaveBeenCalledWith(PROJECT_ID, USER_ID);
-        expect(result.projectAssets).toBe(0);
-        expect(result.siteDeployments).toBe(0);
+        await expect(deleteProject.execute(PROJECT_ID, USER_ID)).rejects.toMatchObject({ details: { failedSteps: ["projectData"] } });
+        expect(repo.deleteById).not.toHaveBeenCalled();
+        error.mockRestore();
     });
 
-    it("deletes the project row only after the associated-data cascade completes", async () => {
+    it("removes no record and keeps the project when file removal fails", async () => {
+        const repo = projectRepo();
+        const storage = fileStorage({ deleteProjectFiles: failing() });
+        const journal = countingRepo(1) as unknown as PromptExecutionLogRepository;
+        const error = vi.spyOn(console, "error").mockImplementation(() => { });
+
+        const deleteProject = new DeleteProject({ projects: repo, moodboards: moodboardRepo(), promptExecutionLogs: journal, fileStorage: storage });
+
+        await expect(deleteProject.execute(PROJECT_ID, USER_ID)).rejects.toMatchObject({ details: { failedSteps: ["project files"] } });
+        expect(journal.deleteByProject).not.toHaveBeenCalled();
+        expect(repo.deleteById).not.toHaveBeenCalled();
+        error.mockRestore();
+    });
+
+    it("removes files, then records, then the project row", async () => {
         const order: string[] = [];
-        const repo = projectRepo({
-            deleteById: vi.fn(async () => {
-                order.push("project");
-                return true;
-            }),
-        });
-        const journal = {
-            deleteByProject: vi.fn(async () => {
-                order.push("journal");
-                return 1;
-            }),
-        } as unknown as PromptExecutionLogRepository;
+        const repo = projectRepo({ deleteById: vi.fn(async () => { order.push("project"); return true; }) });
+        const journal = { deleteByProject: vi.fn(async () => { order.push("journal"); return 1; }) } as unknown as PromptExecutionLogRepository;
+        const storage = fileStorage({ deleteProjectFiles: vi.fn(async () => { order.push("files"); }) });
 
-        const deleteProject = new DeleteProject(repo, moodboardRepo(), journal);
-        await deleteProject.execute(PROJECT_ID, USER_ID);
+        await new DeleteProject({ projects: repo, moodboards: moodboardRepo(), promptExecutionLogs: journal, fileStorage: storage })
+            .execute(PROJECT_ID, USER_ID);
 
-        expect(order).toEqual(["journal", "project"]);
+        expect(order).toEqual(["files", "journal", "project"]);
     });
 });

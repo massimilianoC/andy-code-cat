@@ -131,4 +131,18 @@ export class MongoBrandAssetRepository implements BrandAssetRepository {
         const result = await col.deleteOne({ _id: id });
         return result.deletedCount > 0;
     }
+
+    /** Remove the project-scope brand assets of a project (project deletion). */
+    async deleteByProject(projectId: string, userId: string): Promise<number> {
+        const col = await this.collection();
+        const result = await col.deleteMany({ scope: "project", projectId, ownerUserId: userId });
+        return result.deletedCount ?? 0;
+    }
+
+    /** Remove every brand asset an account owns, any scope (account deletion). */
+    async deleteByUser(userId: string): Promise<number> {
+        const col = await this.collection();
+        const result = await col.deleteMany({ ownerUserId: userId });
+        return result.deletedCount ?? 0;
+    }
 }
